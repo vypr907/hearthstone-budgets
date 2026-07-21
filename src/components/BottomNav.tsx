@@ -16,7 +16,7 @@ export function BottomNav() {
         {items.map(({ to, label, icon: Icon, exact }) => (
           <li key={to} className="flex-1">
             <Link
-              to={to}
+              to={to as string}
               activeOptions={{ exact: !!exact }}
               activeProps={{ className: "text-primary" }}
               inactiveProps={{ className: "text-muted-foreground" }}
