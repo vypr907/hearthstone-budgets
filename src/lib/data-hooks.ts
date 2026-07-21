@@ -1,0 +1,268 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type Bill, type Debt, type Account, type AccountBalance } from "./supabase";
+import { useAuth } from "./auth-context";
+
+export function useBills() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["bills", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Bill[]> => {
+      const { data, error } = await supabase
+        .from("bills")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("due_day", { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []) as Bill[];
+    },
+  });
+}
+
+export function useDebts() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["debts", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Debt[]> => {
+      const { data, error } = await supabase
+        .from("debts")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("priority_order", { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []) as Debt[];
+    },
+  });
+}
+
+export function useAccounts() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["accounts", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Account[]> => {
+      const { data, error } = await supabase
+        .from("accounts")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as Account[];
+    },
+  });
+}
+
+export function useAccountBalances(accountId?: string) {
+  return useQuery({
+    queryKey: ["account_balances", accountId],
+    enabled: !!accountId,
+    queryFn: async (): Promise<AccountBalance[]> => {
+      const { data, error } = await supabase
+        .from("account_balances")
+        .select("*")
+        .eq("account_id", accountId!)
+        .order("as_of_date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AccountBalance[];
+    },
+  });
+}
+
+export function useLatestBalances() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["latest_balances", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Record<string, AccountBalance | undefined>> => {
+      const { data: accts } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("household_id", householdId!);
+      if (!accts || accts.length === 0) return {};
+      const ids = accts.map((a) => a.id);
+      const { data, error } = await supabase
+        .from("account_balances")
+        .select("*")
+        .in("account_id", ids)
+        .order("as_of_date", { ascending: false });
+      if (error) throw error;
+      const out: Record<string, AccountBalance> = {};
+      for (const b of (data ?? []) as AccountBalance[]) {
+        if (!out[b.account_id]) out[b.account_id] = b;
+      }
+      return out;
+    },
+  });
+}
+
+export function useInvalidate() {
+  const qc = useQueryClient();
+  return (keys: string[]) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+}
+
+export function useUpsertBill() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (bill: Partial<Bill> & { name: string; amount: number }) => {
+      const payload = { ...bill, household_id: householdId };
+      if (bill.id) {
+        const { error } = await supabase.from("bills").update(payload).eq("id", bill.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("bills").insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bills"] }),
+  });
+}
+
+export function useDeleteBill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("bills").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bills"] }),
+  });
+}
+
+export function useUpsertDebt() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (debt: Partial<Debt> & { name: string }) => {
+      const payload = { ...debt, household_id: householdId };
+      if (debt.id) {
+        const { error } = await supabase.from("debts").update(payload).eq("id", debt.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("debts").insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+  });
+}
+
+export function useDeleteDebt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("debts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+  });
+}
+
+export function useSetPaymentStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      kind,
+      id,
+      status,
+    }: {
+      kind: "bill" | "debt";
+      id: string;
+      status: string;
+    }) => {
+      const table = kind === "bill" ? "bills" : "debts";
+      const { error } = await supabase
+        .from(table)
+        .update({ payment_status: status })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+    },
+  });
+}
+
+export function useResetMonth() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error: e1 } = await supabase
+        .from("bills")
+        .update({ payment_status: "unpaid" })
+        .eq("household_id", householdId!);
+      if (e1) throw e1;
+      const { error: e2 } = await supabase
+        .from("debts")
+        .update({ payment_status: "unpaid" })
+        .eq("household_id", householdId!);
+      if (e2) throw e2;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+    },
+  });
+}
+
+export function useUpsertAccount() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (a: Partial<Account> & { name: string }) => {
+      const payload = { ...a, household_id: householdId };
+      if (a.id) {
+        const { error } = await supabase.from("accounts").update(payload).eq("id", a.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("accounts").insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
+export function useDeleteAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("accounts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
+export function useLogBalance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      account_id,
+      balance,
+      as_of_date,
+    }: {
+      account_id: string;
+      balance: number;
+      as_of_date: string;
+    }) => {
+      const { error } = await supabase
+        .from("account_balances")
+        .insert({ account_id, balance, as_of_date });
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["account_balances", vars.account_id] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
