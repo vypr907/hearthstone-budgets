@@ -1,13 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { Home, ListChecks, Receipt, CreditCard, Wallet } from "lucide-react";
 
-const items = [
+const items: Array<{ to: string; label: string; icon: typeof Home; exact?: boolean }> = [
   { to: "/app", label: "Home", icon: Home, exact: true },
   { to: "/app/everything", label: "All", icon: ListChecks },
   { to: "/app/bills", label: "Bills", icon: Receipt },
   { to: "/app/debts", label: "Debts", icon: CreditCard },
   { to: "/app/accounts", label: "Accounts", icon: Wallet },
-] as const;
+];
 
 export function BottomNav() {
   return (
