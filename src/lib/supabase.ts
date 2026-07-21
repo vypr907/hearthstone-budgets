@@ -1,0 +1,77 @@
+import { createClient } from "@supabase/supabase-js";
+
+// Publishable key — safe to include in client bundle. RLS enforces access.
+const SUPABASE_URL = "https://ilxwhgqudcxsgxrvxhtb.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_Q56nrfX0_LE4cuKWzYYk4g_nFURfIN5";
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storage: typeof window !== "undefined" ? window.localStorage : undefined,
+  },
+});
+
+export type Bill = {
+  id: string;
+  household_id: string;
+  name: string;
+  category_id: string | null;
+  account_id: string | null;
+  amount: number;
+  due_day: number | null;
+  payment_status: string | null;
+  paid_with: string | null;
+  notes: string | null;
+  is_active: boolean | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Debt = {
+  id: string;
+  household_id: string;
+  name: string;
+  category_id: string | null;
+  debt_type: string | null;
+  account_id: string | null;
+  starting_balance: number | null;
+  program_start_balance: number | null;
+  remaining_balance: number | null;
+  minimum_payment: number | null;
+  interest_rate: number | null;
+  due_day: number | null;
+  payment_status: string | null;
+  paid_with: string | null;
+  manual_or_auto: string | null;
+  priority_order: number | null;
+  notes: string | null;
+  date_paid_off: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Account = {
+  id: string;
+  household_id: string;
+  name: string;
+  account_type: string | null;
+  login_url: string | null;
+  starting_balance: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AccountBalance = {
+  id: string;
+  account_id: string;
+  balance: number;
+  as_of_date: string;
+  created_at: string;
+};
+
+export type Household = {
+  id: string;
+  name?: string;
+};
