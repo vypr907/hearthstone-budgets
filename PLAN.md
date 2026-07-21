@@ -78,22 +78,22 @@ Distribution         →  Google Play Console
 
 ## Phase 0 — Accounts & Tools
 
-- [ ] Create a free [Lovable](https://lovable.dev) account
-- [ ] Create a free [Supabase](https://supabase.com) account
-- [ ] Create a free [GitHub](https://github.com) account if you don't have one (needed in Phase 7 to export your code for the Android wrap)
-- [ ] Create your GitHub repo now if you'd like — but keep it free of actual app code for the moment (a README, `.gitignore`, license is fine). Lovable's GitHub integration creates and pushes into a repo when you connect a project in Phase 1; it doesn't import pre-existing app code into itself. Whether it uses your existing repo or spins up its own depends on what you pick during that Phase 1 connect step — either way, nothing here is lost, you're just deciding where the README lives first.
-- [ ] Create your Supabase project — a few settings matter at creation time:
+- [X] Create a free [Lovable](https://lovable.dev) account
+- [X] Create a free [Supabase](https://supabase.com) account
+- [X] Create a free [GitHub](https://github.com) account if you don't have one (needed in Phase 7 to export your code for the Android wrap)
+- [X] Create your GitHub repo now if you'd like — but keep it free of actual app code for the moment (a README, `.gitignore`, license is fine). Lovable's GitHub integration creates and pushes into a repo when you connect a project in Phase 1; it doesn't import pre-existing app code into itself. Whether it uses your existing repo or spins up its own depends on what you pick during that Phase 1 connect step — either way, nothing here is lost, you're just deciding where the README lives first.
+- [X] Create your Supabase project — a few settings matter at creation time:
   - **Organization / project name** — anything descriptive is fine
   - **Database password** — let Supabase generate a strong one, and save it in a password manager immediately (you'll need it if you ever connect directly via `psql` or a connection string; the app itself won't need it day-to-day)
   - **Region** — pick one geographically close to you (e.g. a US West region) for lower latency
   - **Plan** — Free tier, per the pricing section above
-- [ ] After the project is created, in **Authentication → Providers → Email**, turn off "Allow new users to sign up" once you've created your 2 accounts (Phase 1) — there's no reason for public self-signup on a private 2-person app, even though Row-Level Security would still wall off any stray signups from real household data
-- [ ] When you manually add your 2 users in **Authentication → Users → Add user**, check "Auto Confirm User" — this skips needing real email delivery/SMTP set up just to confirm 2 accounts you created yourself
-- [ ] Skip Supabase's own GitHub integration (found under Project Settings → Integrations) — this plan doesn't use migration files, just the SQL Editor directly, so there's nothing for it to sync. The only GitHub connection this project needs is Lovable's, which happens in Phase 1 once the Lovable project actually exists — there's nothing to connect yet in Phase 0
-- [ ] Everything else (network restrictions, point-in-time recovery, connection pooling) is either a paid-tier feature you don't need yet or fine left at its default for a 2-person app — the one setting that actually matters for security is enabling Row-Level Security per table, which is already baked into the Phase 1 SQL script
-- [ ] Install [Node.js LTS](https://nodejs.org) on the computer you'll use for the Android build steps
+- [X] After the project is created, in **Authentication → Providers → Email**, turn off "Allow new users to sign up" once you've created your 2 accounts (Phase 1) — there's no reason for public self-signup on a private 2-person app, even though Row-Level Security would still wall off any stray signups from real household data
+- [X] When you manually add your 2 users in **Authentication → Users → Add user**, check "Auto Confirm User" — this skips needing real email delivery/SMTP set up just to confirm 2 accounts you created yourself
+- [X] Skip Supabase's own GitHub integration (found under Project Settings → Integrations) — this plan doesn't use migration files, just the SQL Editor directly, so there's nothing for it to sync. The only GitHub connection this project needs is Lovable's, which happens in Phase 1 once the Lovable project actually exists — there's nothing to connect yet in Phase 0
+- [X] Everything else (network restrictions, point-in-time recovery, connection pooling) is either a paid-tier feature you don't need yet or fine left at its default for a 2-person app — the one setting that actually matters for security is enabling Row-Level Security per table, which is already baked into the Phase 1 SQL script
+- [X] Install [Node.js LTS](https://nodejs.org) on the computer you'll use for the Android build steps
 - [ ] Register your Google Play Developer account now ($25 one-time) at [play.google.com/console](https://play.google.com/console/about) — verification can take a day or two, so starting this early avoids a delay later at Phase 8
-- [ ] Go through your actual 18 tabs and sort each into **Core data** / **Computed view** / **Reference**, using the table below as a starting point — my read of the sheet clearly showed these; fill in whichever of your 18 I didn't cover
+- [X] Go through your actual 18 tabs and sort each into **Core data** / **Computed view** / **Reference**, using the table below as a starting point — my read of the sheet clearly showed these; fill in whichever of your 18 I didn't cover
 
 | Sheet (as I found it) | Type | Feeds |
 |---|---|---|
@@ -299,9 +299,9 @@ create policy "household access via account" on account_balances for all
   ));
 ```
 
-- [ ] Run both SQL blocks above in the Supabase SQL Editor, top to bottom
-- [ ] In Supabase → **Authentication → Users**, manually create 2 users: you and the other person (email + password is simplest to start)
-- [ ] Copy each user's UUID from that Users table, then run this as one statement (a CTE chains both inserts together so there's no id to manually copy-paste — that step is an easy place to slip up, since pasting a literal `<household-id>` placeholder instead of a real UUID will error):
+- [X] Run both SQL blocks above in the Supabase SQL Editor, top to bottom
+- [X] In Supabase → **Authentication → Users**, manually create 2 users: you and the other person (email + password is simplest to start)
+- [X] Copy each user's UUID from that Users table, then run this as one statement (a CTE chains both inserts together so there's no id to manually copy-paste — that step is an easy place to slip up, since pasting a literal `<household-id>` placeholder instead of a real UUID will error):
   ```sql
   with new_household as (
     insert into households (name) values ('Our Household') returning id
@@ -311,7 +311,7 @@ create policy "household access via account" on account_balances for all
   union all
   select id, '<other-person-user-uuid>'::uuid, '<Their Name>', 'member' from new_household;
   ```
-- [ ] Seed your spending categories — this is really two levels (an item, and the broader category it rolls up to), which is exactly what `parent_category` is for. Here's what I could see in your "3. Spending" tab as a starting template; add whatever else is actually in there following the same pattern (there are likely more under Auto, Business, Education, Entertainment, Financial, and Travel that I didn't have visibility into):
+- [X] Seed your spending categories — this is really two levels (an item, and the broader category it rolls up to), which is exactly what `parent_category` is for. Here's what I could see in your "3. Spending" tab as a starting template; add whatever else is actually in there following the same pattern (there are likely more under Auto, Business, Education, Entertainment, Financial, and Travel that I didn't have visibility into):
   ```sql
   insert into categories (household_id, name, domain, parent_category)
   select (select id from households limit 1), name, 'spending', parent
@@ -343,7 +343,7 @@ create policy "household access via account" on account_balances for all
 
 ### 1c. Start the Lovable project
 
-- [ ] Create a new Lovable project and paste this as your first prompt:
+- [X] Create a new Lovable project and paste this as your first prompt:
 
 ```
 Build a household budget and debt-payoff tracker Android app called [Ledger — pick your own name].
@@ -374,16 +374,16 @@ to its own members — don't build any single-user-only logic, both logins shoul
 identical shared data.
 ```
 
-- [ ] **Before creating the Lovable project**, know this up front: Lovable defaults every new project to **Lovable Cloud** (its own hidden backend), and once that's enabled there is currently no official way to disconnect it and switch to your own Supabase project — it's a one-way decision made at project creation, not a setting you flip later. So the very first message to a new project needs to say so explicitly:
+- [X] **Before creating the Lovable project**, know this up front: Lovable defaults every new project to **Lovable Cloud** (its own hidden backend), and once that's enabled there is currently no official way to disconnect it and switch to your own Supabase project — it's a one-way decision made at project creation, not a setting you flip later. So the very first message to a new project needs to say so explicitly:
   ```
   Important: do not use Lovable Cloud for this project. I already have my own Supabase
   project set up, and I'll connect it directly.
   ```
   Put this at the top of the Phase 1c scaffold prompt below, in the same message — not as a separate prompt afterward.
-- [ ] Once the project exists without Cloud auto-enabled, connect your own Supabase project via **Settings → Connectors → Supabase** (or the Cloud icon → "Already have a Supabase project? Connect it here"), using the Project URL + anon key from Project Settings → API
-- [ ] Sanity check: ask in the Lovable chat "what tables can you see in the connected database?" — it should list `households`, `household_members`, `categories`, etc. If it comes back empty, it's still on the wrong backend
-- [ ] Connect the project to GitHub (Settings → GitHub → Connect) so you have version history and can export code later in Phase 7
-- [ ] Log in as both users in the Lovable preview and confirm you both land on the same (currently empty) Bills/Debts screens
+- [X] Once the project exists without Cloud auto-enabled, connect your own Supabase project via **Settings → Connectors → Supabase** (or the Cloud icon → "Already have a Supabase project? Connect it here"), using the Project URL + anon key from Project Settings → API
+- [X] Sanity check: ask in the Lovable chat "what tables can you see in the connected database?" — it should list `households`, `household_members`, `categories`, etc. If it comes back empty, it's still on the wrong backend
+- [X] Connect the project to GitHub (Settings → GitHub → Connect) so you have version history and can export code later in Phase 7
+- [X] Log in as both users in the Lovable preview and confirm you both land on the same (currently empty) Bills/Debts screens
 
 **Milestone:** Both of you can log into the same shared, empty household. Bills, Debts, and Accounts screens exist and can add/edit/delete rows.
 

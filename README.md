@@ -26,7 +26,7 @@ A budget/debt app shared by 2 people who each log in separately but see the same
 
 ## Status
 
-**Current phase:** Phase 0 — Accounts & Tools
+**Current phase:** Phase 2 — Import your Real Data
 
 Full phase-by-phase build plan, database schema, and the actual Lovable prompts used at each step live in [`PLAN.md`](./PLAN.md).
 
