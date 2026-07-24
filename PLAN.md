@@ -78,22 +78,22 @@ Distribution         →  Google Play Console
 
 ## Phase 0 — Accounts & Tools
 
-- [X] Create a free [Lovable](https://lovable.dev) account
-- [X] Create a free [Supabase](https://supabase.com) account
-- [X] Create a free [GitHub](https://github.com) account if you don't have one (needed in Phase 7 to export your code for the Android wrap)
-- [X] Create your GitHub repo now if you'd like — but keep it free of actual app code for the moment (a README, `.gitignore`, license is fine). Lovable's GitHub integration creates and pushes into a repo when you connect a project in Phase 1; it doesn't import pre-existing app code into itself. Whether it uses your existing repo or spins up its own depends on what you pick during that Phase 1 connect step — either way, nothing here is lost, you're just deciding where the README lives first.
-- [X] Create your Supabase project — a few settings matter at creation time:
+- [ ] Create a free [Lovable](https://lovable.dev) account
+- [ ] Create a free [Supabase](https://supabase.com) account
+- [ ] Create a free [GitHub](https://github.com) account if you don't have one (needed in Phase 7 to export your code for the Android wrap)
+- [ ] Create your GitHub repo now if you'd like — but keep it free of actual app code for the moment (a README, `.gitignore`, license is fine). Lovable's GitHub integration creates and pushes into a repo when you connect a project in Phase 1; it doesn't import pre-existing app code into itself. Whether it uses your existing repo or spins up its own depends on what you pick during that Phase 1 connect step — either way, nothing here is lost, you're just deciding where the README lives first.
+- [ ] Create your Supabase project — a few settings matter at creation time:
   - **Organization / project name** — anything descriptive is fine
   - **Database password** — let Supabase generate a strong one, and save it in a password manager immediately (you'll need it if you ever connect directly via `psql` or a connection string; the app itself won't need it day-to-day)
   - **Region** — pick one geographically close to you (e.g. a US West region) for lower latency
   - **Plan** — Free tier, per the pricing section above
-- [X] After the project is created, in **Authentication → Providers → Email**, turn off "Allow new users to sign up" once you've created your 2 accounts (Phase 1) — there's no reason for public self-signup on a private 2-person app, even though Row-Level Security would still wall off any stray signups from real household data
-- [X] When you manually add your 2 users in **Authentication → Users → Add user**, check "Auto Confirm User" — this skips needing real email delivery/SMTP set up just to confirm 2 accounts you created yourself
-- [X] Skip Supabase's own GitHub integration (found under Project Settings → Integrations) — this plan doesn't use migration files, just the SQL Editor directly, so there's nothing for it to sync. The only GitHub connection this project needs is Lovable's, which happens in Phase 1 once the Lovable project actually exists — there's nothing to connect yet in Phase 0
-- [X] Everything else (network restrictions, point-in-time recovery, connection pooling) is either a paid-tier feature you don't need yet or fine left at its default for a 2-person app — the one setting that actually matters for security is enabling Row-Level Security per table, which is already baked into the Phase 1 SQL script
-- [X] Install [Node.js LTS](https://nodejs.org) on the computer you'll use for the Android build steps
+- [ ] After the project is created, in **Authentication → Providers → Email**, turn off "Allow new users to sign up" once you've created your 2 accounts (Phase 1) — there's no reason for public self-signup on a private 2-person app, even though Row-Level Security would still wall off any stray signups from real household data
+- [ ] When you manually add your 2 users in **Authentication → Users → Add user**, check "Auto Confirm User" — this skips needing real email delivery/SMTP set up just to confirm 2 accounts you created yourself
+- [ ] Skip Supabase's own GitHub integration (found under Project Settings → Integrations) — this plan doesn't use migration files, just the SQL Editor directly, so there's nothing for it to sync. The only GitHub connection this project needs is Lovable's, which happens in Phase 1 once the Lovable project actually exists — there's nothing to connect yet in Phase 0
+- [ ] Everything else (network restrictions, point-in-time recovery, connection pooling) is either a paid-tier feature you don't need yet or fine left at its default for a 2-person app — the one setting that actually matters for security is enabling Row-Level Security per table, which is already baked into the Phase 1 SQL script
+- [ ] Install [Node.js LTS](https://nodejs.org) on the computer you'll use for the Android build steps
 - [ ] Register your Google Play Developer account now ($25 one-time) at [play.google.com/console](https://play.google.com/console/about) — verification can take a day or two, so starting this early avoids a delay later at Phase 8
-- [X] Go through your actual 18 tabs and sort each into **Core data** / **Computed view** / **Reference**, using the table below as a starting point — my read of the sheet clearly showed these; fill in whichever of your 18 I didn't cover
+- [ ] Go through your actual 18 tabs and sort each into **Core data** / **Computed view** / **Reference**, using the table below as a starting point — my read of the sheet clearly showed these; fill in whichever of your 18 I didn't cover
 
 | Sheet (as I found it) | Type | Feeds |
 |---|---|---|
@@ -150,13 +150,43 @@ create table categories (
   created_at timestamptz not null default now()
 );
 
--- Financial accounts — for LINKING only, never store passwords here
+-- Institutions — anything you have a login/relationship with: banks, subscriptions, lenders,
+-- utilities, tools, medical providers. Not every institution has an actual balance (a subscription
+-- doesn't) — that's what the separate `accounts` table below is for.
+create table institutions (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  name text not null, -- USAA, PetCo, POPFit, etc.
+  institution_type text not null check (institution_type in
+    ('bank','credit_card','lendor_lessor','financial','tool','medical','utility','subscription','other')),
+  category_id uuid references categories(id), -- reuses the same categories table as Spending —
+    -- e.g. PetCo -> Pets, so subscription costs roll up into the same budget bucket as manual
+    -- spending in that category. Nullable; mainly meaningful for subscription/utility/lendor types.
+  login_url text,
+  login_username text, -- low sensitivity, fine to store directly
+  sign_in_with_google boolean not null default false,
+  description text, -- your sheet's "What Am I?" — a short identity tag, distinct from notes
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+-- Deliberately no password column — see the plan's Phase 1 discussion of why that one stays in a
+-- real password manager instead of this database.
+
+-- Accounts — the actual balance-bearing things underneath an institution (Checking, Savings, a
+-- specific credit card). Not every institution gets one of these.
 create table accounts (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references households(id) on delete cascade,
-  name text not null,
+  institution_id uuid not null references institutions(id) on delete cascade,
+  name text not null, -- "Checking", "Savings", "Visa Signature"...
   account_type text not null, -- 'checking' | 'savings' | 'investment' | 'retirement' | 'credit' | 'loan' | 'other'
-  login_url text,
+  account_subtype text, -- "Sub Type" on your sheet: Roth IRA, Brokerage, etc.
+  account_number text, -- moderate sensitivity — your call given RLS already scopes this to your household
+  interest_apy numeric(6,3),
+  credit_limit numeric(12,2), -- for credit accounts; also enables a utilization % calc
+  is_spendable boolean not null default true, -- excludes retirement/investment from spendable totals
+  include_in_net_worth boolean not null default true,
   starting_balance numeric(12,2) not null default 0, -- balance the day you start tracking this account in the app
   notes text,
   created_at timestamptz not null default now(),
@@ -179,30 +209,41 @@ create table bills (
   category_id uuid references categories(id),
   account_id uuid references accounts(id),
   amount numeric(12,2) not null,
-  due_day int not null check (due_day between 1 and 31),
+  next_due_date date not null, -- replaces due_day — an anchor date, since not every bill is monthly
+  billing_cycle text not null default 'monthly'
+    check (billing_cycle in ('monthly','biweekly','quarterly','bimonthly','annually','custom')),
   payment_status text not null default 'unpaid' check (payment_status in ('unpaid','pending','cleared')),
-  paid_with text,
+  manual_or_auto text,
   notes text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- No paid_with column — which account paid a given cycle is transactions.account_id via
+-- linked_bill_id, which is more accurate than a single field that only reflects the latest guess.
 
 create table debts (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references households(id) on delete cascade,
   name text not null,
-  category_id uuid references categories(id),
-  debt_type text, -- e.g. "Credit Card", "Loan", "Medical" — your sheet's "Type" column
+  category_id uuid references categories(id), -- from your sheet's "Cat2" — the universal categories
+  debt_type text, -- broad debt nature (Medical, Credit Card, Loan, Other, Advance) — your sheet's
+    -- "Category" column, not Cat2. The old separate "Type" column (Car Loan/Student Loan/Mortgage...)
+    -- doesn't persist — that only existed to avoid breaking an imported spreadsheet's formulas.
   account_id uuid references accounts(id),
   starting_balance numeric(12,2) not null,
   program_start_balance numeric(12,2), -- balance when you started the payoff plan, if different
   remaining_balance numeric(12,2) not null,
   minimum_payment numeric(12,2) not null,
   interest_rate numeric(6,3) not null default 0, -- APR, as a percentage
+  known_finance_charge numeric(12,2), -- only for the handful of debts where you have an exact,
+    -- document-sourced finance charge that doesn't follow simple amortization (small/odd loans,
+    -- leases). The calculator should use this over its own estimate when it's present.
   due_day int not null check (due_day between 1 and 31),
   payment_status text not null default 'unpaid' check (payment_status in ('unpaid','pending','cleared')),
-  paid_with text,
+  on_payment_plan boolean not null default false, -- your sheet's "Status" dropdown, reduced to the
+    -- one value that isn't derivable elsewhere. "Due"/"Overdue" are computed live from due_day +
+    -- payment_status; "Paid Off" is derived from date_paid_off is not null.
   manual_or_auto text,
   priority_order int, -- used later by the "Custom" strategy
   notes text,
@@ -210,6 +251,13 @@ create table debts (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- No paid_with column here either — same reasoning as bills. For a payroll deduction that never
+-- touches a real bank balance, add an institution (e.g. "Employer / Payroll", type 'other') with
+-- one account underneath it ("Payroll Deduction", is_spendable = false, include_in_net_worth =
+-- false) so it still flows through transactions.account_id uniformly. Your actual HSA is
+-- different — it holds real money, so it should be its own institution (your HSA provider) with
+-- a real account underneath (is_spendable is your call, but include_in_net_worth = true, since
+-- it's real money you own even if payroll deposits are what funds it).
 
 -- The running ledger: every bill payment, debt payment, and manual entry lands here.
 -- An account's balance = its most recent account_balances snapshot (or starting_balance if no
@@ -274,7 +322,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['categories','accounts','bills','debts','transactions']
+  foreach t in array array['categories','institutions','accounts','bills','debts','transactions']
   loop
     execute format('alter table %I enable row level security;', t);
     execute format(
@@ -299,9 +347,9 @@ create policy "household access via account" on account_balances for all
   ));
 ```
 
-- [X] Run both SQL blocks above in the Supabase SQL Editor, top to bottom
-- [X] In Supabase → **Authentication → Users**, manually create 2 users: you and the other person (email + password is simplest to start)
-- [X] Copy each user's UUID from that Users table, then run this as one statement (a CTE chains both inserts together so there's no id to manually copy-paste — that step is an easy place to slip up, since pasting a literal `<household-id>` placeholder instead of a real UUID will error):
+- [ ] Run both SQL blocks above in the Supabase SQL Editor, top to bottom
+- [ ] In Supabase → **Authentication → Users**, manually create 2 users: you and the other person (email + password is simplest to start)
+- [ ] Copy each user's UUID from that Users table, then run this as one statement (a CTE chains both inserts together so there's no id to manually copy-paste — that step is an easy place to slip up, since pasting a literal `<household-id>` placeholder instead of a real UUID will error):
   ```sql
   with new_household as (
     insert into households (name) values ('Our Household') returning id
@@ -311,7 +359,7 @@ create policy "household access via account" on account_balances for all
   union all
   select id, '<other-person-user-uuid>'::uuid, '<Their Name>', 'member' from new_household;
   ```
-- [X] Seed your spending categories — this is really two levels (an item, and the broader category it rolls up to), which is exactly what `parent_category` is for. Here's what I could see in your "3. Spending" tab as a starting template; add whatever else is actually in there following the same pattern (there are likely more under Auto, Business, Education, Entertainment, Financial, and Travel that I didn't have visibility into):
+- [ ] Seed your spending categories — this is really two levels (an item, and the broader category it rolls up to), which is exactly what `parent_category` is for. Here's what I could see in your "3. Spending" tab as a starting template; add whatever else is actually in there following the same pattern (there are likely more under Auto, Business, Education, Entertainment, Financial, and Travel that I didn't have visibility into):
   ```sql
   insert into categories (household_id, name, domain, parent_category)
   select (select id from households limit 1), name, 'spending', parent
@@ -343,7 +391,7 @@ create policy "household access via account" on account_balances for all
 
 ### 1c. Start the Lovable project
 
-- [X] Create a new Lovable project and paste this as your first prompt:
+- [ ] Create a new Lovable project and paste this as your first prompt:
 
 ```
 Build a household budget and debt-payoff tracker Android app called [Ledger — pick your own name].
@@ -351,10 +399,12 @@ It's shared between exactly 2 people who each log in with their own account, but
 household's data — not two separate personal budgets. Use email/password login.
 
 Core data (already exists in a connected Supabase project): households, household_members,
-categories, accounts, account_balances, bills, debts, transactions. transactions is a running
-ledger — every bill payment, debt payment, and manual entry is a signed amount (negative =
-money out) with a status of 'pending' or 'cleared'. Don't build the transaction-entry UI yet,
-just be aware of the table shape.
+categories, institutions, accounts, account_balances, bills, debts, transactions. institutions is
+anything you have a login with (banks, subscriptions, lenders); accounts is the balance-bearing
+things underneath an institution (Checking, Savings) — not every institution has one. transactions
+is a running ledger — every bill payment, debt payment, and manual entry is a signed amount
+(negative = money out) with a status of 'pending' or 'cleared'. Don't build the transaction-entry
+UI yet, just be aware of the table shapes.
 
 Build these screens with a bottom navigation bar (mobile-first — this will later be wrapped as
 an Android app, so use large tap targets and simple, thumb-friendly layouts):
@@ -374,16 +424,16 @@ to its own members — don't build any single-user-only logic, both logins shoul
 identical shared data.
 ```
 
-- [X] **Before creating the Lovable project**, know this up front: Lovable defaults every new project to **Lovable Cloud** (its own hidden backend), and once that's enabled there is currently no official way to disconnect it and switch to your own Supabase project — it's a one-way decision made at project creation, not a setting you flip later. So the very first message to a new project needs to say so explicitly:
+- [ ] **Before creating the Lovable project**, know this up front: Lovable defaults every new project to **Lovable Cloud** (its own hidden backend), and once that's enabled there is currently no official way to disconnect it and switch to your own Supabase project — it's a one-way decision made at project creation, not a setting you flip later. So the very first message to a new project needs to say so explicitly:
   ```
   Important: do not use Lovable Cloud for this project. I already have my own Supabase
   project set up, and I'll connect it directly.
   ```
   Put this at the top of the Phase 1c scaffold prompt below, in the same message — not as a separate prompt afterward.
-- [X] Once the project exists without Cloud auto-enabled, connect your own Supabase project via **Settings → Connectors → Supabase** (or the Cloud icon → "Already have a Supabase project? Connect it here"), using the Project URL + anon key from Project Settings → API
-- [X] Sanity check: ask in the Lovable chat "what tables can you see in the connected database?" — it should list `households`, `household_members`, `categories`, etc. If it comes back empty, it's still on the wrong backend
-- [X] Connect the project to GitHub (Settings → GitHub → Connect) so you have version history and can export code later in Phase 7
-- [X] Log in as both users in the Lovable preview and confirm you both land on the same (currently empty) Bills/Debts screens
+- [ ] Once the project exists without Cloud auto-enabled, connect your own Supabase project via **Settings → Connectors → Supabase** (or the Cloud icon → "Already have a Supabase project? Connect it here"), using the Project URL + anon key from Project Settings → API
+- [ ] Sanity check: ask in the Lovable chat "what tables can you see in the connected database?" — it should list `households`, `household_members`, `categories`, etc. If it comes back empty, it's still on the wrong backend
+- [ ] Connect the project to GitHub (Settings → GitHub → Connect) so you have version history and can export code later in Phase 7
+- [ ] Log in as both users in the Lovable preview and confirm you both land on the same (currently empty) Bills/Debts screens
 
 **Milestone:** Both of you can log into the same shared, empty household. Bills, Debts, and Accounts screens exist and can add/edit/delete rows.
 
@@ -399,34 +449,38 @@ identical shared data.
 - [ ] Export "Balances" as CSV
 - [ ] Clean each CSV: delete any formula/helper columns that don't correspond to a real stored field (see the mapping table below for Debts), and rename headers to match the schema column names
 
-**Debts column mapping** (your sheet → the `debts` table):
+**Debts column mapping** (your sheet → the `debts` table) — see the CSV cleanup discussion later in this doc for the full reasoning behind this version:
 
 | Your sheet column | Maps to | Notes |
 |---|---|---|
 | Name | `name` | |
-| Category | `category_id` | look up/create the matching category row |
-| Cat2 | `categories.parent_category` | |
-| Type | `debt_type` | free text, e.g. "Credit Card" |
+| Cat2 | `category_id` | the universal categories, shared with Spending/Institutions |
+| Category | `debt_type` | broad debt nature (Medical, Credit Card, Loan, Other, Advance) — different from Cat2 |
+| Type | *(don't import)* | only existed for an imported spreadsheet's formulas; doesn't persist |
 | Due | `due_day` | |
-| Remaining Balance | `remaining_balance` | |
+| Remaining Balance | `remaining_balance` | balance as of your last manual check |
 | Starting Balance | `starting_balance` | |
 | Start Bal For Debt Payoff Program | `program_start_balance` | |
 | Interest Rate | `interest_rate` | |
 | Min Payment | `minimum_payment` | |
 | Pd this month / Pd Status | `payment_status` | map checked → `'cleared'`, unchecked → `'unpaid'` (nothing from a past import should land as `'pending'` — that state is for payments you submit going forward) |
-| Paid With | `paid_with` | |
+| Status | `on_payment_plan` | `true` only if the value is "On Payment Plan" — Due/Overdue/Paid Off are computed elsewhere, not stored |
+| Paid With | *(don't import)* | which account paid something is `transactions.account_id` going forward, not a static field. For "Paycheck deduction," see the Payroll/HSA note above the transactions table |
 | Man/Auto | `manual_or_auto` | |
 | Order | `priority_order` | |
 | Notes | `notes` | |
 | Date Paid Off | `date_paid_off` | |
 | Account | `account_id` | look up/create the matching account row |
-| Lnk, Est Rem Bal, Overdue Amt, Status, % PD, Progress, No of Pmts, Pmts Made, No. Pmts Rem, Finance Charge, Total Repayable | *(drop — computed live in-app instead, see Phases 5–6)* | |
+| Lnk, Est Rem Bal, Overdue Amt, Pd Status (formula), % PD, Progress, No of Pmts, No. Pmts Rem, Total Repayable | *(drop — computed live in-app, see Phases 5–6)* | |
+| Pmts Made | *(drop)* | derived from `transactions` once the ledger is running; backfill a few historical `transactions` rows if you want continuity |
+| Finance Charge | `known_finance_charge` | real, document-sourced figures — you confirmed these are exact numbers pulled from actual accounts/documents, not estimates, so they're worth keeping |
 
-Bills follow the same pattern with fewer columns (no interest rate or strategy fields) — map `Name`, `Category`, `Due`, the payment amount, `Account`, the paid checkbox, `Paid With`, and `Notes` directly, and drop any remaining link/computed columns the same way.
+Bills follow a similar pattern, with two differences worth calling out: **`Due` + `Cycle`** together map to `next_due_date` + `billing_cycle` (not a single `due_day` — see the CSV cleanup discussion for why non-monthly bills need an actual anchor date), and **`Paid With` doesn't get imported** for the same reason as Debts above. Otherwise: map `Name`, `Category`, the payment amount, `Account`, `Status` → `payment_status`, `Auto` → `manual_or_auto`, and `Notes` directly, and drop `Lnk`, `Monthly Amount`, `Open`, and `Overdue Amt` as computed/helper columns.
 
 - [ ] Import each cleaned CSV via Supabase → **Table Editor** → your table → **Insert → Import data from CSV**
 - [ ] Spot-check at least 5 bills and 5 debts against the live Google Sheet for accuracy
-- [ ] Import your Accounts and Balances CSVs the same way — **do not** bring over any actual login passwords, only the URLs, if that's what's in that column
+- [ ] Your old "Accounts" sheet is really two destinations now: institution-level facts (name, Type → `institution_type`, Category → `institutions.category_id`, login URL, username, "Sign in with Google," description, notes) go into `institutions`; **do not** import an actual password column — keep that in a password manager and just bring over the login URL
+- [ ] Your old "Account Balances" sheet is also two destinations: `balance` + `as_of_date` become new rows in `account_balances`, while everything else (nickname, account type/subtype, APY, credit limit, spendable flag, net-worth flag) is a one-time value on the matching row in the new `accounts` table — not repeated on every snapshot. Each `accounts` row also needs its `institution_id` set to whichever institution it belongs under (e.g. the Checking and Savings accounts both point at your USAA institution row)
 
 **Milestone:** Your real bills, debts, accounts, and balances are live in the app and match the sheet.
 
@@ -439,17 +493,22 @@ Bills follow the same pattern with fewer columns (no interest rate or strategy f
 ```
 On the Everything screen, add filtering by category and sorting by due date or amount. The
 "paid" checkbox should update the same underlying bill/debt row (not a separate copy), so it
-stays in sync everywhere else the item appears. Add a "reset for new month" button that
-unchecks every paid box across bills and debts at once — with a confirmation dialog first,
-since this affects both of us.
+stays in sync everywhere else the item appears.
+
+Bills each have their own billing_cycle (monthly, biweekly, quarterly, bimonthly, annually) and
+next_due_date — they don't all reset together. When a bill's payment_status is set to 'cleared',
+advance its next_due_date by its billing_cycle interval and set payment_status back to 'unpaid'
+for the new cycle, rather than using one global "reset for new month" button for every bill.
+Debts, which are always monthly, can still use a simple monthly reset action for their
+payment_status.
 
 On the Dashboard, show: total monthly bills, total monthly debts, total of both combined, and
-a list of anything overdue (due_day already passed this cycle and not marked paid), sorted
+a list of anything overdue (next_due_date/due_day already passed and not marked paid), sorted
 soonest-overdue first.
 ```
 
 - [ ] Test: mark a bill paid on the Bills screen, confirm it shows as paid on the Everything screen too (same row, not a duplicate)
-- [ ] Test the monthly reset button
+- [ ] Test that clearing a biweekly bill advances its due date by 14 days, not to next month
 - [ ] Cross-check the overdue list against 2–3 items you know are actually overdue on the real sheet right now
 
 **Milestone:** Everything list + Dashboard totals are working and match reality.
@@ -483,9 +542,9 @@ snapshot yet), plus transactions dated after that snapshot's as_of_date:
 - Current balance = anchor + sum of 'cleared' transaction amounts since the anchor
 - Spendable balance = anchor + sum of 'cleared' AND 'pending' transaction amounts since the
   anchor
-Label them clearly so it's obvious which is which. The monthly "reset" action should set
-payment_status back to 'unpaid' for a new cycle but must NEVER delete transaction rows —
-those are permanent history.
+Label them clearly so it's obvious which is which. Whichever reset mechanism sets payment_status
+back to 'unpaid' for a new cycle (per-bill cycle advancement, or the debts' monthly reset) must
+NEVER delete transaction rows — those are permanent history.
 ```
 
 - [ ] Test: submit a bill payment, confirm the linked account's spendable balance drops immediately while the current balance doesn't change yet
@@ -633,6 +692,11 @@ to debt_strategy_settings.
 
 Payment history for a debt is: transactions where linked_debt_id = that debt and
 status = 'cleared'. Use that to show payments made so far — don't build a separate payment log.
+
+A few debts have a known_finance_charge value (an exact figure pulled from real loan/lease
+documents, for debts where standard amortization math doesn't quite apply). When it's set, use
+that number directly for that debt's total-interest figure instead of your own calculated
+estimate — it's more accurate than the projection for those specific debts.
 ```
 
 - [ ] **Validation checkpoint — do not skip this:** compare the app's Avalanche/Snowball/Custom output (total interest, payoff date, money saved) against your sheet's "Strategy" tab numbers. These should match closely. If they're meaningfully different, the amortization math has a bug — this is the one place in this whole project worth debugging carefully before moving on.
@@ -747,6 +811,26 @@ Since this is a 2-person app, use the **Internal Testing** track rather than a f
 | Capacitor / Android Studio | $0 — always free |
 
 The only time you'll spend money again is if you resubscribe to Lovable for a future round of new features, or (unlikely) your usage somehow outgrows Supabase's free tier.
+
+---
+
+## Reference: Using Kiro (or Other Local AI Coding Tools) Alongside This Project
+
+**Short answer: useful for one specific slice of this project, not as a general Lovable replacement — and its own free tier won't fully solve running out of Claude usage either.**
+
+**What Kiro actually is:** an AWS-backed IDE (built on VS Code), Claude-powered under the hood, built around three ideas — specs (requirements/design/task breakdown, saved as markdown in your repo), steering files (project conventions the agent reads on every task, so you don't re-explain context each time), and hooks (event-driven automations, e.g. on file save or commit). Free tier: 50 credits/month, no card required — enough for maybe 5–10 medium tasks, not a durable daily-driver allowance. Because it's Claude-powered under the hood, it's a genuinely separate usage pool from claude.ai/Claude Code (different company, different billing), which does satisfy "a way to keep working when Claude's free plan is maxed" — just don't expect it to be a large reserve on its own.
+
+**Where it's genuinely useful here:** the parts of this project that already happen *outside* Lovable's own environment — Phase 7's Capacitor wrapping, Android Studio configuration, writing one-off scripts. That work is local by design already; Kiro (or plain VS Code, or Claude Code) is a fine place to do it, and its steering files are a good home for this `CONTEXT.md` — drop the same content in wherever Kiro's steering docs actually live (verify the exact folder in Kiro's own onboarding, since tool conventions shift) so a Kiro session gets oriented without you re-explaining the project.
+
+**Where it's risky: editing the core Lovable-managed app code directly.** Lovable's GitHub sync is genuinely two-way — commits from any Git client, including a local Kiro/VS Code session, sync back into Lovable's editor automatically. The real risk is two agents editing the *same file* without pulling first: if Lovable's AI changes a file in the browser while you separately edit that same file locally without running `git pull` first, you get a real merge conflict that has to be resolved by hand in GitHub before Lovable will pick it back up. This isn't a hypothetical — it's the documented failure mode for exactly this kind of mixed workflow.
+
+**The protocol, if you do use Kiro (or anything local) on the app code itself:**
+- [ ] Always `git pull` before starting any local editing session — never assume your clone is current
+- [ ] Don't run a Lovable prompt and a local Kiro/VS Code session at the same time
+- [ ] Consider an `AGENTS.md` file in the repo root marking which files/folders are Lovable-owned vs. externally-owned (e.g. the `android/` folder from Capacitor is clearly external; `src/` is Lovable's) — this is a real, recognized convention multiple AI coding tools respect for exactly this boundary problem
+- [ ] If a conflict does happen: resolve it in GitHub directly (edit the conflicting file, commit to `main`), and Lovable will pick up the resolved version on its next sync
+
+**Bottom line:** Kiro doesn't replace Lovable for building the app's screens and logic — that's still Lovable's job, and splitting that work across two AI agents editing the same files is more likely to cause the kind of breakage you're trying to avoid than to save you real time. Its actual value here is a second, separate-quota tool for the local, non-Lovable parts of the project (Capacitor/Android work), plus a place to keep `CONTEXT.md`-equivalent project conventions loaded automatically instead of re-pasted. If the free-tier crunch is really about *this conversation* specifically, `CONTEXT.md` solves the re-explaining-everything cost regardless of which tool you hand it to next — a fresh Claude conversation with `CONTEXT.md` pasted in is a perfectly good fallback too, not just Kiro.
 
 ---
 
