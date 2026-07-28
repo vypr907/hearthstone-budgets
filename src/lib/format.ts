@@ -13,3 +13,10 @@ export function isOverdue(dueDay: number | null | undefined, status: string | nu
   const today = new Date().getDate();
   return today > dueDay;
 }
+
+/** Bills store a full date; derive the day-of-month for display/sorting. */
+export function dueDayFromDate(d: string | null | undefined): number | null {
+  if (!d) return null;
+  const day = Number(d.slice(8, 10));
+  return Number.isFinite(day) && day > 0 ? day : null;
+}

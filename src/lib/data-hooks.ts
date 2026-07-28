@@ -12,7 +12,7 @@ export function useBills() {
         .from("bills")
         .select("*")
         .eq("household_id", householdId!)
-        .order("due_day", { ascending: true, nullsFirst: false });
+        .order("next_due_date", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as Bill[];
     },

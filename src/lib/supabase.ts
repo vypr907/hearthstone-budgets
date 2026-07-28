@@ -17,11 +17,9 @@ export type Bill = {
   household_id: string;
   name: string;
   category_id: string | null;
-  account_id: string | null;
   amount: number;
-  due_day: number | null;
+  next_due_date: string | null;
   payment_status: string | null;
-  paid_with: string | null;
   notes: string | null;
   is_active: boolean | null;
   created_at: string;
