@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
 import { useBills, useDebts } from "@/lib/data-hooks";
-import { formatMoney, isOverdue } from "@/lib/format";
+import { formatMoney, isOverdue, dueDayFromDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, TrendingDown, TrendingUp } from "lucide-react";
 
@@ -24,12 +24,12 @@ function Dashboard() {
 
   const overdue = [
     ...bills
-      .filter((b) => isOverdue(b.due_day, b.payment_status))
+      .filter((b) => isOverdue(dueDayFromDate(b.next_due_date), b.payment_status))
       .map((b) => ({
         id: `bill-${b.id}`,
         name: b.name,
         amount: b.amount,
-        due_day: b.due_day,
+        due_day: dueDayFromDate(b.next_due_date),
         kind: "Bill" as const,
       })),
     ...debts

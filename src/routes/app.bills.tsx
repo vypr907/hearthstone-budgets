@@ -52,7 +52,7 @@ function BillsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{b.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {b.due_day ? `Day ${b.due_day}` : "No due day"}
+                    {b.next_due_date ? `Due ${b.next_due_date}` : "No due date"}
                     {b.payment_status ? ` · ${b.payment_status}` : ""}
                   </p>
                 </div>
@@ -103,7 +103,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setLastKey(key);
     setName(bill?.name ?? "");
     setAmount(bill?.amount != null ? String(bill.amount) : "");
-    setDueDay(bill?.due_day != null ? String(bill.due_day) : "");
+    setDueDay(bill?.next_due_date ?? "");
     setNotes(bill?.notes ?? "");
   }
   if (!open && lastKey !== "") setLastKey("");
@@ -118,7 +118,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         id: bill?.id,
         name: name.trim(),
         amount: Number(amount),
-        due_day: dueDay ? Number(dueDay) : null,
+        next_due_date: dueDay || null,
         notes: notes || null,
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
@@ -164,17 +164,16 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               />
             </div>
             <div>
-              <Label htmlFor="b-day">Due day</Label>
+              <Label htmlFor="b-day">Next due date</Label>
               <Input
                 id="b-day"
-                type="number"
-                min="1"
-                max="31"
+                type="date"
                 value={dueDay}
                 onChange={(e) => setDueDay(e.target.value)}
                 className="h-11"
               />
             </div>
+
           </div>
           <div>
             <Label htmlFor="b-notes">Notes</Label>

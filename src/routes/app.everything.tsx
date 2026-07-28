@@ -6,7 +6,7 @@ import {
   useSetPaymentStatus,
   useResetMonth,
 } from "@/lib/data-hooks";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, dueDayFromDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -58,7 +58,7 @@ function EverythingPage() {
         kind: "Bill" as const,
         name: b.name,
         amount: Number(b.amount || 0),
-        due_day: b.due_day,
+        due_day: dueDayFromDate(b.next_due_date),
         payment_status: b.payment_status,
       })),
       ...debts.map((d) => ({
