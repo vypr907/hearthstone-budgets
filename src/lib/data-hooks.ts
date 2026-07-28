@@ -1,6 +1,32 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Bill, type Debt, type Account, type AccountBalance } from "./supabase";
+import {
+  supabase,
+  type Bill,
+  type Debt,
+  type Account,
+  type AccountBalance,
+  type Category,
+} from "./supabase";
+import { advanceDate } from "./format";
 import { useAuth } from "./auth-context";
+
+export function useCategories() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["categories", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Category[]> => {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as Category[];
+    },
+  });
+}
+
 
 export function useBills() {
   const { householdId } = useAuth();
