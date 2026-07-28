@@ -52,7 +52,7 @@ function BillsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{b.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {b.due_day ? `Day ${b.due_day}` : "No due day"}
+                    {b.next_due_date ? `Due ${b.next_due_date}` : "No due date"}
                     {b.payment_status ? ` · ${b.payment_status}` : ""}
                   </p>
                 </div>

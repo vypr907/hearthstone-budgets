@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
 import { useBills, useDebts } from "@/lib/data-hooks";
-import { formatMoney, isOverdue } from "@/lib/format";
+import { formatMoney, isOverdue, dueDayFromDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, TrendingDown, TrendingUp } from "lucide-react";
 

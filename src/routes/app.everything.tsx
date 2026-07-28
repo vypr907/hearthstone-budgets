@@ -6,7 +6,7 @@ import {
   useSetPaymentStatus,
   useResetMonth,
 } from "@/lib/data-hooks";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, dueDayFromDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
