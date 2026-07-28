@@ -478,7 +478,7 @@ identical shared data.
 Bills follow a similar pattern, with two differences worth calling out: **`Due` + `Cycle`** together map to `next_due_date` + `billing_cycle` (not a single `due_day` — see the CSV cleanup discussion for why non-monthly bills need an actual anchor date), and **`Paid With` doesn't get imported** for the same reason as Debts above. Otherwise: map `Name`, `Category`, the payment amount, `Account`, `Status` → `payment_status`, `Auto` → `manual_or_auto`, and `Notes` directly, and drop `Lnk`, `Monthly Amount`, `Open`, and `Overdue Amt` as computed/helper columns.
 
 - [x] Import each cleaned CSV via Supabase → **Table Editor** → your table → **Insert → Import data from CSV**
-- [ ] Spot-check at least 5 bills and 5 debts against the live Google Sheet for accuracy
+- [x] Spot-check at least 5 bills and 5 debts against the live Google Sheet for accuracy
 - [x] Your old "Accounts" sheet is really two destinations now: institution-level facts (name, Type → `institution_type`, Category → `institutions.category_id`, login URL, username, "Sign in with Google," description, notes) go into `institutions`; **do not** import an actual password column — keep that in a password manager and just bring over the login URL
 - [x] Your old "Account Balances" sheet is also two destinations: `balance` + `as_of_date` become new rows in `account_balances`, while everything else (nickname, account type/subtype, APY, credit limit, spendable flag, net-worth flag) is a one-time value on the matching row in the new `accounts` table — not repeated on every snapshot. Each `accounts` row also needs its `institution_id` set to whichever institution it belongs under (e.g. the Checking and Savings accounts both point at your USAA institution row)
 
@@ -488,7 +488,7 @@ Bills follow a similar pattern, with two differences worth calling out: **`Due` 
 
 ## Phase 3 — "Everything" View & Basic Dashboard
 
-- [ ] In Lovable, prompt:
+- [x] In Lovable, prompt:
 
 ```
 On the Everything screen, add filtering by category and sorting by due date or amount. The
