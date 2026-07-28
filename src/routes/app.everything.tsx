@@ -58,7 +58,7 @@ function EverythingPage() {
         kind: "Bill" as const,
         name: b.name,
         amount: Number(b.amount || 0),
-        due_day: b.due_day,
+        due_day: dueDayFromDate(b.next_due_date),
         payment_status: b.payment_status,
       })),
       ...debts.map((d) => ({
