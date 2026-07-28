@@ -391,7 +391,7 @@ create policy "household access via account" on account_balances for all
 
 ### 1c. Start the Lovable project
 
-- [ ] Create a new Lovable project and paste this as your first prompt:
+- [x] Create a new Lovable project and paste this as your first prompt:
 
 ```
 Build a household budget and debt-payoff tracker Android app called [Ledger — pick your own name].
@@ -424,16 +424,16 @@ to its own members — don't build any single-user-only logic, both logins shoul
 identical shared data.
 ```
 
-- [ ] **Before creating the Lovable project**, know this up front: Lovable defaults every new project to **Lovable Cloud** (its own hidden backend), and once that's enabled there is currently no official way to disconnect it and switch to your own Supabase project — it's a one-way decision made at project creation, not a setting you flip later. So the very first message to a new project needs to say so explicitly:
+- [x] **Before creating the Lovable project**, know this up front: Lovable defaults every new project to **Lovable Cloud** (its own hidden backend), and once that's enabled there is currently no official way to disconnect it and switch to your own Supabase project — it's a one-way decision made at project creation, not a setting you flip later. So the very first message to a new project needs to say so explicitly:
   ```
   Important: do not use Lovable Cloud for this project. I already have my own Supabase
   project set up, and I'll connect it directly.
   ```
   Put this at the top of the Phase 1c scaffold prompt below, in the same message — not as a separate prompt afterward.
-- [ ] Once the project exists without Cloud auto-enabled, connect your own Supabase project via **Settings → Connectors → Supabase** (or the Cloud icon → "Already have a Supabase project? Connect it here"), using the Project URL + anon key from Project Settings → API
-- [ ] Sanity check: ask in the Lovable chat "what tables can you see in the connected database?" — it should list `households`, `household_members`, `categories`, etc. If it comes back empty, it's still on the wrong backend
-- [ ] Connect the project to GitHub (Settings → GitHub → Connect) so you have version history and can export code later in Phase 7
-- [ ] Log in as both users in the Lovable preview and confirm you both land on the same (currently empty) Bills/Debts screens
+- [x] Once the project exists without Cloud auto-enabled, connect your own Supabase project via **Settings → Connectors → Supabase** (or the Cloud icon → "Already have a Supabase project? Connect it here"), using the Project URL + anon key from Project Settings → API
+- [x] Sanity check: ask in the Lovable chat "what tables can you see in the connected database?" — it should list `households`, `household_members`, `categories`, etc. If it comes back empty, it's still on the wrong backend
+- [x] Connect the project to GitHub (Settings → GitHub → Connect) so you have version history and can export code later in Phase 7
+- [x] Log in as both users in the Lovable preview and confirm you both land on the same (currently empty) Bills/Debts screens
 
 **Milestone:** Both of you can log into the same shared, empty household. Bills, Debts, and Accounts screens exist and can add/edit/delete rows.
 
@@ -443,11 +443,11 @@ identical shared data.
 
 **Goal:** get your actual bills, debts, accounts, and balances into the app and verified — nothing gets retired yet.
 
-- [ ] Export "1. Bills" as CSV from Google Sheets (File → Download → CSV)
-- [ ] Export "2. Debts" as CSV
-- [ ] Export "Accounts" as CSV
-- [ ] Export "Balances" as CSV
-- [ ] Clean each CSV: delete any formula/helper columns that don't correspond to a real stored field (see the mapping table below for Debts), and rename headers to match the schema column names
+- [x] Export "1. Bills" as CSV from Google Sheets (File → Download → CSV)
+- [x] Export "2. Debts" as CSV
+- [x] Export "Accounts" as CSV
+- [x] Export "Balances" as CSV
+- [x] Clean each CSV: delete any formula/helper columns that don't correspond to a real stored field (see the mapping table below for Debts), and rename headers to match the schema column names
 
 **Debts column mapping** (your sheet → the `debts` table) — see the CSV cleanup discussion later in this doc for the full reasoning behind this version:
 
@@ -477,10 +477,10 @@ identical shared data.
 
 Bills follow a similar pattern, with two differences worth calling out: **`Due` + `Cycle`** together map to `next_due_date` + `billing_cycle` (not a single `due_day` — see the CSV cleanup discussion for why non-monthly bills need an actual anchor date), and **`Paid With` doesn't get imported** for the same reason as Debts above. Otherwise: map `Name`, `Category`, the payment amount, `Account`, `Status` → `payment_status`, `Auto` → `manual_or_auto`, and `Notes` directly, and drop `Lnk`, `Monthly Amount`, `Open`, and `Overdue Amt` as computed/helper columns.
 
-- [ ] Import each cleaned CSV via Supabase → **Table Editor** → your table → **Insert → Import data from CSV**
+- [x] Import each cleaned CSV via Supabase → **Table Editor** → your table → **Insert → Import data from CSV**
 - [ ] Spot-check at least 5 bills and 5 debts against the live Google Sheet for accuracy
-- [ ] Your old "Accounts" sheet is really two destinations now: institution-level facts (name, Type → `institution_type`, Category → `institutions.category_id`, login URL, username, "Sign in with Google," description, notes) go into `institutions`; **do not** import an actual password column — keep that in a password manager and just bring over the login URL
-- [ ] Your old "Account Balances" sheet is also two destinations: `balance` + `as_of_date` become new rows in `account_balances`, while everything else (nickname, account type/subtype, APY, credit limit, spendable flag, net-worth flag) is a one-time value on the matching row in the new `accounts` table — not repeated on every snapshot. Each `accounts` row also needs its `institution_id` set to whichever institution it belongs under (e.g. the Checking and Savings accounts both point at your USAA institution row)
+- [x] Your old "Accounts" sheet is really two destinations now: institution-level facts (name, Type → `institution_type`, Category → `institutions.category_id`, login URL, username, "Sign in with Google," description, notes) go into `institutions`; **do not** import an actual password column — keep that in a password manager and just bring over the login URL
+- [x] Your old "Account Balances" sheet is also two destinations: `balance` + `as_of_date` become new rows in `account_balances`, while everything else (nickname, account type/subtype, APY, credit limit, spendable flag, net-worth flag) is a one-time value on the matching row in the new `accounts` table — not repeated on every snapshot. Each `accounts` row also needs its `institution_id` set to whichever institution it belongs under (e.g. the Checking and Savings accounts both point at your USAA institution row)
 
 **Milestone:** Your real bills, debts, accounts, and balances are live in the app and match the sheet.
 
