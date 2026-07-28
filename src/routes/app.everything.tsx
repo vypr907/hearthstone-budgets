@@ -137,7 +137,7 @@ function EverythingPage() {
       await setStatus.mutateAsync({
         kind: "debt",
         id: r.id,
-        status: checked ? "paid" : "unpaid",
+        status: checked ? "cleared" : "unpaid",
       });
     } catch (e) {
       toast.error((e as Error).message);
