@@ -18,7 +18,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import type { Bill } from "@/lib/supabase";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { Bill, BillingCycle } from "@/lib/supabase";
+
+const CYCLES: BillingCycle[] = [
+  "monthly",
+  "biweekly",
+  "quarterly",
+  "bimonthly",
+  "annually",
+];
 
 export const Route = createFileRoute("/app/bills")({
   component: BillsPage,
@@ -85,6 +100,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDay, setDueDay] = useState("");
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [notes, setNotes] = useState("");
 
   const open = bill !== null;
@@ -104,6 +120,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setName(bill?.name ?? "");
     setAmount(bill?.amount != null ? String(bill.amount) : "");
     setDueDay(bill?.next_due_date ?? "");
+    setCycle((bill?.billing_cycle as BillingCycle) ?? "monthly");
     setNotes(bill?.notes ?? "");
   }
   if (!open && lastKey !== "") setLastKey("");
@@ -119,6 +136,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         name: name.trim(),
         amount: Number(amount),
         next_due_date: dueDay || null,
+        billing_cycle: cycle,
         notes: notes || null,
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
@@ -174,6 +192,21 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               />
             </div>
 
+          </div>
+          <div>
+            <Label>Billing cycle</Label>
+            <Select value={cycle} onValueChange={(v) => setCycle(v as BillingCycle)}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CYCLES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label htmlFor="b-notes">Notes</Label>
