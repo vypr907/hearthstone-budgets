@@ -1,6 +1,32 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Bill, type Debt, type Account, type AccountBalance } from "./supabase";
+import {
+  supabase,
+  type Bill,
+  type Debt,
+  type Account,
+  type AccountBalance,
+  type Category,
+} from "./supabase";
+import { advanceDate } from "./format";
 import { useAuth } from "./auth-context";
+
+export function useCategories() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["categories", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Category[]> => {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as Category[];
+    },
+  });
+}
+
 
 export function useBills() {
   const { householdId } = useAuth();
@@ -185,28 +211,49 @@ export function useSetPaymentStatus() {
   });
 }
 
-export function useResetMonth() {
+/**
+ * Clearing a bill rolls it into its next cycle: mark cleared, advance
+ * next_due_date by the bill's billing_cycle, then reset to unpaid.
+ */
+export function useClearBill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (bill: Bill) => {
+      const { error: e1 } = await supabase
+        .from("bills")
+        .update({ payment_status: "cleared" })
+        .eq("id", bill.id);
+      if (e1) throw e1;
+
+      const base = bill.next_due_date ?? new Date().toISOString().slice(0, 10);
+      const next = advanceDate(base, bill.billing_cycle);
+      const { error: e2 } = await supabase
+        .from("bills")
+        .update({ payment_status: "unpaid", next_due_date: next })
+        .eq("id", bill.id);
+      if (e2) throw e2;
+      return next;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bills"] }),
+  });
+}
+
+/** Debts are always monthly, so they still get a simple bulk reset. */
+export function useResetDebtsMonth() {
   const { householdId } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const { error: e1 } = await supabase
-        .from("bills")
-        .update({ payment_status: "unpaid" })
-        .eq("household_id", householdId!);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase
+      const { error } = await supabase
         .from("debts")
         .update({ payment_status: "unpaid" })
         .eq("household_id", householdId!);
-      if (e2) throw e2;
+      if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["bills"] });
-      qc.invalidateQueries({ queryKey: ["debts"] });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
   });
 }
+
 
 export function useUpsertAccount() {
   const { householdId } = useAuth();

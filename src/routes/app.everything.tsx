@@ -3,10 +3,12 @@ import { AppHeader } from "@/components/AppHeader";
 import {
   useBills,
   useDebts,
+  useCategories,
   useSetPaymentStatus,
-  useResetMonth,
+  useClearBill,
+  useResetDebtsMonth,
 } from "@/lib/data-hooks";
-import { formatMoney, dueDayFromDate } from "@/lib/format";
+import { formatMoney, dueDayToDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,7 @@ import {
 import { useState, useMemo } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
+import type { Bill } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/everything")({
   component: EverythingPage,
@@ -31,8 +34,11 @@ type Row = {
   kind: "Bill" | "Debt";
   name: string;
   amount: number;
-  due_day: number | null;
+  due_date: string | null;
+  category_id: string | null;
+  cycle: string | null;
   payment_status: string | null;
+  bill?: Bill;
 };
 
 function isPaid(status: string | null | undefined) {
@@ -42,14 +48,23 @@ function isPaid(status: string | null | undefined) {
 function EverythingPage() {
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
+  const { data: categories = [] } = useCategories();
   const setStatus = useSetPaymentStatus();
-  const resetMonth = useResetMonth();
+  const clearBill = useClearBill();
+  const resetDebts = useResetDebtsMonth();
 
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "bills" | "debts" | "unpaid" | "paid">(
     "all",
   );
-  const [sort, setSort] = useState<"due" | "amount" | "name">("due");
+  const [category, setCategory] = useState<string>("all");
+  const [sort, setSort] = useState<"due" | "amount">("due");
+
+  const categoryName = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of categories) m[c.id] = c.name;
+    return m;
+  }, [categories]);
 
   const rows = useMemo<Row[]>(() => {
     const all: Row[] = [
@@ -58,15 +73,20 @@ function EverythingPage() {
         kind: "Bill" as const,
         name: b.name,
         amount: Number(b.amount || 0),
-        due_day: dueDayFromDate(b.next_due_date),
+        due_date: b.next_due_date ? b.next_due_date.slice(0, 10) : null,
+        category_id: b.category_id,
+        cycle: b.billing_cycle,
         payment_status: b.payment_status,
+        bill: b,
       })),
       ...debts.map((d) => ({
         id: d.id,
         kind: "Debt" as const,
         name: d.name,
         amount: Number(d.minimum_payment || 0),
-        due_day: d.due_day,
+        due_date: dueDayToDate(d.due_day),
+        category_id: d.category_id,
+        cycle: "monthly",
         payment_status: d.payment_status,
       })),
     ];
@@ -76,23 +96,49 @@ function EverythingPage() {
     if (filter === "debts") out = out.filter((r) => r.kind === "Debt");
     if (filter === "unpaid") out = out.filter((r) => !isPaid(r.payment_status));
     if (filter === "paid") out = out.filter((r) => isPaid(r.payment_status));
+    if (category !== "all") {
+      out =
+        category === "none"
+          ? out.filter((r) => !r.category_id)
+          : out.filter((r) => r.category_id === category);
+    }
     if (q.trim()) {
       const t = q.toLowerCase();
       out = out.filter((r) => r.name.toLowerCase().includes(t));
     }
     out = [...out].sort((a, b) => {
       if (sort === "amount") return b.amount - a.amount;
-      if (sort === "name") return a.name.localeCompare(b.name);
-      return (a.due_day ?? 99) - (b.due_day ?? 99);
+      return (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31");
     });
     return out;
-  }, [bills, debts, filter, q, sort]);
+  }, [bills, debts, filter, category, q, sort]);
 
-  async function handleReset() {
-    if (!confirm("Reset all bills and debts to unpaid for the new month?")) return;
+  async function handleResetDebts() {
+    if (!confirm("Reset all debt payments to unpaid for the new month?")) return;
     try {
-      await resetMonth.mutateAsync();
-      toast.success("Reset for new month");
+      await resetDebts.mutateAsync();
+      toast.success("Debts reset for the new month");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function handleCheck(r: Row, checked: boolean) {
+    try {
+      if (r.kind === "Bill" && r.bill) {
+        if (!checked) {
+          await setStatus.mutateAsync({ kind: "bill", id: r.id, status: "unpaid" });
+          return;
+        }
+        const next = await clearBill.mutateAsync(r.bill);
+        toast.success(`${r.name} cleared · next due ${next}`);
+        return;
+      }
+      await setStatus.mutateAsync({
+        kind: "debt",
+        id: r.id,
+        status: checked ? "paid" : "unpaid",
+      });
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -129,21 +175,35 @@ function EverythingPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="due">Sort: Due day</SelectItem>
+              <SelectItem value="due">Sort: Due date</SelectItem>
               <SelectItem value="amount">Sort: Amount</SelectItem>
-              <SelectItem value="name">Sort: Name</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
+        <Select value={category} onValueChange={setCategory}>
+          <SelectTrigger className="h-11">
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            <SelectItem value="none">Uncategorized</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <Button
           variant="outline"
-          onClick={handleReset}
+          onClick={handleResetDebts}
           className="h-11 w-full"
-          disabled={resetMonth.isPending}
+          disabled={resetDebts.isPending}
         >
           <RotateCcw className="mr-2 h-4 w-4" />
-          Reset for new month
+          Reset debts for new month
         </Button>
 
         <div className="space-y-2 pt-2">
@@ -161,13 +221,7 @@ function EverythingPage() {
                 <CardContent className="flex items-center gap-3 p-3">
                   <Checkbox
                     checked={paid}
-                    onCheckedChange={(c) =>
-                      setStatus.mutate({
-                        kind: r.kind === "Bill" ? "bill" : "debt",
-                        id: r.id,
-                        status: c ? "paid" : "unpaid",
-                      })
-                    }
+                    onCheckedChange={(c) => handleCheck(r, !!c)}
                     className="h-6 w-6"
                   />
                   <div className="min-w-0 flex-1">
@@ -176,9 +230,13 @@ function EverythingPage() {
                     >
                       {r.name}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="truncate text-xs text-muted-foreground">
                       {r.kind}
-                      {r.due_day ? ` · day ${r.due_day}` : ""}
+                      {r.due_date ? ` · due ${r.due_date}` : ""}
+                      {r.cycle ? ` · ${r.cycle}` : ""}
+                      {r.category_id && categoryName[r.category_id]
+                        ? ` · ${categoryName[r.category_id]}`
+                        : ""}
                     </p>
                   </div>
                   <p className="shrink-0 font-semibold">{formatMoney(r.amount)}</p>

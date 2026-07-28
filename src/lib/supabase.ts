@@ -12,6 +12,13 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   },
 });
 
+export type BillingCycle =
+  | "monthly"
+  | "biweekly"
+  | "quarterly"
+  | "bimonthly"
+  | "annually";
+
 export type Bill = {
   id: string;
   household_id: string;
@@ -19,12 +26,20 @@ export type Bill = {
   category_id: string | null;
   amount: number;
   next_due_date: string | null;
+  billing_cycle: BillingCycle | null;
   payment_status: string | null;
   notes: string | null;
   is_active: boolean | null;
   created_at: string;
   updated_at: string;
 };
+
+export type Category = {
+  id: string;
+  household_id: string;
+  name: string;
+};
+
 
 export type Debt = {
   id: string;
