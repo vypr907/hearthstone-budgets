@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Bill, type Debt, type Transaction } from "./supabase";
-import { advanceDate } from "./format";
+import { advanceDate, reverseDate } from "./format";
 import { useAuth } from "./auth-context";
 
 function todayISO() {
@@ -172,23 +172,43 @@ export function useMarkCleared() {
   });
 }
 
-/** Undo: back to unpaid and drop any still-pending linked transaction. */
+/**
+ * Undo = full reversal: delete the linked ledger transaction, revert a bill's
+ * next_due_date by the same billing-cycle interval that clearing added, add a
+ * debt's payment back onto remaining_balance, and reset payment_status.
+ */
 export function useMarkUnpaid() {
   const done = useAfterPayment();
   return useMutation({
     mutationFn: async (p: Payable) => {
-      const { error } = await supabase
-        .from("transactions")
-        .delete()
-        .eq(linkColumn(p.kind), p.id)
-        .eq("status", "pending");
+      const tx = await findLinkedTransaction(p);
+      const wasCleared = tx?.status === "cleared";
+
+      if (tx) {
+        const { error } = await supabase.from("transactions").delete().eq("id", tx.id);
+        if (error) throw error;
+      }
+
+      if (p.kind === "debt") {
+        const update: Record<string, unknown> = { payment_status: "unpaid" };
+        if (wasCleared) {
+          const amount = Math.abs(Number(tx?.amount ?? p.amount));
+          update.remaining_balance = Number(p.debt?.remaining_balance ?? 0) + amount;
+        }
+        const { error } = await supabase.from("debts").update(update).eq("id", p.id);
+        if (error) throw error;
+        return;
+      }
+
+      const bill = p.bill;
+      const update: Record<string, unknown> = { payment_status: "unpaid" };
+      if (wasCleared && bill?.next_due_date) {
+        update.next_due_date = reverseDate(bill.next_due_date, bill.billing_cycle);
+      }
+      const { error } = await supabase.from("bills").update(update).eq("id", p.id);
       if (error) throw error;
-      const { error: e2 } = await supabase
-        .from(table(p.kind))
-        .update({ payment_status: "unpaid" })
-        .eq("id", p.id);
-      if (e2) throw e2;
     },
     onSuccess: done,
   });
 }
+

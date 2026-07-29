@@ -47,30 +47,57 @@ export function dueDayToDate(day: number | null | undefined): string | null {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
-/** Advance an ISO date by one billing-cycle interval. */
-export function advanceDate(date: string, cycle: string | null | undefined): string {
+/** Normalize stored cycle values ("Bi-Weekly", "bi weekly", …) to a known key. */
+function normalizeCycle(cycle: string | null | undefined): string {
+  return (cycle ?? "").toLowerCase().replace(/[\s_-]/g, "");
+}
+
+/**
+ * Shift an ISO date by one billing-cycle interval.
+ * direction 1 advances (clearing), -1 reverses (undo). 'custom' never moves.
+ */
+export function shiftDate(
+  date: string,
+  cycle: string | null | undefined,
+  direction: 1 | -1 = 1,
+): string {
+  const key = normalizeCycle(cycle);
+  if (key === "custom") return date.slice(0, 10);
   const [y, m, d] = date.slice(0, 10).split("-").map(Number);
   const base = new Date(y, m - 1, d);
-  switch (cycle) {
+  switch (key) {
     case "biweekly":
-      base.setDate(base.getDate() + 14);
+      base.setDate(base.getDate() + 14 * direction);
       break;
     case "bimonthly":
-      addMonths(base, 2, d);
+      addMonths(base, 2 * direction, d);
       break;
     case "quarterly":
-      addMonths(base, 3, d);
+      addMonths(base, 3 * direction, d);
       break;
     case "annually":
-      addMonths(base, 12, d);
+    case "annual":
+    case "yearly":
+      addMonths(base, 12 * direction, d);
       break;
     default:
-      addMonths(base, 1, d);
+      addMonths(base, 1 * direction, d);
   }
   return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(
     base.getDate(),
   ).padStart(2, "0")}`;
 }
+
+/** Advance an ISO date by one billing-cycle interval. */
+export function advanceDate(date: string, cycle: string | null | undefined): string {
+  return shiftDate(date, cycle, 1);
+}
+
+/** Reverse an ISO date by one billing-cycle interval (undo). */
+export function reverseDate(date: string, cycle: string | null | undefined): string {
+  return shiftDate(date, cycle, -1);
+}
+
 
 function addMonths(date: Date, months: number, targetDay: number) {
   date.setDate(1);
