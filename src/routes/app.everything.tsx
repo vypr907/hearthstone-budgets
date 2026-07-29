@@ -24,6 +24,7 @@ import { useState, useMemo } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
+import { StatusBadge } from "@/components/detail";
 
 export const Route = createFileRoute("/app/everything")({
   head: () => ({
@@ -233,11 +234,14 @@ function EverythingPage() {
                     className="h-6 w-6"
                   />
                   <div className="min-w-0 flex-1">
-                    <p
-                      className={`truncate font-medium ${paid ? "line-through text-muted-foreground" : ""}`}
-                    >
-                      {r.name}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p
+                        className={`truncate font-medium ${paid ? "line-through text-muted-foreground" : ""}`}
+                      >
+                        {r.name}
+                      </p>
+                      <StatusBadge status={r.payment_status} />
+                    </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {r.kind}
                       {r.due_date ? ` · due ${r.due_date}` : ""}
