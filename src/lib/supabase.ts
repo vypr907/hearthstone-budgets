@@ -49,7 +49,7 @@ export type Debt = {
   name: string;
   category_id: string | null;
   debt_type: string | null;
-  account_id: string | null;
+  institution_id: string | null;
   starting_balance: number | null;
   program_start_balance: number | null;
   remaining_balance: number | null;
@@ -91,6 +91,11 @@ export type AccountBalance = {
 export type Household = {
   id: string;
   name?: string;
+};
+
+export type InstitutionCategory = {
+  institution_id: string;
+  category_id: string;
 };
 
 export type Institution = {

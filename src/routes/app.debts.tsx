@@ -251,7 +251,7 @@ function DebtDetailDialog({
   const { data: categories = [] } = useCategories();
   const { data: accounts = [] } = useAccounts();
   const category = categories.find((c) => c.id === debt?.category_id);
-  const account = accounts.find((a) => a.id === debt?.account_id);
+  const account = accounts.find((a) => a.institution_id === debt?.institution_id);
 
   const open = debt !== null;
   if (!debt) return null;

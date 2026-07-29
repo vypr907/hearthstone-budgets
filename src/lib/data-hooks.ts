@@ -7,6 +7,7 @@ import {
   type AccountBalance,
   type Category,
   type Institution,
+  type InstitutionCategory,
   type Transaction,
 } from "./supabase";
 import { advanceDate } from "./format";
@@ -344,10 +345,15 @@ export function useUpsertInstitution() {
       if (i.id) {
         const { error } = await supabase.from("institutions").update(payload).eq("id", i.id);
         if (error) throw error;
-      } else {
-        const { error } = await supabase.from("institutions").insert(payload);
-        if (error) throw error;
+        return i.id;
       }
+      const { data, error } = await supabase
+        .from("institutions")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error) throw error;
+      return (data as { id: string }).id;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["institutions"] }),
   });
@@ -418,5 +424,73 @@ export function useDeleteTransaction() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions"] }),
+  });
+}
+
+/* ---------------- Institution categories (join table) ---------------- */
+
+/** Map of institution_id -> category_id[] from the institution_categories join table. */
+export function useInstitutionCategories() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["institution_categories", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Record<string, string[]>> => {
+      const { data: insts } = await supabase
+        .from("institutions")
+        .select("id")
+        .eq("household_id", householdId!);
+      const ids = (insts ?? []).map((i) => i.id);
+      if (ids.length === 0) return {};
+      const { data, error } = await supabase
+        .from("institution_categories")
+        .select("institution_id,category_id")
+        .in("institution_id", ids);
+      if (error) throw error;
+      const out: Record<string, string[]> = {};
+      for (const r of (data ?? []) as InstitutionCategory[]) {
+        (out[r.institution_id] ??= []).push(r.category_id);
+      }
+      return out;
+    },
+  });
+}
+
+/** Sync an institution's categories: insert added rows, delete removed ones. */
+export function useSetInstitutionCategories() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      institutionId,
+      categoryIds,
+    }: {
+      institutionId: string;
+      categoryIds: string[];
+    }) => {
+      const { data, error } = await supabase
+        .from("institution_categories")
+        .select("category_id")
+        .eq("institution_id", institutionId);
+      if (error) throw error;
+      const current = new Set((data ?? []).map((r) => r.category_id as string));
+      const next = new Set(categoryIds);
+      const toAdd = categoryIds.filter((c) => !current.has(c));
+      const toRemove = [...current].filter((c) => !next.has(c));
+      if (toAdd.length) {
+        const { error: e } = await supabase
+          .from("institution_categories")
+          .insert(toAdd.map((category_id) => ({ institution_id: institutionId, category_id })));
+        if (e) throw e;
+      }
+      if (toRemove.length) {
+        const { error: e } = await supabase
+          .from("institution_categories")
+          .delete()
+          .eq("institution_id", institutionId)
+          .in("category_id", toRemove);
+        if (e) throw e;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["institution_categories"] }),
   });
 }
