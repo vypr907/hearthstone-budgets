@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppMoreRouteImport } from './routes/app.more'
 import { Route as AppEverythingRouteImport } from './routes/app.everything'
 import { Route as AppDebtsRouteImport } from './routes/app.debts'
 import { Route as AppBillsRouteImport } from './routes/app.bills'
@@ -36,6 +37,11 @@ const IndexRoute = IndexRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMoreRoute = AppMoreRouteImport.update({
+  id: '/more',
+  path: '/more',
   getParentRoute: () => AppRoute,
 } as any)
 const AppEverythingRoute = AppEverythingRouteImport.update({
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/app/bills': typeof AppBillsRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
+  '/app/more': typeof AppMoreRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
@@ -76,6 +83,7 @@ export interface FileRoutesByTo {
   '/app/bills': typeof AppBillsRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
+  '/app/more': typeof AppMoreRoute
   '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -87,6 +95,7 @@ export interface FileRoutesById {
   '/app/bills': typeof AppBillsRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
+  '/app/more': typeof AppMoreRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
@@ -99,6 +108,7 @@ export interface FileRouteTypes {
     | '/app/bills'
     | '/app/debts'
     | '/app/everything'
+    | '/app/more'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/app/bills'
     | '/app/debts'
     | '/app/everything'
+    | '/app/more'
     | '/app'
   id:
     | '__root__'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/app/bills'
     | '/app/debts'
     | '/app/everything'
+    | '/app/more'
     | '/app/'
   fileRoutesById: FileRoutesById
 }
@@ -157,6 +169,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/more': {
+      id: '/app/more'
+      path: '/more'
+      fullPath: '/app/more'
+      preLoaderRoute: typeof AppMoreRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/everything': {
       id: '/app/everything'
       path: '/everything'
@@ -193,6 +212,7 @@ interface AppRouteChildren {
   AppBillsRoute: typeof AppBillsRoute
   AppDebtsRoute: typeof AppDebtsRoute
   AppEverythingRoute: typeof AppEverythingRoute
+  AppMoreRoute: typeof AppMoreRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
@@ -201,6 +221,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppBillsRoute: AppBillsRoute,
   AppDebtsRoute: AppDebtsRoute,
   AppEverythingRoute: AppEverythingRoute,
+  AppMoreRoute: AppMoreRoute,
   AppIndexRoute: AppIndexRoute,
 }
 

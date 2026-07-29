@@ -1,0 +1,347 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { AppHeader } from "@/components/AppHeader";
+import {
+  useInstitutions,
+  useUpsertInstitution,
+  useDeleteInstitution,
+  useAccounts,
+  useLatestBalances,
+} from "@/lib/data-hooks";
+import { formatMoney } from "@/lib/format";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import type { Institution } from "@/lib/supabase";
+import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
+
+export const Route = createFileRoute("/app/institutions")({
+  head: () => ({
+    meta: [
+      { title: "Institutions — Hearthstone" },
+      {
+        name: "description",
+        content:
+          "Keep every bank, lender, and biller your household uses, with login links and their accounts.",
+      },
+      { property: "og:title", content: "Institutions — Hearthstone" },
+      {
+        property: "og:description",
+        content:
+          "Keep every bank, lender, and biller your household uses, with login links and their accounts.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
+  component: InstitutionsPage,
+});
+
+function InstitutionsPage() {
+  const { data: institutions = [], isLoading } = useInstitutions();
+  const [editing, setEditing] = useState<Partial<Institution> | null>(null);
+  const [detail, setDetail] = useState<Institution | null>(null);
+
+  return (
+    <>
+      <AppHeader title="Institutions" />
+      <div className="space-y-3 p-4">
+        <Button className="h-12 w-full text-base" onClick={() => setEditing({})}>
+          <Plus className="mr-2 h-5 w-5" /> Add institution
+        </Button>
+
+        {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {!isLoading && institutions.length === 0 && (
+          <Card>
+            <CardContent className="p-4 text-sm text-muted-foreground">
+              No institutions yet.
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="space-y-2">
+          {institutions.map((i) => (
+            <Card key={i.id} className="cursor-pointer" onClick={() => setDetail(i)}>
+              <CardContent className="flex items-start gap-3 p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{i.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {i.institution_type || "Institution"}
+                    {i.sign_in_with_google ? " · Google sign-in" : ""}
+                  </p>
+                  {i.description ? (
+                    <p className="truncate text-xs text-muted-foreground">{i.description}</p>
+                  ) : null}
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Edit"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditing(i);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      <InstitutionDialog institution={editing} onClose={() => setEditing(null)} />
+      <InstitutionDetail
+        institution={detail}
+        onClose={() => setDetail(null)}
+        onEdit={(i) => {
+          setDetail(null);
+          setEditing(i);
+        }}
+      />
+    </>
+  );
+}
+
+function InstitutionDetail({
+  institution,
+  onClose,
+  onEdit,
+}: {
+  institution: Institution | null;
+  onClose: () => void;
+  onEdit: (i: Institution) => void;
+}) {
+  const { data: accounts = [] } = useAccounts();
+  const { data: latest = {} } = useLatestBalances();
+  if (!institution) return null;
+  const linked = accounts.filter((a) => a.institution_id === institution.id);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{institution.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <DetailGrid>
+            <DetailItem label="Type" value={institution.institution_type ?? "—"} />
+            <DetailItem
+              label="Sign in with Google"
+              value={institution.sign_in_with_google ? "Yes" : "No"}
+            />
+            <DetailItem label="Login username" value={institution.login_username ?? "—"} />
+            <DetailItem
+              label="Login URL"
+              value={
+                institution.login_url ? (
+                  <a
+                    href={institution.login_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="break-all text-primary underline"
+                  >
+                    Open
+                  </a>
+                ) : (
+                  "—"
+                )
+              }
+            />
+          </DetailGrid>
+          <DetailText label="Description" value={institution.description} />
+          <DetailText label="Notes" value={institution.notes} />
+
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Accounts
+            </p>
+            {linked.length === 0 && (
+              <p className="text-sm text-muted-foreground">No accounts linked.</p>
+            )}
+            <div className="space-y-2">
+              {linked.map((a) => {
+                const bal = latest[a.id];
+                const value = bal ? Number(bal.balance) : Number(a.starting_balance ?? 0);
+                return (
+                  <Card key={a.id}>
+                    <CardContent className="flex items-center gap-3 p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{a.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {a.account_type || "Account"}
+                        </p>
+                      </div>
+                      <p className="shrink-0 font-semibold">{formatMoney(value)}</p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" className="h-11" onClick={() => onEdit(institution)}>
+            <Pencil className="mr-2 h-4 w-4" /> Edit
+          </Button>
+          <Button className="h-11" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InstitutionDialog({
+  institution,
+  onClose,
+}: {
+  institution: Partial<Institution> | null;
+  onClose: () => void;
+}) {
+  const upsert = useUpsertInstitution();
+  const del = useDeleteInstitution();
+  const [name, setName] = useState("");
+  const [type, setType] = useState("");
+  const [loginUrl, setLoginUrl] = useState("");
+  const [username, setUsername] = useState("");
+  const [google, setGoogle] = useState(false);
+  const [description, setDescription] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const open = institution !== null;
+  const isEdit = !!institution?.id;
+  const key = institution?.id ?? "new";
+  const [lastKey, setLastKey] = useState("");
+  if (open && key !== lastKey) {
+    setLastKey(key);
+    setName(institution?.name ?? "");
+    setType(institution?.institution_type ?? "");
+    setLoginUrl(institution?.login_url ?? "");
+    setUsername(institution?.login_username ?? "");
+    setGoogle(!!institution?.sign_in_with_google);
+    setDescription(institution?.description ?? "");
+    setNotes(institution?.notes ?? "");
+  }
+  if (!open && lastKey !== "") setLastKey("");
+
+  async function save() {
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    try {
+      await upsert.mutateAsync({
+        id: institution?.id,
+        name: name.trim(),
+        institution_type: type || null,
+        login_url: loginUrl || null,
+        login_username: username || null,
+        sign_in_with_google: google,
+        description: description || null,
+        notes: notes || null,
+      });
+      toast.success(isEdit ? "Institution updated" : "Institution added");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function handleDelete() {
+    if (!institution?.id) return;
+    if (!confirm("Delete this institution?")) return;
+    try {
+      await del.mutateAsync(institution.id);
+      toast.success("Institution deleted");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit institution" : "Add institution"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
+          </div>
+          <div>
+            <Label>Type</Label>
+            <Input
+              placeholder="Bank, lender, utility…"
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="h-11"
+            />
+          </div>
+          <div>
+            <Label>Login URL</Label>
+            <Input
+              type="url"
+              value={loginUrl}
+              onChange={(e) => setLoginUrl(e.target.value)}
+              className="h-11"
+            />
+          </div>
+          <div>
+            <Label>Login username</Label>
+            <Input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="h-11"
+            />
+          </div>
+          <div className="flex items-center justify-between rounded border border-border p-3">
+            <Label htmlFor="i-google">Sign in with Google</Label>
+            <Switch id="i-google" checked={google} onCheckedChange={setGoogle} />
+          </div>
+          <div>
+            <Label>Description</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Notes</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Passwords are never stored in Hearthstone.
+          </p>
+        </div>
+        <DialogFooter className="gap-2 sm:justify-between">
+          {isEdit ? (
+            <Button variant="destructive" className="h-11" onClick={handleDelete}>
+              <Trash2 className="mr-2 h-4 w-4" /> Delete
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button onClick={save} disabled={upsert.isPending} className="h-11">
+            {isEdit ? "Save" : "Add"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
