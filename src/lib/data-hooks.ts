@@ -6,6 +6,8 @@ import {
   type Account,
   type AccountBalance,
   type Category,
+  type Institution,
+  type Transaction,
 } from "./supabase";
 import { advanceDate } from "./format";
 import { useAuth } from "./auth-context";
@@ -311,5 +313,110 @@ export function useLogBalance() {
       qc.invalidateQueries({ queryKey: ["account_balances", vars.account_id] });
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
     },
+  });
+}
+
+/* ---------------- Institutions ---------------- */
+
+export function useInstitutions() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["institutions", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Institution[]> => {
+      const { data, error } = await supabase
+        .from("institutions")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as Institution[];
+    },
+  });
+}
+
+export function useUpsertInstitution() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (i: Partial<Institution> & { name: string }) => {
+      const payload = { ...i, household_id: householdId };
+      if (i.id) {
+        const { error } = await supabase.from("institutions").update(payload).eq("id", i.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("institutions").insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["institutions"] }),
+  });
+}
+
+export function useDeleteInstitution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("institutions").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["institutions"] });
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+    },
+  });
+}
+
+/* ---------------- Transactions ---------------- */
+
+export function useTransactions() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["transactions", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Transaction[]> => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Transaction[];
+    },
+  });
+}
+
+export function useUpsertTransaction() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (t: Partial<Transaction> & { amount: number }) => {
+      const payload = { ...t, household_id: householdId };
+      if (t.id) {
+        const { error } = await supabase.from("transactions").update(payload).eq("id", t.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("transactions").insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions"] }),
+  });
+}
+
+/** Only manual (unlinked) transactions may be deleted — linked rows keep
+ * bill/debt payment_status in sync with the ledger. */
+export function useDeleteTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (t: Transaction) => {
+      if (t.linked_bill_id || t.linked_debt_id) {
+        throw new Error("Linked transactions can't be deleted");
+      }
+      const { error } = await supabase.from("transactions").delete().eq("id", t.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions"] }),
   });
 }
