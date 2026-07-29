@@ -58,13 +58,11 @@ type Row = {
   category_id: string | null;
   cycle: string | null;
   payment_status: string | null;
+  payable: Payable;
+  state: LedgerState;
   bill?: Bill;
   debt?: Debt;
 };
-
-function isPaid(status: string | null | undefined) {
-  return status === "paid" || status === "cleared";
-}
 
 function EverythingPage() {
   const { data: bills = [] } = useBills();
@@ -72,6 +70,7 @@ function EverythingPage() {
   const { data: categories = [] } = useCategories();
   const resetDebts = useResetDebtsMonth();
   const { start, markUnpaid, busy, picker } = usePayFlow();
+  const stateOf = useLedgerState();
 
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "bills" | "debts" | "unpaid" | "paid">(
@@ -88,35 +87,45 @@ function EverythingPage() {
 
   const rows = useMemo<Row[]>(() => {
     const all: Row[] = [
-      ...bills.map((b) => ({
-        id: b.id,
-        kind: "Bill" as const,
-        name: b.name,
-        amount: Number(b.amount || 0),
-        due_date: b.next_due_date ? b.next_due_date.slice(0, 10) : null,
-        category_id: b.category_id,
-        cycle: b.billing_cycle,
-        payment_status: b.payment_status,
-        bill: b,
-      })),
-      ...debts.map((d) => ({
-        id: d.id,
-        kind: "Debt" as const,
-        name: d.name,
-        amount: Number(d.minimum_payment || 0),
-        due_date: dueDayToDate(d.due_day),
-        category_id: d.category_id,
-        cycle: "monthly",
-        payment_status: d.payment_status,
-        debt: d,
-      })),
+      ...bills.map((b) => {
+        const payable = toPayable("bill", b);
+        return {
+          id: b.id,
+          kind: "Bill" as const,
+          name: b.name,
+          amount: Number(b.amount || 0),
+          due_date: b.next_due_date ? b.next_due_date.slice(0, 10) : null,
+          category_id: b.category_id,
+          cycle: b.billing_cycle,
+          payment_status: b.payment_status,
+          payable,
+          state: stateOf(payable),
+          bill: b,
+        };
+      }),
+      ...debts.map((d) => {
+        const payable = toPayable("debt", d);
+        return {
+          id: d.id,
+          kind: "Debt" as const,
+          name: d.name,
+          amount: Number(d.minimum_payment || 0),
+          due_date: dueDayToDate(d.due_day),
+          category_id: d.category_id,
+          cycle: "monthly",
+          payment_status: d.payment_status,
+          payable,
+          state: stateOf(payable),
+          debt: d,
+        };
+      }),
     ];
 
     let out = all;
     if (filter === "bills") out = out.filter((r) => r.kind === "Bill");
     if (filter === "debts") out = out.filter((r) => r.kind === "Debt");
-    if (filter === "unpaid") out = out.filter((r) => !isPaid(r.payment_status));
-    if (filter === "paid") out = out.filter((r) => isPaid(r.payment_status));
+    if (filter === "unpaid") out = out.filter((r) => r.state !== "cleared");
+    if (filter === "paid") out = out.filter((r) => r.state === "cleared");
     if (category !== "all") {
       out =
         category === "none"
@@ -132,7 +141,7 @@ function EverythingPage() {
       return (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31");
     });
     return out;
-  }, [bills, debts, filter, category, q, sort]);
+  }, [bills, debts, filter, category, q, sort, stateOf]);
 
   async function handleResetDebts() {
     if (!confirm("Reset all debt payments to unpaid for the new month?")) return;
