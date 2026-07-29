@@ -1,9 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
-import { useDebts, useDeleteDebt, useUpsertDebt } from "@/lib/data-hooks";
+import {
+  useDebts,
+  useDeleteDebt,
+  useUpsertDebt,
+  useCategories,
+  useAccounts,
+} from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -15,17 +22,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { Debt } from "@/lib/supabase";
+import { format } from "date-fns";
 
 export const Route = createFileRoute("/app/debts")({
   component: DebtsPage,
 });
 
+function statusVariant(status: string | null | undefined) {
+  switch (status) {
+    case "pending":
+      return "secondary";
+    case "cleared":
+      return "outline";
+    case "unpaid":
+    default:
+      return "default";
+  }
+}
+
 function DebtsPage() {
   const { data: debts = [], isLoading } = useDebts();
   const [editing, setEditing] = useState<Partial<Debt> | null>(null);
+  const [detail, setDetail] = useState<Debt | null>(null);
 
   return (
     <>
@@ -46,21 +67,36 @@ function DebtsPage() {
 
         <div className="space-y-2">
           {debts.map((d) => (
-            <Card key={d.id}>
+            <Card
+              key={d.id}
+              className="cursor-pointer"
+              onClick={() => setDetail(d)}
+            >
               <CardContent className="p-3">
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{d.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {d.debt_type || "Debt"}
-                      {d.due_day ? ` · day ${d.due_day}` : ""}
-                      {d.interest_rate != null ? ` · ${Number(d.interest_rate)}% APR` : ""}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span>{d.debt_type || "Debt"}</span>
+                      {d.due_day ? <span>· day {d.due_day}</span> : null}
+                      {d.interest_rate != null ? (
+                        <span>· {Number(d.interest_rate)}% APR</span>
+                      ) : null}
+                      <Badge
+                        variant={statusVariant(d.payment_status)}
+                        className="capitalize"
+                      >
+                        {d.payment_status || "unpaid"}
+                      </Badge>
+                    </div>
                   </div>
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={() => setEditing(d)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(d);
+                    }}
                     aria-label="Edit"
                   >
                     <Pencil className="h-4 w-4" />
@@ -69,11 +105,15 @@ function DebtsPage() {
                 <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                   <div className="rounded bg-muted/40 p-2">
                     <p className="text-xs text-muted-foreground">Remaining</p>
-                    <p className="font-semibold">{formatMoney(Number(d.remaining_balance))}</p>
+                    <p className="font-semibold">
+                      {formatMoney(Number(d.remaining_balance))}
+                    </p>
                   </div>
                   <div className="rounded bg-muted/40 p-2">
                     <p className="text-xs text-muted-foreground">Min payment</p>
-                    <p className="font-semibold">{formatMoney(Number(d.minimum_payment))}</p>
+                    <p className="font-semibold">
+                      {formatMoney(Number(d.minimum_payment))}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -83,11 +123,165 @@ function DebtsPage() {
       </div>
 
       <DebtDialog debt={editing} onClose={() => setEditing(null)} />
+      <DebtDetailDialog
+        debt={detail}
+        onClose={() => setDetail(null)}
+        onEdit={(d) => {
+          setDetail(null);
+          setEditing(d);
+        }}
+      />
     </>
   );
 }
 
-function DebtDialog({ debt, onClose }: { debt: Partial<Debt> | null; onClose: () => void }) {
+function DebtDetailDialog({
+  debt,
+  onClose,
+  onEdit,
+}: {
+  debt: Debt | null;
+  onClose: () => void;
+  onEdit?: (debt: Debt) => void;
+}) {
+  const { data: categories = [] } = useCategories();
+  const { data: accounts = [] } = useAccounts();
+  const category = categories.find((c) => c.id === debt?.category_id);
+  const account = accounts.find((a) => a.id === debt?.account_id);
+
+  const open = debt !== null;
+  if (!debt) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{debt.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <DetailGrid>
+            <DetailItem label="Category" value={category?.name ?? "—"} />
+            <DetailItem label="Debt type" value={debt.debt_type ?? "—"} />
+            <DetailItem label="Account" value={account?.name ?? "—"} />
+            <DetailMoney label="Starting balance" value={debt.starting_balance} />
+            <DetailMoney
+              label="Program start balance"
+              value={debt.program_start_balance}
+            />
+            <DetailMoney label="Remaining balance" value={debt.remaining_balance} />
+            <DetailMoney label="Minimum payment" value={debt.minimum_payment} />
+            <DetailItem
+              label="Interest rate"
+              value={
+                debt.interest_rate != null ? `${debt.interest_rate}%` : "—"
+              }
+            />
+            <DetailMoney
+              label="Known finance charge"
+              value={debt.known_finance_charge}
+            />
+            <DetailItem
+              label="Due day"
+              value={debt.due_day != null ? String(debt.due_day) : "—"}
+            />
+            <DetailItem
+              label="Payment status"
+              value={
+                <Badge
+                  variant={statusVariant(debt.payment_status)}
+                  className="capitalize"
+                >
+                  {debt.payment_status || "unpaid"}
+                </Badge>
+              }
+            />
+            <DetailItem
+              label="On payment plan"
+              value={
+                debt.on_payment_plan === null
+                  ? "—"
+                  : debt.on_payment_plan
+                    ? "Yes"
+                    : "No"
+              }
+            />
+            <DetailItem
+              label="Manual or auto"
+              value={debt.manual_or_auto ?? "—"}
+            />
+            <DetailItem
+              label="Priority order"
+              value={
+                debt.priority_order != null ? String(debt.priority_order) : "—"
+              }
+            />
+          </DetailGrid>
+
+          <div>
+            <p className="text-xs text-muted-foreground">Notes</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm">
+              {debt.notes ?? "—"}
+            </p>
+          </div>
+
+          {debt.date_paid_off && (
+            <div>
+              <p className="text-xs text-muted-foreground">Date paid off</p>
+              <p className="mt-1 text-sm">
+                {format(new Date(debt.date_paid_off), "MMM d, yyyy")}
+              </p>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          {onEdit && (
+            <Button variant="outline" onClick={() => onEdit(debt)} className="h-11">
+              <Pencil className="mr-2 h-4 w-4" /> Edit
+            </Button>
+          )}
+          <Button onClick={onClose} className="h-11">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailGrid({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">{children}</div>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="mt-0.5 font-medium">{value}</div>
+    </div>
+  );
+}
+
+function DetailMoney({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | null | undefined;
+}) {
+  return (
+    <DetailItem label={label} value={value != null ? formatMoney(value) : "—"} />
+  );
+}
+
+function DebtDialog({
+  debt,
+  onClose,
+}: {
+  debt: Partial<Debt> | null;
+  onClose: () => void;
+}) {
   const upsert = useUpsertDebt();
   const del = useDeleteDebt();
   const [name, setName] = useState("");
