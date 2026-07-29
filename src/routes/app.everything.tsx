@@ -4,10 +4,10 @@ import {
   useBills,
   useDebts,
   useCategories,
-  useSetPaymentStatus,
-  useClearBill,
   useResetDebtsMonth,
 } from "@/lib/data-hooks";
+import { usePayFlow } from "@/lib/pay-flow";
+import { toPayable } from "@/lib/payments";
 import { formatMoney, dueDayToDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,7 +23,7 @@ import {
 import { useState, useMemo } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
-import type { Bill } from "@/lib/supabase";
+import type { Bill, Debt } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/everything")({
   head: () => ({
@@ -57,6 +57,7 @@ type Row = {
   cycle: string | null;
   payment_status: string | null;
   bill?: Bill;
+  debt?: Debt;
 };
 
 function isPaid(status: string | null | undefined) {
@@ -67,9 +68,8 @@ function EverythingPage() {
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
   const { data: categories = [] } = useCategories();
-  const setStatus = useSetPaymentStatus();
-  const clearBill = useClearBill();
   const resetDebts = useResetDebtsMonth();
+  const { start, markUnpaid, busy, picker } = usePayFlow();
 
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "bills" | "debts" | "unpaid" | "paid">(
@@ -106,6 +106,7 @@ function EverythingPage() {
         category_id: d.category_id,
         cycle: "monthly",
         payment_status: d.payment_status,
+        debt: d,
       })),
     ];
 
@@ -141,25 +142,13 @@ function EverythingPage() {
     }
   }
 
-  async function handleCheck(r: Row, checked: boolean) {
-    try {
-      if (r.kind === "Bill" && r.bill) {
-        if (!checked) {
-          await setStatus.mutateAsync({ kind: "bill", id: r.id, status: "unpaid" });
-          return;
-        }
-        const next = await clearBill.mutateAsync(r.bill);
-        toast.success(`${r.name} cleared · next due ${next}`);
-        return;
-      }
-      await setStatus.mutateAsync({
-        kind: "debt",
-        id: r.id,
-        status: checked ? "cleared" : "unpaid",
-      });
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
+  function handleCheck(r: Row, checked: boolean) {
+    const payable =
+      r.kind === "Bill"
+        ? toPayable("bill", r.bill!)
+        : toPayable("debt", r.debt!);
+    if (checked) start(payable, "cleared");
+    else void markUnpaid(payable);
   }
 
   return (
@@ -239,6 +228,7 @@ function EverythingPage() {
                 <CardContent className="flex items-center gap-3 p-3">
                   <Checkbox
                     checked={paid}
+                    disabled={busy}
                     onCheckedChange={(c) => handleCheck(r, !!c)}
                     className="h-6 w-6"
                   />
@@ -264,6 +254,7 @@ function EverythingPage() {
           })}
         </div>
       </div>
+      {picker}
     </>
   );
 }
