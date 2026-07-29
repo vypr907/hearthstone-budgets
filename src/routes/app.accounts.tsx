@@ -127,7 +127,6 @@ function AccountDialog({
   const del = useDeleteAccount();
   const [name, setName] = useState("");
   const [type, setType] = useState("");
-  const [loginUrl, setLoginUrl] = useState("");
   const [starting, setStarting] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -139,7 +138,6 @@ function AccountDialog({
     setLastKey(key);
     setName(account?.name ?? "");
     setType(account?.account_type ?? "");
-    setLoginUrl(account?.login_url ?? "");
     setStarting(account?.starting_balance != null ? String(account.starting_balance) : "");
     setNotes(account?.notes ?? "");
   }
@@ -155,7 +153,6 @@ function AccountDialog({
         id: account?.id,
         name: name.trim(),
         account_type: type || null,
-        login_url: loginUrl || null,
         starting_balance: starting ? Number(starting) : null,
         notes: notes || null,
       });
@@ -195,15 +192,6 @@ function AccountDialog({
               placeholder="Checking, savings, credit…"
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="h-11"
-            />
-          </div>
-          <div>
-            <Label>Login URL</Label>
-            <Input
-              type="url"
-              value={loginUrl}
-              onChange={(e) => setLoginUrl(e.target.value)}
               className="h-11"
             />
           </div>
