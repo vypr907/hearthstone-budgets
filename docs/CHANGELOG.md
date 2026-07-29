@@ -79,3 +79,47 @@
 
 * Remaining cleanup may include removing legacy fields after validation (`due_day`, old account references, etc.).
 * Future scheduling improvements should keep Bills and Debts aligned around shared recurrence concepts (`next_due_date`, `billing_cycle`, and related scheduling fields).
+
+## [Unreleased] - 2026-07-28
+
+### Fixed
+- Bills screen not displaying any rows (RLS/scoping ruled out; frontend query bug)
+- Debt checkbox write violating `debts_payment_status_check` (legacy value instead of unpaid/pending/cleared)
+- Marking a bill/debt paid failing with `NOT NULL` violation on `transactions.account_id`
+- Bill cycle-advance always adding +1 month regardless of `billing_cycle` (biweekly bills now advance +14 days, etc.)
+- "Undo" only resetting `payment_status` without deleting the transaction or reverting `next_due_date` / `remaining_balance`
+- Everything screen checkbox not reflecting cleared status (root cause: checkbox was bound directly to `payment_status`, which intentionally rolls back to `unpaid` on clear)
+- Everything screen jumping straight to `cleared` in one tap instead of following submit → clear
+
+### Added
+- Status badges (unpaid/pending/cleared) and full detail views on Bills and Debts
+- Mark-paid (submit/clear) actions on Bills and Debts, backed by a shared ledger helper (`src/lib/payments.ts`)
+- Sort, group, and multi-select category filtering on Bills and Debts
+- New Institutions screen (list, detail, accounts-under-institution, add/edit/delete) — no password field
+- New Transactions screen (ledger view, filter by account/status, sort by date/amount, linked bill/debt detail)
+- New "More" nav entry housing Institutions and Transactions
+- Multi-category support for institutions via `institution_categories` join table, with matching multi-select UI
+- Account resolution at payment time: auto-select if an institution has exactly one account, prompt if multiple, block if none
+- Three-state ledger-aware control on the Everything screen (unpaid → pending → cleared), reading real-time state from a new `src/lib/ledger-state.ts` helper rather than raw `payment_status`
+- Paid/unpaid filters on Everything now use ledger state instead of `payment_status`
+
+### Changed
+- Everything screen's paid/unpaid logic now routes through `payments.ts` (previously a separate, older direct-status toggle)
+
+### Removed
+- `institutions.category_name` (unused leftover column from CSV import staging, superseded by `institution_categories`)
+
+### Documentation
+- Corrected `SCHEMA.md`: `bills` and `debts` reference `institutions.institution_id`, not `accounts.account_id` (prior docs were stale/contradictory)
+- Added ADR-005 through ADR-010 to `DECISIONS.md`:
+  - ADR-005: Institutions support multiple categories (join table)
+  - ADR-006: Bills and Debts reference Institutions, not Accounts
+  - ADR-007: Account selection resolved at payment time
+  - ADR-008: Undo is a full reversal (transaction deleted, due date/balance reverted)
+  - ADR-009: Everything checkbox is ledger-aware, not `payment_status`-aware
+  - ADR-010: Everything checkbox cycles submit → clear, matching Bills/Debts
+- Updated `CONTEXT.md` to reflect current Phase 3 status and all schema corrections
+- Updated PLAN.md's Phase 3.5 section to match actual implementation (account resolution, undo, per-cycle date advancement)
+
+### Still Open
+- Accounts screen missing spendable/current balance display, sort/filter/search (per original Phase 3.5/PLAN.md spec)
