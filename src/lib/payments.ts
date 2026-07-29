@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Bill, type Debt, type Transaction } from "./supabase";
-import { advanceDate } from "./format";
+import { advanceDate, reverseDate } from "./format";
 import { useAuth } from "./auth-context";
 
 function todayISO() {
