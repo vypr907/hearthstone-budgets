@@ -24,7 +24,9 @@ export type Bill = {
   household_id: string;
   name: string;
   category_id: string | null;
+  institution_id: string | null;
   amount: number;
+  manual_or_auto: string | null;
   next_due_date: string | null;
   billing_cycle: BillingCycle | null;
   payment_status: string | null;
@@ -69,9 +71,9 @@ export type Debt = {
 export type Account = {
   id: string;
   household_id: string;
+  institution_id: string | null;
   name: string;
   account_type: string | null;
-  login_url: string | null;
   starting_balance: number | null;
   notes: string | null;
   created_at: string;
@@ -89,4 +91,35 @@ export type AccountBalance = {
 export type Household = {
   id: string;
   name?: string;
+};
+
+export type Institution = {
+  id: string;
+  household_id: string;
+  name: string;
+  institution_type: string | null;
+  login_url: string | null;
+  login_username: string | null;
+  sign_in_with_google: boolean | null;
+  description: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TransactionStatus = "pending" | "cleared";
+
+export type Transaction = {
+  id: string;
+  household_id: string;
+  account_id: string | null;
+  category_id: string | null;
+  amount: number;
+  status: TransactionStatus | null;
+  description: string | null;
+  transaction_date: string;
+  linked_bill_id: string | null;
+  linked_debt_id: string | null;
+  created_at: string;
+  updated_at: string;
 };
