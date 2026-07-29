@@ -6,7 +6,11 @@ import {
   useDeleteInstitution,
   useAccounts,
   useLatestBalances,
+  useCategories,
+  useInstitutionCategories,
+  useSetInstitutionCategories,
 } from "@/lib/data-hooks";
+import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +55,9 @@ export const Route = createFileRoute("/app/institutions")({
 
 function InstitutionsPage() {
   const { data: institutions = [], isLoading } = useInstitutions();
+  const { data: categories = [] } = useCategories();
+  const { data: instCats = {} } = useInstitutionCategories();
+  const categoryName = Object.fromEntries(categories.map((c) => [c.id, c.name]));
   const [editing, setEditing] = useState<Partial<Institution> | null>(null);
   const [detail, setDetail] = useState<Institution | null>(null);
 
@@ -81,6 +88,15 @@ function InstitutionsPage() {
                     {i.institution_type || "Institution"}
                     {i.sign_in_with_google ? " · Google sign-in" : ""}
                   </p>
+                  {(instCats[i.id] ?? []).length > 0 ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {(instCats[i.id] ?? []).map((cid) => (
+                        <Badge key={cid} variant="secondary" className="text-[10px]">
+                          {categoryName[cid] ?? "Category"}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
                   {i.description ? (
                     <p className="truncate text-xs text-muted-foreground">{i.description}</p>
                   ) : null}
@@ -126,7 +142,11 @@ function InstitutionDetail({
 }) {
   const { data: accounts = [] } = useAccounts();
   const { data: latest = {} } = useLatestBalances();
+  const { data: categories = [] } = useCategories();
+  const { data: instCats = {} } = useInstitutionCategories();
   if (!institution) return null;
+  const catIds = instCats[institution.id] ?? [];
+  const catNames = categories.filter((c) => catIds.includes(c.id));
   const linked = accounts.filter((a) => a.institution_id === institution.id);
 
   return (
@@ -161,6 +181,22 @@ function InstitutionDetail({
               }
             />
           </DetailGrid>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Categories
+            </p>
+            {catNames.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No categories.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {catNames.map((c) => (
+                  <Badge key={c.id} variant="secondary">
+                    {c.name}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
           <DetailText label="Description" value={institution.description} />
           <DetailText label="Notes" value={institution.notes} />
 
@@ -214,6 +250,10 @@ function InstitutionDialog({
 }) {
   const upsert = useUpsertInstitution();
   const del = useDeleteInstitution();
+  const { data: categories = [] } = useCategories();
+  const { data: instCats = {} } = useInstitutionCategories();
+  const setCats = useSetInstitutionCategories();
+  const [catIds, setCatIds] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [type, setType] = useState("");
   const [loginUrl, setLoginUrl] = useState("");
@@ -235,6 +275,7 @@ function InstitutionDialog({
     setGoogle(!!institution?.sign_in_with_google);
     setDescription(institution?.description ?? "");
     setNotes(institution?.notes ?? "");
+    setCatIds(institution?.id ? (instCats[institution.id] ?? []) : []);
   }
   if (!open && lastKey !== "") setLastKey("");
 
@@ -244,7 +285,7 @@ function InstitutionDialog({
       return;
     }
     try {
-      await upsert.mutateAsync({
+      const id = await upsert.mutateAsync({
         id: institution?.id,
         name: name.trim(),
         institution_type: type || null,
@@ -254,6 +295,7 @@ function InstitutionDialog({
         description: description || null,
         notes: notes || null,
       });
+      await setCats.mutateAsync({ institutionId: id, categoryIds: catIds });
       toast.success(isEdit ? "Institution updated" : "Institution added");
       onClose();
     } catch (e) {
@@ -283,6 +325,34 @@ function InstitutionDialog({
           <div>
             <Label>Name</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
+          </div>
+          <div>
+            <Label>Categories</Label>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {categories.length === 0 && (
+                <p className="text-sm text-muted-foreground">No categories yet.</p>
+              )}
+              {categories.map((c) => {
+                const on = catIds.includes(c.id);
+                return (
+                  <Button
+                    key={c.id}
+                    type="button"
+                    size="sm"
+                    variant={on ? "default" : "outline"}
+                    className="h-9"
+                    onClick={() =>
+                      setCatIds((prev) =>
+                        on ? prev.filter((x) => x !== c.id) : [...prev, c.id],
+                      )
+                    }
+                  >
+                    {c.name}
+                  </Button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Optional — pick any number.</p>
           </div>
           <div>
             <Label>Type</Label>
