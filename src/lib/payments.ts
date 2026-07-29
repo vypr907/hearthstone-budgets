@@ -18,6 +18,7 @@ export type Payable = {
   name: string;
   amount: number;
   category_id: string | null;
+  institution_id: string | null;
   bill?: Bill;
   debt?: Debt;
 };
@@ -31,6 +32,7 @@ export function toPayable(kind: PayableKind, item: Bill | Debt): Payable {
       name: b.name,
       amount: Number(b.amount || 0),
       category_id: b.category_id,
+      institution_id: b.institution_id,
       bill: b,
     };
   }
@@ -41,12 +43,16 @@ export function toPayable(kind: PayableKind, item: Bill | Debt): Payable {
     name: d.name,
     amount: Number(d.minimum_payment || 0),
     category_id: d.category_id,
+    institution_id: d.institution_id,
     debt: d,
   };
 }
 
 const linkColumn = (kind: PayableKind) =>
   kind === "bill" ? "linked_bill_id" : "linked_debt_id";
+/** Payment mutations need a resolved account: transactions.account_id is NOT NULL. */
+export type PayInput = { payable: Payable; accountId: string };
+
 const table = (kind: PayableKind) => (kind === "bill" ? "bills" : "debts");
 
 async function findLinkedTransaction(p: Payable, status?: string) {
@@ -79,12 +85,12 @@ export function useMarkSubmitted() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async (p: Payable) => {
+    mutationFn: async ({ payable: p, accountId }: PayInput) => {
       const existing = await findLinkedTransaction(p, "pending");
       if (!existing) {
         const { error } = await supabase.from("transactions").insert({
           household_id: householdId,
-          account_id: p.debt?.account_id ?? null,
+          account_id: accountId,
           category_id: p.category_id,
           amount: -Math.abs(p.amount),
           status: "pending",
@@ -113,7 +119,7 @@ export function useMarkCleared() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async (p: Payable) => {
+    mutationFn: async ({ payable: p, accountId }: PayInput) => {
       const existing = await findLinkedTransaction(p, "pending");
       if (existing) {
         const { error } = await supabase
@@ -124,7 +130,7 @@ export function useMarkCleared() {
       } else {
         const { error } = await supabase.from("transactions").insert({
           household_id: householdId,
-          account_id: p.debt?.account_id ?? null,
+          account_id: accountId,
           category_id: p.category_id,
           amount: -Math.abs(p.amount),
           status: "cleared",
@@ -170,7 +176,7 @@ export function useMarkCleared() {
 export function useMarkUnpaid() {
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async (p: Payable) => {
+    mutationFn: async ({ payable: p, accountId }: PayInput) => {
       const { error } = await supabase
         .from("transactions")
         .delete()
