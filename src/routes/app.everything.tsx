@@ -7,10 +7,10 @@ import {
   useResetDebtsMonth,
 } from "@/lib/data-hooks";
 import { usePayFlow } from "@/lib/pay-flow";
-import { toPayable } from "@/lib/payments";
+import { toPayable, type Payable } from "@/lib/payments";
+import { useLedgerState, type LedgerState } from "@/lib/ledger-state";
 import { formatMoney, dueDayToDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState, useMemo } from "react";
-import { RotateCcw, Search } from "lucide-react";
+import { CheckCircle2, Circle, Clock, RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
 import { StatusBadge } from "@/components/detail";
@@ -57,13 +57,11 @@ type Row = {
   category_id: string | null;
   cycle: string | null;
   payment_status: string | null;
+  payable: Payable;
+  state: LedgerState;
   bill?: Bill;
   debt?: Debt;
 };
-
-function isPaid(status: string | null | undefined) {
-  return status === "paid" || status === "cleared";
-}
 
 function EverythingPage() {
   const { data: bills = [] } = useBills();
@@ -71,6 +69,7 @@ function EverythingPage() {
   const { data: categories = [] } = useCategories();
   const resetDebts = useResetDebtsMonth();
   const { start, markUnpaid, busy, picker } = usePayFlow();
+  const stateOf = useLedgerState();
 
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "bills" | "debts" | "unpaid" | "paid">(
@@ -87,35 +86,45 @@ function EverythingPage() {
 
   const rows = useMemo<Row[]>(() => {
     const all: Row[] = [
-      ...bills.map((b) => ({
-        id: b.id,
-        kind: "Bill" as const,
-        name: b.name,
-        amount: Number(b.amount || 0),
-        due_date: b.next_due_date ? b.next_due_date.slice(0, 10) : null,
-        category_id: b.category_id,
-        cycle: b.billing_cycle,
-        payment_status: b.payment_status,
-        bill: b,
-      })),
-      ...debts.map((d) => ({
-        id: d.id,
-        kind: "Debt" as const,
-        name: d.name,
-        amount: Number(d.minimum_payment || 0),
-        due_date: dueDayToDate(d.due_day),
-        category_id: d.category_id,
-        cycle: "monthly",
-        payment_status: d.payment_status,
-        debt: d,
-      })),
+      ...bills.map((b) => {
+        const payable = toPayable("bill", b);
+        return {
+          id: b.id,
+          kind: "Bill" as const,
+          name: b.name,
+          amount: Number(b.amount || 0),
+          due_date: b.next_due_date ? b.next_due_date.slice(0, 10) : null,
+          category_id: b.category_id,
+          cycle: b.billing_cycle,
+          payment_status: b.payment_status,
+          payable,
+          state: stateOf(payable),
+          bill: b,
+        };
+      }),
+      ...debts.map((d) => {
+        const payable = toPayable("debt", d);
+        return {
+          id: d.id,
+          kind: "Debt" as const,
+          name: d.name,
+          amount: Number(d.minimum_payment || 0),
+          due_date: dueDayToDate(d.due_day),
+          category_id: d.category_id,
+          cycle: "monthly",
+          payment_status: d.payment_status,
+          payable,
+          state: stateOf(payable),
+          debt: d,
+        };
+      }),
     ];
 
     let out = all;
     if (filter === "bills") out = out.filter((r) => r.kind === "Bill");
     if (filter === "debts") out = out.filter((r) => r.kind === "Debt");
-    if (filter === "unpaid") out = out.filter((r) => !isPaid(r.payment_status));
-    if (filter === "paid") out = out.filter((r) => isPaid(r.payment_status));
+    if (filter === "unpaid") out = out.filter((r) => r.state !== "cleared");
+    if (filter === "paid") out = out.filter((r) => r.state === "cleared");
     if (category !== "all") {
       out =
         category === "none"
@@ -131,7 +140,7 @@ function EverythingPage() {
       return (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31");
     });
     return out;
-  }, [bills, debts, filter, category, q, sort]);
+  }, [bills, debts, filter, category, q, sort, stateOf]);
 
   async function handleResetDebts() {
     if (!confirm("Reset all debt payments to unpaid for the new month?")) return;
@@ -143,13 +152,11 @@ function EverythingPage() {
     }
   }
 
-  function handleCheck(r: Row, checked: boolean) {
-    const payable =
-      r.kind === "Bill"
-        ? toPayable("bill", r.bill!)
-        : toPayable("debt", r.debt!);
-    if (checked) start(payable, "cleared");
-    else void markUnpaid(payable);
+  /** Tap cycles unpaid → pending → cleared → (undo back to unpaid). */
+  function handleTap(r: Row) {
+    if (r.state === "unpaid") start(r.payable, "submitted");
+    else if (r.state === "pending") start(r.payable, "cleared");
+    else void markUnpaid(r.payable);
   }
 
   return (
@@ -223,16 +230,33 @@ function EverythingPage() {
             </Card>
           )}
           {rows.map((r) => {
-            const paid = isPaid(r.payment_status);
+            const paid = r.state === "cleared";
+            const Icon =
+              r.state === "cleared"
+                ? CheckCircle2
+                : r.state === "pending"
+                  ? Clock
+                  : Circle;
             return (
               <Card key={`${r.kind}-${r.id}`}>
                 <CardContent className="flex items-center gap-3 p-3">
-                  <Checkbox
-                    checked={paid}
+                  <button
+                    type="button"
+                    aria-label={`${r.name}: ${r.state} — tap to advance`}
                     disabled={busy}
-                    onCheckedChange={(c) => handleCheck(r, !!c)}
-                    className="h-6 w-6"
-                  />
+                    onClick={() => handleTap(r)}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border disabled:opacity-50"
+                  >
+                    <Icon
+                      className={`h-6 w-6 ${
+                        r.state === "cleared"
+                          ? "text-primary"
+                          : r.state === "pending"
+                            ? "text-muted-foreground"
+                            : "text-muted-foreground/60"
+                      }`}
+                    />
+                  </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p
@@ -240,7 +264,7 @@ function EverythingPage() {
                       >
                         {r.name}
                       </p>
-                      <StatusBadge status={r.payment_status} />
+                      <StatusBadge status={r.state} />
                     </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {r.kind}
