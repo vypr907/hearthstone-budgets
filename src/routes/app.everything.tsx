@@ -231,16 +231,33 @@ function EverythingPage() {
             </Card>
           )}
           {rows.map((r) => {
-            const paid = isPaid(r.payment_status);
+            const paid = r.state === "cleared";
+            const Icon =
+              r.state === "cleared"
+                ? CheckCircle2
+                : r.state === "pending"
+                  ? Clock
+                  : Circle;
             return (
               <Card key={`${r.kind}-${r.id}`}>
                 <CardContent className="flex items-center gap-3 p-3">
-                  <Checkbox
-                    checked={paid}
+                  <button
+                    type="button"
+                    aria-label={`${r.name}: ${r.state} — tap to advance`}
                     disabled={busy}
-                    onCheckedChange={(c) => handleCheck(r, !!c)}
-                    className="h-6 w-6"
-                  />
+                    onClick={() => handleTap(r)}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border disabled:opacity-50"
+                  >
+                    <Icon
+                      className={`h-6 w-6 ${
+                        r.state === "cleared"
+                          ? "text-primary"
+                          : r.state === "pending"
+                            ? "text-muted-foreground"
+                            : "text-muted-foreground/60"
+                      }`}
+                    />
+                  </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p
@@ -248,7 +265,7 @@ function EverythingPage() {
                       >
                         {r.name}
                       </p>
-                      <StatusBadge status={r.payment_status} />
+                      <StatusBadge status={r.state} />
                     </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {r.kind}
