@@ -7,7 +7,8 @@ import {
   useResetDebtsMonth,
 } from "@/lib/data-hooks";
 import { usePayFlow } from "@/lib/pay-flow";
-import { toPayable } from "@/lib/payments";
+import { toPayable, type Payable } from "@/lib/payments";
+import { useLedgerState, type LedgerState } from "@/lib/ledger-state";
 import { formatMoney, dueDayToDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
