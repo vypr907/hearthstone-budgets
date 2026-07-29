@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Home, ListChecks, Receipt, CreditCard, Wallet } from "lucide-react";
+import { Home, ListChecks, Receipt, CreditCard, Wallet, MoreHorizontal } from "lucide-react";
 
 const items: Array<{ to: string; label: string; icon: typeof Home; exact?: boolean }> = [
   { to: "/app", label: "Home", icon: Home, exact: true },
@@ -7,6 +7,7 @@ const items: Array<{ to: string; label: string; icon: typeof Home; exact?: boole
   { to: "/app/bills", label: "Bills", icon: Receipt },
   { to: "/app/debts", label: "Debts", icon: CreditCard },
   { to: "/app/accounts", label: "Accounts", icon: Wallet },
+  { to: "/app/more", label: "More", icon: MoreHorizontal },
 ];
 
 export function BottomNav() {
@@ -20,7 +21,7 @@ export function BottomNav() {
               activeOptions={{ exact: !!exact }}
               activeProps={{ className: "text-primary" }}
               inactiveProps={{ className: "text-muted-foreground" }}
-              className="flex h-16 flex-col items-center justify-center gap-1 text-xs font-medium transition-colors active:bg-accent/50"
+              className="flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors active:bg-accent/50"
             >
               <Icon className="h-6 w-6" />
               <span>{label}</span>
