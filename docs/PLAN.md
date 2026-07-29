@@ -507,9 +507,9 @@ a list of anything overdue (next_due_date/due_day already passed and not marked 
 soonest-overdue first.
 ```
 
-- [ ] Test: mark a bill paid on the Bills screen, confirm it shows as paid on the Everything screen too (same row, not a duplicate)
-- [ ] Test that clearing a biweekly bill advances its due date by 14 days, not to next month
-- [ ] Cross-check the overdue list against 2–3 items you know are actually overdue on the real sheet right now
+- [x] Test: mark a bill paid on the Bills screen, confirm it shows as paid on the Everything screen too (same row, not a duplicate)
+- [x] Test that clearing a biweekly bill advances its due date by 14 days, not to next month
+- [x] Cross-check the overdue list against 2–3 items you know are actually overdue on the real sheet right now
 
 **Milestone:** Everything list + Dashboard totals are working and match reality.
 
@@ -517,41 +517,33 @@ soonest-overdue first.
 
 ## Phase 3.5 — Pending/Cleared Status & Spendable Balance
 
-**Goal:** replace the simple paid/unpaid checkbox with a real submitted-but-not-cleared state, and show a "spendable" balance that already accounts for money you've committed but your bank hasn't processed yet.
+**Goal:** replace the simple paid/unpaid checkbox with a real submitted-but-not-cleared state, show a "spendable" balance that already accounts for money you've committed but your bank hasn't processed yet, and allow a mis-click to be fully undone.
 
-**How this works, in plain terms:** submitting a bill/debt payment creates a `transactions` row with `status = 'pending'` — that amount is immediately subtracted from that account's *spendable* balance, even though your bank hasn't shown it yet. When the payment actually clears (you see it hit your real bank), you flip it to `status = 'cleared'` — from then on it's just part of history; you don't need to also manually re-type your balance, since the next time you check your real bank you'll see it's already reflected there. Nothing ever gets double-counted, because `cleared` doesn't trigger a second automatic balance change — it just stops being "pending."
+**How this works, in plain terms:** submitting a bill/debt payment creates a `transactions` row with `status = 'pending'` — that amount is immediately subtracted from that account's *spendable* balance, even though your bank hasn't shown it yet. When the payment actually clears (you see it hit your real bank), you flip it to `status = 'cleared'` — from then on it's just part of history. Nothing ever gets double-counted, because `cleared` doesn't trigger a second automatic balance change — it just stops being "pending." Bills and debts reference `institution_id`, not `account_id` (ADR-006) — since an institution can have zero, one, or many accounts, the paying account is resolved at the moment you submit a payment, not stored on the bill/debt itself (ADR-007). "Undo" is a deliberate, narrow exception to "transactions are permanent history" — it fully reverses an accidental clear, rather than recording it as a correction (ADR-008).
 
-- [ ] Prompt in Lovable:
+- [x] Prompt used in Lovable:
 
 ```
-Replace the simple paid checkbox on Bills and Debts with a 3-state payment_status:
+Replace the simple paid checkbox on Bills and Debts with a 3-state payment status:
 unpaid → pending → cleared.
+When I mark a bill or debt as "submitted" (pending): resolve the paying account first — bills/debts reference institution_id, not account_id, so look up accounts under that institution. If exactly one exists, use it automatically. If multiple exist, prompt me to choose. If none exist, block the action and tell me to add an account to that institution first. Once resolved, create a row in transactions with status='pending', that account_id, amount = -amount (negative), linked_bill_id or linked_debt_id set accordingly, and set the bill/debt's payment_status to 'pending'.
 
-When I mark a bill or debt as "submitted" (pending): create a row in transactions with
-status='pending', account_id = the bill/debt's linked account, amount = -amount (negative),
-linked_bill_id or linked_debt_id set accordingly, and set that bill/debt's payment_status
-to 'pending'.
-
-When I mark it "cleared": update that same transaction row's status to 'cleared' (don't
-create a new row), set the bill/debt's payment_status to 'cleared', and if it's a debt,
-reduce that debt's remaining_balance by the transaction amount.
-
-On the Accounts & Balances screen, show two numbers per account. Both start from the same
-anchor: the account's most recent account_balances snapshot (or starting_balance if it has no
-snapshot yet), plus transactions dated after that snapshot's as_of_date:
+When I mark it "cleared": update that same transaction row's status to 'cleared' (don't create a new row). For bills, advance next_due_date by the bill's own billing_cycle (monthly +1 month, biweekly +14 days, quarterly +3 months, bimonthly +2 months, annually +1 year, custom → don't auto-advance) and set payment_status back to 'unpaid' for the new cycle. For debts, set payment_status to 'cleared' and reduce remaining_balance by the transaction amount.
+Add "Undo" as a full reversal, usable right after a clear: delete the linked transactions row, reset payment_status to 'unpaid', and revert next_due_date (bills, by reversing the same billing_cycle interval) or remaining_balance (debts, by adding the amount back). This is the one case where a transaction row gets deleted — everywhere else, transactions are permanent history and resets must never delete them.
+On the Accounts & Balances screen, show two numbers per account. Both start from the same anchor: the account's most recent account_balances snapshot (or starting_balance if it has no snapshot yet), plus transactions dated after that snapshot's as_of_date:
 - Current balance = anchor + sum of 'cleared' transaction amounts since the anchor
-- Spendable balance = anchor + sum of 'cleared' AND 'pending' transaction amounts since the
-  anchor
-Label them clearly so it's obvious which is which. Whichever reset mechanism sets payment_status
-back to 'unpaid' for a new cycle (per-bill cycle advancement, or the debts' monthly reset) must
-NEVER delete transaction rows — those are permanent history.
+- Spendable balance = anchor + sum of 'cleared' AND 'pending' transaction amounts since the anchor
+Label them clearly so it's obvious which is which.
 ```
 
-- [ ] Test: submit a bill payment, confirm the linked account's spendable balance drops immediately while the current balance doesn't change yet
-- [ ] Test: mark it cleared, confirm it now shows in "current balance" too and isn't double-subtracted
+- [x] Test: submit a bill payment, confirm the linked account's spendable balance drops immediately while the current balance doesn't change yet
+- [x] Test: mark it cleared, confirm it now shows in "current balance" too and isn't double-subtracted, and next_due_date advances by the correct billing_cycle interval (not a flat +1 month)
+- [x] Test: account auto-selected when the institution has exactly one account; prompted when it has multiple; blocked with a message when it has none
+- [x] Test: Undo after a clear removes the transaction and reverts next_due_date/remaining_balance
+- [ ] Point the Everything screen's paid toggle at this same logic (`src/lib/payments.ts`) — currently still on its own older direct-status toggle
 - [ ] Decide (just for yourselves, nothing to build): who marks payments as submitted vs. cleared, and how often you'll check for things that need clearing — this is a habit question as much as a feature
 
-**Milestone:** Bills and debts have real pending/cleared status, and each account shows an accurate spendable balance.
+**Milestone:** Bills and debts have real pending/cleared status, correct per-bill due-date advancement, resolved account attribution, a working full undo, and each account shows an accurate spendable balance.
 
 ---
 
@@ -601,13 +593,7 @@ end $$;
 - [ ] Prompt in Lovable:
 
 ```
-Add a Spending screen listing my budget items, grouped by their parent_category (e.g. "Smoking"
-and "Vaping" both roll up under "Puff"). For each item show 3 columns: Budgeted amount, Current
-month actual, and 3-month average (computed by averaging the last 3 months of actuals for that
-item — don't store the average, calculate it on load). Show a subtotal per parent_category group,
-and a grand total at the bottom. Let me edit the budgeted amount and log the current month's
-actual spend per item. Add a "start new month" action that locks in the current month's actuals
-as history and opens a fresh entry for the new month.
+Add a Spending screen listing my budget items, grouped by their parent_category (e.g. "Smoking" and "Vaping" both roll up under "Puff"). For each item show 3 columns: Budgeted amount, Current month actual, and 3-month average (computed by averaging the last 3 months of actuals for that item — don't store the average, calculate it on load). Show a subtotal per parent_category group, and a grand total at the bottom. Let me edit the budgeted amount and log the current month's actual spend per item. Add a "start new month" action that locks in the current month's actuals as history and opens a fresh entry for the new month.
 ```
 
 - [ ] Enter this month's real budget numbers and compare both the per-item numbers and the parent-category subtotals to your "3. Spending" tab

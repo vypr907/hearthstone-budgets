@@ -57,3 +57,66 @@ tracked per-payment via transactions.account_id (through linked_bill_id/linked_d
 not as a static field on bills/debts.
 
 Status: Confirmed 2026-07-28 (documentation previously stated the opposite in error).
+
+## ADR-007: Account Selection at Payment Time
+
+Decision:
+When marking a bill or debt as pending/cleared, the paying account is resolved at that
+moment, not stored on bills/debts. If the linked institution has exactly one account,
+auto-select it. If it has multiple accounts, prompt the user to choose. If it has zero
+accounts, block the action and prompt the user to add one first.
+
+Reason:
+transactions.account_id is NOT NULL, but bills/debts intentionally have no account_id
+(ADR-006), since an institution may have zero, one, or many accounts. This resolves that
+gap without reopening ADR-006.
+
+Status: Implemented 2026-07-28.
+
+## ADR-008: Undo Is a Full Reversal
+
+Decision:
+"Undo" on a cleared bill or debt deletes the associated transactions row, resets
+payment_status to 'unpaid', and reverts next_due_date (bills) / remaining_balance (debts)
+to their pre-clear values.
+
+Reason:
+Undo is meant for correcting an accidental click, not recording a real reversed payment.
+Treating it as "that clear never happened" is simpler and matches user intent. A genuine
+reversal of real money already moved (e.g. a bounced payment) should be handled as a new
+correcting transaction instead, not via Undo.
+
+Note: this narrows Phase 3.5's original "transactions are permanent, never deleted" rule —
+that rule still applies to normal history; Undo is the one intentional exception, scoped
+only to reversing a same-session mis-click.
+
+Status: Implemented 2026-07-28.
+
+## ADR-009: Everything Checkbox Is Ledger-Aware, Not Status-Aware
+
+Decision:
+On the Everything screen, a bill/debt's checkbox reflects whether a 'cleared' transaction
+exists for its current billing cycle — not whether payment_status literally equals 'cleared'.
+
+Reason:
+Clearing a bill automatically rolls payment_status back to 'unpaid' for the new cycle
+(Phase 3.5 design) and advances next_due_date. A checkbox bound directly to payment_status
+would always uncheck itself the instant a bill clears, which is correct under the hood but
+looks broken to the user. Defining "checked" as "a cleared transaction exists dated within
+the bill's current cycle window" keeps the checkbox meaningful without changing the
+underlying rollover behavior on Bills/Debts.
+
+Status: Implemented 2026-07-28.
+
+## ADR-010: Everything Checkbox Cycles Through Submit-Then-Clear
+
+Decision:
+On the Everything screen, tapping a bill/debt's checkbox cycles it through the same states
+as Bills/Debts: unpaid → pending → cleared. It does not jump straight to 'cleared' in one tap.
+
+Reason:
+Consistency with Bills/Debts' submit-then-clear semantics (Phase 3.5) outweighs the extra
+tap. A one-tap "cleared" shortcut risks the same mismatch that caused earlier bugs in this
+area — Everything having its own shortcut logic instead of sharing one real flow.
+
+Status: Implemented 2026-07-28.
