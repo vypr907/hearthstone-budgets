@@ -153,13 +153,11 @@ function EverythingPage() {
     }
   }
 
-  function handleCheck(r: Row, checked: boolean) {
-    const payable =
-      r.kind === "Bill"
-        ? toPayable("bill", r.bill!)
-        : toPayable("debt", r.debt!);
-    if (checked) start(payable, "cleared");
-    else void markUnpaid(payable);
+  /** Tap cycles unpaid → pending → cleared → (undo back to unpaid). */
+  function handleTap(r: Row) {
+    if (r.state === "unpaid") start(r.payable, "submitted");
+    else if (r.state === "pending") start(r.payable, "cleared");
+    else void markUnpaid(r.payable);
   }
 
   return (
