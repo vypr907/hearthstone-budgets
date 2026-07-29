@@ -3,8 +3,10 @@ import { AppHeader } from "@/components/AppHeader";
 import {
   useAccounts,
   useDeleteAccount,
+  useInstitutions,
   useLatestBalances,
   useLogBalance,
+  useTransactions,
   useUpsertAccount,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
@@ -20,8 +22,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Pencil, Plus, Trash2, TrendingUp } from "lucide-react";
-import { useState } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Pencil, Plus, Search, Trash2, TrendingUp } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Account } from "@/lib/supabase";
 import { format } from "date-fns";
@@ -29,17 +38,17 @@ import { format } from "date-fns";
 export const Route = createFileRoute("/app/accounts")({
   head: () => ({
     meta: [
-      { title: "Accounts — Hearthstone" },
+      { title: "Accounts & Balances — Hearthstone" },
       {
         name: "description",
         content:
-          "Monitor account balances and log new balance snapshots for your household in Hearthstone.",
+          "Track current and spendable balances per account and log new balance snapshots in Hearthstone.",
       },
-      { property: "og:title", content: "Accounts — Hearthstone" },
+      { property: "og:title", content: "Accounts & Balances — Hearthstone" },
       {
         property: "og:description",
         content:
-          "Monitor account balances and log new balance snapshots for your household in Hearthstone.",
+          "Track current and spendable balances per account and log new balance snapshots in Hearthstone.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -51,42 +60,173 @@ export const Route = createFileRoute("/app/accounts")({
 function AccountsPage() {
   const { data: accounts = [], isLoading } = useAccounts();
   const { data: latest = {} } = useLatestBalances();
+  const { data: transactions = [] } = useTransactions();
+  const { data: institutions = [] } = useInstitutions();
   const [editing, setEditing] = useState<Partial<Account> | null>(null);
   const [logging, setLogging] = useState<Account | null>(null);
 
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<"name" | "current" | "type">("name");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [instFilter, setInstFilter] = useState("all");
+
+  const institutionName = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const i of institutions) m[i.id] = i.name;
+    return m;
+  }, [institutions]);
+
+  const accountTypes = useMemo(
+    () =>
+      [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[],
+    [accounts],
+  );
+
+  /**
+   * Anchor = latest account_balances snapshot, else starting_balance.
+   * Current  = anchor + cleared transactions dated after the anchor.
+   * Spendable = anchor + cleared AND pending transactions after the anchor.
+   */
+  const balances = useMemo(() => {
+    const out: Record<string, { anchor: number; current: number; spendable: number; asOf: string | null }> = {};
+    for (const a of accounts) {
+      const snap = latest[a.id];
+      const anchor = snap ? Number(snap.balance) : Number(a.starting_balance ?? 0);
+      const since = snap ? snap.as_of_date.slice(0, 10) : null;
+      let cleared = 0;
+      let pending = 0;
+      for (const t of transactions) {
+        if (t.account_id !== a.id) continue;
+        if (since && t.transaction_date.slice(0, 10) <= since) continue;
+        if (t.status === "cleared") cleared += Number(t.amount || 0);
+        else if (t.status === "pending") pending += Number(t.amount || 0);
+      }
+      out[a.id] = {
+        anchor,
+        current: anchor + cleared,
+        spendable: anchor + cleared + pending,
+        asOf: since,
+      };
+    }
+    return out;
+  }, [accounts, latest, transactions]);
+
+  const rows = useMemo(() => {
+    let out = accounts;
+    if (typeFilter !== "all") {
+      out =
+        typeFilter === "none"
+          ? out.filter((a) => !a.account_type)
+          : out.filter((a) => a.account_type === typeFilter);
+    }
+    if (instFilter !== "all") {
+      out =
+        instFilter === "none"
+          ? out.filter((a) => !a.institution_id)
+          : out.filter((a) => a.institution_id === instFilter);
+    }
+    if (q.trim()) {
+      const t = q.toLowerCase();
+      out = out.filter((a) => a.name.toLowerCase().includes(t));
+    }
+    return [...out].sort((a, b) => {
+      if (sort === "current")
+        return (balances[b.id]?.current ?? 0) - (balances[a.id]?.current ?? 0);
+      if (sort === "type")
+        return (a.account_type ?? "").localeCompare(b.account_type ?? "") ||
+          a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name);
+    });
+  }, [accounts, typeFilter, instFilter, q, sort, balances]);
+
   return (
     <>
-      <AppHeader title="Accounts" />
+      <AppHeader title="Accounts & Balances" />
       <div className="space-y-3 p-4">
         <Button className="h-12 w-full text-base" onClick={() => setEditing({})}>
           <Plus className="mr-2 h-5 w-5" /> Add account
         </Button>
 
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search accounts…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="h-12 pl-9"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
+            <SelectTrigger className="h-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Sort: Name</SelectItem>
+              <SelectItem value="current">Sort: Current balance</SelectItem>
+              <SelectItem value="type">Sort: Account type</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="h-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="none">No type</SelectItem>
+              {accountTypes.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Select value={instFilter} onValueChange={setInstFilter}>
+          <SelectTrigger className="h-11">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All institutions</SelectItem>
+            <SelectItem value="none">No institution</SelectItem>
+            {institutions.map((i) => (
+              <SelectItem key={i.id} value={i.id}>
+                {i.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {!isLoading && accounts.length === 0 && (
+        {!isLoading && rows.length === 0 && (
           <Card>
             <CardContent className="p-4 text-sm text-muted-foreground">
-              No accounts yet.
+              {accounts.length === 0 ? "No accounts yet." : "Nothing matches."}
             </CardContent>
           </Card>
         )}
 
         <div className="space-y-2">
-          {accounts.map((a) => {
-            const bal = latest[a.id];
-            const value = bal ? Number(bal.balance) : Number(a.starting_balance ?? 0);
+          {rows.map((a) => {
+            const b = balances[a.id];
             return (
               <Card key={a.id}>
                 <CardContent className="p-3">
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{a.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground">
                         {a.account_type || "Account"}
-                        {bal ? ` · as of ${format(new Date(bal.as_of_date), "MMM d")}` : " · starting"}
+                        {a.institution_id && institutionName[a.institution_id]
+                          ? ` · ${institutionName[a.institution_id]}`
+                          : ""}
+                        {b?.asOf
+                          ? ` · snapshot ${format(new Date(b.asOf), "MMM d")}`
+                          : " · starting balance"}
                       </p>
                     </div>
-                    <p className="shrink-0 font-semibold">{formatMoney(value)}</p>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -95,6 +235,16 @@ function AccountsPage() {
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="rounded-md border p-2">
+                      <p className="text-xs text-muted-foreground">Current</p>
+                      <p className="font-semibold">{formatMoney(b?.current ?? 0)}</p>
+                    </div>
+                    <div className="rounded-md border p-2">
+                      <p className="text-xs text-muted-foreground">Spendable</p>
+                      <p className="font-semibold">{formatMoney(b?.spendable ?? 0)}</p>
+                    </div>
                   </div>
                   <Button
                     variant="outline"
@@ -115,6 +265,7 @@ function AccountsPage() {
     </>
   );
 }
+
 
 function AccountDialog({
   account,
