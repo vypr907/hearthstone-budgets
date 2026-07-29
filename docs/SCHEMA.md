@@ -311,7 +311,7 @@ debts (
     name text not null,
     category_id uuid references categories(id),
     debt_type text,
-    account_id uuid references accounts(id),
+    institution_id uuid references institutions(id),
     starting_balance numeric,
     program_start_balance numeric,
     remaining_balance numeric,
@@ -448,22 +448,14 @@ Exceptions:
 
 # Recent Schema Fixes
 
-## Institution Foreign Key Issue
+## Institution vs. Account References (Bills & Debts)
 
-Resolved incorrect references where debts/accounts pointed to missing institutions.
+Both bills and debts reference institutions directly (institution_id), not accounts.
+This allows a bill or debt to be owed to an institution with no balance-bearing account
+underneath it (e.g. a subscription, a utility, a medical provider).
 
-Correct relationship:
-
-```
-institutions
-      |
-      v
- accounts
-      |
-      v
- transactions
-```
-
-Debts reference accounts, not arbitrary institutions.
+Which account actually paid a given bill/debt cycle is tracked per-payment via
+transactions.account_id (linked through linked_bill_id / linked_debt_id) — not a static
+field on bills or debts. See ADR-006.
 
 ---
