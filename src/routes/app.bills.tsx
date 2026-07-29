@@ -1,6 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
-import { useBills, useDeleteBill, useUpsertBill } from "@/lib/data-hooks";
+import {
+  useBills,
+  useDeleteBill,
+  useUpsertBill,
+  useCategories,
+  useInstitutions,
+} from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,13 +16,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   Select,
@@ -26,6 +31,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Bill, BillingCycle } from "@/lib/supabase";
+import { DetailGrid, DetailItem, DetailMoney, DetailText, StatusBadge } from "@/components/detail";
+import { ListControls, groupRows } from "@/components/ListControls";
+import { PayActions } from "@/components/PayActions";
+import { toPayable } from "@/lib/payments";
 
 const CYCLES: BillingCycle[] = [
   "monthly",
@@ -59,7 +68,51 @@ export const Route = createFileRoute("/app/bills")({
 
 function BillsPage() {
   const { data: bills = [], isLoading } = useBills();
+  const { data: categories = [] } = useCategories();
   const [editing, setEditing] = useState<Partial<Bill> | null>(null);
+  const [detail, setDetail] = useState<Bill | null>(null);
+
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState("due");
+  const [group, setGroup] = useState("none");
+  const [cats, setCats] = useState<string[]>([]);
+
+  const categoryName = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of categories) m[c.id] = c.name;
+    return m;
+  }, [categories]);
+
+  const rows = useMemo(() => {
+    let out = bills;
+    if (cats.length) {
+      out = out.filter((b) =>
+        b.category_id ? cats.includes(b.category_id) : cats.includes("none"),
+      );
+    }
+    if (q.trim()) {
+      const t = q.toLowerCase();
+      out = out.filter((b) => b.name.toLowerCase().includes(t));
+    }
+    return [...out].sort((a, b) => {
+      if (sort === "category")
+        return (categoryName[a.category_id ?? ""] ?? "zzz").localeCompare(
+          categoryName[b.category_id ?? ""] ?? "zzz",
+        );
+      if (sort === "cycle") return (a.billing_cycle ?? "").localeCompare(b.billing_cycle ?? "");
+      if (sort === "amount") return Number(b.amount || 0) - Number(a.amount || 0);
+      return (a.next_due_date ?? "9999-12-31").localeCompare(b.next_due_date ?? "9999-12-31");
+    });
+  }, [bills, cats, q, sort, categoryName]);
+
+  const groups = useMemo(() => {
+    if (group === "none") return [["", rows]] as Array<[string, Bill[]]>;
+    return groupRows(rows, (b) => {
+      if (group === "category") return categoryName[b.category_id ?? ""] ?? "Uncategorized";
+      if (group === "cycle") return b.billing_cycle ?? "No cycle";
+      return b.next_due_date ? b.next_due_date.slice(0, 7) : "No due date";
+    });
+  }, [rows, group, categoryName]);
 
   return (
     <>
@@ -69,68 +122,173 @@ function BillsPage() {
           <Plus className="mr-2 h-5 w-5" /> Add bill
         </Button>
 
+        <ListControls
+          query={q}
+          onQueryChange={setQ}
+          sort={sort}
+          onSortChange={setSort}
+          sortOptions={[
+            { value: "due", label: "Next due date" },
+            { value: "category", label: "Category" },
+            { value: "cycle", label: "Billing cycle" },
+            { value: "amount", label: "Amount" },
+          ]}
+          group={group}
+          onGroupChange={setGroup}
+          groupOptions={[
+            { value: "category", label: "Category" },
+            { value: "due", label: "Due month" },
+            { value: "cycle", label: "Billing cycle" },
+          ]}
+          categories={categories}
+          selectedCategories={cats}
+          onSelectedCategoriesChange={setCats}
+        />
+
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {!isLoading && bills.length === 0 && (
+        {!isLoading && rows.length === 0 && (
           <Card>
             <CardContent className="p-4 text-sm text-muted-foreground">
-              No bills yet.
+              No bills match.
             </CardContent>
           </Card>
         )}
 
-        <div className="space-y-2">
-          {bills.map((b) => (
-            <Card key={b.id}>
-              <CardContent className="flex items-center gap-3 p-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{b.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {b.next_due_date ? `Due ${b.next_due_date}` : "No due date"}
-                    {b.payment_status ? ` · ${b.payment_status}` : ""}
-                  </p>
-                </div>
-                <p className="shrink-0 font-semibold">{formatMoney(Number(b.amount))}</p>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => setEditing(b)}
-                  aria-label="Edit"
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
+        <div className="space-y-4">
+          {groups.map(([label, items]) => (
+            <div key={label || "all"} className="space-y-2">
+              {label && (
+                <h2 className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {label}
+                </h2>
+              )}
+              {items.map((b) => (
+                <Card key={b.id} className="cursor-pointer" onClick={() => setDetail(b)}>
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{b.name}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                          <span>
+                            {b.next_due_date ? `Due ${b.next_due_date}` : "No due date"}
+                          </span>
+                          {b.billing_cycle ? <span>· {b.billing_cycle}</span> : null}
+                          {b.category_id && categoryName[b.category_id] ? (
+                            <span>· {categoryName[b.category_id]}</span>
+                          ) : null}
+                          <StatusBadge status={b.payment_status} />
+                        </div>
+                      </div>
+                      <p className="shrink-0 font-semibold">{formatMoney(Number(b.amount))}</p>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditing(b);
+                        }}
+                        aria-label="Edit"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <PayActions
+                      payable={toPayable("bill", b)}
+                      status={b.payment_status}
+                      className="mt-2"
+                    />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           ))}
         </div>
       </div>
 
-      <BillDialog
-        bill={editing}
-        onClose={() => setEditing(null)}
+      <BillDialog bill={editing} onClose={() => setEditing(null)} />
+      <BillDetailDialog
+        bill={detail}
+        onClose={() => setDetail(null)}
+        onEdit={(b) => {
+          setDetail(null);
+          setEditing(b);
+        }}
       />
     </>
+  );
+}
+
+function BillDetailDialog({
+  bill,
+  onClose,
+  onEdit,
+}: {
+  bill: Bill | null;
+  onClose: () => void;
+  onEdit: (bill: Bill) => void;
+}) {
+  const { data: categories = [] } = useCategories();
+  const { data: institutions = [] } = useInstitutions();
+  if (!bill) return null;
+  const category = categories.find((c) => c.id === bill.category_id);
+  const institution = institutions.find((i) => i.id === bill.institution_id);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{bill.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <DetailGrid>
+            <DetailItem label="Category" value={category?.name ?? "—"} />
+            <DetailItem label="Institution / account" value={institution?.name ?? "—"} />
+            <DetailMoney label="Amount" value={bill.amount} />
+            <DetailItem label="Next due date" value={bill.next_due_date ?? "—"} />
+            <DetailItem label="Billing cycle" value={bill.billing_cycle ?? "—"} />
+            <DetailItem
+              label="Payment status"
+              value={<StatusBadge status={bill.payment_status} />}
+            />
+            <DetailItem label="Manual or auto" value={bill.manual_or_auto ?? "—"} />
+            <DetailItem
+              label="Active"
+              value={bill.is_active === null ? "—" : bill.is_active ? "Yes" : "No"}
+            />
+          </DetailGrid>
+          <DetailText label="Notes" value={bill.notes} />
+          <PayActions payable={toPayable("bill", bill)} status={bill.payment_status} />
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => onEdit(bill)} className="h-11">
+            <Pencil className="mr-2 h-4 w-4" /> Edit
+          </Button>
+          <Button onClick={onClose} className="h-11">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: () => void }) {
   const upsert = useUpsertBill();
   const del = useDeleteBill();
+  const { data: categories = [] } = useCategories();
+  const { data: institutions = [] } = useInstitutions();
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDay, setDueDay] = useState("");
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const [categoryId, setCategoryId] = useState("none");
+  const [institutionId, setInstitutionId] = useState("none");
+  const [manual, setManual] = useState("none");
   const [notes, setNotes] = useState("");
 
   const open = bill !== null;
   const isEdit = !!bill?.id;
 
-  // reset on open
-  useState(() => 0);
-  if (open && name === "" && bill && bill.id !== undefined && (bill as Bill).name) {
-    // no-op guard
-  }
-
-  // sync when bill changes
   const key = bill?.id ?? "new";
   const [lastKey, setLastKey] = useState<string>("");
   if (open && key !== lastKey) {
@@ -139,6 +297,9 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setAmount(bill?.amount != null ? String(bill.amount) : "");
     setDueDay(bill?.next_due_date ?? "");
     setCycle((bill?.billing_cycle as BillingCycle) ?? "monthly");
+    setCategoryId(bill?.category_id ?? "none");
+    setInstitutionId(bill?.institution_id ?? "none");
+    setManual(bill?.manual_or_auto ?? "none");
     setNotes(bill?.notes ?? "");
   }
   if (!open && lastKey !== "") setLastKey("");
@@ -155,6 +316,9 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         amount: Number(amount),
         next_due_date: dueDay || null,
         billing_cycle: cycle,
+        category_id: categoryId === "none" ? null : categoryId,
+        institution_id: institutionId === "none" ? null : institutionId,
+        manual_or_auto: manual === "none" ? null : manual,
         notes: notes || null,
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
@@ -178,7 +342,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit bill" : "Add bill"}</DialogTitle>
         </DialogHeader>
@@ -209,7 +373,6 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
                 className="h-11"
               />
             </div>
-
           </div>
           <div>
             <Label>Billing cycle</Label>
@@ -223,6 +386,51 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
                     {c}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Category</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Uncategorized</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Institution</Label>
+            <Select value={institutionId} onValueChange={setInstitutionId}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {institutions.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Manual or auto</Label>
+            <Select value={manual} onValueChange={setManual}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unset</SelectItem>
+                <SelectItem value="manual">manual</SelectItem>
+                <SelectItem value="auto">auto</SelectItem>
               </SelectContent>
             </Select>
           </div>
