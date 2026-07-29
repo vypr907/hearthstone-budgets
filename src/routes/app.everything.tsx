@@ -11,7 +11,6 @@ import { toPayable, type Payable } from "@/lib/payments";
 import { useLedgerState, type LedgerState } from "@/lib/ledger-state";
 import { formatMoney, dueDayToDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState, useMemo } from "react";
-import { RotateCcw, Search } from "lucide-react";
+import { CheckCircle2, Circle, Clock, RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
 import { StatusBadge } from "@/components/detail";
