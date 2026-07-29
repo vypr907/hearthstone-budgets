@@ -64,6 +64,58 @@ function DebtsPage() {
   const { data: debts = [], isLoading } = useDebts();
   const [editing, setEditing] = useState<Partial<Debt> | null>(null);
   const [detail, setDetail] = useState<Debt | null>(null);
+  const { data: categories = [] } = useCategories();
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState("priority");
+  const [group, setGroup] = useState("none");
+  const [cats, setCats] = useState<string[]>([]);
+
+  const categoryName = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of categories) m[c.id] = c.name;
+    return m;
+  }, [categories]);
+
+  const rows = useMemo(() => {
+    let out = debts;
+    if (cats.length) {
+      out = out.filter((d) =>
+        d.category_id ? cats.includes(d.category_id) : cats.includes("none"),
+      );
+    }
+    if (q.trim()) {
+      const t = q.toLowerCase();
+      out = out.filter((d) => d.name.toLowerCase().includes(t));
+    }
+    return [...out].sort((a, b) => {
+      if (sort === "category")
+        return (categoryName[a.category_id ?? ""] ?? "zzz").localeCompare(
+          categoryName[b.category_id ?? ""] ?? "zzz",
+        );
+      if (sort === "due")
+        return (dueDayToDate(a.due_day) ?? "9999-12-31").localeCompare(
+          dueDayToDate(b.due_day) ?? "9999-12-31",
+        );
+      if (sort === "remaining")
+        return Number(b.remaining_balance || 0) - Number(a.remaining_balance || 0);
+      return (a.priority_order ?? 9999) - (b.priority_order ?? 9999);
+    });
+  }, [debts, cats, q, sort, categoryName]);
+
+  const flat = useMemo(() => {
+    if (group === "none") return rows.map((d) => ({ header: "", d }));
+    const grouped = groupRows(rows, (d) => {
+      if (group === "category") return categoryName[d.category_id ?? ""] ?? "Uncategorized";
+      if (group === "due") return d.due_day ? `Day ${d.due_day}` : "No due day";
+      if (group === "remaining")
+        return Number(d.remaining_balance || 0) > 0 ? "Outstanding" : "Paid off";
+      return d.priority_order != null ? `Priority ${d.priority_order}` : "No priority";
+    });
+    const out: Array<{ header: string; d: Debt }> = [];
+    for (const [label, items] of grouped)
+      items.forEach((d, i) => out.push({ header: i === 0 ? label : "", d }));
+    return out;
+  }, [rows, group, categoryName]);
 
   return (
     <>
@@ -82,10 +134,39 @@ function DebtsPage() {
           </Card>
         )}
 
+        <ListControls
+          query={q}
+          onQueryChange={setQ}
+          sort={sort}
+          onSortChange={setSort}
+          sortOptions={[
+            { value: "priority", label: "Priority order" },
+            { value: "due", label: "Due day" },
+            { value: "category", label: "Category" },
+            { value: "remaining", label: "Remaining balance" },
+          ]}
+          group={group}
+          onGroupChange={setGroup}
+          groupOptions={[
+            { value: "category", label: "Category" },
+            { value: "due", label: "Due day" },
+            { value: "priority", label: "Priority order" },
+            { value: "remaining", label: "Balance state" },
+          ]}
+          categories={categories}
+          selectedCategories={cats}
+          onSelectedCategoriesChange={setCats}
+        />
+
         <div className="space-y-2">
-          {debts.map((d) => (
+          {flat.map(({ header, d }) => (
+            <div key={d.id} className="space-y-2">
+            {header ? (
+              <h2 className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {header}
+              </h2>
+            ) : null}
             <Card
-              key={d.id}
               className="cursor-pointer"
               onClick={() => setDetail(d)}
             >
@@ -133,8 +214,14 @@ function DebtsPage() {
                     </p>
                   </div>
                 </div>
+                <PayActions
+                  payable={toPayable("debt", d)}
+                  status={d.payment_status}
+                  className="mt-2"
+                />
               </CardContent>
             </Card>
+            </div>
           ))}
         </div>
       </div>
@@ -234,12 +321,8 @@ function DebtDetailDialog({
             />
           </DetailGrid>
 
-          <div>
-            <p className="text-xs text-muted-foreground">Notes</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm">
-              {debt.notes ?? "—"}
-            </p>
-          </div>
+          <DetailText label="Notes" value={debt.notes} />
+          <PayActions payable={toPayable("debt", debt)} status={debt.payment_status} />
 
           {debt.date_paid_off && (
             <div>
