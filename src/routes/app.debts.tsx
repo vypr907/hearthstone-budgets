@@ -28,6 +28,24 @@ import type { Debt } from "@/lib/supabase";
 import { format } from "date-fns";
 
 export const Route = createFileRoute("/app/debts")({
+  head: () => ({
+    meta: [
+      { title: "Debts — Hearthstone" },
+      {
+        name: "description",
+        content:
+          "View and manage your household debts, balances, interest rates, and minimum payments in Hearthstone.",
+      },
+      { property: "og:title", content: "Debts — Hearthstone" },
+      {
+        property: "og:description",
+        content:
+          "View and manage your household debts, balances, interest rates, and minimum payments in Hearthstone.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: DebtsPage,
 });
 
