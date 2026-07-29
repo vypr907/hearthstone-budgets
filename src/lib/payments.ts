@@ -176,7 +176,7 @@ export function useMarkCleared() {
 export function useMarkUnpaid() {
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable: p, accountId }: PayInput) => {
+    mutationFn: async (p: Payable) => {
       const { error } = await supabase
         .from("transactions")
         .delete()
