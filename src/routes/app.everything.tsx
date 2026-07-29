@@ -26,6 +26,24 @@ import { toast } from "sonner";
 import type { Bill } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/everything")({
+  head: () => ({
+    meta: [
+      { title: "Everything — Hearthstone" },
+      {
+        name: "description",
+        content:
+          "See all household bills and debts in one filterable, sortable list and mark payments in Hearthstone.",
+      },
+      { property: "og:title", content: "Everything — Hearthstone" },
+      {
+        property: "og:description",
+        content:
+          "See all household bills and debts in one filterable, sortable list and mark payments in Hearthstone.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: EverythingPage,
 });
 

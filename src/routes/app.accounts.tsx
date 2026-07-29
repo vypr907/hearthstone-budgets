@@ -27,6 +27,24 @@ import type { Account } from "@/lib/supabase";
 import { format } from "date-fns";
 
 export const Route = createFileRoute("/app/accounts")({
+  head: () => ({
+    meta: [
+      { title: "Accounts — Hearthstone" },
+      {
+        name: "description",
+        content:
+          "Monitor account balances and log new balance snapshots for your household in Hearthstone.",
+      },
+      { property: "og:title", content: "Accounts — Hearthstone" },
+      {
+        property: "og:description",
+        content:
+          "Monitor account balances and log new balance snapshots for your household in Hearthstone.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: AccountsPage,
 });
 
