@@ -7,7 +7,18 @@ import {
   useCategories,
   useAccounts,
 } from "@/lib/data-hooks";
-import { formatMoney } from "@/lib/format";
+import { ListControls, groupRows } from "@/components/ListControls";
+import { PayActions } from "@/components/PayActions";
+import { toPayable } from "@/lib/payments";
+import {
+  DetailGrid,
+  DetailItem,
+  DetailMoney,
+  DetailText,
+  StatusBadge,
+  statusVariant,
+} from "@/components/detail";
+import { formatMoney, dueDayToDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt } from "@/lib/supabase";
 import { format } from "date-fns";
@@ -48,18 +59,6 @@ export const Route = createFileRoute("/app/debts")({
   }),
   component: DebtsPage,
 });
-
-function statusVariant(status: string | null | undefined) {
-  switch (status) {
-    case "pending":
-      return "secondary";
-    case "cleared":
-      return "outline";
-    case "unpaid":
-    default:
-      return "default";
-  }
-}
 
 function DebtsPage() {
   const { data: debts = [], isLoading } = useDebts();
@@ -266,32 +265,8 @@ function DebtDetailDialog({
   );
 }
 
-function DetailGrid({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">{children}</div>
-  );
-}
 
-function DetailItem({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="mt-0.5 font-medium">{value}</div>
-    </div>
-  );
-}
 
-function DetailMoney({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | null | undefined;
-}) {
-  return (
-    <DetailItem label={label} value={value != null ? formatMoney(value) : "—"} />
-  );
-}
 
 function DebtDialog({
   debt,
