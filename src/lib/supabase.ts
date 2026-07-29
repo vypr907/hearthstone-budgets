@@ -53,8 +53,10 @@ export type Debt = {
   remaining_balance: number | null;
   minimum_payment: number | null;
   interest_rate: number | null;
+  known_finance_charge: number | null;
   due_day: number | null;
   payment_status: string | null;
+  on_payment_plan: boolean | null;
   paid_with: string | null;
   manual_or_auto: string | null;
   priority_order: number | null;

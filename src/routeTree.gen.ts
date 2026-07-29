@@ -9,18 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AppRouteImport } from './routes/app'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
-import { Route as AppAccountsRouteImport } from './routes/app.accounts'
-import { Route as AppBillsRouteImport } from './routes/app.bills'
-import { Route as AppDebtsRouteImport } from './routes/app.debts'
 import { Route as AppEverythingRouteImport } from './routes/app.everything'
+import { Route as AppDebtsRouteImport } from './routes/app.debts'
+import { Route as AppBillsRouteImport } from './routes/app.bills'
+import { Route as AppAccountsRouteImport } from './routes/app.accounts'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -28,9 +28,9 @@ const AppRoute = AppRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -38,14 +38,9 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAccountsRoute = AppAccountsRouteImport.update({
-  id: '/accounts',
-  path: '/accounts',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppBillsRoute = AppBillsRouteImport.update({
-  id: '/bills',
-  path: '/bills',
+const AppEverythingRoute = AppEverythingRouteImport.update({
+  id: '/everything',
+  path: '/everything',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDebtsRoute = AppDebtsRouteImport.update({
@@ -53,9 +48,14 @@ const AppDebtsRoute = AppDebtsRouteImport.update({
   path: '/debts',
   getParentRoute: () => AppRoute,
 } as any)
-const AppEverythingRoute = AppEverythingRouteImport.update({
-  id: '/everything',
-  path: '/everything',
+const AppBillsRoute = AppBillsRouteImport.update({
+  id: '/bills',
+  path: '/bills',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAccountsRoute = AppAccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
   getParentRoute: () => AppRoute,
 } as any)
 
@@ -129,11 +129,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -143,11 +143,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -157,18 +157,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/accounts': {
-      id: '/app/accounts'
-      path: '/accounts'
-      fullPath: '/app/accounts'
-      preLoaderRoute: typeof AppAccountsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/bills': {
-      id: '/app/bills'
-      path: '/bills'
-      fullPath: '/app/bills'
-      preLoaderRoute: typeof AppBillsRouteImport
+    '/app/everything': {
+      id: '/app/everything'
+      path: '/everything'
+      fullPath: '/app/everything'
+      preLoaderRoute: typeof AppEverythingRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/debts': {
@@ -178,11 +171,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDebtsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/everything': {
-      id: '/app/everything'
-      path: '/everything'
-      fullPath: '/app/everything'
-      preLoaderRoute: typeof AppEverythingRouteImport
+    '/app/bills': {
+      id: '/app/bills'
+      path: '/bills'
+      fullPath: '/app/bills'
+      preLoaderRoute: typeof AppBillsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/accounts': {
+      id: '/app/accounts'
+      path: '/accounts'
+      fullPath: '/app/accounts'
+      preLoaderRoute: typeof AppAccountsRouteImport
       parentRoute: typeof AppRoute
     }
   }

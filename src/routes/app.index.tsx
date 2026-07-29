@@ -6,6 +6,24 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/app/")({
+  head: () => ({
+    meta: [
+      { title: "Dashboard — Hearthstone" },
+      {
+        name: "description",
+        content:
+          "Household budget dashboard with monthly obligations, income comparison, and overdue items in Hearthstone.",
+      },
+      { property: "og:title", content: "Dashboard — Hearthstone" },
+      {
+        property: "og:description",
+        content:
+          "Household budget dashboard with monthly obligations, income comparison, and overdue items in Hearthstone.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: Dashboard,
 });
 

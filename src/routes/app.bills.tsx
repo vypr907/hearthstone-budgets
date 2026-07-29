@@ -36,6 +36,24 @@ const CYCLES: BillingCycle[] = [
 ];
 
 export const Route = createFileRoute("/app/bills")({
+  head: () => ({
+    meta: [
+      { title: "Bills — Hearthstone" },
+      {
+        name: "description",
+        content:
+          "Track upcoming household bills, due dates, amounts, and payment status in Hearthstone.",
+      },
+      { property: "og:title", content: "Bills — Hearthstone" },
+      {
+        property: "og:description",
+        content:
+          "Track upcoming household bills, due dates, amounts, and payment status in Hearthstone.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: BillsPage,
 });
 
