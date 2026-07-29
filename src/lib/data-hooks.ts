@@ -345,10 +345,15 @@ export function useUpsertInstitution() {
       if (i.id) {
         const { error } = await supabase.from("institutions").update(payload).eq("id", i.id);
         if (error) throw error;
-      } else {
-        const { error } = await supabase.from("institutions").insert(payload);
-        if (error) throw error;
+        return i.id;
       }
+      const { data, error } = await supabase
+        .from("institutions")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error) throw error;
+      return (data as { id: string }).id;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["institutions"] }),
   });
