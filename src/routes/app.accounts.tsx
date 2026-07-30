@@ -238,6 +238,7 @@ function AccountsPage() {
                       <p className="font-semibold">{formatMoney(b?.spendable ?? 0)}</p>
                     </div>
                   </div>
+                  <RecentActivity rows={recentByAccount[a.id] ?? []} />
                   <Button
                     variant="outline"
                     className="mt-2 h-10 w-full"
@@ -245,6 +246,7 @@ function AccountsPage() {
                   >
                     <TrendingUp className="mr-2 h-4 w-4" /> Log new balance
                   </Button>
+
                 </CardContent>
               </Card>
             );
