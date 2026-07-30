@@ -40,6 +40,26 @@ export type Category = {
   id: string;
   household_id: string;
   name: string;
+  domain?: string | null;
+  parent_category?: string | null;
+};
+
+export type SpendingBudget = {
+  id: string;
+  household_id: string;
+  category_id: string | null;
+  budgeted_amount: number;
+  updated_at?: string | null;
+};
+
+export type SpendingActual = {
+  id: string;
+  household_id: string;
+  category_id: string | null;
+  /** First day of the month, ISO date. */
+  month: string;
+  actual_amount: number;
+  created_at?: string | null;
 };
 
 
