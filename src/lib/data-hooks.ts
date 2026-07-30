@@ -9,6 +9,8 @@ import {
   type Institution,
   type InstitutionCategory,
   type Transaction,
+  type SpendingBudget,
+  type SpendingActual,
 } from "./supabase";
 import { advanceDate } from "./format";
 import { useAuth } from "./auth-context";
@@ -492,5 +494,161 @@ export function useSetInstitutionCategories() {
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["institution_categories"] }),
+  });
+}
+
+/* ---------------------------- Spending ---------------------------- */
+
+/** ISO first-of-month for a given date (defaults to today). */
+export function monthKey(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/** Shift an ISO first-of-month key by n months. */
+export function shiftMonth(key: string, n: number): string {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return monthKey(d);
+}
+
+export function useSpendingBudgets() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["spending_budgets", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<SpendingBudget[]> => {
+      const { data, error } = await supabase
+        .from("spending_budgets")
+        .select("*")
+        .eq("household_id", householdId!);
+      if (error) throw error;
+      return (data ?? []) as SpendingBudget[];
+    },
+  });
+}
+
+export function useSpendingActuals() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["spending_actuals", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<SpendingActual[]> => {
+      const { data, error } = await supabase
+        .from("spending_actuals")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("month", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as SpendingActual[];
+    },
+  });
+}
+
+/** Create or update the budgeted amount for a category. */
+export function useUpsertSpendingBudget() {
+  const qc = useQueryClient();
+  const { householdId } = useAuth();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      categoryId,
+      amount,
+    }: {
+      id?: string;
+      categoryId: string;
+      amount: number;
+    }) => {
+      if (id) {
+        const { error } = await supabase
+          .from("spending_budgets")
+          .update({ budgeted_amount: amount, updated_at: new Date().toISOString() })
+          .eq("id", id);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabase.from("spending_budgets").insert({
+        household_id: householdId!,
+        category_id: categoryId,
+        budgeted_amount: amount,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["spending_budgets"] }),
+  });
+}
+
+/** Create or update the actual spend for a category in a given month. */
+export function useUpsertSpendingActual() {
+  const qc = useQueryClient();
+  const { householdId } = useAuth();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      categoryId,
+      month,
+      amount,
+    }: {
+      id?: string;
+      categoryId: string;
+      month: string;
+      amount: number;
+    }) => {
+      if (id) {
+        const { error } = await supabase
+          .from("spending_actuals")
+          .update({ actual_amount: amount })
+          .eq("id", id);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabase.from("spending_actuals").insert({
+        household_id: householdId!,
+        category_id: categoryId,
+        month,
+        actual_amount: amount,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["spending_actuals"] }),
+  });
+}
+
+/**
+ * Start a new month: existing rows stay untouched (that's the history), and a
+ * fresh zeroed actuals row is opened for each budget item in the next month.
+ */
+export function useStartNewSpendingMonth() {
+  const qc = useQueryClient();
+  const { householdId } = useAuth();
+  return useMutation({
+    mutationFn: async ({
+      nextMonth,
+      categoryIds,
+    }: {
+      nextMonth: string;
+      categoryIds: string[];
+    }) => {
+      const { data, error } = await supabase
+        .from("spending_actuals")
+        .select("category_id")
+        .eq("household_id", householdId!)
+        .eq("month", nextMonth);
+      if (error) throw error;
+      const existing = new Set((data ?? []).map((r) => r.category_id as string));
+      const rows = categoryIds
+        .filter((c) => !existing.has(c))
+        .map((category_id) => ({
+          household_id: householdId!,
+          category_id,
+          month: nextMonth,
+          actual_amount: 0,
+        }));
+      if (rows.length) {
+        const { error: e } = await supabase.from("spending_actuals").insert(rows);
+        if (e) throw e;
+      }
+      return nextMonth;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["spending_actuals"] }),
   });
 }
