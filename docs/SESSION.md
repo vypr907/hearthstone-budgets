@@ -11,3 +11,13 @@
 - Outstanding: decide whether to add a `notes` column to spending tables; still no in-app "add budget item" UI (SQL-only for now)
 
 - Spending screen: group headers now use categories.parent_category text directly (fixes "Other" labels); added "New budget item" flow (pick or create a category, initial budgeted amount, optional description); items with a spending_budgets.description show a (?) icon with a popover.
+## 2026-08-02 – Phase 5: Quick add transaction, account statements, dashboard spendable
+
+- Added a global floating "Add transaction" button (src/components/AddTransactionFab.tsx) rendered in the /app layout, so it's one tap from every screen. Asks only for account, amount, optional category, and description; date defaults to today and status to 'cleared'. Positive amounts are stored as money out (negative); enter a negative amount for money in.
+- Saving invalidates transactions, latest_balances and spending_actuals, so balances update everywhere immediately.
+- Extracted the shared balance formula into src/lib/balances.ts (anchor = latest snapshot else starting_balance; current = + cleared; spendable = + cleared and pending) and reused it on Accounts and Dashboard.
+- Accounts screen: each account card now shows a bank-statement style "Recent activity" list (5 rows, expandable to 25) with date, description, pending marker and signed amount.
+- Spending screen: current-month actual now comes from categorised ledger transactions when any exist for that category/month; the manual monthly total remains the fallback when there are none (ledger-sourced cells are read-only). Same rule applies to the 3-month average.
+- Dashboard: added a spendable balance card (only is_spendable checking/credit accounts; savings, investment and retirement always excluded) with a breakdown of checking total, available credit (credit_limit − owed), and savings labelled as not included. Added a current-month budgeted-vs-actual progress chart grouped by parent_category.
+- Types: Account now includes is_spendable and credit_limit.
+- Known issues: credit "available credit" assumes balances are stored signed either way and uses the absolute owed amount; the combined spendable total sums raw balances for credit accounts rather than available credit, per spec.
