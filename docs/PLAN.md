@@ -586,17 +586,17 @@ begin
 end $$;
 ```
 
-- [ ] Run the SQL above in Supabase
+- [x] Run the SQL above in Supabase
 
 ### 4b. Build the screen
 
-- [ ] Prompt in Lovable:
+- [x] Prompt in Lovable:
 
 ```
 Add a Spending screen listing my budget items, grouped by their parent_category (e.g. "Smoking" and "Vaping" both roll up under "Puff"). For each item show 3 columns: Budgeted amount, Current month actual, and 3-month average (computed by averaging the last 3 months of actuals for that item — don't store the average, calculate it on load). Show a subtotal per parent_category group, and a grand total at the bottom. Let me edit the budgeted amount and log the current month's actual spend per item. Add a "start new month" action that locks in the current month's actuals as history and opens a fresh entry for the new month.
 ```
 
-- [ ] Enter this month's real budget numbers and compare both the per-item numbers and the parent-category subtotals to your "3. Spending" tab
+- [x] Enter this month's real budget numbers and compare both the per-item numbers and the parent-category subtotals to your "3. Spending" tab
 
 **Milestone:** Spending/budget tracking works and matches the sheet.
 
@@ -606,7 +606,7 @@ Add a Spending screen listing my budget items, grouped by their parent_category 
 
 **Goal:** a fast way to log everyday, non-bill/debt spending (groceries, gas, a deposit) that immediately updates the running balance — no bank connection, just quick manual entry. This uses the same `transactions` table from Phase 3.5, so bill payments, debt payments, and everyday spending all live in one ledger.
 
-- [ ] Prompt in Lovable:
+- [x] Prompt in Lovable:
 
 ```
 Add a quick "Add Transaction" action, reachable from one tap on every main screen (a floating
@@ -625,8 +625,8 @@ categories I'm already logging transactions for. If a category has no logged tra
 a given month, keep allowing the manual monthly total from Phase 4 as a fallback.
 ```
 
-- [ ] Test: log a $20 grocery purchase, confirm the account balance updates immediately and (if categorized) the Spending screen reflects it without double-entry
-- [ ] Decide which categories you'll log transaction-by-transaction vs. which you'll keep entering as a single monthly total (Phase 4's original method) — mixing both is fine, just avoid doing both for the *same* category in the *same* month, or it'll double count
+- [x] Test: log a $20 grocery purchase, confirm the account balance updates immediately and (if categorized) the Spending screen reflects it without double-entry
+- [x] Decide which categories you'll log transaction-by-transaction vs. which you'll keep entering as a single monthly total (Phase 4's original method) — mixing both is fine, just avoid doing both for the *same* category in the *same* month, or it'll double count
 
 **Bonus this unlocks:** since every transaction is dated, your net worth history (Phase 6) can now be reconstructed for any past date directly from the ledger, instead of depending only on manually re-entered balance snapshots.
 

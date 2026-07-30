@@ -12,11 +12,11 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Phase 0 complete: accounts, tools, repository
 - Phase 1 complete: Core Data Model & Shared Login
 - Phase 2 complete: Import Your Real Data (One-Time)
-- Phase 3 in progress: "Everything" View & Basic Dashboard
-- Phase 3.5 not started: Pending/Cleared Status & Spendable Balance
-- Phase 4 not started: Spending & Budget Tracking
-- Phase 4.5 not started: Quick Transaction Entry & Running Balance
-- Phase 5 not started: Debt Payoff Strategy Calculator
+- Phase 3 completed: "Everything" View & Basic Dashboard
+- Phase 3.5 completed: Pending/Cleared Status & Spendable Balance
+- Phase 4 completed: Spending & Budget Tracking
+- Phase 4.5 completed: Quick Transaction Entry & Running Balance
+- Phase 5 in progress: Debt Payoff Strategy Calculator
 - Phase 6 not started: Payment Schedule & Charts
 - Phase 7 not started: Wrap as a Real Android App (Capacitor)
 - Phase 8 not started: Publish to Google Play (Internal Testing)
