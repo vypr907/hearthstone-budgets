@@ -49,6 +49,7 @@ export type SpendingBudget = {
   household_id: string;
   category_id: string | null;
   budgeted_amount: number;
+  description?: string | null;
   updated_at?: string | null;
 };
 
