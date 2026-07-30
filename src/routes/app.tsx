@@ -31,7 +31,9 @@ function AppLayout() {
       <div className="mx-auto max-w-lg">
         <Outlet />
       </div>
+      <AddTransactionFab />
       <BottomNav />
     </div>
   );
 }
+
