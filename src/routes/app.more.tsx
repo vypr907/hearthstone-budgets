@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
 import { Card, CardContent } from "@/components/ui/card";
-import { Building2, ChevronRight, Receipt } from "lucide-react";
+import { Building2, ChevronRight, PiggyBank, Receipt } from "lucide-react";
 
 export const Route = createFileRoute("/app/more")({
   head: () => ({
@@ -26,6 +26,7 @@ export const Route = createFileRoute("/app/more")({
 });
 
 const links = [
+  { to: "/app/spending", label: "Spending", icon: PiggyBank },
   { to: "/app/institutions", label: "Institutions", icon: Building2 },
   { to: "/app/transactions", label: "Transactions", icon: Receipt },
 ];
