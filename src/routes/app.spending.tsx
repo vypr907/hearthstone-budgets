@@ -10,10 +10,13 @@ import {
   useSpendingActuals,
   useSpendingBudgets,
   useStartNewSpendingMonth,
+  useTransactions,
   useUpsertSpendingActual,
   useUpsertSpendingBudget,
 } from "@/lib/data-hooks";
+import { buildActualResolver } from "@/lib/spending-actuals";
 import { formatMoney } from "@/lib/format";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,9 +68,11 @@ type Row = {
   budgeted: number;
   actualId?: string;
   actual: number;
+  actualSource: "ledger" | "manual";
   avg3: number;
   description?: string | null;
 };
+
 
 function monthLabel(key: string) {
   const [y, m] = key.split("-").map(Number);
@@ -81,6 +86,8 @@ function SpendingPage() {
   const { data: categories = [] } = useCategories();
   const { data: budgets = [], isLoading } = useSpendingBudgets();
   const { data: actuals = [] } = useSpendingActuals();
+  const { data: transactions = [] } = useTransactions();
+
   const saveBudget = useUpsertSpendingBudget();
   const saveActual = useUpsertSpendingActual();
   const startMonth = useStartNewSpendingMonth();
@@ -113,6 +120,11 @@ function SpendingPage() {
     return m;
   }, [categories]);
 
+  const resolver = useMemo(
+    () => buildActualResolver(actuals, transactions),
+    [actuals, transactions],
+  );
+
   const groups = useMemo(() => {
     const last3 = [0, 1, 2].map((n) => shiftMonth(activeMonth, -n));
 
@@ -120,13 +132,10 @@ function SpendingPage() {
       .filter((b) => !!b.category_id)
       .map((b) => {
         const catId = b.category_id!;
-        const mine = actuals.filter((a) => a.category_id === catId);
-        const current = mine.find((a) => a.month?.slice(0, 10) === activeMonth);
-        const window = last3
-          .map((m) => mine.find((a) => a.month?.slice(0, 10) === m))
-          .filter(Boolean);
+        const current = resolver.resolve(catId, activeMonth);
+        const window = last3.filter((m) => resolver.has(catId, m));
         const avg3 = window.length
-          ? window.reduce((s, a) => s + Number(a!.actual_amount || 0), 0) /
+          ? window.reduce((s, m) => s + resolver.resolve(catId, m).amount, 0) /
             window.length
           : 0;
         return {
@@ -134,8 +143,9 @@ function SpendingPage() {
           name: categoryById[catId]?.name ?? "Uncategorized",
           budgetId: b.id,
           budgeted: Number(b.budgeted_amount || 0),
-          actualId: current?.id,
-          actual: Number(current?.actual_amount || 0),
+          actualId: current.rowId,
+          actual: current.amount,
+          actualSource: current.source,
           avg3,
           description: b.description ?? null,
         };
@@ -153,7 +163,8 @@ function SpendingPage() {
       g.rows.sort((a, b) => a.name.localeCompare(b.name));
 
     return [...byParent.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [budgets, actuals, categoryById, activeMonth]);
+  }, [budgets, resolver, categoryById, activeMonth]);
+
 
   const totals = useMemo(() => {
     const all = groups.flatMap((g) => g.rows);
@@ -336,18 +347,28 @@ function SpendingPage() {
                       >
                         {formatMoney(r.budgeted)}
                       </button>
-                      <button
-                        className="h-10 w-20 rounded-md text-right tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
-                        onClick={() =>
-                          setEditing({
-                            row: r,
-                            field: "actual",
-                            value: String(r.actual),
-                          })
-                        }
-                      >
-                        {formatMoney(r.actual)}
-                      </button>
+                      {r.actualSource === "ledger" ? (
+                        <span
+                          className="h-10 w-20 self-center text-right tabular-nums"
+                          title="From logged transactions this month"
+                        >
+                          {formatMoney(r.actual)}
+                        </span>
+                      ) : (
+                        <button
+                          className="h-10 w-20 rounded-md text-right tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
+                          onClick={() =>
+                            setEditing({
+                              row: r,
+                              field: "actual",
+                              value: String(r.actual),
+                            })
+                          }
+                        >
+                          {formatMoney(r.actual)}
+                        </button>
+                      )}
+
                       <span className="w-20 text-right tabular-nums text-muted-foreground">
                         {formatMoney(r.avg3)}
                       </span>

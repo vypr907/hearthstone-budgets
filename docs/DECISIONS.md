@@ -150,3 +150,18 @@ See PARENT_CATEGORY_MIGRATION.md for the exact steps to take when this is revisi
 categories.parent_category is a text label, not a FK. Grouping on the Spending screen keys off the trimmed text ("Ungrouped" when empty) rather than looking up another categories row.
 
 Status: Decided 2026-07-30. Not implemented.
+
+## ADR-012: Ledger-derived spending actuals with manual fallback
+Decision: A category's actual for a month is the sum of its negative transactions that month when any exist; otherwise the manually entered spending_actuals row is used. Ledger-derived cells are not editable inline.
+Reason: Avoids double-counting and avoids retyping monthly totals for categories already tracked as transactions, while keeping manual entry for categories that are never itemised.
+Status: Decided 2026-08-02. Implemented.
+
+## ADR-013: Spendable balance definition
+Decision: Combined spendable = accounts with is_spendable = true AND account_type in ('checking','credit'). 'savings', 'investment' and 'retirement' are excluded unconditionally. Balance per account uses the shared formula in src/lib/balances.ts.
+Reason: is_spendable is a user-set flag that can be wrong on long-term accounts; the type exclusion is a hard guard.
+Status: Decided 2026-08-02. Implemented.
+
+## ADR-014: Manual transaction sign convention
+Decision: In the quick-add transaction dialog a positive amount is stored as a negative (money out); a negative amount is stored as-is (money in).
+Reason: Most manual entries are spending, and it keeps the form to the four requested fields with no extra direction toggle.
+Status: Decided 2026-08-02. Implemented.

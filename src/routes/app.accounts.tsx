@@ -10,6 +10,8 @@ import {
   useUpsertAccount,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
+import { computeBalances } from "@/lib/balances";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +34,7 @@ import {
 import { Pencil, Plus, Search, Trash2, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Account } from "@/lib/supabase";
+import type { Account, Transaction } from "@/lib/supabase";
 import { format } from "date-fns";
 
 export const Route = createFileRoute("/app/accounts")({
@@ -82,34 +84,24 @@ function AccountsPage() {
     [accounts],
   );
 
-  /**
-   * Anchor = latest account_balances snapshot, else starting_balance.
-   * Current  = anchor + cleared transactions dated after the anchor.
-   * Spendable = anchor + cleared AND pending transactions after the anchor.
-   */
-  const balances = useMemo(() => {
-    const out: Record<string, { anchor: number; current: number; spendable: number; asOf: string | null }> = {};
-    for (const a of accounts) {
-      const snap = latest[a.id];
-      const anchor = snap ? Number(snap.balance) : Number(a.starting_balance ?? 0);
-      const since = snap ? snap.as_of_date.slice(0, 10) : null;
-      let cleared = 0;
-      let pending = 0;
-      for (const t of transactions) {
-        if (t.account_id !== a.id) continue;
-        if (since && t.transaction_date.slice(0, 10) <= since) continue;
-        if (t.status === "cleared") cleared += Number(t.amount || 0);
-        else if (t.status === "pending") pending += Number(t.amount || 0);
-      }
-      out[a.id] = {
-        anchor,
-        current: anchor + cleared,
-        spendable: anchor + cleared + pending,
-        asOf: since,
-      };
+  const balances = useMemo(
+    () => computeBalances(accounts, latest, transactions),
+    [accounts, latest, transactions],
+  );
+
+  /** Recent ledger rows per account, newest first (bank-statement style). */
+  const recentByAccount = useMemo(() => {
+    const out: Record<string, typeof transactions> = {};
+    const sorted = [...transactions].sort((a, b) =>
+      b.transaction_date.localeCompare(a.transaction_date),
+    );
+    for (const t of sorted) {
+      if (!t.account_id) continue;
+      (out[t.account_id] ??= []).push(t);
     }
     return out;
-  }, [accounts, latest, transactions]);
+  }, [transactions]);
+
 
   const rows = useMemo(() => {
     let out = accounts;
@@ -246,6 +238,7 @@ function AccountsPage() {
                       <p className="font-semibold">{formatMoney(b?.spendable ?? 0)}</p>
                     </div>
                   </div>
+                  <RecentActivity rows={recentByAccount[a.id] ?? []} />
                   <Button
                     variant="outline"
                     className="mt-2 h-10 w-full"
@@ -253,6 +246,7 @@ function AccountsPage() {
                   >
                     <TrendingUp className="mr-2 h-4 w-4" /> Log new balance
                   </Button>
+
                 </CardContent>
               </Card>
             );
@@ -263,6 +257,55 @@ function AccountsPage() {
       <AccountDialog account={editing} onClose={() => setEditing(null)} />
       <LogBalanceDialog account={logging} onClose={() => setLogging(null)} />
     </>
+  );
+}
+
+/** Bank-statement style list of the most recent ledger rows for an account. */
+function RecentActivity({ rows }: { rows: Transaction[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (rows.length === 0) {
+    return (
+      <p className="mt-2 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+        No transactions yet.
+      </p>
+    );
+  }
+  const shown = expanded ? rows.slice(0, 25) : rows.slice(0, 5);
+  return (
+    <div className="mt-2 rounded-md border">
+      <p className="border-b px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground">
+        Recent activity
+      </p>
+      {shown.map((t) => (
+        <div
+          key={t.id}
+          className="flex items-center justify-between gap-2 border-b px-2 py-2 text-sm last:border-b-0"
+        >
+          <div className="min-w-0">
+            <p className="truncate">{t.description || "Transaction"}</p>
+            <p className="text-xs text-muted-foreground">
+              {format(new Date(t.transaction_date), "MMM d")}
+              {t.status === "pending" ? " · pending" : ""}
+            </p>
+          </div>
+          <p
+            className={`shrink-0 tabular-nums font-medium ${
+              Number(t.amount) < 0 ? "" : "text-primary"
+            } ${t.status === "pending" ? "opacity-60" : ""}`}
+          >
+            {formatMoney(Number(t.amount || 0))}
+          </p>
+        </div>
+      ))}
+      {rows.length > 5 ? (
+        <button
+          className="w-full px-2 py-2 text-xs text-muted-foreground underline decoration-dotted"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Show less" : `Show more (${rows.length - 5} more)`}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
