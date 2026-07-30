@@ -347,18 +347,28 @@ function SpendingPage() {
                       >
                         {formatMoney(r.budgeted)}
                       </button>
-                      <button
-                        className="h-10 w-20 rounded-md text-right tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
-                        onClick={() =>
-                          setEditing({
-                            row: r,
-                            field: "actual",
-                            value: String(r.actual),
-                          })
-                        }
-                      >
-                        {formatMoney(r.actual)}
-                      </button>
+                      {r.actualSource === "ledger" ? (
+                        <span
+                          className="h-10 w-20 self-center text-right tabular-nums"
+                          title="From logged transactions this month"
+                        >
+                          {formatMoney(r.actual)}
+                        </span>
+                      ) : (
+                        <button
+                          className="h-10 w-20 rounded-md text-right tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
+                          onClick={() =>
+                            setEditing({
+                              row: r,
+                              field: "actual",
+                              value: String(r.actual),
+                            })
+                          }
+                        >
+                          {formatMoney(r.actual)}
+                        </button>
+                      )}
+
                       <span className="w-20 text-right tabular-nums text-muted-foreground">
                         {formatMoney(r.avg3)}
                       </span>
