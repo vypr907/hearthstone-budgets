@@ -152,3 +152,10 @@ export type Transaction = {
   created_at: string;
   updated_at: string;
 };
+
+export type DebtStrategySettings = {
+  household_id: string;
+  active_strategy: string | null;
+  extra_monthly_payment: number | null;
+  updated_at?: string | null;
+};

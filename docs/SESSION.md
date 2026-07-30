@@ -21,3 +21,5 @@
 - Dashboard: added a spendable balance card (only is_spendable checking/credit accounts; savings, investment and retirement always excluded) with a breakdown of checking total, available credit (credit_limit − owed), and savings labelled as not included. Added a current-month budgeted-vs-actual progress chart grouped by parent_category.
 - Types: Account now includes is_spendable and credit_limit.
 - Known issues: credit "available credit" assumes balances are stored signed either way and uses the absolute owed amount; the combined spendable total sums raw balances for credit accounts rather than available credit, per spec.
+
+- Added Debt Strategy screen (More menu): avalanche/snowball/custom payoff simulation with side-by-side comparison of months to debt-free, total interest, and savings vs minimums-only; active strategy + extra monthly payment persist to debt_strategy_settings; per-debt payoff order shows cleared ledger payments (linked_debt_id) as payment history; known_finance_charge overrides projected interest for those debts. Known issue: projection assumes fixed rates and no new borrowing.
