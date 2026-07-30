@@ -1,9 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { AppHeader } from "@/components/AppHeader";
-import { useBills, useDebts } from "@/lib/data-hooks";
+import {
+  monthKey,
+  useAccounts,
+  useBills,
+  useCategories,
+  useDebts,
+  useLatestBalances,
+  useSpendingActuals,
+  useSpendingBudgets,
+  useTransactions,
+} from "@/lib/data-hooks";
 import { formatMoney, isDateOverdue, dueDayToDate } from "@/lib/format";
+import {
+  accountTypeIs,
+  computeBalances,
+  creditOwed,
+  isSpendableAccount,
+} from "@/lib/balances";
+import { buildActualResolver } from "@/lib/spending-actuals";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+
 
 export const Route = createFileRoute("/app/")({
   head: () => ({
