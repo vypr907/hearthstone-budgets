@@ -10,6 +10,8 @@ import {
   useUpsertAccount,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
+import { computeBalances } from "@/lib/balances";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
