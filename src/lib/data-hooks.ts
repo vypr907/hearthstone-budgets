@@ -11,6 +11,7 @@ import {
   type Transaction,
   type SpendingBudget,
   type SpendingActual,
+  type DebtStrategySettings,
 } from "./supabase";
 import { advanceDate } from "./format";
 import { useAuth } from "./auth-context";
@@ -688,5 +689,49 @@ export function useCreateCategory() {
       return data as Category;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+  });
+}
+
+/* ---------------- Debt strategy ---------------- */
+
+export function useDebtStrategySettings() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["debt_strategy_settings", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<DebtStrategySettings | null> => {
+      const { data, error } = await supabase
+        .from("debt_strategy_settings")
+        .select("*")
+        .eq("household_id", householdId!)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as DebtStrategySettings | null) ?? null;
+    },
+  });
+}
+
+export function useSaveDebtStrategySettings() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: {
+      active_strategy?: string;
+      extra_monthly_payment?: number;
+    }) => {
+      const { error } = await supabase
+        .from("debt_strategy_settings")
+        .upsert(
+          {
+            household_id: householdId!,
+            ...patch,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "household_id" },
+        );
+      if (error) throw error;
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["debt_strategy_settings"] }),
   });
 }
