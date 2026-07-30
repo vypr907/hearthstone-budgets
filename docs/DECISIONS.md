@@ -120,3 +120,5 @@ tap. A one-tap "cleared" shortcut risks the same mismatch that caused earlier bu
 area — Everything having its own shortcut logic instead of sharing one real flow.
 
 Status: Implemented 2026-07-28.
+## Spending groups use categories.parent_category as plain text
+categories.parent_category is a text label, not a FK. Grouping on the Spending screen keys off the trimmed text ("Ungrouped" when empty) rather than looking up another categories row.
