@@ -34,7 +34,7 @@ import {
 import { Pencil, Plus, Search, Trash2, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Account } from "@/lib/supabase";
+import type { Account, Transaction } from "@/lib/supabase";
 import { format } from "date-fns";
 
 export const Route = createFileRoute("/app/accounts")({
@@ -257,6 +257,55 @@ function AccountsPage() {
       <AccountDialog account={editing} onClose={() => setEditing(null)} />
       <LogBalanceDialog account={logging} onClose={() => setLogging(null)} />
     </>
+  );
+}
+
+/** Bank-statement style list of the most recent ledger rows for an account. */
+function RecentActivity({ rows }: { rows: Transaction[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (rows.length === 0) {
+    return (
+      <p className="mt-2 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+        No transactions yet.
+      </p>
+    );
+  }
+  const shown = expanded ? rows.slice(0, 25) : rows.slice(0, 5);
+  return (
+    <div className="mt-2 rounded-md border">
+      <p className="border-b px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground">
+        Recent activity
+      </p>
+      {shown.map((t) => (
+        <div
+          key={t.id}
+          className="flex items-center justify-between gap-2 border-b px-2 py-2 text-sm last:border-b-0"
+        >
+          <div className="min-w-0">
+            <p className="truncate">{t.description || "Transaction"}</p>
+            <p className="text-xs text-muted-foreground">
+              {format(new Date(t.transaction_date), "MMM d")}
+              {t.status === "pending" ? " · pending" : ""}
+            </p>
+          </div>
+          <p
+            className={`shrink-0 tabular-nums font-medium ${
+              Number(t.amount) < 0 ? "" : "text-primary"
+            } ${t.status === "pending" ? "opacity-60" : ""}`}
+          >
+            {formatMoney(Number(t.amount || 0))}
+          </p>
+        </div>
+      ))}
+      {rows.length > 5 ? (
+        <button
+          className="w-full px-2 py-2 text-xs text-muted-foreground underline decoration-dotted"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Show less" : `Show more (${rows.length - 5} more)`}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
