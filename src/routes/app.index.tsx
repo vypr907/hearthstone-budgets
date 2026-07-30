@@ -49,6 +49,58 @@ export const Route = createFileRoute("/app/")({
 function Dashboard() {
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
+  const { data: accounts = [] } = useAccounts();
+  const { data: latest = {} } = useLatestBalances();
+  const { data: transactions = [] } = useTransactions();
+  const { data: budgets = [] } = useSpendingBudgets();
+  const { data: actuals = [] } = useSpendingActuals();
+  const { data: categories = [] } = useCategories();
+
+  const balances = useMemo(
+    () => computeBalances(accounts, latest, transactions),
+    [accounts, latest, transactions],
+  );
+
+  /**
+   * Spendable = only is_spendable checking/credit accounts. Savings,
+   * investment and retirement are always excluded.
+   */
+  const spendable = useMemo(() => {
+    let total = 0;
+    let checking = 0;
+    let availableCredit = 0;
+    let savings = 0;
+    for (const a of accounts) {
+      const b = balances[a.id]?.spendable ?? 0;
+      if (isSpendableAccount(a)) total += b;
+      if (accountTypeIs(a, "checking")) checking += b;
+      if (accountTypeIs(a, "credit"))
+        availableCredit += Number(a.credit_limit ?? 0) - creditOwed(b);
+      if (accountTypeIs(a, "savings")) savings += b;
+    }
+    return { total, checking, availableCredit, savings };
+  }, [accounts, balances]);
+
+  /** Budget vs actual for the current month, grouped by parent_category. */
+  const budgetChart = useMemo(() => {
+    const month = monthKey(new Date());
+    const resolver = buildActualResolver(actuals, transactions);
+    const byId: Record<string, (typeof categories)[number]> = {};
+    for (const c of categories) byId[c.id] = c;
+    const groups = new Map<string, { name: string; budgeted: number; actual: number }>();
+    for (const b of budgets) {
+      if (!b.category_id) continue;
+      const parent = byId[b.category_id]?.parent_category?.trim() || "";
+      const key = parent || "__none__";
+      const g = groups.get(key) ?? { name: parent || "Ungrouped", budgeted: 0, actual: 0 };
+      g.budgeted += Number(b.budgeted_amount || 0);
+      g.actual += resolver.resolve(b.category_id, month).amount;
+      groups.set(key, g);
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [budgets, actuals, transactions, categories]);
+
+
 
   const totalBills = bills
     .filter((b) => b.is_active !== false)
