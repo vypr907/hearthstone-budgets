@@ -86,6 +86,8 @@ function SpendingPage() {
   const { data: categories = [] } = useCategories();
   const { data: budgets = [], isLoading } = useSpendingBudgets();
   const { data: actuals = [] } = useSpendingActuals();
+  const { data: transactions = [] } = useTransactions();
+
   const saveBudget = useUpsertSpendingBudget();
   const saveActual = useUpsertSpendingActual();
   const startMonth = useStartNewSpendingMonth();
