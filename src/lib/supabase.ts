@@ -96,10 +96,13 @@ export type Account = {
   name: string;
   account_type: string | null;
   starting_balance: number | null;
+  is_spendable: boolean | null;
+  credit_limit: number | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
 };
+
 
 export type AccountBalance = {
   id: string;
