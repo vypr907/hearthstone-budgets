@@ -82,34 +82,24 @@ function AccountsPage() {
     [accounts],
   );
 
-  /**
-   * Anchor = latest account_balances snapshot, else starting_balance.
-   * Current  = anchor + cleared transactions dated after the anchor.
-   * Spendable = anchor + cleared AND pending transactions after the anchor.
-   */
-  const balances = useMemo(() => {
-    const out: Record<string, { anchor: number; current: number; spendable: number; asOf: string | null }> = {};
-    for (const a of accounts) {
-      const snap = latest[a.id];
-      const anchor = snap ? Number(snap.balance) : Number(a.starting_balance ?? 0);
-      const since = snap ? snap.as_of_date.slice(0, 10) : null;
-      let cleared = 0;
-      let pending = 0;
-      for (const t of transactions) {
-        if (t.account_id !== a.id) continue;
-        if (since && t.transaction_date.slice(0, 10) <= since) continue;
-        if (t.status === "cleared") cleared += Number(t.amount || 0);
-        else if (t.status === "pending") pending += Number(t.amount || 0);
-      }
-      out[a.id] = {
-        anchor,
-        current: anchor + cleared,
-        spendable: anchor + cleared + pending,
-        asOf: since,
-      };
+  const balances = useMemo(
+    () => computeBalances(accounts, latest, transactions),
+    [accounts, latest, transactions],
+  );
+
+  /** Recent ledger rows per account, newest first (bank-statement style). */
+  const recentByAccount = useMemo(() => {
+    const out: Record<string, typeof transactions> = {};
+    const sorted = [...transactions].sort((a, b) =>
+      b.transaction_date.localeCompare(a.transaction_date),
+    );
+    for (const t of sorted) {
+      if (!t.account_id) continue;
+      (out[t.account_id] ??= []).push(t);
     }
     return out;
-  }, [accounts, latest, transactions]);
+  }, [transactions]);
+
 
   const rows = useMemo(() => {
     let out = accounts;
