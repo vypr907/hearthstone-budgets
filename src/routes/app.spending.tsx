@@ -6,6 +6,7 @@ import {
   monthKey,
   shiftMonth,
   useCategories,
+  useCreateCategory,
   useSpendingActuals,
   useSpendingBudgets,
   useStartNewSpendingMonth,
@@ -24,7 +25,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CalendarPlus } from "lucide-react";
+import { CalendarPlus, HelpCircle, Plus } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/app/spending")({
   head: () => ({
@@ -56,6 +66,7 @@ type Row = {
   actualId?: string;
   actual: number;
   avg3: number;
+  description?: string | null;
 };
 
 function monthLabel(key: string) {
@@ -80,6 +91,17 @@ function SpendingPage() {
   const thisMonth = monthKey();
   const activeMonth =
     latestMonth && latestMonth > thisMonth ? latestMonth : thisMonth;
+
+  const createCategory = useCreateCategory();
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({
+    mode: "existing" as "existing" | "new",
+    categoryId: "",
+    newName: "",
+    newParent: "",
+    amount: "",
+    description: "",
+  });
 
   const [editing, setEditing] = useState<
     { row: Row; field: "budgeted" | "actual"; value: string } | null
@@ -115,16 +137,15 @@ function SpendingPage() {
           actualId: current?.id,
           actual: Number(current?.actual_amount || 0),
           avg3,
+          description: b.description ?? null,
         };
       });
 
     const byParent = new Map<string, { name: string; rows: Row[] }>();
     for (const r of rows) {
-      const parentId = categoryById[r.categoryId]?.parent_category ?? null;
-      const key = parentId ?? "__none__";
-      const name = parentId
-        ? (categoryById[parentId]?.name ?? "Other")
-        : "Ungrouped";
+      const parent = categoryById[r.categoryId]?.parent_category?.trim() || "";
+      const key = parent || "__none__";
+      const name = parent || "Ungrouped";
       if (!byParent.has(key)) byParent.set(key, { name, rows: [] });
       byParent.get(key)!.rows.push(r);
     }
@@ -172,6 +193,49 @@ function SpendingPage() {
     }
   }
 
+  async function submitNewItem() {
+    const amount = Number(form.amount || 0);
+    if (!Number.isFinite(amount)) {
+      toast.error("Enter a number for the budgeted amount");
+      return;
+    }
+    try {
+      let categoryId = form.categoryId;
+      if (form.mode === "new") {
+        if (!form.newName.trim()) {
+          toast.error("Enter a category name");
+          return;
+        }
+        const cat = await createCategory.mutateAsync({
+          name: form.newName.trim(),
+          parentCategory: form.newParent.trim() || null,
+        });
+        categoryId = cat.id;
+      }
+      if (!categoryId) {
+        toast.error("Pick a category");
+        return;
+      }
+      await saveBudget.mutateAsync({
+        categoryId,
+        amount,
+        description: form.description.trim() || null,
+      });
+      toast.success("Budget item added");
+      setAdding(false);
+      setForm({
+        mode: "existing",
+        categoryId: "",
+        newName: "",
+        newParent: "",
+        amount: "",
+        description: "",
+      });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   async function handleStartNewMonth() {
     const next = shiftMonth(activeMonth, 1);
     try {
@@ -207,6 +271,11 @@ function SpendingPage() {
           </Button>
         </div>
 
+        <Button className="h-12 w-full" onClick={() => setAdding(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New budget item
+        </Button>
+
         <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-1 text-[11px] uppercase tracking-wide text-muted-foreground">
           <span>Item</span>
           <span className="w-20 text-right">Budget</span>
@@ -237,7 +306,24 @@ function SpendingPage() {
                       key={r.categoryId}
                       className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 border-t border-border/60 px-2 py-2 text-sm"
                     >
-                      <span className="truncate">{r.name}</span>
+                      <span className="flex min-w-0 items-center gap-1">
+                        <span className="truncate">{r.name}</span>
+                        {r.description ? (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                aria-label={`About ${r.name}`}
+                                className="shrink-0 text-muted-foreground"
+                              >
+                                <HelpCircle className="h-4 w-4" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 text-sm">
+                              {r.description}
+                            </PopoverContent>
+                          </Popover>
+                        ) : null}
+                      </span>
                       <button
                         className="h-10 w-20 rounded-md text-right tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
                         onClick={() =>
@@ -302,6 +388,115 @@ function SpendingPage() {
           </Card>
         ) : null}
       </div>
+
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New budget item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={form.mode === "existing" ? "default" : "outline"}
+                className="h-11"
+                onClick={() => setForm((f) => ({ ...f, mode: "existing" }))}
+              >
+                Existing category
+              </Button>
+              <Button
+                variant={form.mode === "new" ? "default" : "outline"}
+                className="h-11"
+                onClick={() => setForm((f) => ({ ...f, mode: "new" }))}
+              >
+                New category
+              </Button>
+            </div>
+
+            {form.mode === "existing" ? (
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select
+                  value={form.categoryId}
+                  onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
+                >
+                  <SelectTrigger className="h-12">
+                    <SelectValue placeholder="Pick a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                        {c.parent_category ? ` · ${c.parent_category}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="new-name">Category name</Label>
+                  <Input
+                    id="new-name"
+                    className="h-12"
+                    value={form.newName}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, newName: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-parent">Parent category</Label>
+                  <Input
+                    id="new-parent"
+                    className="h-12"
+                    placeholder="e.g. Puff"
+                    value={form.newParent}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, newParent: e.target.value }))
+                    }
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="new-amount">Budgeted amount</Label>
+              <Input
+                id="new-amount"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                className="h-12"
+                value={form.amount}
+                onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-desc">Description (optional)</Label>
+              <Textarea
+                id="new-desc"
+                rows={2}
+                placeholder="Short note explaining this line"
+                value={form.description}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, description: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              className="h-12 w-full"
+              disabled={saveBudget.isPending || createCategory.isPending}
+              onClick={submitNewItem}
+            >
+              Add item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
