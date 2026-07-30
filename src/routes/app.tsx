@@ -2,7 +2,9 @@ import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { BottomNav } from "@/components/BottomNav";
+import { AddTransactionFab } from "@/components/AddTransactionFab";
 import { Flame } from "lucide-react";
+
 
 export const Route = createFileRoute("/app")({
   component: AppLayout,
