@@ -553,15 +553,21 @@ export function useUpsertSpendingBudget() {
       id,
       categoryId,
       amount,
+      description,
     }: {
       id?: string;
       categoryId: string;
       amount: number;
+      description?: string | null;
     }) => {
       if (id) {
         const { error } = await supabase
           .from("spending_budgets")
-          .update({ budgeted_amount: amount, updated_at: new Date().toISOString() })
+          .update({
+            budgeted_amount: amount,
+            ...(description !== undefined ? { description: description || null } : {}),
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", id);
         if (error) throw error;
         return;
@@ -570,6 +576,7 @@ export function useUpsertSpendingBudget() {
         household_id: householdId!,
         category_id: categoryId,
         budgeted_amount: amount,
+        ...(description !== undefined ? { description: description || null } : {}),
       });
       if (error) throw error;
     },
@@ -650,5 +657,36 @@ export function useStartNewSpendingMonth() {
       return nextMonth;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["spending_actuals"] }),
+  });
+}
+
+/** Create a spending category (plain-text parent_category grouping). */
+export function useCreateCategory() {
+  const qc = useQueryClient();
+  const { householdId } = useAuth();
+  return useMutation({
+    mutationFn: async ({
+      name,
+      parentCategory,
+      domain = "spending",
+    }: {
+      name: string;
+      parentCategory?: string | null;
+      domain?: string;
+    }): Promise<Category> => {
+      const { data, error } = await supabase
+        .from("categories")
+        .insert({
+          household_id: householdId!,
+          name,
+          parent_category: parentCategory || null,
+          domain,
+        })
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data as Category;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
   });
 }
