@@ -32,3 +32,11 @@ src/lib/spending-actuals.ts resolves a category's monthly actual from the ledger
 
 ## Global quick actions
 The /app layout renders a floating Add Transaction action alongside the bottom nav, available on every screen.
+
+## Payment schedule
+src/lib/payment-schedule.ts builds the forward-looking 12-month debt payment plan using the
+same ordering/rollover rules as src/lib/debt-payoff.ts. The Payment Schedule screen consumes it.
+
+## Net worth history
+src/lib/net-worth.ts owns point-in-time account balances (snapshot-before-date + cleared
+transactions since) and the account_type-grouped trend used by the Dashboard charts.
