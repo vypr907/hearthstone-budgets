@@ -259,3 +259,11 @@ every payment would silently log the wrong figure. Since quick manual transactio
 at bill-payment time keeps the same interaction pattern rather than introducing a new one.
 
 Status: Decided 2026-08-02. Not yet implemented.
+## ADR-014: Debt schedules branch on billing_cycle
+Decision: Monthly debts continue using `due_day`; any other `billing_cycle` uses `next_due_date`
+for display, editing, overdue checks, and cycle roll-forward. A single helper `debtDueDate()`
+resolves a debt's effective due date, and clearing/undo reuse the bill helpers
+`advanceDate()`/`reverseDate()`.
+Reason: Most debts are monthly with a stable day-of-month, but leases/loans on other cadences
+need a real date. Reusing the bill cycle helpers avoids duplicating interval math.
+Status: Decided 2026-07-31. Implemented.
