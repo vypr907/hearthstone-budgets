@@ -352,7 +352,7 @@ function AccountDialog({
       await upsert.mutateAsync({
         id: account?.id,
         name: name.trim(),
-        account_type: type || null,
+        account_type: type.trim() ? type.trim().toLowerCase() : null,
         starting_balance: starting ? Number(starting) : null,
         notes: notes || null,
         is_spendable: isSpendable,
