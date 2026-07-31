@@ -34,7 +34,8 @@ import type { Bill, BillingCycle } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailMoney, DetailText, StatusBadge } from "@/components/detail";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
-import { toPayable } from "@/lib/payments";
+import { Switch } from "@/components/ui/switch";
+import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 
 const CYCLES: BillingCycle[] = [
   "monthly",
@@ -176,10 +177,17 @@ function BillsPage() {
                           {b.category_id && categoryName[b.category_id] ? (
                             <span>· {categoryName[b.category_id]}</span>
                           ) : null}
+                          {b.is_variable_amount ? <span>· variable</span> : null}
                           <StatusBadge status={b.payment_status} />
+                          {Number(b.cycle_paid_to_date ?? 0) > 0 && billRemainingOwed(b) > 0 ? (
+                            <span className="font-medium text-destructive">
+                              {formatMoney(billRemainingOwed(b))} still owed
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                       <p className="shrink-0 font-semibold">{formatMoney(Number(b.amount))}</p>
+
                       <Button
                         size="icon"
                         variant="ghost"
@@ -232,6 +240,12 @@ function BillDetailDialog({
   if (!bill) return null;
   const category = categories.find((c) => c.id === bill.category_id);
   const institution = institutions.find((i) => i.id === bill.institution_id);
+  // Only surface cycle figures when they add information beyond bills.amount.
+  const showCycle =
+    Number(bill.cycle_paid_to_date ?? 0) > 0 ||
+    (bill.cycle_amount_due != null &&
+      Number(bill.cycle_amount_due) !== Number(bill.amount || 0));
+
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -252,12 +266,24 @@ function BillDetailDialog({
             />
             <DetailItem label="Manual or auto" value={bill.manual_or_auto ?? "—"} />
             <DetailItem
+              label="Variable amount"
+              value={bill.is_variable_amount ? "Yes" : "No"}
+            />
+            <DetailItem
               label="Active"
               value={bill.is_active === null ? "—" : bill.is_active ? "Yes" : "No"}
             />
+            {showCycle ? (
+              <>
+                <DetailMoney label="Due this cycle" value={billCycleDue(bill)} />
+                <DetailMoney label="Paid this cycle" value={Number(bill.cycle_paid_to_date ?? 0)} />
+                <DetailMoney label="Remaining owed" value={billRemainingOwed(bill)} />
+              </>
+            ) : null}
           </DetailGrid>
           <DetailText label="Notes" value={bill.notes} />
           <PayActions payable={toPayable("bill", bill)} status={bill.payment_status} />
+
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onEdit(bill)} className="h-11">
@@ -285,6 +311,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   const [institutionId, setInstitutionId] = useState("none");
   const [manual, setManual] = useState("none");
   const [notes, setNotes] = useState("");
+  const [variable, setVariable] = useState(false);
 
   const open = bill !== null;
   const isEdit = !!bill?.id;
@@ -301,6 +328,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setInstitutionId(bill?.institution_id ?? "none");
     setManual(bill?.manual_or_auto ?? "none");
     setNotes(bill?.notes ?? "");
+    setVariable(!!bill?.is_variable_amount);
   }
   if (!open && lastKey !== "") setLastKey("");
 
@@ -320,6 +348,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         institution_id: institutionId === "none" ? null : institutionId,
         manual_or_auto: manual === "none" ? null : manual,
         notes: notes || null,
+        is_variable_amount: variable,
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
       onClose();
@@ -353,7 +382,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="b-amt">Amount</Label>
+              <Label htmlFor="b-amt">{variable ? "Typical amount" : "Amount"}</Label>
               <Input
                 id="b-amt"
                 type="number"
@@ -374,6 +403,16 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               />
             </div>
           </div>
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="pr-3">
+              <Label htmlFor="b-variable">Variable amount</Label>
+              <p className="text-xs text-muted-foreground">
+                Ask what's owed each cycle when marking this bill paid.
+              </p>
+            </div>
+            <Switch id="b-variable" checked={variable} onCheckedChange={setVariable} />
+          </div>
+
           <div>
             <Label>Billing cycle</Label>
             <Select value={cycle} onValueChange={(v) => setCycle(v as BillingCycle)}>

@@ -290,4 +290,4 @@ Bills had no way to represent "owed X, paid less than X, remainder still due" â€
 assumed one payment fully resolved a cycle. Variable bills (electric, phone) need both a
 different amount each cycle and the ability to under-pay without losing track of the shortfall.
 
-Status: Decided 2026-07-31. Not yet implemented.
+Status: Decided 2026-07-31. Implemented.

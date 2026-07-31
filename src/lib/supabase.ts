@@ -34,6 +34,12 @@ export type Bill = {
   payment_status: string | null;
   notes: string | null;
   is_active: boolean | null;
+  /** Variable bills prompt for the amount owed each cycle. */
+  is_variable_amount?: boolean | null;
+  /** Amount owed for the current cycle (set on the first payment of a cycle). */
+  cycle_amount_due?: number | null;
+  /** Total paid so far against the current cycle. */
+  cycle_paid_to_date?: number | null;
   created_at: string;
   updated_at: string;
 };
