@@ -240,6 +240,12 @@ function BillDetailDialog({
   if (!bill) return null;
   const category = categories.find((c) => c.id === bill.category_id);
   const institution = institutions.find((i) => i.id === bill.institution_id);
+  // Only surface cycle figures when they add information beyond bills.amount.
+  const showCycle =
+    Number(bill.cycle_paid_to_date ?? 0) > 0 ||
+    (bill.cycle_amount_due != null &&
+      Number(bill.cycle_amount_due) !== Number(bill.amount || 0));
+
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
