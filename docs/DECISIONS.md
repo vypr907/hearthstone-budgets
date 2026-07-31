@@ -210,7 +210,7 @@ simulation still accrued interest_rate monthly and started from principal only. 
 `known_finance_charge` is added to the starting remaining balance and interest accrual is
 skipped for that debt, matching this ADR.
 
-## ADR-016: Debts Support Non-Monthly Billing Cycles
+## ADR-017: Debts Support Non-Monthly Billing Cycles
 
 Decision:
 `debts.billing_cycle` and `debts.next_due_date` (both already present in the schema, previously
@@ -237,11 +237,20 @@ Note: GTC is a payment-plan debt being paid off and closed, not a recurring biwe
 no special handling needed; once `remaining_balance` reaches 0 it naturally drops out of the
 payoff simulation and active-debt views via the existing `remaining_balance > 0` filter.
 
-Status: Decided 2026-08-02. Implementation in progress via Lovable.
+### From Lovable update:
+Decision: Monthly debts continue using `due_day`; any other `billing_cycle` uses `next_due_date`
+for display, editing, overdue checks, and cycle roll-forward. A single helper `debtDueDate()`
+resolves a debt's effective due date, and clearing/undo reuse the bill helpers
+`advanceDate()`/`reverseDate()`.
+
+Reason: Most debts are monthly with a stable day-of-month, but leases/loans on other cadences
+need a real date. Reusing the bill cycle helpers avoids duplicating interval math.
+
+Status: Decided 2026-07-31. Implemented.
 
 ---
 
-## ADR-017: Variable-Amount Bills Prompt for Actual Amount at Payment Time
+## ADR-018: Variable-Amount Bills Prompt for Actual Amount at Payment Time
 
 Decision:
 When marking a bill as pending (submitted), the app prompts for the actual amount owed this
