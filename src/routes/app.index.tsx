@@ -17,8 +17,9 @@ import { formatMoney, isDateOverdue, debtDueDate } from "@/lib/format";
 import {
   accountTypeIs,
   computeBalances,
+  creditAccountsMissingLimit,
   creditOwed,
-  isSpendableAccount,
+  spendableContribution,
 } from "@/lib/balances";
 import { buildActualResolver } from "@/lib/spending-actuals";
 import { Card, CardContent } from "@/components/ui/card";
