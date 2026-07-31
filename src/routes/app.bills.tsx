@@ -311,6 +311,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   const [institutionId, setInstitutionId] = useState("none");
   const [manual, setManual] = useState("none");
   const [notes, setNotes] = useState("");
+  const [variable, setVariable] = useState(false);
 
   const open = bill !== null;
   const isEdit = !!bill?.id;
@@ -327,6 +328,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setInstitutionId(bill?.institution_id ?? "none");
     setManual(bill?.manual_or_auto ?? "none");
     setNotes(bill?.notes ?? "");
+    setVariable(!!bill?.is_variable_amount);
   }
   if (!open && lastKey !== "") setLastKey("");
 
@@ -346,6 +348,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         institution_id: institutionId === "none" ? null : institutionId,
         manual_or_auto: manual === "none" ? null : manual,
         notes: notes || null,
+        is_variable_amount: variable,
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
       onClose();
