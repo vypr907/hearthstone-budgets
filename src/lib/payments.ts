@@ -144,13 +144,22 @@ export function useMarkCleared() {
       if (p.kind === "debt") {
         const remaining = Number(p.debt?.remaining_balance ?? 0);
         const next = Math.max(0, remaining - Math.abs(p.amount));
-        const { error } = await supabase
-          .from("debts")
-          .update({ payment_status: "cleared", remaining_balance: next })
-          .eq("id", p.id);
+        const cycle = (p.debt?.billing_cycle ?? "monthly").toLowerCase();
+        const update: Record<string, unknown> = {
+          payment_status: "cleared",
+          remaining_balance: next,
+        };
+        // Non-monthly debts roll forward on their own cycle, like bills.
+        let nextDue: string | null = null;
+        if (cycle !== "monthly") {
+          nextDue = advanceDate(p.debt?.next_due_date ?? todayISO(), p.debt?.billing_cycle);
+          update.next_due_date = nextDue;
+        }
+        const { error } = await supabase.from("debts").update(update).eq("id", p.id);
         if (error) throw error;
-        return { next_due_date: null as string | null };
+        return { next_due_date: nextDue };
       }
+
 
       // Bills: mark cleared, then roll forward into the next cycle.
       const bill = p.bill!;
