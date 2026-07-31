@@ -28,6 +28,7 @@ export const Route = createFileRoute("/app/more")({
 const links = [
   { to: "/app/spending", label: "Spending", icon: PiggyBank },
   { to: "/app/debt-strategy", label: "Debt Strategy", icon: TrendingDown },
+  { to: "/app/payment-schedule", label: "Payment Schedule", icon: CalendarDays },
   { to: "/app/institutions", label: "Institutions", icon: Building2 },
   { to: "/app/transactions", label: "Transactions", icon: Receipt },
 ];

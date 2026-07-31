@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppTransactionsRouteImport } from './routes/app.transactions'
 import { Route as AppSpendingRouteImport } from './routes/app.spending'
+import { Route as AppPaymentScheduleRouteImport } from './routes/app.payment-schedule'
 import { Route as AppMoreRouteImport } from './routes/app.more'
 import { Route as AppInstitutionsRouteImport } from './routes/app.institutions'
 import { Route as AppEverythingRouteImport } from './routes/app.everything'
@@ -51,6 +52,11 @@ const AppTransactionsRoute = AppTransactionsRouteImport.update({
 const AppSpendingRoute = AppSpendingRouteImport.update({
   id: '/spending',
   path: '/spending',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPaymentScheduleRoute = AppPaymentScheduleRouteImport.update({
+  id: '/payment-schedule',
+  path: '/payment-schedule',
   getParentRoute: () => AppRoute,
 } as any)
 const AppMoreRoute = AppMoreRouteImport.update({
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/app/everything': typeof AppEverythingRoute
   '/app/institutions': typeof AppInstitutionsRoute
   '/app/more': typeof AppMoreRoute
+  '/app/payment-schedule': typeof AppPaymentScheduleRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
@@ -114,6 +121,7 @@ export interface FileRoutesByTo {
   '/app/everything': typeof AppEverythingRoute
   '/app/institutions': typeof AppInstitutionsRoute
   '/app/more': typeof AppMoreRoute
+  '/app/payment-schedule': typeof AppPaymentScheduleRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app': typeof AppIndexRoute
@@ -130,6 +138,7 @@ export interface FileRoutesById {
   '/app/everything': typeof AppEverythingRoute
   '/app/institutions': typeof AppInstitutionsRoute
   '/app/more': typeof AppMoreRoute
+  '/app/payment-schedule': typeof AppPaymentScheduleRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
@@ -147,6 +156,7 @@ export interface FileRouteTypes {
     | '/app/everything'
     | '/app/institutions'
     | '/app/more'
+    | '/app/payment-schedule'
     | '/app/spending'
     | '/app/transactions'
     | '/app/'
@@ -161,6 +171,7 @@ export interface FileRouteTypes {
     | '/app/everything'
     | '/app/institutions'
     | '/app/more'
+    | '/app/payment-schedule'
     | '/app/spending'
     | '/app/transactions'
     | '/app'
@@ -176,6 +187,7 @@ export interface FileRouteTypes {
     | '/app/everything'
     | '/app/institutions'
     | '/app/more'
+    | '/app/payment-schedule'
     | '/app/spending'
     | '/app/transactions'
     | '/app/'
@@ -229,6 +241,13 @@ declare module '@tanstack/react-router' {
       path: '/spending'
       fullPath: '/app/spending'
       preLoaderRoute: typeof AppSpendingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/payment-schedule': {
+      id: '/app/payment-schedule'
+      path: '/payment-schedule'
+      fullPath: '/app/payment-schedule'
+      preLoaderRoute: typeof AppPaymentScheduleRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/more': {
@@ -291,6 +310,7 @@ interface AppRouteChildren {
   AppEverythingRoute: typeof AppEverythingRoute
   AppInstitutionsRoute: typeof AppInstitutionsRoute
   AppMoreRoute: typeof AppMoreRoute
+  AppPaymentScheduleRoute: typeof AppPaymentScheduleRoute
   AppSpendingRoute: typeof AppSpendingRoute
   AppTransactionsRoute: typeof AppTransactionsRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -304,6 +324,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppEverythingRoute: AppEverythingRoute,
   AppInstitutionsRoute: AppInstitutionsRoute,
   AppMoreRoute: AppMoreRoute,
+  AppPaymentScheduleRoute: AppPaymentScheduleRoute,
   AppSpendingRoute: AppSpendingRoute,
   AppTransactionsRoute: AppTransactionsRoute,
   AppIndexRoute: AppIndexRoute,
