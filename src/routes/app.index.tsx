@@ -4,6 +4,7 @@ import { AppHeader } from "@/components/AppHeader";
 import {
   monthKey,
   useAccounts,
+  useAllAccountBalances,
   useBills,
   useCategories,
   useDebts,
@@ -22,6 +23,24 @@ import {
 import { buildActualResolver } from "@/lib/spending-actuals";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+import { netWorthTrend } from "@/lib/net-worth";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+const CHART_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 
 export const Route = createFileRoute("/app/")({
@@ -55,6 +74,7 @@ function Dashboard() {
   const { data: budgets = [] } = useSpendingBudgets();
   const { data: actuals = [] } = useSpendingActuals();
   const { data: categories = [] } = useCategories();
+  const { data: balanceHistory = [] } = useAllAccountBalances();
 
   const balances = useMemo(
     () => computeBalances(accounts, latest, transactions),
@@ -80,6 +100,68 @@ function Dashboard() {
     }
     return { total, checking, availableCredit, savings };
   }, [accounts, balances]);
+
+  /** Net worth over the last 6 months, split by account_type. */
+  const netWorth = useMemo(
+    () => netWorthTrend(accounts, balanceHistory, transactions, 6),
+    [accounts, balanceHistory, transactions],
+  );
+  const netWorthTypes = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of netWorth) for (const k of Object.keys(p.byType)) set.add(k);
+    return [...set].sort();
+  }, [netWorth]);
+  const netWorthData = useMemo(
+    () =>
+      netWorth.map((p) => ({
+        label: p.label,
+        total: Math.round(p.total),
+        ...Object.fromEntries(
+          netWorthTypes.map((t) => [t, Math.round(p.byType[t] ?? 0)]),
+        ),
+      })),
+    [netWorth, netWorthTypes],
+  );
+
+  /** Money out per category for the current month, largest first. */
+  const spendingByCategory = useMemo(() => {
+    const month = monthKey(new Date());
+    const names: Record<string, string> = {};
+    for (const c of categories) names[c.id] = c.name;
+    const totals = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.status !== "cleared") continue;
+      if (t.transaction_date.slice(0, 7) !== month) continue;
+      const amt = Number(t.amount || 0);
+      if (amt >= 0) continue;
+      const key = t.category_id ?? "__none__";
+      totals.set(key, (totals.get(key) ?? 0) + Math.abs(amt));
+    }
+    const rows = [...totals.entries()].map(([id, amount]) => ({
+      id,
+      name: names[id] ?? "Uncategorized",
+      amount,
+    }));
+    rows.sort((a, b) => b.amount - a.amount);
+    const max = rows[0]?.amount ?? 0;
+    return { rows: rows.slice(0, 8), max, total: rows.reduce((s, r) => s + r.amount, 0) };
+  }, [transactions, categories]);
+
+  /** Payoff progress per debt: how much of the starting balance is gone. */
+  const payoffProgress = useMemo(
+    () =>
+      debts
+        .map((d) => {
+          const start = Number(d.starting_balance ?? 0);
+          const remaining = Number(d.remaining_balance ?? 0);
+          const paid = Math.max(0, start - remaining);
+          const pct = start > 0 ? Math.min(100, (paid / start) * 100) : 0;
+          return { id: d.id, name: d.name, start, remaining, paid, pct };
+        })
+        .filter((d) => d.start > 0)
+        .sort((a, b) => b.pct - a.pct),
+    [debts],
+  );
 
   /** Budget vs actual for the current month, grouped by parent_category. */
   const budgetChart = useMemo(() => {
@@ -201,6 +283,134 @@ function Dashboard() {
           </Card>
         )}
 
+
+        {netWorthData.length > 1 && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Net worth trend
+              </p>
+              <p className="mt-1 text-2xl font-bold">
+                {formatMoney(netWorth[netWorth.length - 1]?.total ?? 0)}
+              </p>
+              <div className="mt-3 h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={netWorthData} margin={{ left: 4, right: 8, top: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                    <YAxis
+                      width={48}
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={11}
+                      tickFormatter={(v: number) => `$${Math.round(v / 100) / 10}k`}
+                    />
+                    <Tooltip
+                      formatter={(v: number, n: string) => [formatMoney(v), n]}
+                      contentStyle={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="total"
+                      name="Total"
+                      stroke="var(--primary)"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    {netWorthTypes.map((t, i) => (
+                      <Line
+                        key={t}
+                        type="monotone"
+                        dataKey={t}
+                        name={t}
+                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                        strokeWidth={1.5}
+                        dot={false}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {netWorthTypes.map((t, i) => (
+                  <span key={t} className="flex items-center gap-1 capitalize">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                    />
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {spendingByCategory.rows.length > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Spending by category · this month
+              </p>
+              <p className="mt-1 text-2xl font-bold">
+                {formatMoney(spendingByCategory.total)}
+              </p>
+              <div className="mt-3 space-y-2">
+                {spendingByCategory.rows.map((r) => (
+                  <div key={r.id}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="truncate">{r.name}</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {formatMoney(r.amount)}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{
+                          width: `${spendingByCategory.max ? (r.amount / spendingByCategory.max) * 100 : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {payoffProgress.length > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Payoff progress
+              </p>
+              <div className="mt-3 space-y-3">
+                {payoffProgress.map((d) => (
+                  <div key={d.id}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="truncate">{d.name}</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {Math.round(d.pct)}% · {formatMoney(d.remaining)} left
+                      </span>
+                    </div>
+                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${d.pct}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="p-4">
