@@ -278,6 +278,9 @@ bills (
     billing_cycle text,
     payment_status text,
     manual_or_auto text,
+    is_variable_amount boolean default false, -- prompt for the amount owed each cycle
+    cycle_amount_due numeric,                 -- actual amount owed for the current cycle
+    cycle_paid_to_date numeric default 0,     -- cleared payments applied to the current cycle
     notes text,
     is_active boolean default true,
     created_at timestamptz default now(),
