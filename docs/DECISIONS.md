@@ -204,4 +204,8 @@ known_finance_charge = (remaining_scheduled_payments − 1) × payment_amount
 − remaining_balance
 ```
 
-Status: Decided 2026-08-02. Implemented (see 'src/lib/debt-payoff.ts').
+Status: Decided 2026-08-02. Correctly implemented 2026-07-31.
+Note: The initial implementation only overwrote the displayed interest after the loop; the
+simulation still accrued interest_rate monthly and started from principal only. Fixed so
+`known_finance_charge` is added to the starting remaining balance and interest accrual is
+skipped for that debt, matching this ADR.
