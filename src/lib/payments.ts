@@ -95,20 +95,23 @@ function useAfterPayment() {
 
 /**
  * Mark submitted: create a pending ledger transaction and set the
- * bill/debt payment_status to 'pending'.
+ * bill/debt payment_status to 'pending'. For variable-amount bills the caller
+ * passes the amount owed this cycle, which is stored on the bill the first
+ * time a payment is made in the cycle.
  */
 export function useMarkSubmitted() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable: p, accountId }: PayInput) => {
+    mutationFn: async ({ payable: p, accountId, amount }: PayInput) => {
+      const amt = Math.abs(Number(amount ?? p.amount) || 0);
       const existing = await findLinkedTransaction(p, "pending");
       if (!existing) {
         const { error } = await supabase.from("transactions").insert({
           household_id: householdId,
           account_id: accountId,
           category_id: p.category_id,
-          amount: -Math.abs(p.amount),
+          amount: -amt,
           status: "pending",
           description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
           transaction_date: todayISO(),
@@ -116,15 +119,21 @@ export function useMarkSubmitted() {
         });
         if (error) throw error;
       }
+      const update: Record<string, unknown> = { payment_status: "pending" };
+      if (p.kind === "bill" && p.bill?.is_variable_amount && p.bill.cycle_amount_due == null) {
+        // First payment of this cycle sets what's owed for the cycle.
+        update.cycle_amount_due = amount != null ? Math.abs(Number(amount)) : p.amount;
+      }
       const { error: e2 } = await supabase
         .from(table(p.kind))
-        .update({ payment_status: "pending" })
+        .update(update)
         .eq("id", p.id);
       if (e2) throw e2;
     },
     onSuccess: done,
   });
 }
+
 
 /**
  * Mark cleared: clear the linked pending transaction (creating one if the
