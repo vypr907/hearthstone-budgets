@@ -177,10 +177,17 @@ function BillsPage() {
                           {b.category_id && categoryName[b.category_id] ? (
                             <span>· {categoryName[b.category_id]}</span>
                           ) : null}
+                          {b.is_variable_amount ? <span>· variable</span> : null}
                           <StatusBadge status={b.payment_status} />
+                          {Number(b.cycle_paid_to_date ?? 0) > 0 && billRemainingOwed(b) > 0 ? (
+                            <span className="font-medium text-destructive">
+                              {formatMoney(billRemainingOwed(b))} still owed
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                       <p className="shrink-0 font-semibold">{formatMoney(Number(b.amount))}</p>
+
                       <Button
                         size="icon"
                         variant="ghost"
