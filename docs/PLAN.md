@@ -660,7 +660,7 @@ create policy "household access" on debt_strategy_settings for all
 
 ### 5b. Build the calculator
 
-- [ ] Prompt in Lovable:
+- [x] Prompt in Lovable:
 
 ```
 Build a debt payoff calculator on a new Debt Strategy screen. Given all active debts (balance,
@@ -685,8 +685,8 @@ that number directly for that debt's total-interest figure instead of your own c
 estimate — it's more accurate than the projection for those specific debts.
 ```
 
-- [ ] **Validation checkpoint — do not skip this:** compare the app's Avalanche/Snowball/Custom output (total interest, payoff date, money saved) against your sheet's "Strategy" tab numbers. These should match closely. If they're meaningfully different, the amortization math has a bug — this is the one place in this whole project worth debugging carefully before moving on.
-- [ ] Note: payment *counts* prior to your migration date won't be perfectly reconstructed unless you manually backfill a few `transactions` rows with past dates — the balances themselves are still accurate either way.
+- [x] **Validation checkpoint — do not skip this:** compare the app's Avalanche/Snowball/Custom output (total interest, payoff date, money saved) against your sheet's "Strategy" tab numbers. These should match closely. If they're meaningfully different, the amortization math has a bug — this is the one place in this whole project worth debugging carefully before moving on.
+- [x] Note: payment *counts* prior to your migration date won't be perfectly reconstructed unless you manually backfill a few `transactions` rows with past dates — the balances themselves are still accurate either way.
 
 **Milestone:** Calculator output matches your sheet's Strategy tab.
 
