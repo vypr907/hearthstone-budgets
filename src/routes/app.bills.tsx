@@ -382,7 +382,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="b-amt">Amount</Label>
+              <Label htmlFor="b-amt">{variable ? "Typical amount" : "Amount"}</Label>
               <Input
                 id="b-amt"
                 type="number"
@@ -403,6 +403,16 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               />
             </div>
           </div>
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="pr-3">
+              <Label htmlFor="b-variable">Variable amount</Label>
+              <p className="text-xs text-muted-foreground">
+                Ask what's owed each cycle when marking this bill paid.
+              </p>
+            </div>
+            <Switch id="b-variable" checked={variable} onCheckedChange={setVariable} />
+          </div>
+
           <div>
             <Label>Billing cycle</Label>
             <Select value={cycle} onValueChange={(v) => setCycle(v as BillingCycle)}>
