@@ -62,3 +62,33 @@ export function accountTypeIs(a: Account, type: string): boolean {
 export function creditOwed(balance: number): number {
   return Math.abs(balance);
 }
+
+/**
+ * ADR-023: what one account contributes to the COMBINED household spendable
+ * total. Checking contributes its raw spendable balance; credit contributes
+ * available credit (limit - owed). Returns null when the account should be
+ * excluded from the total — credit accounts with no credit_limit entered.
+ * Per-account displays keep using the balance-based value, not this.
+ */
+export function spendableContribution(
+  account: Account,
+  spendable: number,
+): number | null {
+  if (!isSpendableAccount(account)) return null;
+  if (accountTypeIs(account, "credit")) {
+    const limit = Number(account.credit_limit ?? 0);
+    if (!limit) return null;
+    return limit - creditOwed(spendable);
+  }
+  return spendable;
+}
+
+/** Credit accounts included in the total but missing a usable credit_limit. */
+export function creditAccountsMissingLimit(accounts: Account[]): Account[] {
+  return accounts.filter(
+    (a) =>
+      isSpendableAccount(a) &&
+      accountTypeIs(a, "credit") &&
+      !Number(a.credit_limit ?? 0),
+  );
+}

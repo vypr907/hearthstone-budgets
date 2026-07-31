@@ -1,3 +1,11 @@
+## 2026-07-31 – ADR-023: credit accounts contribute available credit
+
+- Combined household spendable total now uses `spendableContribution()` in `src/lib/balances.ts`: checking contributes its raw spendable balance, credit contributes `credit_limit - creditOwed(spendable)`.
+- Credit accounts with a null or 0 `credit_limit` are excluded from the total and listed in a warning under the Dashboard "Spendable balance" card (`creditAccountsMissingLimit()`).
+- Per-account displays and `computeBalances()` output are unchanged; ADR-013 inclusion rules unchanged.
+- Checked live data: all three credit accounts (Mission Lane 1600, CreditOne 300, Milestone 300) have limits set, so nothing is currently excluded.
+- Known issues: none new.
+
 ## 2026-07-31 – Verification: schedule check-offs + account_type casing
 
 - Verified Payment Schedule check-offs: `useScheduleCheckoffs`/`useToggleScheduleCheckoff` already read/write `payment_schedule_checkoffs` (household_id, month); the table now exists in Supabase, so check-offs are household-shared. Device-local storage remains only as an error fallback. No change made.

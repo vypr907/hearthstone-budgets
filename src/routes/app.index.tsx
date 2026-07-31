@@ -17,8 +17,9 @@ import { formatMoney, isDateOverdue, debtDueDate } from "@/lib/format";
 import {
   accountTypeIs,
   computeBalances,
+  creditAccountsMissingLimit,
   creditOwed,
-  isSpendableAccount,
+  spendableContribution,
 } from "@/lib/balances";
 import { buildActualResolver } from "@/lib/spending-actuals";
 import { Card, CardContent } from "@/components/ui/card";
@@ -83,7 +84,8 @@ function Dashboard() {
 
   /**
    * Spendable = only is_spendable checking/credit accounts. Savings,
-   * investment and retirement are always excluded.
+   * investment and retirement are always excluded. ADR-023: credit accounts
+   * contribute available credit, and are skipped when credit_limit is unset.
    */
   const spendable = useMemo(() => {
     let total = 0;
@@ -92,7 +94,8 @@ function Dashboard() {
     let savings = 0;
     for (const a of accounts) {
       const b = balances[a.id]?.spendable ?? 0;
-      if (isSpendableAccount(a)) total += b;
+      const contribution = spendableContribution(a, b);
+      if (contribution != null) total += contribution;
       if (accountTypeIs(a, "checking")) checking += b;
       if (accountTypeIs(a, "credit"))
         availableCredit += Number(a.credit_limit ?? 0) - creditOwed(b);
@@ -100,6 +103,13 @@ function Dashboard() {
     }
     return { total, checking, availableCredit, savings };
   }, [accounts, balances]);
+
+  /** Credit accounts excluded from the total because credit_limit is missing. */
+  const missingLimits = useMemo(
+    () => creditAccountsMissingLimit(accounts),
+    [accounts],
+  );
+
 
   /** Net worth over the last 6 months, split by account_type. */
   const netWorth = useMemo(
@@ -244,6 +254,17 @@ function Dashboard() {
                 </span>
               </div>
             </div>
+            {missingLimits.length > 0 && (
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <p>
+                  Excluded from the total — no credit limit set:{" "}
+                  <span className="font-medium">
+                    {missingLimits.map((a) => a.name).join(", ")}
+                  </span>
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
