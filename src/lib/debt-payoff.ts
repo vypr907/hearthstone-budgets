@@ -69,7 +69,12 @@ export function simulate(
   strategy: StrategyKey,
 ): ScenarioResult {
   const order = orderFor(strategy, debts);
-  const state = order.map((d) => ({ ...d, remaining: d.balance, interest: 0, months: 0 }));
+  const state = order.map((d) => ({
+    ...d,
+    remaining: d.balance + (d.knownFinanceCharge ?? 0),
+    interest: 0,
+    months: 0,
+  }));
   const baseMinimums = state.reduce((s, d) => s + d.minimum, 0);
   let month = 0;
 
@@ -78,6 +83,7 @@ export function simulate(
     // Accrue interest first.
     for (const d of state) {
       if (d.remaining <= 0.005) continue;
+      if (d.knownFinanceCharge != null) continue;
       const monthly = (d.rate > 0 ? d.rate / 100 : 0) / 12;
       const charge = d.remaining * monthly;
       d.remaining += charge;
