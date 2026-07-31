@@ -195,5 +195,15 @@ export function usePayFlow() {
   );
 
 
-  return { start, markUnpaid, busy, picker };
+  return {
+    start,
+    markUnpaid,
+    busy,
+    picker: (
+      <>
+        {picker}
+        {amountPrompt}
+      </>
+    ),
+  };
 }
