@@ -123,3 +123,79 @@
 
 ### Still Open
 - Accounts screen missing spendable/current balance display, sort/filter/search (per original Phase 3.5/PLAN.md spec)
+## 2026-07-31 – Payment Schedule Screen & Dashboard Charts
+
+### Completed
+
+* Added **Payment Schedule** screen (More → Payment Schedule, `/app/payment-schedule`) projecting the next 12 months of debt payments from the household's active strategy and extra monthly payment: which debts get paid, how much, remaining balance, and a "Paid off" badge.
+* Added a large per-month "Mark paid" check-off, stored in the shared `payment_schedule_checkoffs` table (device-local storage retained only as an error fallback).
+* Added Dashboard charts:
+
+  * Net worth trend line (6 months, per `account_type` plus total).
+  * Spending-by-category bars for the current month (cleared money-out transactions).
+  * Payoff-progress bar per debt using `(starting_balance - remaining_balance) / starting_balance`.
+* New modules: `src/lib/payment-schedule.ts`, `src/lib/net-worth.ts`.
+* New hooks: `useScheduleCheckoffs`, `useToggleScheduleCheckoff`, `useAllAccountBalances`.
+
+## 2026-07-31 – Variable-Amount Bills & Partial Payments
+
+### Completed
+
+* Added a "Variable amount" toggle to the bill add/edit form (`bills.is_variable_amount`); the amount field relabels to "Typical amount" when enabled.
+* Marking a variable bill submitted/cleared now prompts for the amount owed this cycle (defaults to remaining owed, else `cycle_amount_due`, else `bills.amount`) and stores it in `cycle_amount_due` on the first payment of the cycle. Fixed-amount bills skip the prompt.
+* Clearing a bill payment adds the transaction amount to `cycle_paid_to_date`:
+
+  * Full payment advances `next_due_date`, resets `payment_status` to `unpaid`, and clears the cycle fields.
+  * Underpayment keeps `payment_status` as `pending` within the same cycle so a follow-up payment can be submitted.
+* Bill cards show "X still owed"; the detail dialog shows Due / Paid / Remaining for the cycle when they differ from `bills.amount`.
+* Undo reverses a partial payment without rolling the cycle back.
+
+### Notes
+
+* Debt payment logic was intentionally left unchanged.
+
+## 2026-07-31 – Debt Billing Cycles
+
+### Completed
+
+* Debts now expose `billing_cycle` (monthly / biweekly / quarterly / bimonthly / annually / custom) and `next_due_date` on the list card, detail dialog, and add/edit form (dropdown, defaults to monthly).
+* Monthly debts continue to use `due_day`; non-monthly debts show/edit `next_due_date`.
+* Added `debtDueDate()` helper in `src/lib/format.ts`; the effective due date drives overdue status, Everything sorting, and the Dashboard overdue list.
+* Clearing a non-monthly debt advances `next_due_date` via the shared `advanceDate()` helper; undo reverses it with `reverseDate()`. Monthly debts keep the existing reset.
+
+## 2026-07-31 – Debt Payoff Simulation: known_finance_charge Fix
+
+### Fixed
+
+* `src/lib/debt-payoff.ts` now starts simulation for debts with `known_finance_charge` at `balance + known_finance_charge` and skips `interest_rate` accrual for those debts entirely.
+* Previously the known charge only overwrote the final displayed interest, so payoff months and rollover timing were wrong. Display logic already used the known charge and is unchanged.
+
+## 2026-07-31 – Verification Pass: Schedule Check-offs & account_type Casing
+
+### Verified
+
+* Payment Schedule check-offs already read/write `payment_schedule_checkoffs` (`household_id`, `month`) via `useScheduleCheckoffs` / `useToggleScheduleCheckoff`; the table exists in Supabase, so check-offs are household-shared. No change required.
+
+### Fixed
+
+* The account dialog's free-text Type field saved values as typed (e.g. "Checking"). It now writes `trim().toLowerCase()` so `account_type` is always stored lowercase. Display labels unchanged.
+
+## 2026-07-31 – Account Dialog: is_spendable & credit_limit
+
+### Completed
+
+* Account add/edit dialog now exposes a "Spendable" checkbox bound to `accounts.is_spendable`.
+* Added a "Credit limit" currency input bound to `accounts.credit_limit`, shown only when `account_type` is "credit" and saved as `null` for other types.
+* No balance calculation logic changed — this only exposes existing columns.
+
+## 2026-07-31 – ADR-023: Credit Accounts Contribute Available Credit
+
+### Changed
+
+* The combined household spendable total now uses `spendableContribution()` in `src/lib/balances.ts`: checking contributes its raw spendable balance, credit contributes `credit_limit - creditOwed(spendable)`.
+* Credit accounts with a null or 0 `credit_limit` are excluded from the combined total and listed in a warning under the Dashboard "Spendable balance" card (`creditAccountsMissingLimit()`).
+* Per-account displays and `computeBalances()` output are unchanged; ADR-013 inclusion rules are unchanged.
+
+### Notes
+
+* Live data check: all three credit accounts (Mission Lane 1600, CreditOne 300, Milestone 300) have limits set, so nothing is currently excluded.
