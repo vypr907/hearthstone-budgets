@@ -12,7 +12,7 @@ import {
   useSpendingBudgets,
   useTransactions,
 } from "@/lib/data-hooks";
-import { formatMoney, isDateOverdue, dueDayToDate } from "@/lib/format";
+import { formatMoney, isDateOverdue, debtDueDate } from "@/lib/format";
 import {
   accountTypeIs,
   computeBalances,
@@ -122,12 +122,12 @@ function Dashboard() {
         kind: "Bill" as const,
       })),
     ...debts
-      .filter((d) => isDateOverdue(dueDayToDate(d.due_day), d.payment_status))
+      .filter((d) => isDateOverdue(debtDueDate(d), d.payment_status))
       .map((d) => ({
         id: `debt-${d.id}`,
         name: d.name,
         amount: Number(d.minimum_payment || 0),
-        due_date: dueDayToDate(d.due_day)!,
+        due_date: debtDueDate(d)!,
         kind: "Debt" as const,
       })),
   ].sort((a, b) => a.due_date.localeCompare(b.due_date));
