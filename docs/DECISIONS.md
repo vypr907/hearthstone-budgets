@@ -370,4 +370,5 @@ Implementation notes:
   in ('checking','credit')) — only changes what value a 'credit' account contributes once
   included.
 
-Status: Decided 2026-08-02. Not yet implemented.
+Status: Decided 2026-08-02. Implemented 2026-07-31 (null/0 credit_limit excludes the account
+from the combined total).
