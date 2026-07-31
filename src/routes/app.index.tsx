@@ -83,7 +83,8 @@ function Dashboard() {
 
   /**
    * Spendable = only is_spendable checking/credit accounts. Savings,
-   * investment and retirement are always excluded.
+   * investment and retirement are always excluded. ADR-023: credit accounts
+   * contribute available credit, and are skipped when credit_limit is unset.
    */
   const spendable = useMemo(() => {
     let total = 0;
@@ -92,7 +93,8 @@ function Dashboard() {
     let savings = 0;
     for (const a of accounts) {
       const b = balances[a.id]?.spendable ?? 0;
-      if (isSpendableAccount(a)) total += b;
+      const contribution = spendableContribution(a, b);
+      if (contribution != null) total += contribution;
       if (accountTypeIs(a, "checking")) checking += b;
       if (accountTypeIs(a, "credit"))
         availableCredit += Number(a.credit_limit ?? 0) - creditOwed(b);
@@ -100,6 +102,13 @@ function Dashboard() {
     }
     return { total, checking, availableCredit, savings };
   }, [accounts, balances]);
+
+  /** Credit accounts excluded from the total because credit_limit is missing. */
+  const missingLimits = useMemo(
+    () => creditAccountsMissingLimit(accounts),
+    [accounts],
+  );
+
 
   /** Net worth over the last 6 months, split by account_type. */
   const netWorth = useMemo(
