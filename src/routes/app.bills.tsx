@@ -260,12 +260,24 @@ function BillDetailDialog({
             />
             <DetailItem label="Manual or auto" value={bill.manual_or_auto ?? "—"} />
             <DetailItem
+              label="Variable amount"
+              value={bill.is_variable_amount ? "Yes" : "No"}
+            />
+            <DetailItem
               label="Active"
               value={bill.is_active === null ? "—" : bill.is_active ? "Yes" : "No"}
             />
+            {showCycle ? (
+              <>
+                <DetailMoney label="Due this cycle" value={billCycleDue(bill)} />
+                <DetailMoney label="Paid this cycle" value={Number(bill.cycle_paid_to_date ?? 0)} />
+                <DetailMoney label="Remaining owed" value={billRemainingOwed(bill)} />
+              </>
+            ) : null}
           </DetailGrid>
           <DetailText label="Notes" value={bill.notes} />
           <PayActions payable={toPayable("bill", bill)} status={bill.payment_status} />
+
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onEdit(bill)} className="h-11">
