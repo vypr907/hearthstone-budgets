@@ -17,3 +17,11 @@
 - Monthly debts keep `due_day`; non-monthly debts show/edit `next_due_date`, and that date drives overdue status, Everything sorting, and the Dashboard overdue list via the new `debtDueDate()` helper in `src/lib/format.ts`.
 - Clearing a non-monthly debt advances `next_due_date` with the shared `advanceDate()` cycle helper (undo reverses it with `reverseDate()`); monthly debts keep the existing reset.
 - Known issues: none new.
+
+## 2026-07-31 – Payment Schedule screen and Dashboard charts
+
+- New **Payment Schedule** screen (More → Payment Schedule, `/app/payment-schedule`) showing the next 12 months of debt payments — which debts get paid, how much, remaining balance, and a "Paid off" badge — derived from the household's active strategy and extra monthly payment.
+- Each month has a large "Mark paid" check-off. State is stored in a shared `payment_schedule_checkoffs` table if it exists, otherwise device-local storage.
+- Dashboard additions: net worth trend line (6 months, per `account_type` plus total), spending-by-category bars for the current month (cleared money-out transactions), and a payoff-progress bar per debt using `(starting_balance - remaining_balance) / starting_balance`.
+- New modules: `src/lib/payment-schedule.ts`, `src/lib/net-worth.ts`; new hooks `useScheduleCheckoffs`, `useToggleScheduleCheckoff`, `useAllAccountBalances`.
+- Known issue: month check-offs are per-device until the `payment_schedule_checkoffs` table is created in Supabase (SQL noted in TODO.md).
