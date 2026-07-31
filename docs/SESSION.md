@@ -1,3 +1,9 @@
+## 2026-07-31 – Verification: schedule check-offs + account_type casing
+
+- Verified Payment Schedule check-offs: `useScheduleCheckoffs`/`useToggleScheduleCheckoff` already read/write `payment_schedule_checkoffs` (household_id, month); the table now exists in Supabase, so check-offs are household-shared. Device-local storage remains only as an error fallback. No change made.
+- Fixed: the account dialog's free-text Type field saved the value as typed, so "Checking" could be stored capitalized. It now writes `trim().toLowerCase()`. Display labels unchanged.
+- Known issues: none new.
+
 ## 2026-07-31 – Account dialog exposes is_spendable and credit_limit
 
 - Account add/edit dialog now has a "Spendable" checkbox bound to `accounts.is_spendable` and a "Credit limit" currency input bound to `accounts.credit_limit`.
