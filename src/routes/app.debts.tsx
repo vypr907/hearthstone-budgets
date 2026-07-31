@@ -18,7 +18,7 @@ import {
   StatusBadge,
   statusVariant,
 } from "@/components/detail";
-import { formatMoney, dueDayToDate } from "@/lib/format";
+import { formatMoney, debtDueDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +32,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Debt } from "@/lib/supabase";
+import type { Debt, BillingCycle } from "@/lib/supabase";
 import { format } from "date-fns";
+
+const CYCLES: BillingCycle[] = [
+  "monthly",
+  "biweekly",
+  "quarterly",
+  "bimonthly",
+  "annually",
+  "custom",
+];
 
 export const Route = createFileRoute("/app/debts")({
   head: () => ({
@@ -93,8 +109,8 @@ function DebtsPage() {
           categoryName[b.category_id ?? ""] ?? "zzz",
         );
       if (sort === "due")
-        return (dueDayToDate(a.due_day) ?? "9999-12-31").localeCompare(
-          dueDayToDate(b.due_day) ?? "9999-12-31",
+        return (debtDueDate(a) ?? "9999-12-31").localeCompare(
+          debtDueDate(b) ?? "9999-12-31",
         );
       if (sort === "remaining")
         return Number(b.remaining_balance || 0) - Number(a.remaining_balance || 0);
@@ -176,7 +192,14 @@ function DebtsPage() {
                     <p className="truncate font-medium">{d.name}</p>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <span>{d.debt_type || "Debt"}</span>
-                      {d.due_day ? <span>· day {d.due_day}</span> : null}
+                      {(d.billing_cycle ?? "monthly") === "monthly"
+                        ? d.due_day
+                          ? <span>· day {d.due_day}</span>
+                          : null
+                        : d.next_due_date
+                          ? <span>· due {d.next_due_date.slice(0, 10)}</span>
+                          : null}
+                      <span>· {d.billing_cycle ?? "monthly"}</span>
                       {d.interest_rate != null ? (
                         <span>· {Number(d.interest_rate)}% APR</span>
                       ) : null}
@@ -284,10 +307,18 @@ function DebtDetailDialog({
               label="Known finance charge"
               value={debt.known_finance_charge}
             />
-            <DetailItem
-              label="Due day"
-              value={debt.due_day != null ? String(debt.due_day) : "—"}
-            />
+            <DetailItem label="Billing cycle" value={debt.billing_cycle ?? "monthly"} />
+            {(debt.billing_cycle ?? "monthly") === "monthly" ? (
+              <DetailItem
+                label="Due day"
+                value={debt.due_day != null ? String(debt.due_day) : "—"}
+              />
+            ) : (
+              <DetailItem
+                label="Next due date"
+                value={debt.next_due_date ? debt.next_due_date.slice(0, 10) : "—"}
+              />
+            )}
             <DetailItem
               label="Payment status"
               value={
@@ -365,6 +396,8 @@ function DebtDialog({
   const [rate, setRate] = useState("");
   const [minPay, setMinPay] = useState("");
   const [dueDay, setDueDay] = useState("");
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const [nextDue, setNextDue] = useState("");
   const [debtType, setDebtType] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -379,6 +412,8 @@ function DebtDialog({
     setRate(debt?.interest_rate != null ? String(debt.interest_rate) : "");
     setMinPay(debt?.minimum_payment != null ? String(debt.minimum_payment) : "");
     setDueDay(debt?.due_day != null ? String(debt.due_day) : "");
+    setCycle((debt?.billing_cycle as BillingCycle) ?? "monthly");
+    setNextDue(debt?.next_due_date ? debt.next_due_date.slice(0, 10) : "");
     setDebtType(debt?.debt_type ?? "");
     setNotes(debt?.notes ?? "");
   }
@@ -396,7 +431,9 @@ function DebtDialog({
         remaining_balance: remaining ? Number(remaining) : null,
         interest_rate: rate ? Number(rate) : null,
         minimum_payment: minPay ? Number(minPay) : null,
-        due_day: dueDay ? Number(dueDay) : null,
+        due_day: cycle === "monthly" ? (dueDay ? Number(dueDay) : null) : debt?.due_day ?? null,
+        billing_cycle: cycle,
+        next_due_date: cycle === "monthly" ? debt?.next_due_date ?? null : nextDue || null,
         debt_type: debtType || null,
         notes: notes || null,
       });
@@ -470,17 +507,44 @@ function DebtDialog({
                 className="h-11"
               />
             </div>
-            <div>
-              <Label>Due day</Label>
-              <Input
-                type="number"
-                min="1"
-                max="31"
-                value={dueDay}
-                onChange={(e) => setDueDay(e.target.value)}
-                className="h-11"
-              />
-            </div>
+            {cycle === "monthly" ? (
+              <div>
+                <Label>Due day</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={dueDay}
+                  onChange={(e) => setDueDay(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+            ) : (
+              <div>
+                <Label>Next due date</Label>
+                <Input
+                  type="date"
+                  value={nextDue}
+                  onChange={(e) => setNextDue(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+            )}
+          </div>
+          <div>
+            <Label>Billing cycle</Label>
+            <Select value={cycle} onValueChange={(v) => setCycle(v as BillingCycle)}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CYCLES.map((c) => (
+                  <SelectItem key={c} value={c} className="capitalize">
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Notes</Label>
