@@ -266,8 +266,20 @@ export function useMarkUnpaid() {
 
       const bill = p.bill;
       const update: Record<string, unknown> = { payment_status: "unpaid" };
-      if (wasCleared && bill?.next_due_date) {
-        update.next_due_date = reverseDate(bill.next_due_date, bill.billing_cycle);
+      if (wasCleared) {
+        const amount = Math.abs(Number(tx?.amount ?? p.amount));
+        const paid = Number(bill?.cycle_paid_to_date ?? 0);
+        if (paid > 0) {
+          // Reversing a partial payment: stay in the same cycle, just take it back off.
+          const next = Math.max(0, paid - amount);
+          update.cycle_paid_to_date = next;
+          if (next === 0 && !bill?.is_variable_amount) update.cycle_amount_due = null;
+        } else if (bill?.next_due_date) {
+          // The clear rolled the bill into its next cycle — undo that roll-forward.
+          update.next_due_date = reverseDate(bill.next_due_date, bill.billing_cycle);
+          update.cycle_paid_to_date = 0;
+          update.cycle_amount_due = null;
+        }
       }
       const { error } = await supabase.from("bills").update(update).eq("id", p.id);
       if (error) throw error;
