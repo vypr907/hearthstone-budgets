@@ -1,3 +1,10 @@
+## 2026-07-31 – Account dialog exposes is_spendable and credit_limit
+
+- Account add/edit dialog now has a "Spendable" checkbox bound to `accounts.is_spendable` and a "Credit limit" currency input bound to `accounts.credit_limit`.
+- Credit limit only appears when `account_type` is "credit"; it is saved as `null` for other types.
+- No balance calculation logic changed.
+- Known issues: none new.
+
 ## 2026-07-31 – Variable-amount bills and partial payments
 
 - Bill add/edit form has a "Variable amount" toggle (`bills.is_variable_amount`); the amount field relabels to "Typical amount" when on.
