@@ -17,7 +17,9 @@ export type BillingCycle =
   | "biweekly"
   | "quarterly"
   | "bimonthly"
-  | "annually";
+  | "annually"
+  | "custom";
+
 
 export type Bill = {
   id: string;
