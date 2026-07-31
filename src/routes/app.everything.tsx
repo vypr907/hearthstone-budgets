@@ -9,7 +9,7 @@ import {
 import { usePayFlow } from "@/lib/pay-flow";
 import { toPayable, type Payable } from "@/lib/payments";
 import { useLedgerState, type LedgerState } from "@/lib/ledger-state";
-import { formatMoney, dueDayToDate } from "@/lib/format";
+import { formatMoney, debtDueDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,7 +109,7 @@ function EverythingPage() {
           kind: "Debt" as const,
           name: d.name,
           amount: Number(d.minimum_payment || 0),
-          due_date: dueDayToDate(d.due_day),
+          due_date: debtDueDate(d),
           category_id: d.category_id,
           cycle: "monthly",
           payment_status: d.payment_status,
