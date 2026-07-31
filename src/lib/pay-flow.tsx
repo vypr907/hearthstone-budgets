@@ -133,7 +133,7 @@ export function usePayFlow() {
               onClick={() => {
                 const c = choice!;
                 setChoice(null);
-                void perform(c.payable, c.action, a.id);
+                void perform(c.payable, c.action, a.id, c.amount);
               }}
             >
               {a.name}
@@ -148,6 +148,52 @@ export function usePayFlow() {
       </DialogContent>
     </Dialog>
   );
+
+  const amountPrompt = (
+    <Dialog open={!!ask} onOpenChange={(o) => !o && setAsk(null)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Amount owed this cycle</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="pay-amount">{ask?.payable.name}</Label>
+          <Input
+            id="pay-amount"
+            type="number"
+            step="0.01"
+            inputMode="decimal"
+            className="h-12 text-base"
+            value={askValue}
+            onChange={(e) => setAskValue(e.target.value)}
+          />
+          {ask?.payable.bill && Number(ask.payable.bill.cycle_paid_to_date ?? 0) > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {formatMoney(Number(ask.payable.bill.cycle_paid_to_date ?? 0))} already paid
+              of {formatMoney(billCycleDue(ask.payable.bill))} due this cycle.
+            </p>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button
+            className="h-12 w-full"
+            onClick={() => {
+              const value = Number(askValue);
+              if (!value || value <= 0) {
+                toast.error("Enter an amount greater than zero");
+                return;
+              }
+              const a = ask!;
+              setAsk(null);
+              resolveAccount(a.payable, a.action, value);
+            }}
+          >
+            Continue
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
 
   return { start, markUnpaid, busy, picker };
 }
