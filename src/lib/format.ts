@@ -47,6 +47,21 @@ export function dueDayToDate(day: number | null | undefined): string | null {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+/**
+ * A debt's effective due date: monthly debts use due_day within the current
+ * month, every other billing_cycle uses its stored next_due_date.
+ */
+export function debtDueDate(debt: {
+  billing_cycle?: string | null;
+  next_due_date?: string | null;
+  due_day?: number | null;
+}): string | null {
+  const cycle = (debt.billing_cycle ?? "monthly").toLowerCase();
+  if (cycle !== "monthly") return debt.next_due_date ? debt.next_due_date.slice(0, 10) : null;
+  return dueDayToDate(debt.due_day);
+}
+
+
 /** Normalize stored cycle values ("Bi-Weekly", "bi weekly", …) to a known key. */
 function normalizeCycle(cycle: string | null | undefined): string {
   return (cycle ?? "").toLowerCase().replace(/[\s_-]/g, "");

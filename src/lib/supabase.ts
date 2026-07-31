@@ -17,7 +17,9 @@ export type BillingCycle =
   | "biweekly"
   | "quarterly"
   | "bimonthly"
-  | "annually";
+  | "annually"
+  | "custom";
+
 
 export type Bill = {
   id: string;
@@ -78,7 +80,10 @@ export type Debt = {
   interest_rate: number | null;
   known_finance_charge: number | null;
   due_day: number | null;
+  next_due_date: string | null;
+  billing_cycle: BillingCycle | null;
   payment_status: string | null;
+
   on_payment_plan: boolean | null;
   paid_with: string | null;
   manual_or_auto: string | null;
