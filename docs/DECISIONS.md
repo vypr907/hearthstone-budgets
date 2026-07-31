@@ -209,3 +209,53 @@ Note: The initial implementation only overwrote the displayed interest after the
 simulation still accrued interest_rate monthly and started from principal only. Fixed so
 `known_finance_charge` is added to the starting remaining balance and interest accrual is
 skipped for that debt, matching this ADR.
+
+## ADR-016: Debts Support Non-Monthly Billing Cycles
+
+Decision:
+`debts.billing_cycle` and `debts.next_due_date` (both already present in the schema, previously
+unused) are now surfaced and editable in the app, and drive scheduling for any debt that isn't
+monthly. When `billing_cycle` is `'monthly'`, the existing `due_day`-based flow is unchanged.
+When it's anything else (e.g. `'biweekly'`), `next_due_date` is used instead of `due_day` to
+determine overdue status and Dashboard listing, and advances by the billing_cycle interval on
+clear — reusing the same cycle-advance logic already built for bills, rather than a second copy.
+
+Reason:
+Phase 3 assumed all debts reset monthly. In practice, several debts (paycheck-deduction loans,
+a payment-plan credit card) are on a biweekly schedule. The columns needed to support this
+already existed but were never wired into the UI or the clear/reset logic.
+
+Data correction applied:
+```sql
+update debts set next_due_date = '2026-07-30' where name = 'GTC';
+update debts set next_due_date = '2026-08-01' where name = 'TSP Loan';
+update debts set next_due_date = '2026-07-30' where name = 'Schwab Loan';
+update debts set billing_cycle = 'biweekly' where name in ('GTC', 'TSP Loan', 'Schwab Loan');
+```
+
+Note: GTC is a payment-plan debt being paid off and closed, not a recurring biweekly bill —
+no special handling needed; once `remaining_balance` reaches 0 it naturally drops out of the
+payoff simulation and active-debt views via the existing `remaining_balance > 0` filter.
+
+Status: Decided 2026-08-02. Implementation in progress via Lovable.
+
+---
+
+## ADR-017: Variable-Amount Bills Prompt for Actual Amount at Payment Time
+
+Decision:
+When marking a bill as pending (submitted), the app prompts for the actual amount owed this
+cycle, defaulting to `bills.amount` as a starting value. The entered amount — not the stored
+`bills.amount` — is what gets used for the resulting `transactions` row. `bills.amount` itself
+is left unchanged unless the user explicitly edits it separately; it continues to represent a
+typical/budgeted amount, not necessarily this cycle's exact bill.
+
+Reason:
+`bills.amount` is a single fixed value, and the existing mark-paid flow always submits that
+stored amount as the transaction amount. This is correct for fixed bills (rent, subscriptions)
+but wrong for variable bills (electric, phone) whose real amount changes month to month —
+every payment would silently log the wrong figure. Since quick manual transaction entry
+(Phase 4.5) already asks the user for an amount at entry time, prompting for the actual amount
+at bill-payment time keeps the same interaction pattern rather than introducing a new one.
+
+Status: Decided 2026-08-02. Not yet implemented.
