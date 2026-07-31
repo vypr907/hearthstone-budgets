@@ -83,6 +83,7 @@ export function simulate(
     // Accrue interest first.
     for (const d of state) {
       if (d.remaining <= 0.005) continue;
+      if (d.knownFinanceCharge != null) continue;
       const monthly = (d.rate > 0 ? d.rate / 100 : 0) / 12;
       const charge = d.remaining * monthly;
       d.remaining += charge;
