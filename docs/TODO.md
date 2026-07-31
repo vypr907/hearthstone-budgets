@@ -1,10 +1,10 @@
 
 ## Discovered 2026-08-02
 - [ ] Decide whether the combined spendable total should use available credit rather than raw balance for credit accounts.
-- [ ] Expose is_spendable and credit_limit in the account edit dialog.
+- [x] Expose is_spendable and credit_limit in the account edit dialog.
 
 ## Discovered 2026-07-31
-- [ ] Create the shared check-off table so Payment Schedule months sync between both logins:
+- [x] Create the shared check-off table so Payment Schedule months sync between both logins:
 ```sql
 create table public.payment_schedule_checkoffs (
   household_id uuid not null references public.households(id) on delete cascade,
