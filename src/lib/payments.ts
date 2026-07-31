@@ -203,11 +203,16 @@ export function useMarkUnpaid() {
         if (wasCleared) {
           const amount = Math.abs(Number(tx?.amount ?? p.amount));
           update.remaining_balance = Number(p.debt?.remaining_balance ?? 0) + amount;
+          const cycle = (p.debt?.billing_cycle ?? "monthly").toLowerCase();
+          if (cycle !== "monthly" && p.debt?.next_due_date) {
+            update.next_due_date = reverseDate(p.debt.next_due_date, p.debt.billing_cycle);
+          }
         }
         const { error } = await supabase.from("debts").update(update).eq("id", p.id);
         if (error) throw error;
         return;
       }
+
 
       const bill = p.bill;
       const update: Record<string, unknown> = { payment_status: "unpaid" };
