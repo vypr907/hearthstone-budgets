@@ -50,10 +50,26 @@ export function toPayable(kind: PayableKind, item: Bill | Debt): Payable {
 
 const linkColumn = (kind: PayableKind) =>
   kind === "bill" ? "linked_bill_id" : "linked_debt_id";
-/** Payment mutations need a resolved account: transactions.account_id is NOT NULL. */
-export type PayInput = { payable: Payable; accountId: string };
+/**
+ * Payment mutations need a resolved account: transactions.account_id is NOT NULL.
+ * `amount` overrides the payable's default (variable-amount bills, partial payments).
+ */
+export type PayInput = { payable: Payable; accountId: string; amount?: number };
 
 const table = (kind: PayableKind) => (kind === "bill" ? "bills" : "debts");
+
+/** Amount owed for the bill's current cycle: the per-cycle override, else the standing amount. */
+export function billCycleDue(bill: Bill) {
+  const cycle = bill.cycle_amount_due;
+  return cycle != null ? Number(cycle) : Number(bill.amount || 0);
+}
+
+/** Still owed for the current cycle after partial payments (0 when settled). */
+export function billRemainingOwed(bill: Bill) {
+  const paid = Number(bill.cycle_paid_to_date ?? 0);
+  return Math.max(0, billCycleDue(bill) - paid);
+}
+
 
 async function findLinkedTransaction(p: Payable, status?: string) {
   let q = supabase
