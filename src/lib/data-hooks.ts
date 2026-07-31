@@ -735,3 +735,94 @@ export function useSaveDebtStrategySettings() {
       qc.invalidateQueries({ queryKey: ["debt_strategy_settings"] }),
   });
 }
+
+/* ---------------- Payment schedule check-offs ---------------- */
+
+/**
+ * Month check-offs are shared household state when the optional
+ * `payment_schedule_checkoffs` table exists; otherwise we fall back to
+ * device-local storage so the screen still works.
+ */
+const CHECKOFF_TABLE = "payment_schedule_checkoffs";
+
+function localKey(householdId: string) {
+  return `hearthstone:schedule-checkoffs:${householdId}`;
+}
+
+function readLocal(householdId: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(localKey(householdId)) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeLocal(householdId: string, months: string[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(localKey(householdId), JSON.stringify(months));
+}
+
+export function useScheduleCheckoffs() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["schedule_checkoffs", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from(CHECKOFF_TABLE)
+        .select("month")
+        .eq("household_id", householdId!);
+      if (error) return readLocal(householdId!);
+      return ((data ?? []) as { month: string }[]).map((r) => r.month);
+    },
+  });
+}
+
+export function useToggleScheduleCheckoff() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ month, done }: { month: string; done: boolean }) => {
+      const hh = householdId!;
+      if (done) {
+        const { error } = await supabase
+          .from(CHECKOFF_TABLE)
+          .upsert({ household_id: hh, month }, { onConflict: "household_id,month" });
+        if (error) writeLocal(hh, [...new Set([...readLocal(hh), month])]);
+      } else {
+        const { error } = await supabase
+          .from(CHECKOFF_TABLE)
+          .delete()
+          .eq("household_id", hh)
+          .eq("month", month);
+        if (error) writeLocal(hh, readLocal(hh).filter((m) => m !== month));
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule_checkoffs"] }),
+  });
+}
+
+/** Every balance snapshot for the household's accounts, newest first. */
+export function useAllAccountBalances() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["all_account_balances", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<AccountBalance[]> => {
+      const { data: accts } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("household_id", householdId!);
+      const ids = (accts ?? []).map((a) => a.id);
+      if (ids.length === 0) return [];
+      const { data, error } = await supabase
+        .from("account_balances")
+        .select("*")
+        .in("account_id", ids)
+        .order("as_of_date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AccountBalance[];
+    },
+  });
+}
