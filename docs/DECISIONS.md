@@ -312,3 +312,19 @@ Check-off state is household-shared data, but no table exists yet in the connect
 project; the fallback avoids blocking the feature on a manual migration.
 
 Status: Decided 2026-07-31. Implemented.
+
+## ADR-021: Expose accounts.is_spendable and accounts.credit_limit in the UI
+
+Decision:
+The account add/edit dialog includes a "Spendable" checkbox bound to `accounts.is_spendable`
+and a "Credit limit" currency input bound to `accounts.credit_limit`. The credit-limit field is
+only shown when `account_type` is "credit" and is stored as `null` for non-credit accounts.
+Balance computation (`src/lib/balances.ts`) is unchanged; this only exposes existing columns.
+
+Reason:
+These columns existed in the schema and were already used by spending-balance and net-worth
+calculations, but they had no UI affordance, so users couldn't actually maintain them.
+Credit limit is only meaningful for credit accounts, so hiding it for other types keeps the
+form simple and avoids accidental data entry.
+
+Status: Decided 2026-07-31. Implemented.

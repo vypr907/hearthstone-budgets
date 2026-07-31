@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Pencil, Plus, Search, Trash2, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -323,17 +324,22 @@ function AccountDialog({
   const [type, setType] = useState("");
   const [starting, setStarting] = useState("");
   const [notes, setNotes] = useState("");
+  const [isSpendable, setIsSpendable] = useState(false);
+  const [creditLimit, setCreditLimit] = useState("");
 
   const open = account !== null;
   const isEdit = !!account?.id;
   const key = account?.id ?? "new";
   const [lastKey, setLastKey] = useState("");
+  const isCredit = type.trim().toLowerCase() === "credit";
   if (open && key !== lastKey) {
     setLastKey(key);
     setName(account?.name ?? "");
     setType(account?.account_type ?? "");
     setStarting(account?.starting_balance != null ? String(account.starting_balance) : "");
     setNotes(account?.notes ?? "");
+    setIsSpendable(account?.is_spendable ?? false);
+    setCreditLimit(account?.credit_limit != null ? String(account.credit_limit) : "");
   }
   if (!open && lastKey !== "") setLastKey("");
 
@@ -349,6 +355,8 @@ function AccountDialog({
         account_type: type || null,
         starting_balance: starting ? Number(starting) : null,
         notes: notes || null,
+        is_spendable: isSpendable,
+        credit_limit: isCredit && creditLimit ? Number(creditLimit) : null,
       });
       toast.success(isEdit ? "Account updated" : "Account added");
       onClose();
@@ -398,6 +406,28 @@ function AccountDialog({
               onChange={(e) => setStarting(e.target.value)}
               className="h-11"
             />
+          </div>
+          {isCredit && (
+            <div>
+              <Label>Credit limit</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={creditLimit}
+                onChange={(e) => setCreditLimit(e.target.value)}
+                className="h-11"
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-2 py-1">
+            <Checkbox
+              id="isSpendable"
+              checked={isSpendable}
+              onCheckedChange={(v) => setIsSpendable(v === true)}
+            />
+            <Label htmlFor="isSpendable" className="font-normal">
+              Spendable
+            </Label>
           </div>
           <div>
             <Label>Notes</Label>
