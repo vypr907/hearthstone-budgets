@@ -113,14 +113,39 @@ export function topByAmount(rows: SnapshotRow[], n = SNAPSHOT_MAX_ROWS) {
  */
 export async function exportSnapshot(node: HTMLElement, format: "png" | "pdf") {
   const { default: html2canvas } = await import("html2canvas-pro");
-  const canvas = await html2canvas(node, {
-    scale: 2,
-    useCORS: true,
-    foreignObjectRendering: true,
-    width: node.offsetWidth,
-    windowWidth: node.offsetWidth,
-    backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
-  });
+
+  // Clone the node and render it at a fixed (0,0) origin so
+  // foreignObjectRendering captures the full width without scroll/position drift.
+  const clone = node.cloneNode(true) as HTMLElement;
+  const wrapper = document.createElement("div");
+  wrapper.style.position = "fixed";
+  wrapper.style.top = "0";
+  wrapper.style.left = "0";
+  wrapper.style.width = `${node.offsetWidth}px`;
+  wrapper.style.height = `${node.offsetHeight}px`;
+  wrapper.style.zIndex = "-9999";
+  wrapper.style.overflow = "hidden";
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = await html2canvas(clone, {
+      scale: 2,
+      useCORS: true,
+      foreignObjectRendering: true,
+      width: clone.offsetWidth,
+      height: clone.offsetHeight,
+      windowWidth: clone.offsetWidth,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
+      backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
+    });
+  } finally {
+    document.body.removeChild(wrapper);
+  }
 
   const stamp = todayISO();
 
