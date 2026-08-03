@@ -99,6 +99,14 @@ export function formatDayLabel(iso: string) {
   });
 }
 
+/** One-page cap: how many individual rows each section may render. */
+export const SNAPSHOT_MAX_ROWS = 5;
+
+/** Top N rows by dollar amount (used for the overdue section). */
+export function topByAmount(rows: SnapshotRow[], n = SNAPSHOT_MAX_ROWS) {
+  return [...rows].sort((a, b) => b.amount - a.amount).slice(0, n);
+}
+
 /**
  * One canvas render, two encodings (ADR-028). PNG downloads directly; PDF
  * pipes the same canvas into a single-page jsPDF sized to the image.
@@ -107,8 +115,12 @@ export async function exportSnapshot(node: HTMLElement, format: "png" | "pdf") {
   const { default: html2canvas } = await import("html2canvas-pro");
   const canvas = await html2canvas(node, {
     scale: 2,
-    backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
+    useCORS: true,
+    width: node.offsetWidth,
+    windowWidth: node.offsetWidth,
+    backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
   });
+
   const stamp = todayISO();
 
   if (format === "pdf") {
