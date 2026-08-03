@@ -34,9 +34,9 @@ function defaultCycleAmount(payable: Payable) {
 
 /**
  * Shared mark-paid flow. transactions.account_id is NOT NULL, but bills/debts
- * only carry institution_id, so resolve the account from the institution:
- * one match → auto, several → picker, none → blocked with a message.
- * Variable-amount bills first prompt for the amount owed this cycle.
+ * carry no account, so the payer is picked from ALL household accounts at pay
+ * time (ADR-007 correction 2026-08-03), defaulting to the account that last
+ * paid this same bill/debt. Variable-amount bills first prompt for the amount.
  */
 export function usePayFlow() {
   const { data: accounts = [] } = useAccounts();
@@ -113,9 +113,8 @@ export function usePayFlow() {
   }
 
 
-  const options = choice
-    ? accounts.filter((a) => a.institution_id === choice.payable.institution_id)
-    : [];
+  const options = choice ? accounts : [];
+  const defaultAccountId = choice ? lastPaidAccountId(choice.payable) : null;
 
   const picker = (
     <Dialog open={!!choice} onOpenChange={(o) => !o && setChoice(null)}>
@@ -123,11 +122,16 @@ export function usePayFlow() {
         <DialogHeader>
           <DialogTitle>Which account paid this?</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2">
+        <div className="max-h-[60vh] space-y-2 overflow-y-auto">
+          {options.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No accounts yet — add an account first.
+            </p>
+          ) : null}
           {options.map((a) => (
             <Button
               key={a.id}
-              variant="outline"
+              variant={a.id === defaultAccountId ? "default" : "outline"}
               className="h-12 w-full justify-start"
               onClick={() => {
                 const c = choice!;
@@ -137,9 +141,10 @@ export function usePayFlow() {
             >
               {a.name}
               {a.account_type ? (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {a.account_type}
-                </span>
+                <span className="ml-2 text-xs opacity-70">{a.account_type}</span>
+              ) : null}
+              {a.id === defaultAccountId ? (
+                <span className="ml-auto text-xs opacity-80">Last used</span>
               ) : null}
             </Button>
           ))}
