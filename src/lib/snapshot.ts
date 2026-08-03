@@ -116,6 +116,7 @@ export async function exportSnapshot(node: HTMLElement, format: "png" | "pdf") {
   const canvas = await html2canvas(node, {
     scale: 2,
     useCORS: true,
+    foreignObjectRendering: true,
     width: node.offsetWidth,
     windowWidth: node.offsetWidth,
     backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
