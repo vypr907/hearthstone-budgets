@@ -313,32 +313,60 @@ function SpendingPage() {
             return (
               <Card key={g.name}>
                 <CardContent className="p-2">
-                  <p className="px-2 py-1 text-sm font-semibold">{g.name}</p>
-                  {g.rows.map((r) => (
+                  <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {g.name}
+                  </p>
+                  {g.rows.map((r, i) => {
+                    const pct =
+                      r.budgeted > 0
+                        ? Math.min(100, (r.actual / r.budgeted) * 100)
+                        : r.actual > 0
+                          ? 100
+                          : 0;
+                    const over = r.budgeted > 0 && r.actual > r.budgeted;
+                    return (
                     <div
                       key={r.categoryId}
-                      className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 border-t border-border/60 px-2 py-2 text-sm"
+                      className="grid grid-cols-[3rem_1fr_auto_auto_auto] items-center gap-x-3 px-2 py-2 text-sm"
                     >
-                      <span className="flex min-w-0 items-center gap-1">
-                        <span className="truncate">{r.name}</span>
-                        {r.description ? (
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                aria-label={`About ${r.name}`}
-                                className="shrink-0 text-muted-foreground"
-                              >
-                                <HelpCircle className="h-4 w-4" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-64 text-sm">
-                              {r.description}
-                            </PopoverContent>
-                          </Popover>
-                        ) : null}
+                      <ProgressRing
+                        value={pct}
+                        color={over ? "var(--destructive)" : itemColor(i)}
+                      />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="flex min-w-0 items-center gap-1">
+                          <span aria-hidden>{emojiFor(r.name)}</span>
+                          <span className="truncate">{r.name}</span>
+                          {r.description ? (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  aria-label={`About ${r.name}`}
+                                  className="shrink-0 text-muted-foreground"
+                                >
+                                  <HelpCircle className="h-4 w-4" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-64 text-sm">
+                                {r.description}
+                              </PopoverContent>
+                            </Popover>
+                          ) : null}
+                        </span>
+                        <span
+                          className={
+                            over
+                              ? "text-[10px] uppercase tracking-widest text-destructive"
+                              : "text-[10px] uppercase tracking-widest text-muted-foreground"
+                          }
+                        >
+                          {over
+                            ? `${formatMoney(r.actual - r.budgeted)} over`
+                            : `${formatMoney(r.budgeted - r.actual)} left`}
+                        </span>
                       </span>
                       <button
-                        className="h-10 w-20 rounded-md text-right tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
+                        className="h-10 w-20 rounded-md text-right text-base font-bold tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
                         onClick={() =>
                           setEditing({
                             row: r,
@@ -351,14 +379,14 @@ function SpendingPage() {
                       </button>
                       {r.actualSource === "ledger" ? (
                         <span
-                          className="h-10 w-20 self-center text-right tabular-nums"
+                          className="h-10 w-20 self-center text-right text-base font-bold tabular-nums"
                           title="From logged transactions this month"
                         >
                           {formatMoney(r.actual)}
                         </span>
                       ) : (
                         <button
-                          className="h-10 w-20 rounded-md text-right tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
+                          className="h-10 w-20 rounded-md text-right text-base font-bold tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
                           onClick={() =>
                             setEditing({
                               row: r,
@@ -375,20 +403,25 @@ function SpendingPage() {
                         {formatMoney(r.avg3)}
                       </span>
                     </div>
-                  ))}
-                  <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 border-t border-border px-2 py-2 text-sm font-medium">
-                    <span>Subtotal</span>
-                    <span className="w-20 text-right tabular-nums">
+                    );
+                  })}
+                  <div className="grid grid-cols-[3rem_1fr_auto_auto_auto] items-center gap-x-3 border-t border-border/60 px-2 py-2 text-sm font-medium">
+                    <span />
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Subtotal
+                    </span>
+                    <span className="w-20 text-right font-bold tabular-nums">
                       {formatMoney(sub.budgeted)}
                     </span>
-                    <span className="w-20 text-right tabular-nums">
+                    <span className="w-20 text-right font-bold tabular-nums">
                       {formatMoney(sub.actual)}
                     </span>
-                    <span className="w-20 text-right tabular-nums">
+                    <span className="w-20 text-right font-bold tabular-nums">
                       {formatMoney(sub.avg3)}
                     </span>
                   </div>
                 </CardContent>
+
               </Card>
             );
           })
