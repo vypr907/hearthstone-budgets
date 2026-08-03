@@ -96,6 +96,11 @@ function SnapshotPage() {
   const [busy, setBusy] = useState(false);
 
   const snap = useMemo(() => buildSnapshot(bills, debts, stateOf), [bills, debts, stateOf]);
+  const overdueTop = useMemo(() => topByAmount(snap.overdue), [snap.overdue]);
+  const upcomingTop = snap.upcoming.slice(0, SNAPSHOT_MAX_ROWS);
+  const grandTotal = snap.overdueTotal + snap.upcomingTotal;
+  const overduePct = grandTotal > 0 ? (snap.overdueTotal / grandTotal) * 100 : 0;
+
 
   const nextPaycheck = useMemo(() => {
     const primaryIds = new Set(
