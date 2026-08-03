@@ -124,7 +124,22 @@
 }
 
 .dark {
+  --brand: oklch(0.72 0.15 152);
+  --brand-foreground: oklch(0.17 0.03 160);
+  --gradient-brand: linear-gradient(
+    135deg,
+    oklch(0.56 0.14 152),
+    oklch(0.42 0.12 168)
+  );
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --item-1: oklch(0.72 0.15 152);
+  --item-2: oklch(0.7 0.16 262);
+  --item-3: oklch(0.75 0.16 42);
+  --item-4: oklch(0.7 0.18 340);
+  --item-5: oklch(0.72 0.14 200);
+  --item-6: oklch(0.7 0.16 300);
   --background: oklch(0.129 0.042 264.695);
+
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.208 0.042 265.755);
   --card-foreground: oklch(0.984 0.003 247.858);
