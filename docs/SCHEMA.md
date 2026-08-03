@@ -462,3 +462,25 @@ transactions.account_id (linked through linked_bill_id / linked_debt_id) — not
 field on bills or debts. See ADR-006.
 
 ---
+
+---
+
+## savings_goals (ADR-027)
+
+| column | type | notes |
+| --- | --- | --- |
+| id | uuid pk | gen_random_uuid() |
+| household_id | uuid not null | references households(id) on delete cascade |
+| name | text not null | |
+| icon | text | single emoji |
+| target_amount | numeric(12,2) not null | |
+| target_date | date | optional |
+| created_at / updated_at | timestamptz not null | default now() |
+
+RLS: `for all using (is_household_member(household_id)) with check (...)`.
+
+`transactions.linked_goal_id uuid references savings_goals(id)` links funding and
+withdrawal rows to a goal, mirroring linked_bill_id / linked_debt_id.
+
+A goal's **current_amount is not stored** — it is the sum of `transactions.amount`
+where `linked_goal_id = goal.id and status = 'cleared'` (ADR-003).

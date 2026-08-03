@@ -1,3 +1,8 @@
+## Discovered 2026-08-03
+- [ ] Run the ADR-027 savings_goals SQL (table, linked_goal_id column, RLS policy) in Supabase.
+- [x] Build the Savings Goals screen (ADR-027).
+- [ ] Open question: whether savings goals should appear in pay_period_allocations (ADR-024 cross-reference).
+
 
 ## Discovered 2026-08-02
 - [ ] Decide whether the combined spendable total should use available credit rather than raw balance for credit accounts.

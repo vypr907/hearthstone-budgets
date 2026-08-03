@@ -46,3 +46,11 @@ src/lib/paycheck-budget.ts owns pay-period math: the effective date/amount of an
 (actual over expected), the period range (event date → next primary event, else +14 days), and
 which bills/debts fall inside it (reusing debtDueDate() and bill next_due_date). The Paycheck
 Budget screen consumes it; it is independent of spending_budgets/spending_actuals.
+
+## Savings Goals (ADR-027)
+
+- `src/routes/app.goals.tsx` — goal cards, new/edit form, Add/Withdraw dialogs.
+- `src/lib/balances.ts` — `computeGoalBalances()`, `monthsRemaining()`, `daysRemaining()`;
+  goal totals are derived from the ledger exactly like account balances.
+- `src/lib/data-hooks.ts` — `useSavingsGoals`, `useUpsertSavingsGoal`, `useDeleteSavingsGoal`.
+- Add/Withdraw reuse `useUpsertTransaction` with `linked_goal_id` and `status='cleared'`.
