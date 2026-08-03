@@ -50,6 +50,10 @@ export type Category = {
   name: string;
   domain?: string | null;
   parent_category?: string | null;
+  /** ADR-029: emoji icon shown on category rows. */
+  icon?: string | null;
+  /** ADR-029: hex colour accent for category rows. */
+  color?: string | null;
 };
 
 export type SpendingBudget = {
@@ -147,6 +151,8 @@ export type Institution = {
   sign_in_with_google: boolean | null;
   description: string | null;
   notes: string | null;
+  /** ADR-030: logo image URL (often a derived favicon). */
+  logo_url?: string | null;
   created_at: string;
   updated_at: string;
 };
