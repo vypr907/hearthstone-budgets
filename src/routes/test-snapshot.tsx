@@ -40,10 +40,6 @@ function TestSnapshotPage() {
           width: clone.offsetWidth,
           height: clone.offsetHeight,
           windowWidth: clone.offsetWidth,
-          x: 0,
-          y: 0,
-          scrollX: 0,
-          scrollY: 0,
           backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
         });
       } finally {
