@@ -8,7 +8,7 @@ import {
   useMarkUnpaid,
   type Payable,
 } from "@/lib/payments";
-import { useAccounts } from "@/lib/data-hooks";
+import { useAccounts, useTransactions } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import {
   Dialog,
@@ -34,12 +34,13 @@ function defaultCycleAmount(payable: Payable) {
 
 /**
  * Shared mark-paid flow. transactions.account_id is NOT NULL, but bills/debts
- * only carry institution_id, so resolve the account from the institution:
- * one match → auto, several → picker, none → blocked with a message.
- * Variable-amount bills first prompt for the amount owed this cycle.
+ * carry no account, so the payer is picked from ALL household accounts at pay
+ * time (ADR-007 correction 2026-08-03), defaulting to the account that last
+ * paid this same bill/debt. Variable-amount bills first prompt for the amount.
  */
 export function usePayFlow() {
   const { data: accounts = [] } = useAccounts();
+  const { data: transactions = [] } = useTransactions();
   const submit = useMarkSubmitted();
   const clear = useMarkCleared();
   const undo = useMarkUnpaid();
@@ -78,20 +79,18 @@ export function usePayFlow() {
     }
   }
 
+  /** Account that most recently paid this specific bill/debt, if any. */
+  function lastPaidAccountId(payable: Payable): string | null {
+    const match = transactions.find((t) =>
+      payable.kind === "bill"
+        ? t.linked_bill_id === payable.id
+        : t.linked_debt_id === payable.id,
+    );
+    return match?.account_id ?? null;
+  }
+
   function resolveAccount(payable: Payable, action: Action, amount?: number) {
-    const matches = payable.institution_id
-      ? accounts.filter((a) => a.institution_id === payable.institution_id)
-      : [];
-    if (matches.length === 0) {
-      toast.error(
-        `No account linked to ${payable.name}'s institution — add an account to that institution first.`,
-      );
-      return;
-    }
-    if (matches.length === 1) {
-      void perform(payable, action, matches[0].id, amount);
-      return;
-    }
+    // Any household account can pay any bill/debt (ADR-007 correction 2026-08-03).
     setChoice({ payable, action, amount });
   }
 
@@ -114,9 +113,8 @@ export function usePayFlow() {
   }
 
 
-  const options = choice
-    ? accounts.filter((a) => a.institution_id === choice.payable.institution_id)
-    : [];
+  const options = choice ? accounts : [];
+  const defaultAccountId = choice ? lastPaidAccountId(choice.payable) : null;
 
   const picker = (
     <Dialog open={!!choice} onOpenChange={(o) => !o && setChoice(null)}>
@@ -124,11 +122,16 @@ export function usePayFlow() {
         <DialogHeader>
           <DialogTitle>Which account paid this?</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2">
+        <div className="max-h-[60vh] space-y-2 overflow-y-auto">
+          {options.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No accounts yet — add an account first.
+            </p>
+          ) : null}
           {options.map((a) => (
             <Button
               key={a.id}
-              variant="outline"
+              variant={a.id === defaultAccountId ? "default" : "outline"}
               className="h-12 w-full justify-start"
               onClick={() => {
                 const c = choice!;
@@ -138,9 +141,10 @@ export function usePayFlow() {
             >
               {a.name}
               {a.account_type ? (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {a.account_type}
-                </span>
+                <span className="ml-2 text-xs opacity-70">{a.account_type}</span>
+              ) : null}
+              {a.id === defaultAccountId ? (
+                <span className="ml-auto text-xs opacity-80">Last used</span>
               ) : null}
             </Button>
           ))}

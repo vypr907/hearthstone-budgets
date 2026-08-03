@@ -86,7 +86,7 @@ recent transactions.account_id for that linked_bill_id/linked_debt_id), falling 
 to no default if there's no payment history yet. Never block on "institution has zero
 accounts" — that condition is expected and normal for most institutions.
 
-Correction Status: Decided 2026-08-03. Not yet implemented.
+Correction Status: Decided 2026-08-03. Implemented 2026-08-03.
 
 Status: Implemented 2026-07-28.
 
