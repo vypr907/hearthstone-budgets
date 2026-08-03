@@ -413,3 +413,17 @@ Known limitation: no manual override yet for "pay this bill from a different che
 due-date range implies." Due-date-in-range is the only assignment rule for now.
 
 Status: Decided 2026-08-03. Not yet implemented.
+## ADR-024: Paycheck Budget is separate from monthly Spending
+Decision: Paycheck-level planning uses income_sources / income_events / pay_period_allocations
+on its own screen; spending_budgets and spending_actuals are untouched. A pay period runs from a
+primary income_event's effective date up to (exclusive) the next primary event, or +14 days when
+none exists. Allocations are keyed on income_event_id + category_id and stored per household.
+Reason: Monthly budgets and per-paycheck cash allocation answer different questions; merging them
+would overload the Spending screen and its month-locking flow.
+Status: Decided 2026-02-14. Implemented.
+
+## ADR-025: zod upgraded to v4
+Decision: Upgrade zod from ^3.24 to ^4.
+Reason: @tanstack/start-plugin-core calls `.prefault()`, which only exists in zod v4; on zod 3 the
+Vite config failed to load and the dev server would not start.
+Status: Decided 2026-02-14. Implemented.

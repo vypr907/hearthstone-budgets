@@ -40,3 +40,9 @@ same ordering/rollover rules as src/lib/debt-payoff.ts. The Payment Schedule scr
 ## Net worth history
 src/lib/net-worth.ts owns point-in-time account balances (snapshot-before-date + cleared
 transactions since) and the account_type-grouped trend used by the Dashboard charts.
+
+## Paycheck budgeting
+src/lib/paycheck-budget.ts owns pay-period math: the effective date/amount of an income_event
+(actual over expected), the period range (event date → next primary event, else +14 days), and
+which bills/debts fall inside it (reusing debtDueDate() and bill next_due_date). The Paycheck
+Budget screen consumes it; it is independent of spending_budgets/spending_actuals.
