@@ -551,19 +551,21 @@ function Dashboard() {
             <div className="space-y-2">
               {overdue.map((o) => (
                 <Card key={o.id}>
-                  <CardContent className="flex items-center justify-between gap-3 p-4">
-                    <div className="min-w-0">
+                  <CardContent className="flex items-center gap-3 p-4">
+                    <EmojiIcon name={o.name} fallback={o.kind === "Debt" ? "🏦" : "🧾"} />
+                    <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{o.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
                         {o.kind} · due {o.due_date}
                       </p>
                     </div>
-                    <p className="shrink-0 font-semibold text-destructive">
+                    <p className="shrink-0 text-lg font-extrabold tabular-nums text-destructive">
                       {formatMoney(o.amount)}
                     </p>
                   </CardContent>
                 </Card>
               ))}
+
             </div>
           )}
         </div>
