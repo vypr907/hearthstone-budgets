@@ -16,6 +16,7 @@ import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppTransactionsRouteImport } from './routes/app.transactions'
 import { Route as AppSpendingRouteImport } from './routes/app.spending'
 import { Route as AppPaymentScheduleRouteImport } from './routes/app.payment-schedule'
+import { Route as AppPaycheckRouteImport } from './routes/app.paycheck'
 import { Route as AppMoreRouteImport } from './routes/app.more'
 import { Route as AppInstitutionsRouteImport } from './routes/app.institutions'
 import { Route as AppEverythingRouteImport } from './routes/app.everything'
@@ -57,6 +58,11 @@ const AppSpendingRoute = AppSpendingRouteImport.update({
 const AppPaymentScheduleRoute = AppPaymentScheduleRouteImport.update({
   id: '/payment-schedule',
   path: '/payment-schedule',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPaycheckRoute = AppPaycheckRouteImport.update({
+  id: '/paycheck',
+  path: '/paycheck',
   getParentRoute: () => AppRoute,
 } as any)
 const AppMoreRoute = AppMoreRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/app/everything': typeof AppEverythingRoute
   '/app/institutions': typeof AppInstitutionsRoute
   '/app/more': typeof AppMoreRoute
+  '/app/paycheck': typeof AppPaycheckRoute
   '/app/payment-schedule': typeof AppPaymentScheduleRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/app/everything': typeof AppEverythingRoute
   '/app/institutions': typeof AppInstitutionsRoute
   '/app/more': typeof AppMoreRoute
+  '/app/paycheck': typeof AppPaycheckRoute
   '/app/payment-schedule': typeof AppPaymentScheduleRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   '/app/everything': typeof AppEverythingRoute
   '/app/institutions': typeof AppInstitutionsRoute
   '/app/more': typeof AppMoreRoute
+  '/app/paycheck': typeof AppPaycheckRoute
   '/app/payment-schedule': typeof AppPaymentScheduleRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
@@ -156,6 +165,7 @@ export interface FileRouteTypes {
     | '/app/everything'
     | '/app/institutions'
     | '/app/more'
+    | '/app/paycheck'
     | '/app/payment-schedule'
     | '/app/spending'
     | '/app/transactions'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/app/everything'
     | '/app/institutions'
     | '/app/more'
+    | '/app/paycheck'
     | '/app/payment-schedule'
     | '/app/spending'
     | '/app/transactions'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/app/everything'
     | '/app/institutions'
     | '/app/more'
+    | '/app/paycheck'
     | '/app/payment-schedule'
     | '/app/spending'
     | '/app/transactions'
@@ -250,6 +262,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPaymentScheduleRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/paycheck': {
+      id: '/app/paycheck'
+      path: '/paycheck'
+      fullPath: '/app/paycheck'
+      preLoaderRoute: typeof AppPaycheckRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/more': {
       id: '/app/more'
       path: '/more'
@@ -310,6 +329,7 @@ interface AppRouteChildren {
   AppEverythingRoute: typeof AppEverythingRoute
   AppInstitutionsRoute: typeof AppInstitutionsRoute
   AppMoreRoute: typeof AppMoreRoute
+  AppPaycheckRoute: typeof AppPaycheckRoute
   AppPaymentScheduleRoute: typeof AppPaymentScheduleRoute
   AppSpendingRoute: typeof AppSpendingRoute
   AppTransactionsRoute: typeof AppTransactionsRoute
@@ -324,6 +344,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppEverythingRoute: AppEverythingRoute,
   AppInstitutionsRoute: AppInstitutionsRoute,
   AppMoreRoute: AppMoreRoute,
+  AppPaycheckRoute: AppPaycheckRoute,
   AppPaymentScheduleRoute: AppPaymentScheduleRoute,
   AppSpendingRoute: AppSpendingRoute,
   AppTransactionsRoute: AppTransactionsRoute,
