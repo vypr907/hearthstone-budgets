@@ -30,3 +30,6 @@ with check (exists (select 1 from public.household_members m
 
 - [ ] Run ADR-028 migration in Supabase: `alter table households add column export_format text not null default 'png' check (export_format in ('png','pdf'));`
 - [x] ADR-028 Status Snapshot screen + PNG/PDF export + Settings toggle.
+
+- [x] ADR-029 category icon/colour metadata
+- [x] ADR-030 institution logo_url + type icons, grouping, linked bills/debts

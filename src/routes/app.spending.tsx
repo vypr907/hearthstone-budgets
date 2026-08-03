@@ -31,7 +31,8 @@ import {
 import { CalendarPlus, HelpCircle, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { ProgressRing, emojiFor, itemColor } from "@/components/viz";
+import { ProgressRing, itemColor } from "@/components/viz";
+import { categoryVisual } from "@/lib/visual-meta";
 
 import {
   Select,
@@ -73,6 +74,8 @@ type Row = {
   actualSource: "ledger" | "manual";
   avg3: number;
   description?: string | null;
+  icon: string;
+  color: string;
 };
 
 
@@ -150,6 +153,7 @@ function SpendingPage() {
           actualSource: current.source,
           avg3,
           description: b.description ?? null,
+          ...categoryVisual(categoryById[catId]),
         };
       });
 
@@ -329,15 +333,20 @@ function SpendingPage() {
                     return (
                     <div
                       key={r.categoryId}
-                      className="grid grid-cols-[3rem_1fr_auto_auto_auto] items-center gap-x-3 px-2 py-2 text-sm"
+                      className="grid grid-cols-[3rem_1fr_auto_auto_auto] items-center gap-x-3 border-l-4 px-2 py-2 text-sm"
+                      style={{ borderColor: r.color }}
                     >
                       <ProgressRing
                         value={pct}
-                        color={over ? "var(--destructive)" : itemColor(i)}
+                        color={
+                          over
+                            ? "var(--destructive)"
+                            : (r.color ?? itemColor(i))
+                        }
                       />
                       <span className="flex min-w-0 flex-col">
                         <span className="flex min-w-0 items-center gap-1">
-                          <span aria-hidden>{emojiFor(r.name)}</span>
+                          <span aria-hidden>{r.icon}</span>
                           <span className="truncate">{r.name}</span>
                           {r.description ? (
                             <Popover>

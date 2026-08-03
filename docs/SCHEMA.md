@@ -486,3 +486,12 @@ withdrawal rows to a goal, mirroring linked_bill_id / linked_debt_id.
 
 A goal's **current_amount is not stored** — it is the sum of `transactions.amount`
 where `linked_goal_id = goal.id and status = 'cleared'` (ADR-003).
+
+
+## ADR-029 / ADR-030 columns (2026-08-03)
+
+- `categories.icon text` — nullable emoji shown on category rows.
+- `categories.color text` — nullable hex accent colour for category rows.
+- `institutions.logo_url text` — nullable logo image URL (usually a derived favicon).
+
+All three are display-only; no logic depends on them being non-null.

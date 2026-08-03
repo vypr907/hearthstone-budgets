@@ -25,6 +25,7 @@ import { Route as AppGoalsRouteImport } from './routes/app.goals'
 import { Route as AppEverythingRouteImport } from './routes/app.everything'
 import { Route as AppDebtsRouteImport } from './routes/app.debts'
 import { Route as AppDebtStrategyRouteImport } from './routes/app.debt-strategy'
+import { Route as AppCategoriesRouteImport } from './routes/app.categories'
 import { Route as AppBillsRouteImport } from './routes/app.bills'
 import { Route as AppAccountsRouteImport } from './routes/app.accounts'
 
@@ -108,6 +109,11 @@ const AppDebtStrategyRoute = AppDebtStrategyRouteImport.update({
   path: '/debt-strategy',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCategoriesRoute = AppCategoriesRouteImport.update({
+  id: '/categories',
+  path: '/categories',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBillsRoute = AppBillsRouteImport.update({
   id: '/bills',
   path: '/bills',
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
+  '/app/categories': typeof AppCategoriesRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
@@ -144,6 +151,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
+  '/app/categories': typeof AppCategoriesRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
@@ -165,6 +173,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
+  '/app/categories': typeof AppCategoriesRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
@@ -187,6 +196,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app/accounts'
     | '/app/bills'
+    | '/app/categories'
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
@@ -206,6 +216,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app/accounts'
     | '/app/bills'
+    | '/app/categories'
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
@@ -226,6 +237,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app/accounts'
     | '/app/bills'
+    | '/app/categories'
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
@@ -361,6 +373,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDebtStrategyRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/categories': {
+      id: '/app/categories'
+      path: '/categories'
+      fullPath: '/app/categories'
+      preLoaderRoute: typeof AppCategoriesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/bills': {
       id: '/app/bills'
       path: '/bills'
@@ -381,6 +400,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAccountsRoute: typeof AppAccountsRoute
   AppBillsRoute: typeof AppBillsRoute
+  AppCategoriesRoute: typeof AppCategoriesRoute
   AppDebtStrategyRoute: typeof AppDebtStrategyRoute
   AppDebtsRoute: typeof AppDebtsRoute
   AppEverythingRoute: typeof AppEverythingRoute
@@ -399,6 +419,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAccountsRoute: AppAccountsRoute,
   AppBillsRoute: AppBillsRoute,
+  AppCategoriesRoute: AppCategoriesRoute,
   AppDebtStrategyRoute: AppDebtStrategyRoute,
   AppDebtsRoute: AppDebtsRoute,
   AppEverythingRoute: AppEverythingRoute,

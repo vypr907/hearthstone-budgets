@@ -32,3 +32,13 @@
 - Fixed snapshot export cropping by adding explicit `width`, `height`, `x`, `y`, `scrollX`, and `scrollY` options to the html2canvas-pro call, and by capturing a clone rendered in a fixed-position `(0,0)` off-screen wrapper. This prevents `foreignObjectRendering` from applying the original node's document offset (`offsetLeft/offsetTop`) to the SVG foreignObject origin, which was shifting the captured content left and leaving empty canvas background. Verified via headless capture: the exported PNG is 800×1102 (node size × scale 2), shows the full card width with no clipped text, has no large empty areas, and preserves card backgrounds/shadows, sans-serif font, and the filled colored ProgressRing arc.
 
 - Pay-time account resolution (ADR-007 correction) implemented in src/lib/pay-flow.tsx: the "Which account paid this?" picker now lists ALL household accounts instead of only accounts under the bill/debt's own institution, highlights the account that most recently paid that same bill/debt (most recent transaction with matching linked_bill_id/linked_debt_id, marked "Last used"), and no longer blocks with "No account linked to X's institution". Known issue: with no payment history no account is preselected, so a tap is always required.
+
+- ADR-029 + ADR-030: added a Categories screen (`/app/categories`, linked from More)
+  with emoji icon and fixed-palette colour pickers; Spending rows now use the stored
+  icon and colour accent with a gray tag fallback. Institutions gained a `logo_url`
+  field (favicon URL suggested from `login_url`, editable before save), logo display
+  with an institution-type icon fallback, title-cased type labels with a per-type
+  icon/colour map, a UI-only Group by (type/category) control, and linked Bills and
+  Debts in the detail view.
+  Known issue: the three new columns must exist in Supabase (`categories.icon`,
+  `categories.color`, `institutions.logo_url`) — schema is managed outside the app.

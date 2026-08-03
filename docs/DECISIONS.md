@@ -585,7 +585,9 @@ Matches the icon/color treatment already used for institution_type and the
 visual language established in ADR-026. Purely additive display metadata,
 no impact on category matching/grouping logic (ADR-011, ADR-012).
 
-Status: Decided 2026-08-03. Not yet implemented.
+Status: Decided 2026-08-03. Implemented 2026-08-03 (/app/categories icon+colour
+picker; icon + left-border colour accent on Categories and Spending rows,
+falling back to a gray tag icon when null).
 
 
 ## ADR-030: Institution Logo Field
@@ -608,4 +610,9 @@ and has no usage limits relevant here. If visual quality proves unsatisfying
 later, this can be swapped for a keyed service without a schema change —
 logo_url stays a plain URL string either way.
 
-Status: Decided 2026-08-03. Not yet implemented.
+Status: Decided 2026-08-03. Implemented 2026-08-03 (institution form logo_url
+field pre-filled with the derived favicon URL as a visible, editable suggestion;
+list/detail render the logo with an institution-type icon fallback on null or
+image load error; institution_type is title-cased for display via a code-side
+lookup map; Institutions gained a UI-only Group by (type/category) control and
+linked Bills/Debts sections in detail).

@@ -673,10 +673,14 @@ export function useCreateCategory() {
       name,
       parentCategory,
       domain = "spending",
+      icon,
+      color,
     }: {
       name: string;
       parentCategory?: string | null;
       domain?: string;
+      icon?: string | null;
+      color?: string | null;
     }): Promise<Category> => {
       const { data, error } = await supabase
         .from("categories")
@@ -685,11 +689,34 @@ export function useCreateCategory() {
           name,
           parent_category: parentCategory || null,
           domain,
+          icon: icon || null,
+          color: color || null,
         })
         .select("*")
         .single();
       if (error) throw error;
       return data as Category;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+  });
+}
+
+/** Update an existing category (name, grouping, ADR-029 icon/colour). */
+export function useUpdateCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...patch
+    }: {
+      id: string;
+      name?: string;
+      parent_category?: string | null;
+      icon?: string | null;
+      color?: string | null;
+    }) => {
+      const { error } = await supabase.from("categories").update(patch).eq("id", id);
+      if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
   });
