@@ -19,3 +19,8 @@
 - New files: src/lib/snapshot.ts (buildSnapshot/exportSnapshot), src/routes/app.snapshot.tsx, src/routes/app.settings.tsx. New hooks useHousehold/useSetExportFormat; Household.export_format + ExportFormat types.
 - Used html2canvas-pro instead of html2canvas 1.4.1: the original throws on the app's oklch color tokens.
 - Known issue: the `alter table households add column export_format ...` migration must be run manually in Supabase (own project, no agent DB access) — until then Settings saves will error and exports fall back to PNG.
+
+- Snapshot styling pass (presentation only, ADR-028 data logic untouched): /app/snapshot now uses the Dashboard's visual language — gradient brand hero card (household name, timestamp, combined due-now + 14-day total, ProgressRing showing what share of that is overdue), shadowed 16px cards, bold tabular amounts with small uppercase gray labels, EmojiIcon + per-item ItemBar rows.
+- One-page cap enforced: Overdue shows the bold "$X overdue across N items" total plus only the top 5 by dollar amount, then "+N more overdue — see full list in app."; Upcoming shows total + top 5 by due date with the same "+N more" note. Next paycheck stays a single line. Helpers SNAPSHOT_MAX_ROWS/topByAmount live in src/lib/snapshot.ts.
+- Overdue section carries a destructive border/tint accent matching the Bills status badges; upcoming stays neutral.
+- exportSnapshot now measures the capture node (width/windowWidth/its own background) instead of the body, so html2canvas reproduces the styled card layout rather than reflowing it.
