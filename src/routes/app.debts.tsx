@@ -44,6 +44,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
 import { format } from "date-fns";
+import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+
 
 const CYCLES: BillingCycle[] = [
   "monthly",
