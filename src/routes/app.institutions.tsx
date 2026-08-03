@@ -68,10 +68,17 @@ function InstitutionsPage() {
   const { data: institutions = [], isLoading } = useInstitutions();
   const { data: categories = [] } = useCategories();
   const { data: instCats = {} } = useInstitutionCategories();
+  const { data: accounts = [] } = useAccounts();
+  const { data: latest = {} } = useLatestBalances();
+  const { data: transactions = [] } = useTransactions();
+  const { data: bills = [] } = useBills();
+  const { data: debts = [] } = useDebts();
+  const balances = computeBalances(accounts, latest, transactions);
   const categoryName = Object.fromEntries(categories.map((c) => [c.id, c.name]));
   const [editing, setEditing] = useState<Partial<Institution> | null>(null);
   const [detail, setDetail] = useState<Institution | null>(null);
   const [groupBy, setGroupBy] = useState<"none" | "type" | "category">("none");
+
 
   // UI-only grouping: an institution with several categories appears under each.
   const groups: Array<{ key: string; label: string; rows: Institution[] }> = (() => {
