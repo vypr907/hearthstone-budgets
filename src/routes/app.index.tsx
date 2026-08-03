@@ -24,6 +24,8 @@ import {
 import { buildActualResolver } from "@/lib/spending-actuals";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+import { EmojiIcon, ItemBar, ProgressRing, emojiFor, itemColor } from "@/components/viz";
+
 import { netWorthTrend } from "@/lib/net-worth";
 import {
   CartesianGrid,
