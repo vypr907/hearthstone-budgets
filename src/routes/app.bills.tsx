@@ -36,6 +36,8 @@ import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
 import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
+import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+
 
 const CYCLES: BillingCycle[] = [
   "monthly",
