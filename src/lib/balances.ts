@@ -1,5 +1,6 @@
 import type { Account, AccountBalance, Bill, Debt, Transaction } from "./supabase";
-import { debtDueDate, todayISO } from "./format";
+import { debtDueDate } from "./format";
+import { todayISO } from "./snapshot";
 import { billCycleDue, billRemainingOwed } from "./payments";
 
 export type AccountBalanceInfo = {
