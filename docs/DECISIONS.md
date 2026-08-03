@@ -397,6 +397,11 @@ obligation bucket.
 The "bottom number" for a period = primary amount + secondary income in range − obligations
 in range − sum(allocations) — computed live, never cached.
 
+Paycheck-level planning uses income_sources / income_events / pay_period_allocations
+on its own screen; spending_budgets and spending_actuals are untouched. A pay period runs from a
+primary income_event's effective date up to (exclusive) the next primary event, or +14 days when
+none exists. Allocations are keyed on income_event_id + category_id and stored per household.
+
 Reason:
 Obligation timing can't be derived from a fixed cadence (ANG's date moves monthly, UberEats
 has none), so auto-assignment must be date-range-based and computed at read time — consistent
@@ -405,6 +410,9 @@ one paycheck across 3 accounts on different days is a real, recurring shape (ASR
 USAA), not a one-off, so it's modeled as a reusable per-source template rather than one-off
 manual entries each period.
 
+Monthly budgets and per-paycheck cash allocation answer different questions; merging them
+would overload the Spending screen and its month-locking flow.
+
 This is additive only — `spending_budgets`/`spending_actuals` and all Bills/Debts logic are
 unchanged. Some months have 2–3 primary paychecks; this layer handles that naturally since
 periods are derived from actual `income_events`, not a fixed monthly bucket.
@@ -412,18 +420,90 @@ periods are derived from actual `income_events`, not a fixed monthly bucket.
 Known limitation: no manual override yet for "pay this bill from a different check than its
 due-date range implies." Due-date-in-range is the only assignment rule for now.
 
-Status: Decided 2026-08-03. Not yet implemented.
-## ADR-024: Paycheck Budget is separate from monthly Spending
-Decision: Paycheck-level planning uses income_sources / income_events / pay_period_allocations
-on its own screen; spending_budgets and spending_actuals are untouched. A pay period runs from a
-primary income_event's effective date up to (exclusive) the next primary event, or +14 days when
-none exists. Allocations are keyed on income_event_id + category_id and stored per household.
-Reason: Monthly budgets and per-paycheck cash allocation answer different questions; merging them
-would overload the Spending screen and its month-locking flow.
-Status: Decided 2026-02-14. Implemented.
+Status: Decided 2026-08-03. Implemented.
+### Open Question — Future Cross-Reference (not yet decided)
+
+Two items surfaced while comparing this ADR against reference-app screenshots
+(2026-08-03). Neither requires action now; both should be revisited at the
+noted trigger point.
+
+**1. Stored bill→paycheck override (vs. current date-range-only assignment)**
+Reference apps store an explicit "which paycheck pays this bill" tag per bill,
+rather than deriving it from due-date-in-range. This is the same gap already
+named in this ADR's "Known limitation." Two options if it becomes a real need:
+- Add an optional `bills.forced_income_event_id` override column, checked
+  before falling back to date-range logic, or
+- Treat a wrong assignment as a due-date data problem (fix the bill's date)
+  rather than adding an override mechanism.
+Revisit when: date-range misassignment actually happens in practice, not
+speculatively.
+
+**2. Allocations may eventually need to target savings goals, not just categories**
+Reference apps let one "distribute paycheck" action fill both spending
+categories and savings goals in the same flow. `pay_period_allocations`
+currently only supports `category_id`. Once ADR-025 (Savings Goals) is
+implemented, decide between:
+- Adding a nullable `goal_id` to `pay_period_allocations` alongside
+  `category_id` (mutually exclusive — exactly one set per row), or
+- Keeping goal contributions purely in the transactions ledger via
+  `linked_goal_id` (ADR-025), with no representation in the pay-period
+  allocation/planning layer at all.
+Revisit when: ADR-026 is implemented and this becomes a concrete UX decision.
+
 
 ## ADR-025: zod upgraded to v4
 Decision: Upgrade zod from ^3.24 to ^4.
 Reason: @tanstack/start-plugin-core calls `.prefault()`, which only exists in zod v4; on zod 3 the
 Vite config failed to load and the dev server would not start.
-Status: Decided 2026-02-14. Implemented.
+Status: Decided 2026-08-03. Implemented.
+
+## ADR-026: Savings Goals (Sinking Funds)
+
+Decision:
+Add a new `savings_goals` table (household_id, name, target_amount, target_date,
+current_amount, icon/emoji, created_at, updated_at) with standard household RLS.
+Add/withdraw actions create a `transactions` row with a new `linked_goal_id uuid
+references savings_goals(id)` column, mirroring the existing linked_bill_id/
+linked_debt_id pattern. A goal's current_amount is derived the same way account
+balances are: sum of cleared transactions linked to that goal (not a separately
+maintained running total), for consistency with ADR-003 (transactions as source
+of truth).
+
+Reason:
+Reference apps show a common, clearly useful pattern (Emergency Fund, Vacation,
+Christmas) — a target amount/date with a "monthly amount needed" calculation and
+Add/Withdraw actions. Nothing in the current schema supports this; it's a new
+first-class concept alongside bills/debts, not a variant of either.
+
+Schema change:
+```sql
+create table savings_goals (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  name text not null,
+  icon text,
+  target_amount numeric(12,2) not null,
+  target_date date,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table transactions add column linked_goal_id uuid references savings_goals(id);
+
+alter table savings_goals enable row level security;
+create policy "household access" on savings_goals for all
+  using (is_household_member(household_id))
+  with check (is_household_member(household_id));
+```
+
+Migration steps:
+1. Run the SQL above.
+2. current_amount is NOT a stored column — compute as
+   `sum(transactions.amount) where linked_goal_id = goal.id and status = 'cleared'`,
+   same pattern as account balances.
+3. "Monthly amount needed" = `(target_amount - current_amount) / months_remaining
+   (from target_date)` — computed client-side, not stored.
+4. Add/Withdraw UI reuses the existing quick-transaction entry pattern (Phase 4.5)
+   with linked_goal_id set instead of linked_bill_id/linked_debt_id.
+
+Status: Decided — pending your approval. Not implemented.
