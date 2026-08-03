@@ -118,7 +118,12 @@ export async function exportSnapshot(node: HTMLElement, format: "png" | "pdf") {
     useCORS: true,
     foreignObjectRendering: true,
     width: node.offsetWidth,
+    height: node.offsetHeight,
     windowWidth: node.offsetWidth,
+    x: 0,
+    y: 0,
+    scrollX: 0,
+    scrollY: 0,
     backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
   });
 
