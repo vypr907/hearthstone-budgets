@@ -27,7 +27,7 @@ function CapTest() {
       <div ref={ref} className="max-w-lg bg-background p-4 space-y-3">
         <Card className="shadow-md">
           <CardContent className="p-4 flex items-center gap-4">
-            <ProgressRing value={0.68} size={48} color={itemColor(1)} />
+            <ProgressRing value={68} size={48} color={itemColor(1)} />
             <div>
               <div className="text-2xl font-bold">$1,284.50</div>
               <div className="text-sm text-muted-foreground">Overdue total</div>
@@ -37,8 +37,8 @@ function CapTest() {
         </Card>
         <Card className="shadow-md">
           <CardContent className="p-4 space-y-2">
-            <ItemBar value={0.7} color={itemColor(2)} />
-            <ItemBar value={0.3} color={itemColor(3)} />
+            <ItemBar value={70} color={itemColor(2)} />
+            <ItemBar value={30} color={itemColor(3)} />
 
           </CardContent>
         </Card>
