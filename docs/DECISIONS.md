@@ -516,4 +516,6 @@ Migration steps:
 4. Add/Withdraw UI reuses the existing quick-transaction entry pattern (Phase 4.5)
    with linked_goal_id set instead of linked_bill_id/linked_debt_id.
 
-Status: Decided — pending your approval. Not implemented.
+Status: Decided 2026-08-03. Implemented (UI + derived current_amount). SQL must be
+run manually in the self-managed Supabase project; no goal <-> pay_period_allocations
+link was built (see ADR-024 cross-reference note).

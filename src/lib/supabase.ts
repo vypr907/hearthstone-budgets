@@ -160,6 +160,8 @@ export type Transaction = {
   transaction_date: string;
   linked_bill_id: string | null;
   linked_debt_id: string | null;
+  /** ADR-027: set when this row funds/withdraws from a savings goal. */
+  linked_goal_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -217,3 +219,15 @@ export type PayPeriodAllocation = {
   allocated_amount: number | null;
 };
 
+
+/** ADR-027: a sinking fund. current_amount is derived, never stored. */
+export type SavingsGoal = {
+  id: string;
+  household_id: string;
+  name: string;
+  icon: string | null;
+  target_amount: number;
+  target_date: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};

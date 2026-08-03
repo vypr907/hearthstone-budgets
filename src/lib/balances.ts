@@ -92,3 +92,43 @@ export function creditAccountsMissingLimit(accounts: Account[]): Account[] {
       !Number(a.credit_limit ?? 0),
   );
 }
+
+/**
+ * ADR-027: a savings goal's current amount, derived exactly like account
+ * balances — the sum of CLEARED transactions linked to that goal. Never stored.
+ */
+export function computeGoalBalances(
+  goalIds: string[],
+  transactions: Transaction[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const id of goalIds) out[id] = 0;
+  for (const t of transactions) {
+    const gid = t.linked_goal_id;
+    if (!gid || !(gid in out)) continue;
+    if (t.status !== "cleared") continue;
+    out[gid] += Number(t.amount || 0);
+  }
+  return out;
+}
+
+/** Months (>= 1) between today and a target date; null when no date is set. */
+export function monthsRemaining(targetDate: string | null | undefined): number | null {
+  if (!targetDate) return null;
+  const now = new Date();
+  const t = new Date(`${targetDate.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(t.getTime())) return null;
+  const months =
+    (t.getFullYear() - now.getFullYear()) * 12 + (t.getMonth() - now.getMonth());
+  return Math.max(1, months);
+}
+
+/** Whole days left until a target date; null when no date is set. */
+export function daysRemaining(targetDate: string | null | undefined): number | null {
+  if (!targetDate) return null;
+  const t = new Date(`${targetDate.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(t.getTime())) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((t.getTime() - today.getTime()) / 86400000);
+}

@@ -6,6 +6,7 @@ import {
   CalendarDays,
   ChevronRight,
   PiggyBank,
+  Target,
   Receipt,
   TrendingDown,
   Wallet,
@@ -35,6 +36,7 @@ export const Route = createFileRoute("/app/more")({
 
 const links = [
   { to: "/app/spending", label: "Spending", icon: PiggyBank },
+  { to: "/app/goals", label: "Savings Goals", icon: Target },
   { to: "/app/paycheck", label: "Paycheck Budget", icon: Wallet },
   { to: "/app/debt-strategy", label: "Debt Strategy", icon: TrendingDown },
   { to: "/app/payment-schedule", label: "Payment Schedule", icon: CalendarDays },

@@ -9,3 +9,7 @@
 - Dashboard: single gradient hero card ("$X to go · Y% paid off" + spendable/obligations tiles + slim progress bar baked into the bottom); spendable breakdown, budget-vs-actual rings, spending bars, payoff bars and overdue rows restyled with bold amounts and small uppercase labels.
 - Bills, Debts, Accounts, Spending: emoji icons, bold/large dollar amounts, small gray uppercase labels, per-item recolored progress bars (Bills partial-payment, Debts payoff) and progress rings on Spending rows.
 - Known issue: no donut chart exists yet, so the "total centered in the donut hole" rule has nothing to apply to.
+
+- ADR-027 Savings Goals: new /app/goals screen (linked from More) listing sinking-fund cards with EmojiIcon, ProgressRing/ItemBar, days-left and "save $X/month" math, + New Goal / Edit / Delete, and +Add / −Withdraw quick entries that write a cleared transaction with linked_goal_id.
+- current_amount is derived, never stored: computeGoalBalances() in src/lib/balances.ts sums cleared transactions per goal (plus monthsRemaining/daysRemaining helpers). New hooks useSavingsGoals/useUpsertSavingsGoal/useDeleteSavingsGoal; SavingsGoal type and Transaction.linked_goal_id added.
+- Known issue: the savings_goals table + transactions.linked_goal_id column must be created manually in Supabase (see ADR-027 SQL) — until then the screen shows an empty list / query error.

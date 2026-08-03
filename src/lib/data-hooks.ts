@@ -12,6 +12,7 @@ import {
   type SpendingBudget,
   type SpendingActual,
   type DebtStrategySettings,
+  type SavingsGoal,
 } from "./supabase";
 import { advanceDate } from "./format";
 import { useAuth } from "./auth-context";
@@ -824,5 +825,52 @@ export function useAllAccountBalances() {
       if (error) throw error;
       return (data ?? []) as AccountBalance[];
     },
+  });
+}
+
+/** ADR-027: savings goals (sinking funds). Additive, household-scoped. */
+export function useSavingsGoals() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["savings_goals", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<SavingsGoal[]> => {
+      const { data, error } = await supabase
+        .from("savings_goals")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as SavingsGoal[];
+    },
+  });
+}
+
+export function useUpsertSavingsGoal() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (g: Partial<SavingsGoal> & { name: string; target_amount: number }) => {
+      const payload = { ...g, household_id: householdId };
+      if (g.id) {
+        const { error } = await supabase.from("savings_goals").update(payload).eq("id", g.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("savings_goals").insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["savings_goals"] }),
+  });
+}
+
+export function useDeleteSavingsGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("savings_goals").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["savings_goals"] }),
   });
 }
