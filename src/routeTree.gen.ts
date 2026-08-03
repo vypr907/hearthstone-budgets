@@ -15,6 +15,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppTransactionsRouteImport } from './routes/app.transactions'
 import { Route as AppSpendingRouteImport } from './routes/app.spending'
+import { Route as AppSnapshotRouteImport } from './routes/app.snapshot'
+import { Route as AppSettingsRouteImport } from './routes/app.settings'
 import { Route as AppPaymentScheduleRouteImport } from './routes/app.payment-schedule'
 import { Route as AppPaycheckRouteImport } from './routes/app.paycheck'
 import { Route as AppMoreRouteImport } from './routes/app.more'
@@ -54,6 +56,16 @@ const AppTransactionsRoute = AppTransactionsRouteImport.update({
 const AppSpendingRoute = AppSpendingRouteImport.update({
   id: '/spending',
   path: '/spending',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSnapshotRoute = AppSnapshotRouteImport.update({
+  id: '/snapshot',
+  path: '/snapshot',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPaymentScheduleRoute = AppPaymentScheduleRouteImport.update({
@@ -121,6 +133,8 @@ export interface FileRoutesByFullPath {
   '/app/more': typeof AppMoreRoute
   '/app/paycheck': typeof AppPaycheckRoute
   '/app/payment-schedule': typeof AppPaymentScheduleRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
@@ -138,6 +152,8 @@ export interface FileRoutesByTo {
   '/app/more': typeof AppMoreRoute
   '/app/paycheck': typeof AppPaycheckRoute
   '/app/payment-schedule': typeof AppPaymentScheduleRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app': typeof AppIndexRoute
@@ -157,6 +173,8 @@ export interface FileRoutesById {
   '/app/more': typeof AppMoreRoute
   '/app/paycheck': typeof AppPaycheckRoute
   '/app/payment-schedule': typeof AppPaymentScheduleRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
@@ -177,6 +195,8 @@ export interface FileRouteTypes {
     | '/app/more'
     | '/app/paycheck'
     | '/app/payment-schedule'
+    | '/app/settings'
+    | '/app/snapshot'
     | '/app/spending'
     | '/app/transactions'
     | '/app/'
@@ -194,6 +214,8 @@ export interface FileRouteTypes {
     | '/app/more'
     | '/app/paycheck'
     | '/app/payment-schedule'
+    | '/app/settings'
+    | '/app/snapshot'
     | '/app/spending'
     | '/app/transactions'
     | '/app'
@@ -212,6 +234,8 @@ export interface FileRouteTypes {
     | '/app/more'
     | '/app/paycheck'
     | '/app/payment-schedule'
+    | '/app/settings'
+    | '/app/snapshot'
     | '/app/spending'
     | '/app/transactions'
     | '/app/'
@@ -265,6 +289,20 @@ declare module '@tanstack/react-router' {
       path: '/spending'
       fullPath: '/app/spending'
       preLoaderRoute: typeof AppSpendingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/snapshot': {
+      id: '/app/snapshot'
+      path: '/snapshot'
+      fullPath: '/app/snapshot'
+      preLoaderRoute: typeof AppSnapshotRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/settings': {
+      id: '/app/settings'
+      path: '/settings'
+      fullPath: '/app/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/payment-schedule': {
@@ -351,6 +389,8 @@ interface AppRouteChildren {
   AppMoreRoute: typeof AppMoreRoute
   AppPaycheckRoute: typeof AppPaycheckRoute
   AppPaymentScheduleRoute: typeof AppPaymentScheduleRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppSnapshotRoute: typeof AppSnapshotRoute
   AppSpendingRoute: typeof AppSpendingRoute
   AppTransactionsRoute: typeof AppTransactionsRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -367,6 +407,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppMoreRoute: AppMoreRoute,
   AppPaycheckRoute: AppPaycheckRoute,
   AppPaymentScheduleRoute: AppPaymentScheduleRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppSnapshotRoute: AppSnapshotRoute,
   AppSpendingRoute: AppSpendingRoute,
   AppTransactionsRoute: AppTransactionsRoute,
   AppIndexRoute: AppIndexRoute,

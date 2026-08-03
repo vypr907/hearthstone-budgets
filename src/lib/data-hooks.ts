@@ -13,6 +13,8 @@ import {
   type SpendingActual,
   type DebtStrategySettings,
   type SavingsGoal,
+  type Household,
+  type ExportFormat,
 } from "./supabase";
 import { advanceDate } from "./format";
 import { useAuth } from "./auth-context";
@@ -872,5 +874,38 @@ export function useDeleteSavingsGoal() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["savings_goals"] }),
+  });
+}
+
+/** ADR-028: the household row (name + export_format). */
+export function useHousehold() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["household", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<Household | null> => {
+      const { data, error } = await supabase
+        .from("households")
+        .select("*")
+        .eq("id", householdId!)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as Household | null;
+    },
+  });
+}
+
+export function useSetExportFormat() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (format: ExportFormat) => {
+      const { error } = await supabase
+        .from("households")
+        .update({ export_format: format })
+        .eq("id", householdId!);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["household"] }),
   });
 }

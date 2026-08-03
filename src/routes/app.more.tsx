@@ -7,7 +7,9 @@ import {
   ChevronRight,
   PiggyBank,
   Target,
+  Camera,
   Receipt,
+  Settings,
   TrendingDown,
   Wallet,
 } from "lucide-react";
@@ -42,6 +44,8 @@ const links = [
   { to: "/app/payment-schedule", label: "Payment Schedule", icon: CalendarDays },
   { to: "/app/institutions", label: "Institutions", icon: Building2 },
   { to: "/app/transactions", label: "Transactions", icon: Receipt },
+  { to: "/app/snapshot", label: "Status Snapshot", icon: Camera },
+  { to: "/app/settings", label: "Settings", icon: Settings },
 ];
 
 function MorePage() {

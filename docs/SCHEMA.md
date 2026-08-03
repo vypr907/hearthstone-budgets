@@ -70,6 +70,8 @@ Stores the shared household container.
 households (
     id uuid primary key default gen_random_uuid(),
     name text not null,
+    -- ADR-028: preferred Status Snapshot export encoding.
+    export_format text not null default 'png' check (export_format in ('png','pdf')),
     created_at timestamptz default now()
 )
 ```

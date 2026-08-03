@@ -123,9 +123,13 @@ export type AccountBalance = {
   created_at: string;
 };
 
+export type ExportFormat = "png" | "pdf";
+
 export type Household = {
   id: string;
-  name?: string;
+  name?: string | null;
+  /** ADR-028: preferred snapshot export encoding. */
+  export_format?: ExportFormat | null;
 };
 
 export type InstitutionCategory = {
