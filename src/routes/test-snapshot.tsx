@@ -18,6 +18,14 @@ function TestSnapshotPage() {
     (async () => {
       const { default: html2canvas } = await import("html2canvas-pro");
       const node = nodeRef.current!;
+      const rect = node.getBoundingClientRect();
+      console.log("node dims:", {
+        offsetWidth: node.offsetWidth,
+        offsetHeight: node.offsetHeight,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        offsetLeft: node.offsetLeft,
+        offsetTop: node.offsetTop,
+      });
       const canvas = await html2canvas(node, {
         scale: 2,
         useCORS: true,
