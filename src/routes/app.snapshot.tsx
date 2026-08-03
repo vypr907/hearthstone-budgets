@@ -9,14 +9,17 @@ import { useBills, useDebts, useHousehold } from "@/lib/data-hooks";
 import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
 import { useLedgerState } from "@/lib/ledger-state";
 import { formatMoney } from "@/lib/format";
-import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+import { EmojiIcon, ItemBar, ProgressRing, itemColor } from "@/components/viz";
 import {
   buildSnapshot,
   exportSnapshot,
   formatDayLabel,
   todayISO,
+  topByAmount,
+  SNAPSHOT_MAX_ROWS,
   type SnapshotRow,
 } from "@/lib/snapshot";
+
 
 export const Route = createFileRoute("/app/snapshot")({
   head: () => ({
