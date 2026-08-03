@@ -11,9 +11,10 @@ function TestSnapshotPage() {
   const nodeRef = useRef<HTMLDivElement>(null);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
 
+  const capturedRef = useRef(false);
   useEffect(() => {
-    if (!nodeRef.current) return;
-    let cancelled = false;
+    if (!nodeRef.current || capturedRef.current) return;
+    capturedRef.current = true;
     (async () => {
       const { default: html2canvas } = await import("html2canvas-pro");
       const node = nodeRef.current!;
@@ -30,13 +31,8 @@ function TestSnapshotPage() {
         scrollY: 0,
         backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
       });
-      if (!cancelled) {
-        setDataUrl(canvas.toDataURL("image/png"));
-      }
+      setDataUrl(canvas.toDataURL("image/png"));
     })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   return (
