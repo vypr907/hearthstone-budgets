@@ -378,12 +378,13 @@ function Dashboard() {
         {netWorthData.length > 1 && (
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Net worth trend
               </p>
-              <p className="mt-1 text-2xl font-bold">
+              <p className="mt-1 text-3xl font-extrabold tabular-nums">
                 {formatMoney(netWorth[netWorth.length - 1]?.total ?? 0)}
               </p>
+
               <div className="mt-3 h-48 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={netWorthData} margin={{ left: 4, right: 8, top: 4 }}>
