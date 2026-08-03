@@ -31,6 +31,8 @@ import {
 import { CalendarPlus, HelpCircle, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { ProgressRing, emojiFor, itemColor } from "@/components/viz";
+
 import {
   Select,
   SelectContent,
