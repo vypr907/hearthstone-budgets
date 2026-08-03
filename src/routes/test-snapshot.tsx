@@ -37,7 +37,6 @@ function TestSnapshotPage() {
         canvas = await html2canvas(clone, {
           scale: 2,
           useCORS: true,
-          foreignObjectRendering: true,
           width: clone.offsetWidth,
           height: clone.offsetHeight,
           windowWidth: clone.offsetWidth,
