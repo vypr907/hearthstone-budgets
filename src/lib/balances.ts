@@ -1,4 +1,7 @@
-import type { Account, AccountBalance, Transaction } from "./supabase";
+import type { Account, AccountBalance, Bill, Debt, Transaction } from "./supabase";
+import { debtDueDate } from "./format";
+import { todayISO } from "./snapshot";
+import { billCycleDue, billRemainingOwed } from "./payments";
 
 export type AccountBalanceInfo = {
   anchor: number;
@@ -131,4 +134,66 @@ export function daysRemaining(targetDate: string | null | undefined): number | n
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((t.getTime() - today.getTime()) / 86400000);
+}
+
+/**
+ * ADR-031: institution-level computed totals. Never stored — derived on render.
+ *
+ * - Accounts linked → Current Balance = sum of those accounts' current balance;
+ *   no Current Due.
+ * - No accounts, but bills/debts linked → Current Balance = open debt balances
+ *   + open-cycle bill amounts; Current Due = still-owed bill amounts this cycle
+ *   + minimum payments for debts due on/before today.
+ * - Nothing linked → both null.
+ */
+export type InstitutionTotals = {
+  source: "accounts" | "obligations" | "none";
+  currentBalance: number | null;
+  currentDue: number | null;
+};
+
+export function computeInstitutionTotals(
+  institutionId: string,
+  accounts: Account[],
+  balances: Record<string, AccountBalanceInfo>,
+  bills: Bill[],
+  debts: Debt[],
+): InstitutionTotals {
+  const linkedAccounts = accounts.filter((a) => a.institution_id === institutionId);
+  if (linkedAccounts.length > 0) {
+    const total = linkedAccounts.reduce(
+      (sum, a) => sum + (balances[a.id]?.current ?? Number(a.starting_balance ?? 0)),
+      0,
+    );
+    return { source: "accounts", currentBalance: total, currentDue: null };
+  }
+
+  const linkedBills = bills.filter(
+    (b) => b.institution_id === institutionId && b.is_active !== false,
+  );
+  const linkedDebts = debts.filter(
+    (d) => d.institution_id === institutionId && !d.date_paid_off,
+  );
+  if (linkedBills.length === 0 && linkedDebts.length === 0)
+    return { source: "none", currentBalance: null, currentDue: null };
+
+  const today = todayISO();
+  let balance = 0;
+  let due = 0;
+
+  for (const b of linkedBills) {
+    const owed = billRemainingOwed(b);
+    if (owed <= 0) continue;
+    balance += billCycleDue(b);
+    due += owed;
+  }
+
+  for (const d of linkedDebts) {
+    const remaining = Number(d.remaining_balance ?? 0);
+    if (remaining > 0) balance += remaining;
+    const dueDate = debtDueDate(d);
+    if (dueDate && dueDate <= today) due += Number(d.minimum_payment ?? 0);
+  }
+
+  return { source: "obligations", currentBalance: balance, currentDue: due };
 }

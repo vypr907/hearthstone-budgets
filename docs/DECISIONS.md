@@ -648,4 +648,8 @@ concepts that happened to share a UI slot request — separating Current Balance
 Bills/Debts already distinguish total remaining vs. this-cycle's amount
 (ADR-019), rather than inventing a third definition.
 
-Status: Decided 2026-08-03. Not yet implemented.
+Status: Decided 2026-08-03. Implemented 2026-08-03 in
+`computeInstitutionTotals()` (src/lib/balances.ts), rendered on the Institutions
+list rows and detail view. Debts count toward Current Due when debtDueDate()
+(ADR-017) is on or before today; bills use billCycleDue()/billRemainingOwed()
+(ADR-019). Institutions with neither accounts nor obligations render "—".
