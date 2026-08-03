@@ -8,7 +8,7 @@ import {
   useMarkUnpaid,
   type Payable,
 } from "@/lib/payments";
-import { useAccounts } from "@/lib/data-hooks";
+import { useAccounts, useTransactions } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import {
   Dialog,
@@ -40,6 +40,7 @@ function defaultCycleAmount(payable: Payable) {
  */
 export function usePayFlow() {
   const { data: accounts = [] } = useAccounts();
+  const { data: transactions = [] } = useTransactions();
   const submit = useMarkSubmitted();
   const clear = useMarkCleared();
   const undo = useMarkUnpaid();
