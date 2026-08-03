@@ -28,7 +28,6 @@ function TestSnapshotPage() {
       wrapper.style.height = `${node.offsetHeight}px`;
       wrapper.style.zIndex = "-9999";
       wrapper.style.overflow = "hidden";
-      clone.style.padding = "0";
       wrapper.appendChild(clone);
       document.body.appendChild(wrapper);
 
