@@ -224,38 +224,92 @@ function Dashboard() {
       })),
   ].sort((a, b) => a.due_date.localeCompare(b.due_date));
 
+  /** Hero: total debt remaining vs. how much has already been paid off. */
+  const payoffTotals = payoffProgress.reduce(
+    (acc, d) => {
+      acc.start += d.start;
+      acc.remaining += d.remaining;
+      acc.paid += d.paid;
+      return acc;
+    },
+    { start: 0, remaining: 0, paid: 0 },
+  );
+  const paidPct =
+    payoffTotals.start > 0
+      ? Math.min(100, (payoffTotals.paid / payoffTotals.start) * 100)
+      : 0;
+
   return (
     <>
       <AppHeader title="Dashboard" />
       <div className="space-y-4 p-4">
+        <div
+          className="overflow-hidden rounded-[16px] text-brand-foreground shadow-[var(--shadow-card)]"
+          style={{ backgroundImage: "var(--gradient-brand)" }}
+        >
+          <div className="p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-widest opacity-80">
+              {payoffProgress.length} active debt
+              {payoffProgress.length === 1 ? "" : "s"}
+            </p>
+            <p className="mt-1 text-4xl font-extrabold tracking-tight tabular-nums">
+              {formatMoney(payoffTotals.remaining)}
+            </p>
+            <p className="mt-1 text-sm opacity-90">
+              to go · {Math.round(paidPct)}% paid off ·{" "}
+              {formatMoney(payoffTotals.paid)} eliminated
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-[12px] bg-white/15 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                  Spendable
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {formatMoney(spendable.total)}
+                </p>
+              </div>
+              <div className="rounded-[12px] bg-white/15 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                  Monthly obligations
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {formatMoney(totalObligations)}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="h-2 w-full bg-white/20">
+            <div className="h-full bg-white/85" style={{ width: `${paidPct}%` }} />
+          </div>
+        </div>
+
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Spendable balance
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              Spendable breakdown
             </p>
-            <p className="mt-1 text-3xl font-bold">{formatMoney(spendable.total)}</p>
             <div className="mt-3 space-y-1 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Checking</span>
-                <span className="font-medium tabular-nums">
+                <span className="font-bold tabular-nums">
                   {formatMoney(spendable.checking)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Available credit</span>
-                <span className="font-medium tabular-nums">
+                <span className="font-bold tabular-nums">
                   {formatMoney(spendable.availableCredit)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Savings (not included)</span>
-                <span className="font-medium tabular-nums">
+                <span className="font-bold tabular-nums">
                   {formatMoney(spendable.savings)}
                 </span>
               </div>
             </div>
             {missingLimits.length > 0 && (
-              <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">
+              <div className="mt-3 flex items-start gap-2 rounded-[12px] bg-destructive/10 p-2 text-xs">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                 <p>
                   Excluded from the total — no credit limit set:{" "}
@@ -271,11 +325,11 @@ function Dashboard() {
         {budgetChart.length > 0 && (
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Budget vs actual · this month
               </p>
               <div className="mt-3 space-y-3">
-                {budgetChart.map((g) => {
+                {budgetChart.map((g, i) => {
                   const pct = g.budgeted
                     ? Math.min(100, (g.actual / g.budgeted) * 100)
                     : g.actual > 0
@@ -283,18 +337,31 @@ function Dashboard() {
                       : 0;
                   const over = g.budgeted > 0 && g.actual > g.budgeted;
                   return (
-                    <div key={g.name}>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="truncate">{g.name}</span>
-                        <span className="tabular-nums text-muted-foreground">
-                          {formatMoney(g.actual)} / {formatMoney(g.budgeted)}
-                        </span>
-                      </div>
-                      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={`h-full rounded-full ${over ? "bg-destructive" : "bg-primary"}`}
-                          style={{ width: `${pct}%` }}
-                        />
+                    <div key={g.name} className="flex items-center gap-3">
+                      <ProgressRing
+                        value={pct}
+                        color={over ? "var(--destructive)" : itemColor(i)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex min-w-0 items-center gap-1.5 truncate text-sm">
+                            <span aria-hidden>{emojiFor(g.name)}</span>
+                            <span className="truncate">{g.name}</span>
+                          </span>
+                          <span className="shrink-0 text-sm font-bold tabular-nums">
+                            {formatMoney(Math.max(0, g.budgeted - g.actual))}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <ItemBar
+                            value={pct}
+                            color={over ? "var(--destructive)" : itemColor(i)}
+                            className="mt-1"
+                          />
+                        </div>
+                        <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                          {formatMoney(g.actual)} of {formatMoney(g.budgeted)} used
+                        </p>
                       </div>
                     </div>
                   );
@@ -303,6 +370,7 @@ function Dashboard() {
             </CardContent>
           </Card>
         )}
+
 
 
         {netWorthData.length > 1 && (
