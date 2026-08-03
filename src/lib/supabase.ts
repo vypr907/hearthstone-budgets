@@ -170,3 +170,50 @@ export type DebtStrategySettings = {
   extra_monthly_payment: number | null;
   updated_at?: string | null;
 };
+
+/** A recurring source of income. Exactly one per household may be primary. */
+export type IncomeSource = {
+  id: string;
+  household_id: string;
+  name: string;
+  cadence: string | null;
+  is_primary: boolean | null;
+  typical_amount: number | null;
+  is_active: boolean | null;
+  created_at?: string | null;
+};
+
+/** How one primary paycheck deposits across accounts (read-only in the UI). */
+export type IncomeSourceSplit = {
+  id: string;
+  income_source_id: string;
+  account_id: string | null;
+  amount: number | null;
+  /** 'fixed' or 'remainder'. */
+  split_type: string | null;
+  day_offset: number | null;
+  sort_order: number | null;
+};
+
+/** A single expected or received paycheck. */
+export type IncomeEvent = {
+  id: string;
+  household_id: string;
+  income_source_id: string | null;
+  expected_date: string | null;
+  expected_amount: number | null;
+  actual_date: string | null;
+  actual_amount: number | null;
+  status: string | null;
+  created_at?: string | null;
+};
+
+/** Money set aside for a spending category out of one paycheck. */
+export type PayPeriodAllocation = {
+  id: string;
+  household_id: string;
+  income_event_id: string;
+  category_id: string | null;
+  allocated_amount: number | null;
+};
+
