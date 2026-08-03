@@ -176,7 +176,7 @@ function DebtsPage() {
 
         <div className="space-y-2">
           {flat.map(({ header, d }, i) => {
-            const start = Number(d.original_balance ?? 0) || Number(d.remaining_balance);
+            const start = Number(d.starting_balance ?? 0) || Number(d.remaining_balance ?? 0);
             const pctPaid =
               start > 0
                 ? Math.min(
