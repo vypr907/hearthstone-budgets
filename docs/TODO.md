@@ -27,3 +27,6 @@ using (exists (select 1 from public.household_members m
 with check (exists (select 1 from public.household_members m
   where m.household_id = payment_schedule_checkoffs.household_id and m.user_id = auth.uid()));
 ```
+
+- [ ] Run ADR-028 migration in Supabase: `alter table households add column export_format text not null default 'png' check (export_format in ('png','pdf'));`
+- [x] ADR-028 Status Snapshot screen + PNG/PDF export + Settings toggle.

@@ -13,3 +13,9 @@
 - ADR-027 Savings Goals: new /app/goals screen (linked from More) listing sinking-fund cards with EmojiIcon, ProgressRing/ItemBar, days-left and "save $X/month" math, + New Goal / Edit / Delete, and +Add / −Withdraw quick entries that write a cleared transaction with linked_goal_id.
 - current_amount is derived, never stored: computeGoalBalances() in src/lib/balances.ts sums cleared transactions per goal (plus monthsRemaining/daysRemaining helpers). New hooks useSavingsGoals/useUpsertSavingsGoal/useDeleteSavingsGoal; SavingsGoal type and Transaction.linked_goal_id added.
 - Known issue: the savings_goals table + transactions.linked_goal_id column must be created manually in Supabase (see ADR-027 SQL) — until then the screen shows an empty list / query error.
+
+- ADR-028 Status Snapshot: new /app/snapshot (linked from More) rendering a one-page snapshot — header (household name + now), red-accented Overdue section with per-item days overdue and a total, Next-14-days section sorted soonest first, and next primary paycheck (date + expected amount). Uses EmojiIcon/ItemBar from viz.tsx.
+- Export: one html2canvas render, two encodings — PNG by default, single-page jsPDF when households.export_format = 'pdf'. New /app/settings screen toggles that column.
+- New files: src/lib/snapshot.ts (buildSnapshot/exportSnapshot), src/routes/app.snapshot.tsx, src/routes/app.settings.tsx. New hooks useHousehold/useSetExportFormat; Household.export_format + ExportFormat types.
+- Used html2canvas-pro instead of html2canvas 1.4.1: the original throws on the app's oklch color tokens.
+- Known issue: the `alter table households add column export_format ...` migration must be run manually in Supabase (own project, no agent DB access) — until then Settings saves will error and exports fall back to PNG.

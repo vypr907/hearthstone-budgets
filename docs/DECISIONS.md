@@ -554,4 +554,4 @@ Implementation notes:
 - Report date is always "now" — no historical/backdated report in this version.
 - "Upcoming" window is a fixed 14 days for this first version, not user-configurable.
 
-Status: Decided 2026-08-03. Not yet implemented.
+Status: Decided 2026-08-03. Implemented 2026-08-03 (/app/snapshot + /app/settings). Uses html2canvas-pro (drop-in html2canvas fork) because html2canvas 1.4.1 cannot parse the app's oklch color tokens.
