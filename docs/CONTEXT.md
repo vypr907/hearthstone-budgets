@@ -18,6 +18,8 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Phase 4.5 complete: Quick Transaction Entry & Running Balance
 - Phase 5 complete: Debt Payoff Strategy Calculator
 - Phase 6 complete: Payment Schedule & Charts
+- Phase 6.5 complete: Paycheck Budget, Savings Goals, Status Snapshot & Settings
+- Phase 6.6 complete: Visual restyle + category/institution visual metadata and institution totals
 - Phase 7 not started: Wrap as a Real Android App (Capacitor)
 - Phase 8 not started: Publish to Google Play (Internal Testing)
 - Phase 9 not started: Cutover: Retire the Sheet
@@ -33,6 +35,10 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Bills and debts both carry billing_cycle + next_due_date; monthly debts still use due_day
 - Combined spendable total counts credit accounts as available credit (ADR-023)
 - Payment Schedule month check-offs are shared via payment_schedule_checkoffs
+- Savings goal current_amount is derived from cleared transactions, never stored (ADR-027)
+- Snapshot export uses html2canvas-pro (oklch-safe) with foreignObjectRendering; format from households.export_format (ADR-028)
+- Category icon/color and institution logo_url are stored fields; institution type icon/color is a code-side map (ADR-029, ADR-030)
+- Institution Current Balance / Current Due are computed on render, never stored (ADR-031)
 
 ## Important Rules
 - Never store passwords.
@@ -43,3 +49,6 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Variable bills track cycle_amount_due / cycle_paid_to_date; a cycle only rolls forward when fully paid.
 - Debts with known_finance_charge do not accrue interest_rate in payoff simulations.
 - Credit accounts with no credit_limit are excluded from the combined spendable total and flagged on the Dashboard.
+- Pay-time account picker lists ALL household accounts, defaulting to the account that last paid that bill/debt; never scoped to the vendor's institution (ADR-007 correction).
+- Institution logo_url is only ever suggested from login_url for the user to confirm — never written silently.
+- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url) must exist before those screens work.
