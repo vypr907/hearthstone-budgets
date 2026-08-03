@@ -24,3 +24,5 @@
 - One-page cap enforced: Overdue shows the bold "$X overdue across N items" total plus only the top 5 by dollar amount, then "+N more overdue — see full list in app."; Upcoming shows total + top 5 by due date with the same "+N more" note. Next paycheck stays a single line. Helpers SNAPSHOT_MAX_ROWS/topByAmount live in src/lib/snapshot.ts.
 - Overdue section carries a destructive border/tint accent matching the Bills status badges; upcoming stays neutral.
 - exportSnapshot now measures the capture node (width/windowWidth/its own background) instead of the body, so html2canvas reproduces the styled card layout rather than reflowing it.
+
+- Export capture library verified/cleaned: exportSnapshot uses html2canvas-pro exclusively; the unused html2canvas 1.4.1 dependency was removed from package.json (it cannot parse the app's oklch/lab theme tokens and stripped all styling from the PNG). Verified with a throwaway route + headless capture: exported PNG keeps card backgrounds/shadows, the app sans-serif font, and a filled colored ProgressRing arc at the correct percentage. src/routes/app.snapshot.tsx unchanged.
