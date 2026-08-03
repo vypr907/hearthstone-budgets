@@ -148,7 +148,15 @@ function InstitutionsPage() {
                   {g.label}
                 </p>
               ) : null}
-              {g.rows.map((i) => (
+              {g.rows.map((i) => {
+                const totals = computeInstitutionTotals(
+                  i.id,
+                  accounts,
+                  balances,
+                  bills,
+                  debts,
+                );
+                return (
                 <Card key={i.id} className="cursor-pointer" onClick={() => setDetail(i)}>
                   <CardContent className="flex items-start gap-3 p-3">
                     <InstitutionLogo logoUrl={i.logo_url} type={i.institution_type} />
@@ -173,6 +181,18 @@ function InstitutionsPage() {
                         </p>
                       ) : null}
                     </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-semibold">
+                        {totals.currentBalance == null
+                          ? "—"
+                          : formatMoney(totals.currentBalance)}
+                      </p>
+                      {totals.currentDue != null ? (
+                        <p className="text-xs text-muted-foreground">
+                          Due {formatMoney(totals.currentDue)}
+                        </p>
+                      ) : null}
+                    </div>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -186,7 +206,9 @@ function InstitutionsPage() {
                     </Button>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
+
             </div>
           ))}
         </div>
