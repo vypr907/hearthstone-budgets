@@ -4,3 +4,8 @@
 - New files: src/lib/income-hooks.ts, src/lib/paycheck-budget.ts, src/routes/app.paycheck.tsx. Types added to src/lib/supabase.ts.
 - Upgraded zod to v4 — the TanStack Start plugin required `.prefault()`, and the dev server refused to boot on zod 3.
 - Known issues: income_source_splits editing is intentionally not built; allocation categories fall back to all categories when none have domain='spending'.
+- Visual restyle pass (presentation only, no query/schema/logic changes): new design tokens in src/styles.css (--brand, --gradient-brand, --shadow-card, --item-1..6, soft neutral --background); cards are 16px radius, borderless with a soft shadow; bottom nav is icon-only with a filled rounded chip behind the active icon.
+- New src/components/viz.tsx: ProgressRing (48px), ItemBar (per-item rotating colors), EmojiIcon + emojiFor, itemColor palette.
+- Dashboard: single gradient hero card ("$X to go · Y% paid off" + spendable/obligations tiles + slim progress bar baked into the bottom); spendable breakdown, budget-vs-actual rings, spending bars, payoff bars and overdue rows restyled with bold amounts and small uppercase labels.
+- Bills, Debts, Accounts, Spending: emoji icons, bold/large dollar amounts, small gray uppercase labels, per-item recolored progress bars (Bills partial-payment, Debts payoff) and progress rings on Spending rows.
+- Known issue: no donut chart exists yet, so the "total centered in the donut hole" rule has nothing to apply to.

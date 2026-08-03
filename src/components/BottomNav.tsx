@@ -12,19 +12,22 @@ const items: Array<{ to: string; label: string; icon: typeof Home; exact?: boole
 
 export function BottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 pb-[env(safe-area-inset-bottom)]">
-      <ul className="mx-auto flex max-w-lg items-stretch justify-between">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 shadow-[0_-6px_20px_-12px_rgb(15_23_42/0.25)] backdrop-blur supports-[backdrop-filter]:bg-card/85 pb-[env(safe-area-inset-bottom)]">
+      <ul className="mx-auto flex max-w-lg items-stretch justify-between px-2">
         {items.map(({ to, label, icon: Icon, exact }) => (
           <li key={to} className="flex-1">
             <Link
               to={to as string}
+              aria-label={label}
+              title={label}
               activeOptions={{ exact: !!exact }}
-              activeProps={{ className: "text-primary" }}
-              inactiveProps={{ className: "text-muted-foreground" }}
-              className="flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors active:bg-accent/50"
+              activeProps={{ className: "[&>span]:bg-brand/12 [&>span]:text-brand" }}
+              inactiveProps={{ className: "[&>span]:text-muted-foreground" }}
+              className="flex h-16 flex-col items-center justify-center"
             >
-              <Icon className="h-6 w-6" />
-              <span>{label}</span>
+              <span className="grid h-11 w-11 place-items-center rounded-[14px] transition-colors">
+                <Icon className="h-6 w-6" />
+              </span>
             </Link>
           </li>
         ))}

@@ -44,6 +44,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
 import { format } from "date-fns";
+import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+
 
 const CYCLES: BillingCycle[] = [
   "monthly",
@@ -175,10 +177,19 @@ function DebtsPage() {
         />
 
         <div className="space-y-2">
-          {flat.map(({ header, d }) => (
+          {flat.map(({ header, d }, i) => {
+            const start = Number(d.starting_balance ?? 0) || Number(d.remaining_balance ?? 0);
+            const pctPaid =
+              start > 0
+                ? Math.min(
+                    100,
+                    Math.max(0, ((start - Number(d.remaining_balance)) / start) * 100),
+                  )
+                : 0;
+            return (
             <div key={d.id} className="space-y-2">
             {header ? (
-              <h2 className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h2 className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 {header}
               </h2>
             ) : null}
@@ -188,6 +199,7 @@ function DebtsPage() {
             >
               <CardContent className="p-3">
                 <div className="flex items-start gap-3">
+                  <EmojiIcon name={`${d.name} ${d.debt_type ?? ""}`} fallback="🏦" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{d.name}</p>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -223,20 +235,28 @@ function DebtsPage() {
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded bg-muted/40 p-2">
-                    <p className="text-xs text-muted-foreground">Remaining</p>
-                    <p className="font-semibold">
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="rounded-[12px] bg-muted/50 p-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Remaining
+                    </p>
+                    <p className="text-xl font-extrabold tabular-nums">
                       {formatMoney(Number(d.remaining_balance))}
                     </p>
                   </div>
-                  <div className="rounded bg-muted/40 p-2">
-                    <p className="text-xs text-muted-foreground">Min payment</p>
-                    <p className="font-semibold">
+                  <div className="rounded-[12px] bg-muted/50 p-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Min payment
+                    </p>
+                    <p className="text-xl font-extrabold tabular-nums">
                       {formatMoney(Number(d.minimum_payment))}
                     </p>
                   </div>
                 </div>
+                <ItemBar className="mt-2" value={pctPaid} color={itemColor(i)} />
+                <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {Math.round(pctPaid)}% paid off
+                </p>
                 <PayActions
                   payable={toPayable("debt", d)}
                   status={d.payment_status}
@@ -245,7 +265,9 @@ function DebtsPage() {
               </CardContent>
             </Card>
             </div>
-          ))}
+            );
+          })}
+
         </div>
       </div>
 

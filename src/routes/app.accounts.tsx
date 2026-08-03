@@ -37,6 +37,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Account, Transaction } from "@/lib/supabase";
 import { format } from "date-fns";
+import { EmojiIcon } from "@/components/viz";
+
 
 export const Route = createFileRoute("/app/accounts")({
   head: () => ({
@@ -208,6 +210,10 @@ function AccountsPage() {
               <Card key={a.id}>
                 <CardContent className="p-3">
                   <div className="flex items-start gap-3">
+                    <EmojiIcon
+                      name={`${a.name} ${a.account_type ?? ""}`}
+                      fallback="🏛️"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{a.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
@@ -230,15 +236,24 @@ function AccountsPage() {
                     </Button>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    <div className="rounded-md border p-2">
-                      <p className="text-xs text-muted-foreground">Current</p>
-                      <p className="font-semibold">{formatMoney(b?.current ?? 0)}</p>
+                    <div className="rounded-[12px] bg-muted/50 p-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        Current
+                      </p>
+                      <p className="text-xl font-extrabold tabular-nums">
+                        {formatMoney(b?.current ?? 0)}
+                      </p>
                     </div>
-                    <div className="rounded-md border p-2">
-                      <p className="text-xs text-muted-foreground">Spendable</p>
-                      <p className="font-semibold">{formatMoney(b?.spendable ?? 0)}</p>
+                    <div className="rounded-[12px] bg-muted/50 p-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        Spendable
+                      </p>
+                      <p className="text-xl font-extrabold tabular-nums">
+                        {formatMoney(b?.spendable ?? 0)}
+                      </p>
                     </div>
                   </div>
+
                   <RecentActivity rows={recentByAccount[a.id] ?? []} />
                   <Button
                     variant="outline"
