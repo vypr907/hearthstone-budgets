@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as CaptestRouteImport } from './routes/captest'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -28,6 +29,11 @@ import { Route as AppDebtStrategyRouteImport } from './routes/app.debt-strategy'
 import { Route as AppBillsRouteImport } from './routes/app.bills'
 import { Route as AppAccountsRouteImport } from './routes/app.accounts'
 
+const CaptestRoute = CaptestRouteImport.update({
+  id: '/captest',
+  path: '/captest',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/captest': typeof CaptestRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/captest': typeof CaptestRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/captest': typeof CaptestRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
@@ -185,6 +194,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
+    | '/captest'
     | '/app/accounts'
     | '/app/bills'
     | '/app/debt-strategy'
@@ -204,6 +214,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/captest'
     | '/app/accounts'
     | '/app/bills'
     | '/app/debt-strategy'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
+    | '/captest'
     | '/app/accounts'
     | '/app/bills'
     | '/app/debt-strategy'
@@ -245,10 +257,18 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
+  CaptestRoute: typeof CaptestRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/captest': {
+      id: '/captest'
+      path: '/captest'
+      fullPath: '/captest'
+      preLoaderRoute: typeof CaptestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -420,17 +440,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
+  CaptestRoute: CaptestRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

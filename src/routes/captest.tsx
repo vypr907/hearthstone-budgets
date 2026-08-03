@@ -37,8 +37,9 @@ function CapTest() {
         </Card>
         <Card className="shadow-md">
           <CardContent className="p-4 space-y-2">
-            <ItemBar label="Groceries" value={420} max={600} color={itemColor(2)} />
-            <ItemBar label="Utilities" value={180} max={600} color={itemColor(3)} />
+            <ItemBar value={0.7} color={itemColor(2)} />
+            <ItemBar value={0.3} color={itemColor(3)} />
+
           </CardContent>
         </Card>
       </div>
