@@ -18,27 +18,39 @@ function TestSnapshotPage() {
     (async () => {
       const { default: html2canvas } = await import("html2canvas-pro");
       const node = nodeRef.current!;
-      const rect = node.getBoundingClientRect();
-      console.log("node dims:", {
-        offsetWidth: node.offsetWidth,
-        offsetHeight: node.offsetHeight,
-        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-        offsetLeft: node.offsetLeft,
-        offsetTop: node.offsetTop,
+      const clone = node.cloneNode(true) as HTMLElement;
+      const wrapper = document.createElement("div");
+      wrapper.style.position = "fixed";
+      wrapper.style.top = "0";
+      wrapper.style.left = "0";
+      wrapper.style.width = `${node.offsetWidth}px`;
+      wrapper.style.height = `${node.offsetHeight}px`;
+      wrapper.style.zIndex = "-9999";
+      wrapper.style.overflow = "hidden";
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      console.log("clone dims:", {
+        offsetWidth: clone.offsetWidth,
+        offsetHeight: clone.offsetHeight,
+        offsetLeft: clone.offsetLeft,
+        offsetTop: clone.offsetTop,
       });
-      const canvas = await html2canvas(node, {
+
+      const canvas = await html2canvas(clone, {
         scale: 2,
         useCORS: true,
         foreignObjectRendering: true,
-        width: node.offsetWidth,
-        height: node.offsetHeight,
-        windowWidth: node.offsetWidth,
+        width: clone.offsetWidth,
+        height: clone.offsetHeight,
+        windowWidth: clone.offsetWidth,
         x: 0,
         y: 0,
         scrollX: 0,
         scrollY: 0,
         backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
       });
+      document.body.removeChild(wrapper);
       setDataUrl(canvas.toDataURL("image/png"));
     })();
   }, []);
