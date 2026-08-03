@@ -142,47 +142,76 @@ function SnapshotPage() {
           Export as {format.toUpperCase()}
         </Button>
 
-        <div ref={nodeRef} className="space-y-3 rounded-2xl bg-background p-1">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Status Snapshot
-              </p>
-              <h2 className="text-xl font-bold tracking-tight">
-                {household?.name || "Household"}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                {now.toLocaleString("en-US", {
-                  dateStyle: "full",
-                  timeStyle: "short",
-                })}
-              </p>
+        <div
+          ref={nodeRef}
+          className="space-y-3 rounded-2xl bg-background p-3"
+          style={{ boxShadow: "var(--shadow-card)" }}
+        >
+          <Card
+            className="border-0 text-brand-foreground"
+            style={{ background: "var(--gradient-brand)", boxShadow: "var(--shadow-card)" }}
+          >
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                  Status Snapshot
+                </p>
+                <h2 className="truncate text-2xl font-bold tracking-tight">
+                  {household?.name || "Household"}
+                </h2>
+                <p className="text-xs opacity-80">
+                  {now.toLocaleString("en-US", {
+                    dateStyle: "full",
+                    timeStyle: "short",
+                  })}
+                </p>
+                <p className="mt-2 text-3xl font-bold tabular-nums">
+                  {formatMoney(snap.overdueTotal + snap.upcomingTotal)}
+                </p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                  Due now + next 14 days
+                </p>
+              </div>
+              <ProgressRing
+                value={overduePct}
+                size={56}
+                color="var(--destructive)"
+                label={`${Math.round(overduePct)}% of the total is overdue`}
+              />
             </CardContent>
           </Card>
 
           {snap.overdue.length > 0 && (
-            <Card className="border border-destructive/30">
+            <Card
+              className="border-2 border-destructive/40 bg-destructive/5"
+              style={{ boxShadow: "var(--shadow-card)" }}
+            >
               <CardContent className="p-4">
-                <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline justify-between gap-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-destructive">
-                    Overdue · {snap.overdue.length}
+                    Overdue
                   </p>
                   <p className="text-2xl font-bold tabular-nums text-destructive">
                     {formatMoney(snap.overdueTotal)}
                   </p>
                 </div>
-                <div className="mt-2 divide-y divide-border/40">
-                  {snap.overdue.map((r, i) => (
+                <p className="text-sm font-bold text-destructive">
+                  {formatMoney(snap.overdueTotal)} overdue across {snap.overdue.length} item
+                  {snap.overdue.length === 1 ? "" : "s"}
+                </p>
+                <div className="mt-1 divide-y divide-destructive/15">
+                  {overdueTop.map((r, i) => (
                     <Row key={`${r.kind}-${r.id}`} row={r} index={i} accent />
                   ))}
                 </div>
+                <MoreNote count={snap.overdue.length - overdueTop.length} tone="overdue" />
               </CardContent>
             </Card>
           )}
 
-          <Card>
+          <Card style={{ boxShadow: "var(--shadow-card)" }}>
             <CardContent className="p-4">
-              <div className="flex items-baseline justify-between">
+              <div className="flex items-baseline justify-between gap-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Next 14 days · {snap.upcoming.length}
                 </p>
@@ -195,14 +224,18 @@ function SnapshotPage() {
                   Nothing due in the next two weeks.
                 </p>
               ) : (
-                <div className="mt-2 divide-y divide-border/40">
-                  {snap.upcoming.map((r, i) => (
-                    <Row key={`${r.kind}-${r.id}`} row={r} index={i} />
-                  ))}
-                </div>
+                <>
+                  <div className="mt-1 divide-y divide-border/40">
+                    {upcomingTop.map((r, i) => (
+                      <Row key={`${r.kind}-${r.id}`} row={r} index={i} />
+                    ))}
+                  </div>
+                  <MoreNote count={snap.upcoming.length - upcomingTop.length} tone="upcoming" />
+                </>
               )}
             </CardContent>
           </Card>
+
 
           <Card>
             <CardContent className="p-4">
