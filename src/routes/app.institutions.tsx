@@ -242,7 +242,16 @@ function InstitutionDetail({
   const { data: instCats = {} } = useInstitutionCategories();
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
+  const { data: transactions = [] } = useTransactions();
+  const balances = computeBalances(accounts, latest, transactions);
   if (!institution) return null;
+  const totals = computeInstitutionTotals(
+    institution.id,
+    accounts,
+    balances,
+    bills,
+    debts,
+  );
   const catIds = instCats[institution.id] ?? [];
   const catNames = categories.filter((c) => catIds.includes(c.id));
   const linked = accounts.filter((a) => a.institution_id === institution.id);
@@ -289,6 +298,20 @@ function InstitutionDetail({
                   "—"
                 )
               }
+            />
+          </DetailGrid>
+          <DetailGrid>
+            <DetailItem
+              label="Current balance"
+              value={
+                totals.currentBalance == null
+                  ? "—"
+                  : formatMoney(totals.currentBalance)
+              }
+            />
+            <DetailItem
+              label="Current due"
+              value={totals.currentDue == null ? "—" : formatMoney(totals.currentDue)}
             />
           </DetailGrid>
           <div>
