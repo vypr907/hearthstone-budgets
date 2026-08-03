@@ -445,29 +445,33 @@ function Dashboard() {
         {spendingByCategory.rows.length > 0 && (
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Spending by category · this month
               </p>
-              <p className="mt-1 text-2xl font-bold">
+              <p className="mt-1 text-3xl font-extrabold tabular-nums">
                 {formatMoney(spendingByCategory.total)}
               </p>
               <div className="mt-3 space-y-2">
-                {spendingByCategory.rows.map((r) => (
+                {spendingByCategory.rows.map((r, i) => (
                   <div key={r.id}>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="truncate">{r.name}</span>
-                      <span className="tabular-nums text-muted-foreground">
+                      <span className="flex min-w-0 items-center gap-1.5 truncate">
+                        <span aria-hidden>{emojiFor(r.name)}</span>
+                        <span className="truncate">{r.name}</span>
+                      </span>
+                      <span className="font-bold tabular-nums">
                         {formatMoney(r.amount)}
                       </span>
                     </div>
-                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary"
-                        style={{
-                          width: `${spendingByCategory.max ? (r.amount / spendingByCategory.max) * 100 : 0}%`,
-                        }}
-                      />
-                    </div>
+                    <ItemBar
+                      className="mt-1"
+                      color={itemColor(i)}
+                      value={
+                        spendingByCategory.max
+                          ? (r.amount / spendingByCategory.max) * 100
+                          : 0
+                      }
+                    />
                   </div>
                 ))}
               </div>
@@ -478,24 +482,25 @@ function Dashboard() {
         {payoffProgress.length > 0 && (
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Payoff progress
               </p>
               <div className="mt-3 space-y-3">
-                {payoffProgress.map((d) => (
+                {payoffProgress.map((d, i) => (
                   <div key={d.id}>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="truncate">{d.name}</span>
-                      <span className="tabular-nums text-muted-foreground">
-                        {Math.round(d.pct)}% · {formatMoney(d.remaining)} left
+                      <span className="flex min-w-0 items-center gap-1.5 truncate">
+                        <span aria-hidden>{emojiFor(d.name, "🏦")}</span>
+                        <span className="truncate">{d.name}</span>
+                      </span>
+                      <span className="shrink-0 font-bold tabular-nums">
+                        {formatMoney(d.remaining)}
                       </span>
                     </div>
-                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary"
-                        style={{ width: `${d.pct}%` }}
-                      />
-                    </div>
+                    <ItemBar className="mt-1" value={d.pct} color={itemColor(i)} />
+                    <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                      {Math.round(d.pct)}% paid off
+                    </p>
                   </div>
                 ))}
               </div>
@@ -505,22 +510,31 @@ function Dashboard() {
 
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
               Total monthly obligations
             </p>
-            <p className="mt-1 text-3xl font-bold">{formatMoney(totalObligations)}</p>
+            <p className="mt-1 text-3xl font-extrabold tabular-nums">
+              {formatMoney(totalObligations)}
+            </p>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-xs text-muted-foreground">Monthly bills</p>
-                <p className="text-lg font-semibold">{formatMoney(totalBills)}</p>
+              <div className="rounded-[12px] bg-muted/60 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Monthly bills
+                </p>
+                <p className="text-xl font-bold tabular-nums">{formatMoney(totalBills)}</p>
               </div>
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-xs text-muted-foreground">Monthly debts</p>
-                <p className="text-lg font-semibold">{formatMoney(totalDebtPayments)}</p>
+              <div className="rounded-[12px] bg-muted/60 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Monthly debts
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {formatMoney(totalDebtPayments)}
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
+
 
         <div>
           <div className="mb-2 flex items-center gap-2">
