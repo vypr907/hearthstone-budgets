@@ -287,12 +287,14 @@ function SpendingPage() {
           New budget item
         </Button>
 
-        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+        <div className="grid grid-cols-[3rem_1fr_auto_auto_auto] gap-x-3 px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          <span />
           <span>Item</span>
           <span className="w-20 text-right">Budget</span>
           <span className="w-20 text-right">Actual</span>
           <span className="w-20 text-right">3-mo avg</span>
         </div>
+
 
         {isLoading ? (
           <p className="p-4 text-sm text-muted-foreground">Loading…</p>
