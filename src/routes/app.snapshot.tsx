@@ -43,23 +43,47 @@ export const Route = createFileRoute("/app/snapshot")({
 function Row({ row, index, accent }: { row: SnapshotRow; index: number; accent?: boolean }) {
   const days = Math.abs(row.daysDiff);
   return (
-    <div className="flex items-center gap-3 py-2">
-      <EmojiIcon name={row.name} fallback={row.kind === "debt" ? "🏦" : "🧾"} />
+    <div className="flex items-center gap-3 py-2.5">
+      <EmojiIcon
+        name={row.name}
+        fallback={row.kind === "debt" ? "🏦" : "🧾"}
+        className={accent ? "bg-destructive/10" : undefined}
+      />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{row.name}</p>
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           {accent
             ? `${days} day${days === 1 ? "" : "s"} overdue`
             : `${formatDayLabel(row.dueDate)} · in ${days} day${days === 1 ? "" : "s"}`}
         </p>
-        <ItemBar value={accent ? 100 : Math.max(8, 100 - days * 7)} color={accent ? "var(--destructive)" : itemColor(index)} className="mt-1.5" />
+        <ItemBar
+          value={accent ? 100 : Math.max(8, 100 - days * 7)}
+          color={accent ? "var(--destructive)" : itemColor(index)}
+          className="mt-1.5"
+        />
       </div>
-      <p className={`text-base font-bold tabular-nums ${accent ? "text-destructive" : ""}`}>
+      <p
+        className={`text-base font-bold tabular-nums ${accent ? "text-destructive" : "text-foreground"}`}
+      >
         {formatMoney(row.amount)}
       </p>
     </div>
   );
 }
+
+function MoreNote({ count, tone }: { count: number; tone: "overdue" | "upcoming" }) {
+  if (count <= 0) return null;
+  return (
+    <p
+      className={`pt-2 text-[11px] font-semibold uppercase tracking-wide ${
+        tone === "overdue" ? "text-destructive" : "text-muted-foreground"
+      }`}
+    >
+      +{count} more {tone} — see full list in app.
+    </p>
+  );
+}
+
 
 function SnapshotPage() {
   const { data: bills = [] } = useBills();
