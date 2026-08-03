@@ -72,7 +72,24 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
+  /* Soft neutral page background; cards stay pure white. */
+  --background: oklch(0.972 0.004 247.9);
+  /* Brand accent used for the hero gradient and the active nav chip. */
+  --brand: oklch(0.62 0.16 152);
+  --brand-foreground: oklch(0.99 0.005 150);
+  --gradient-brand: linear-gradient(
+    135deg,
+    oklch(0.66 0.16 152),
+    oklch(0.52 0.14 165)
+  );
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px -12px rgb(15 23 42 / 0.18);
+  --item-1: oklch(0.62 0.16 152);
+  --item-2: oklch(0.62 0.18 262);
+  --item-3: oklch(0.68 0.17 42);
+  --item-4: oklch(0.6 0.2 340);
+  --item-5: oklch(0.62 0.16 200);
+  --item-6: oklch(0.62 0.18 300);
+
   --foreground: oklch(0.129 0.042 264.695);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.129 0.042 264.695);
