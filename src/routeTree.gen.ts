@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TestSnapshotRouteImport } from './routes/test-snapshot'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -29,11 +28,6 @@ import { Route as AppDebtStrategyRouteImport } from './routes/app.debt-strategy'
 import { Route as AppBillsRouteImport } from './routes/app.bills'
 import { Route as AppAccountsRouteImport } from './routes/app.accounts'
 
-const TestSnapshotRoute = TestSnapshotRouteImport.update({
-  id: '/test-snapshot',
-  path: '/test-snapshot',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -129,7 +123,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
-  '/test-snapshot': typeof TestSnapshotRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
@@ -149,7 +142,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/test-snapshot': typeof TestSnapshotRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
@@ -171,7 +163,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
-  '/test-snapshot': typeof TestSnapshotRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
@@ -194,7 +185,6 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
-    | '/test-snapshot'
     | '/app/accounts'
     | '/app/bills'
     | '/app/debt-strategy'
@@ -214,7 +204,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
-    | '/test-snapshot'
     | '/app/accounts'
     | '/app/bills'
     | '/app/debt-strategy'
@@ -235,7 +224,6 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
-    | '/test-snapshot'
     | '/app/accounts'
     | '/app/bills'
     | '/app/debt-strategy'
@@ -257,18 +245,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
-  TestSnapshotRoute: typeof TestSnapshotRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/test-snapshot': {
-      id: '/test-snapshot'
-      path: '/test-snapshot'
-      fullPath: '/test-snapshot'
-      preLoaderRoute: typeof TestSnapshotRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -440,8 +420,17 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
-  TestSnapshotRoute: TestSnapshotRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
