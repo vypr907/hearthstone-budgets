@@ -17,19 +17,39 @@ function TestSnapshotPage() {
     (async () => {
       const { default: html2canvas } = await import("html2canvas-pro");
       const node = nodeRef.current!;
-      const canvas = await html2canvas(node, {
-        scale: 2,
-        useCORS: true,
-        foreignObjectRendering: true,
-        width: node.offsetWidth,
-        height: node.offsetHeight,
-        windowWidth: node.offsetWidth,
-        x: 0,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0,
-        backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
-      });
+
+      // Mirror the clone-to-fixed-origin technique from src/lib/snapshot.ts
+      const clone = node.cloneNode(true) as HTMLElement;
+      const wrapper = document.createElement("div");
+      wrapper.style.position = "fixed";
+      wrapper.style.top = "0";
+      wrapper.style.left = "0";
+      wrapper.style.width = `${node.offsetWidth}px`;
+      wrapper.style.height = `${node.offsetHeight}px`;
+      wrapper.style.zIndex = "-9999";
+      wrapper.style.overflow = "hidden";
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await html2canvas(clone, {
+          scale: 2,
+          useCORS: true,
+          foreignObjectRendering: true,
+          width: clone.offsetWidth,
+          height: clone.offsetHeight,
+          windowWidth: clone.offsetWidth,
+          x: 0,
+          y: 0,
+          scrollX: 0,
+          scrollY: 0,
+          backgroundColor: getComputedStyle(node).backgroundColor || "#ffffff",
+        });
+      } finally {
+        document.body.removeChild(wrapper);
+      }
+
       if (!cancelled) {
         setDataUrl(canvas.toDataURL("image/png"));
       }
