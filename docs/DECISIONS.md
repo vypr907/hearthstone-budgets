@@ -572,3 +572,40 @@ Implementation notes:
 - "Upcoming" window is a fixed 14 days for this first version, not user-configurable.
 
 Status: Decided 2026-08-03. Implemented 2026-08-03 (/app/snapshot + /app/settings). Uses html2canvas-pro (drop-in html2canvas fork) because html2canvas 1.4.1 cannot parse the app's oklch color tokens.
+
+## ADR-029: Category Visual Metadata (Icon, Color)
+
+Decision:
+Add `categories.icon text` and `categories.color text` (hex or Tailwind token).
+Both nullable — existing categories without a value fall back to a default
+icon/gray color in the UI rather than requiring a backfill.
+
+Reason:
+Matches the icon/color treatment already used for institution_type and the
+visual language established in ADR-026. Purely additive display metadata,
+no impact on category matching/grouping logic (ADR-011, ADR-012).
+
+Status: Decided 2026-08-03. Not yet implemented.
+
+
+## ADR-030: Institution Logo Field
+
+Decision:
+Add `institutions.logo_url text` (nullable). Auto-populate on institution
+create/edit by deriving a favicon URL from the institution's existing
+`login_url` domain via Google's public favicon service
+(`https://www.google.com/s2/favicons?domain={domain}&sz=128`) — no API key,
+no signup, no rate-limit concerns for a 2-person app's request volume.
+User can override with a manually pasted `logo_url` at any time.
+
+Reason:
+Clearbit's free Logo API (the common go-to for this) was permanently shut
+down December 8, 2025 — no longer usable. Paid alternatives (logo.dev,
+Brandfetch) require API key management and signup for what's a cosmetic,
+low-stakes feature in a private household app. Google's favicon endpoint is
+lower-resolution (16-128px, not a full vector logo) but requires zero setup
+and has no usage limits relevant here. If visual quality proves unsatisfying
+later, this can be swapped for a keyed service without a schema change —
+logo_url stays a plain URL string either way.
+
+Status: Decided 2026-08-03. Not yet implemented.
