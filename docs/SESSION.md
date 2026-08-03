@@ -42,3 +42,14 @@
   Debts in the detail view.
   Known issue: the three new columns must exist in Supabase (`categories.icon`,
   `categories.color`, `institutions.logo_url`) — schema is managed outside the app.
+
+- ADR-031: Institutions list and detail now show computed Current Balance and
+  Current Due. Institutions with linked accounts sum those accounts' current
+  balance (balances.ts formula) and show no due; institutions with only bills
+  and/or debts sum open debt balances plus open bill-cycle amounts for balance,
+  and unpaid bill remainder plus minimum payments on debts due today or earlier
+  for due. Nothing linked renders "—". New helper `computeInstitutionTotals()`
+  in src/lib/balances.ts; nothing is stored.
+  Known issue: "currently due" for debts is defined as due date <= today, so a
+  debt due later this month contributes to Current Balance but not Current Due.
+
