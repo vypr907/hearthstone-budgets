@@ -8,6 +8,7 @@ import {
   PiggyBank,
   Receipt,
   TrendingDown,
+  Wallet,
 } from "lucide-react";
 
 export const Route = createFileRoute("/app/more")({
