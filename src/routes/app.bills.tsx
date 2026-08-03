@@ -163,10 +163,20 @@ function BillsPage() {
                   {label}
                 </h2>
               )}
-              {items.map((b) => (
+              {items.map((b, i) => {
+                const due = billCycleDue(b);
+                const paid = Number(b.cycle_paid_to_date ?? 0);
+                const pct = due > 0 ? Math.min(100, (paid / due) * 100) : 0;
+                return (
                 <Card key={b.id} className="cursor-pointer" onClick={() => setDetail(b)}>
                   <CardContent className="p-3">
                     <div className="flex items-start gap-3">
+                      <EmojiIcon
+                        name={`${b.name} ${
+                          (b.category_id && categoryName[b.category_id]) || ""
+                        }`}
+                        fallback="🧾"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{b.name}</p>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -186,7 +196,9 @@ function BillsPage() {
                           ) : null}
                         </div>
                       </div>
-                      <p className="shrink-0 font-semibold">{formatMoney(Number(b.amount))}</p>
+                      <p className="shrink-0 text-lg font-extrabold tabular-nums">
+                        {formatMoney(Number(b.amount))}
+                      </p>
 
                       <Button
                         size="icon"
@@ -200,6 +212,9 @@ function BillsPage() {
                         <Pencil className="h-4 w-4" />
                       </Button>
                     </div>
+                    {paid > 0 ? (
+                      <ItemBar className="mt-2" value={pct} color={itemColor(i)} />
+                    ) : null}
                     <PayActions
                       payable={toPayable("bill", b)}
                       status={b.payment_status}
@@ -207,7 +222,9 @@ function BillsPage() {
                     />
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
+
             </div>
           ))}
         </div>
