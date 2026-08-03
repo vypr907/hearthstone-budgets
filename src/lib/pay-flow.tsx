@@ -79,20 +79,18 @@ export function usePayFlow() {
     }
   }
 
+  /** Account that most recently paid this specific bill/debt, if any. */
+  function lastPaidAccountId(payable: Payable): string | null {
+    const match = transactions.find((t) =>
+      payable.kind === "bill"
+        ? t.linked_bill_id === payable.id
+        : t.linked_debt_id === payable.id,
+    );
+    return match?.account_id ?? null;
+  }
+
   function resolveAccount(payable: Payable, action: Action, amount?: number) {
-    const matches = payable.institution_id
-      ? accounts.filter((a) => a.institution_id === payable.institution_id)
-      : [];
-    if (matches.length === 0) {
-      toast.error(
-        `No account linked to ${payable.name}'s institution — add an account to that institution first.`,
-      );
-      return;
-    }
-    if (matches.length === 1) {
-      void perform(payable, action, matches[0].id, amount);
-      return;
-    }
+    // Any household account can pay any bill/debt (ADR-007 correction 2026-08-03).
     setChoice({ payable, action, amount });
   }
 
