@@ -27,6 +27,10 @@ export const DEFAULT_CATEGORY_COLOR = "#9ca3af";
 /** Neutral fallback when a category has no icon set. */
 export const DEFAULT_CATEGORY_ICON = "🏷️";
 
+/** ADR-032: marks a debt serviced by payroll/HSA deduction. */
+export const PAYCHECK_DEDUCTION_ICON = "💼";
+
+
 /** Emoji choices offered by the category icon picker. */
 export const CATEGORY_ICONS = [
   "🏷️", "🛒", "🍽️", "⛽", "🚗", "🏠", "💡", "💧", "📱", "🌐",
