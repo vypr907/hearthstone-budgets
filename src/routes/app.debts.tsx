@@ -7,7 +7,6 @@ import {
   useCategories,
   useAccounts,
   useTransactions,
-  useInstitutions,
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
