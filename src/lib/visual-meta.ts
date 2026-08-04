@@ -27,6 +27,10 @@ export const DEFAULT_CATEGORY_COLOR = "#9ca3af";
 /** Neutral fallback when a category has no icon set. */
 export const DEFAULT_CATEGORY_ICON = "🏷️";
 
+/** ADR-032: marks a debt serviced by payroll/HSA deduction. */
+export const PAYCHECK_DEDUCTION_ICON = "💼";
+
+
 /** Emoji choices offered by the category icon picker. */
 export const CATEGORY_ICONS = [
   "🏷️", "🛒", "🍽️", "⛽", "🚗", "🏠", "💡", "💧", "📱", "🌐",
@@ -87,7 +91,25 @@ export function institutionTypeVisual(type: string | null | undefined) {
   return { icon: emojiFor(type, "🏢"), color: DEFAULT_CATEGORY_COLOR };
 }
 
+/* ---------------- Account types (code-side map, no schema) ---------------- */
+
+const ACCOUNT_TYPE_META: Record<string, { icon: string; color: string }> = {
+  checking: { icon: "💳", color: "#3b82f6" },
+  savings: { icon: "🐷", color: "#22c55e" },
+  credit: { icon: "💳", color: "#a855f7" },
+  investment: { icon: "📈", color: "#14b8a6" },
+  retirement: { icon: "🏖️", color: "#f59e0b" },
+  cash: { icon: "💵", color: "#64748b" },
+};
+
+/** Icon + colour for an account type, same pattern as institutions. */
+export function accountTypeVisual(type: string | null | undefined) {
+  const key = (type ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return ACCOUNT_TYPE_META[key] ?? { icon: "🏦", color: DEFAULT_CATEGORY_COLOR };
+}
+
 /* ---------------- Logo suggestion (ADR-030) ---------------- */
+
 
 /** Extract a bare domain from a possibly-scheme-less URL string. */
 export function domainFromUrl(url: string | null | undefined) {

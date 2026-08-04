@@ -18,8 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAccounts, useCategories, useUpsertTransaction } from "@/lib/data-hooks";
+import {
+  useAccounts,
+  useCategories,
+  useInstitutions,
+  useUpsertTransaction,
+} from "@/lib/data-hooks";
+import { accountLabel } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
+
 
 function todayISO() {
   const n = new Date();
@@ -50,6 +57,14 @@ export function AddTransactionFab() {
     () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
     [categories],
   );
+
+  const { data: institutions = [] } = useInstitutions();
+  const institutionName = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const i of institutions) m[i.id] = i.name;
+    return m;
+  }, [institutions]);
+
 
   function reset() {
     setAccountId("");
@@ -113,10 +128,11 @@ export function AddTransactionFab() {
                 <SelectContent>
                   {accounts.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
-                      {a.name}
+                      {accountLabel(a, institutionName[a.institution_id ?? ""])}
                     </SelectItem>
                   ))}
                 </SelectContent>
+
               </Select>
             </div>
 

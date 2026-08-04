@@ -33,3 +33,11 @@ with check (exists (select 1 from public.household_members m
 
 - [x] ADR-029 category icon/colour metadata
 - [x] ADR-030 institution logo_url + type icons, grouping, linked bills/debts
+- [x] ADR-031 institution-level balance & due aggregation
+- [x] ADR-032 paycheck-deduction debts (form toggle, badges, paycheck exclusion)
+- [x] Debts: auto date_paid_off, "Show paid off" toggle, title-cased cycles, recent transactions
+- [x] ADR-033 monthlyEquivalent(), envelope auto-creation, goal account_id
+- [x] Account labels + pay-time picker polish (icon, logo, last 4)
+- [ ] ADR-033 bill card "Add to envelope" quick-transaction action
+- [ ] ADR-034 Dashboard hero rework, budget/actual bills split, owed-this-period card, Net Worth to bottom
+- [ ] Snapshot: balances by account type, pay-period progress bar, buildSnapshotSummary()

@@ -6,6 +6,7 @@ import {
   useUpsertDebt,
   useCategories,
   useAccounts,
+  useTransactions,
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
@@ -45,6 +46,8 @@ import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
 import { format } from "date-fns";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+import { Switch } from "@/components/ui/switch";
+import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel } from "@/lib/visual-meta";
 
 
 const CYCLES: BillingCycle[] = [
@@ -87,6 +90,7 @@ function DebtsPage() {
   const [sort, setSort] = useState("priority");
   const [group, setGroup] = useState("none");
   const [cats, setCats] = useState<string[]>([]);
+  const [showPaidOff, setShowPaidOff] = useState(false);
 
   const categoryName = useMemo(() => {
     const m: Record<string, string> = {};
@@ -94,8 +98,11 @@ function DebtsPage() {
     return m;
   }, [categories]);
 
+  const isPaidOff = (d: Debt) => Number(d.remaining_balance ?? 0) <= 0;
+
   const rows = useMemo(() => {
     let out = debts;
+    if (!showPaidOff) out = out.filter((d) => !isPaidOff(d));
     if (cats.length) {
       out = out.filter((d) =>
         d.category_id ? cats.includes(d.category_id) : cats.includes("none"),
@@ -106,6 +113,8 @@ function DebtsPage() {
       out = out.filter((d) => d.name.toLowerCase().includes(t));
     }
     return [...out].sort((a, b) => {
+      // Paid-off debts always sink to the bottom of the list.
+      if (isPaidOff(a) !== isPaidOff(b)) return isPaidOff(a) ? 1 : -1;
       if (sort === "category")
         return (categoryName[a.category_id ?? ""] ?? "zzz").localeCompare(
           categoryName[b.category_id ?? ""] ?? "zzz",
@@ -118,7 +127,7 @@ function DebtsPage() {
         return Number(b.remaining_balance || 0) - Number(a.remaining_balance || 0);
       return (a.priority_order ?? 9999) - (b.priority_order ?? 9999);
     });
-  }, [debts, cats, q, sort, categoryName]);
+  }, [debts, cats, q, sort, categoryName, showPaidOff]);
 
   const flat = useMemo(() => {
     if (group === "none") return rows.map((d) => ({ header: "", d }));
@@ -176,6 +185,20 @@ function DebtsPage() {
           onSelectedCategoriesChange={setCats}
         />
 
+        <div className="flex items-center justify-between rounded-md border p-3">
+          <div className="pr-3">
+            <Label htmlFor="show-paid-off">Show paid off</Label>
+            <p className="text-xs text-muted-foreground">
+              Include debts with a zero balance, sorted to the bottom.
+            </p>
+          </div>
+          <Switch
+            id="show-paid-off"
+            checked={showPaidOff}
+            onCheckedChange={setShowPaidOff}
+          />
+        </div>
+
         <div className="space-y-2">
           {flat.map(({ header, d }, i) => {
             const start = Number(d.starting_balance ?? 0) || Number(d.remaining_balance ?? 0);
@@ -204,14 +227,23 @@ function DebtsPage() {
                     <p className="truncate font-medium">{d.name}</p>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <span>{d.debt_type || "Debt"}</span>
-                      {(d.billing_cycle ?? "monthly") === "monthly"
+                      {isPaidOff(d) ? (
+                        <span>
+                          · paid off{d.date_paid_off ? ` ${d.date_paid_off.slice(0, 10)}` : ""}
+                        </span>
+                      ) : (d.billing_cycle ?? "monthly") === "monthly"
                         ? d.due_day
                           ? <span>· day {d.due_day}</span>
                           : null
                         : d.next_due_date
                           ? <span>· due {d.next_due_date.slice(0, 10)}</span>
                           : null}
-                      <span>· {d.billing_cycle ?? "monthly"}</span>
+                      <span>· {formatTypeLabel(d.billing_cycle ?? "monthly")}</span>
+                      {d.is_paycheck_deduction ? (
+                        <Badge variant="secondary" title="Paid via paycheck/HSA deduction">
+                          {PAYCHECK_DEDUCTION_ICON} Paycheck deduction
+                        </Badge>
+                      ) : null}
                       {d.interest_rate != null ? (
                         <span>· {Number(d.interest_rate)}% APR</span>
                       ) : null}
@@ -329,7 +361,22 @@ function DebtDetailDialog({
               label="Known finance charge"
               value={debt.known_finance_charge}
             />
-            <DetailItem label="Billing cycle" value={debt.billing_cycle ?? "monthly"} />
+            <DetailItem
+              label="Billing cycle"
+              value={formatTypeLabel(debt.billing_cycle ?? "monthly")}
+            />
+            <DetailItem
+              label="Paycheck deduction"
+              value={
+                debt.is_paycheck_deduction ? (
+                  <Badge variant="secondary">
+                    {PAYCHECK_DEDUCTION_ICON} Paid via paycheck/HSA
+                  </Badge>
+                ) : (
+                  "No"
+                )
+              }
+            />
             {(debt.billing_cycle ?? "monthly") === "monthly" ? (
               <DetailItem
                 label="Due day"
@@ -377,6 +424,8 @@ function DebtDetailDialog({
           <DetailText label="Notes" value={debt.notes} />
           <PayActions payable={toPayable("debt", debt)} status={debt.payment_status} />
 
+          <RecentDebtTransactions debtId={debt.id} />
+
           {debt.date_paid_off && (
             <div>
               <p className="text-xs text-muted-foreground">Date paid off</p>
@@ -422,6 +471,7 @@ function DebtDialog({
   const [nextDue, setNextDue] = useState("");
   const [debtType, setDebtType] = useState("");
   const [notes, setNotes] = useState("");
+  const [deduction, setDeduction] = useState(false);
 
   const open = debt !== null;
   const isEdit = !!debt?.id;
@@ -438,6 +488,7 @@ function DebtDialog({
     setNextDue(debt?.next_due_date ? debt.next_due_date.slice(0, 10) : "");
     setDebtType(debt?.debt_type ?? "");
     setNotes(debt?.notes ?? "");
+    setDeduction(debt?.is_paycheck_deduction === true);
   }
   if (!open && lastKey !== "") setLastKey("");
 
@@ -458,6 +509,7 @@ function DebtDialog({
         next_due_date: cycle === "monthly" ? debt?.next_due_date ?? null : nextDue || null,
         debt_type: debtType || null,
         notes: notes || null,
+        is_paycheck_deduction: deduction,
       });
       toast.success(isEdit ? "Debt updated" : "Debt added");
       onClose();
@@ -561,12 +613,21 @@ function DebtDialog({
               </SelectTrigger>
               <SelectContent>
                 {CYCLES.map((c) => (
-                  <SelectItem key={c} value={c} className="capitalize">
-                    {c}
+                  <SelectItem key={c} value={c}>
+                    {formatTypeLabel(c)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="pr-3">
+              <Label htmlFor="d-deduction">Paid via paycheck/HSA deduction</Label>
+              <p className="text-xs text-muted-foreground">
+                Excluded from pay-period and monthly cash obligations (ADR-032).
+              </p>
+            </div>
+            <Switch id="d-deduction" checked={deduction} onCheckedChange={setDeduction} />
           </div>
           <div>
             <Label>Notes</Label>
@@ -587,5 +648,44 @@ function DebtDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+
+/** Last 10 ledger rows linked to this debt, newest first. */
+function RecentDebtTransactions({ debtId }: { debtId: string }) {
+  const { data: transactions = [] } = useTransactions();
+  const rows = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.linked_debt_id === debtId)
+        .sort((a, b) => (b.transaction_date ?? "").localeCompare(a.transaction_date ?? ""))
+        .slice(0, 10),
+    [transactions, debtId],
+  );
+
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Recent transactions
+      </p>
+      {rows.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">No payments logged yet.</p>
+      ) : (
+        <div className="mt-1 divide-y divide-border/50">
+          {rows.map((t) => (
+            <div key={t.id} className="flex items-center justify-between py-2 text-sm">
+              <span className="min-w-0 flex-1 truncate">
+                {t.transaction_date?.slice(0, 10)}
+                {t.description ? ` · ${t.description}` : ""}
+              </span>
+              <span className="ml-2 shrink-0 tabular-nums">
+                {formatMoney(Number(t.amount ?? 0))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

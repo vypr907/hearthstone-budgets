@@ -667,7 +667,9 @@ TSP Loan and similar debts are serviced via payroll/HSA deduction before the pay
 ever hits a tracked account. Counting them as "due this period" double-subtracts money
 that was never actually available to spend.
 
-Status: Decided 2026-08-04. Not yet implemented.
+Status: Decided 2026-08-04. Implemented 2026-08-04 — `is_paycheck_deduction` toggle on
+the debt form, badge on Debts list/detail, excluded from `obligationsInRange()` and shown
+via `deductedObligationsInRange()` on Paycheck Budget. Dashboard exclusion pending.
 
 ## ADR-033: Auto-Generated Envelope Goals for Non-Monthly Bills
 
@@ -704,7 +706,9 @@ Open question: `custom` billing_cycle has no fixed interval, so it can't be
 auto-prorated the same way. Needs either a stored cycle-length-in-months field or
 manual monthly-equivalent entry — deferred until a real `custom` bill needs this.
 
-Status: Decided 2026-08-04. Not yet implemented.
+Status: Decided 2026-08-04. Partly implemented 2026-08-04 — `monthlyEquivalent()` /
+`needsEnvelope()` in format.ts, envelope auto-creation in `useUpsertBill()`, optional
+`account_id` on the goal form. The bill-card "Add to envelope" action is pending.
 
 ## ADR-034: Budget Totals Include Linked Bill Amounts, Shown as Two Parts
 

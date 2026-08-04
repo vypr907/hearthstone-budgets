@@ -126,7 +126,14 @@ function GoalsPage() {
                 <div className="flex items-center gap-3">
                   <EmojiIcon name={g.name} fallback={g.icon || "🏦"} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-semibold">{g.name}</p>
+                    <p className="truncate text-base font-semibold">
+                      {g.name}
+                      {g.linked_bill_id ? (
+                        <span className="ml-2 align-middle text-xs text-muted-foreground">
+                          ✉️ bill envelope
+                        </span>
+                      ) : null}
+                    </p>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">
                       Target {formatMoney(target)}
                       {g.target_date ? ` · ${g.target_date.slice(0, 10)}` : ""}
@@ -209,6 +216,8 @@ function GoalDialog({
   const [icon, setIcon] = useState(goal?.icon ?? "");
   const [amount, setAmount] = useState(goal ? String(goal.target_amount ?? "") : "");
   const [date, setDate] = useState(goal?.target_date?.slice(0, 10) ?? "");
+  const [accountId, setAccountId] = useState(goal?.account_id ?? "none");
+  const { data: accounts = [] } = useAccounts();
 
   async function submit() {
     const n = Number(amount);
@@ -221,6 +230,7 @@ function GoalDialog({
         icon: icon.trim() || null,
         target_amount: n,
         target_date: date || null,
+        account_id: accountId === "none" ? null : accountId,
       });
       toast.success(goal ? "Goal updated" : "Goal created");
       onOpenChange(false);
@@ -268,6 +278,25 @@ function GoalDialog({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Account holding this money (optional)</Label>
+            <Select value={accountId} onValueChange={setAccountId}>
+              <SelectTrigger className="h-12">
+                <SelectValue placeholder="No account" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No account</SelectItem>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Display only — the balance stays derived from the ledger.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="goal-date">Target date (optional)</Label>
