@@ -61,6 +61,8 @@ import {
   inRange,
   isReceived,
   obligationsInRange,
+  deductedObligationsInRange,
+
   periodRange,
   sum,
 } from "@/lib/paycheck-budget";
@@ -367,6 +369,26 @@ function PeriodBudget({
             <span>Obligations total</span>
             <span>{formatMoney(obligationsTotal)}</span>
           </div>
+          {deducted.length > 0 ? (
+            <div className="space-y-1 rounded-md bg-muted/40 p-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                🧾 Paycheck-deducted (not counted)
+              </p>
+              {deducted.map((o) => (
+                <div
+                  key={`ded-${o.id}`}
+                  className="flex items-center justify-between text-sm text-muted-foreground"
+                >
+                  <span className="flex-1">
+                    🏷️ {o.name}
+                    <span className="ml-2 text-xs">{o.dueDate}</span>
+                  </span>
+                  <span>{formatMoney(o.amount)}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
         </CardContent>
       </Card>
 
