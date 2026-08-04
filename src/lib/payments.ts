@@ -177,12 +177,15 @@ export function useMarkCleared() {
           payment_status: "cleared",
           remaining_balance: next,
         };
+        // A payment that zeroes the balance retires the debt.
+        if (next === 0 && !p.debt?.date_paid_off) update.date_paid_off = todayISO();
         // Non-monthly debts roll forward on their own cycle, like bills.
         let nextDue: string | null = null;
         if (cycle !== "monthly") {
           nextDue = advanceDate(p.debt?.next_due_date ?? todayISO(), p.debt?.billing_cycle);
           update.next_due_date = nextDue;
         }
+
         const { error } = await supabase.from("debts").update(update).eq("id", p.id);
         if (error) throw error;
         return { next_due_date: nextDue };
