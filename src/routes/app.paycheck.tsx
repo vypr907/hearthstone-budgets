@@ -256,6 +256,12 @@ function PeriodBudget({
     [bills, debts, start, end],
   );
   const obligationsTotal = sum(obligations.map((o) => o.amount));
+  // ADR-032: shown for awareness, never subtracted from the paycheck.
+  const deducted = useMemo(
+    () => deductedObligationsInRange(debts, start, end),
+    [debts, start, end],
+  );
+
 
   const secondary = useMemo(
     () =>
