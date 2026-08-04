@@ -58,7 +58,16 @@ export type Obligation = {
   amount: number;
 };
 
-/** Bills and debts whose effective due date lands inside the pay period. */
+/** ADR-032: debts serviced by payroll/HSA deduction never touch spendable cash. */
+export function isPaycheckDeducted(debt: Debt): boolean {
+  return debt.is_paycheck_deduction === true;
+}
+
+/**
+ * Bills and debts whose effective due date lands inside the pay period.
+ * Paycheck-deducted debts (ADR-032) are excluded — list them separately with
+ * `deductedObligationsInRange()`.
+ */
 export function obligationsInRange(
   bills: Bill[],
   debts: Debt[],
@@ -75,6 +84,7 @@ export function obligationsInRange(
   }
   for (const d of debts) {
     if (d.date_paid_off) continue;
+    if (isPaycheckDeducted(d)) continue;
     const due = debtDueDate(d);
     if (!inRange(due, start, end)) continue;
     rows.push({
@@ -87,6 +97,30 @@ export function obligationsInRange(
   }
   return rows.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
+
+/** ADR-032: paycheck-deducted debts due in the period — shown, never counted. */
+export function deductedObligationsInRange(
+  debts: Debt[],
+  start: string,
+  end: string,
+): Obligation[] {
+  const rows: Obligation[] = [];
+  for (const d of debts) {
+    if (d.date_paid_off) continue;
+    if (!isPaycheckDeducted(d)) continue;
+    const due = debtDueDate(d);
+    if (!inRange(due, start, end)) continue;
+    rows.push({
+      id: d.id,
+      kind: "debt",
+      name: d.name,
+      dueDate: due!,
+      amount: Number(d.minimum_payment ?? 0),
+    });
+  }
+  return rows.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+}
+
 
 export function sum(values: number[]): number {
   return values.reduce((t, v) => t + v, 0);
