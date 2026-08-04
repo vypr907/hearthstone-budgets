@@ -100,6 +100,8 @@ export type Debt = {
   priority_order: number | null;
   notes: string | null;
   date_paid_off: string | null;
+  /** ADR-032: serviced by payroll/HSA deduction — excluded from cash obligations. */
+  is_paycheck_deduction?: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -113,10 +115,13 @@ export type Account = {
   starting_balance: number | null;
   is_spendable: boolean | null;
   credit_limit: number | null;
+  /** Full or masked account number; only the last 4 are ever displayed. */
+  account_number?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
 };
+
 
 
 export type AccountBalance = {
