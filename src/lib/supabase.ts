@@ -243,6 +243,11 @@ export type SavingsGoal = {
   icon: string | null;
   target_amount: number;
   target_date: string | null;
+  /** ADR-033: optional account this envelope's money physically lives in. */
+  account_id?: string | null;
+  /** ADR-033: set when this goal is the envelope for a non-monthly bill. */
+  linked_bill_id?: string | null;
+
   created_at?: string | null;
   updated_at?: string | null;
 };
