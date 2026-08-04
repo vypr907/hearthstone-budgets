@@ -68,7 +68,7 @@ import {
 } from "@/lib/paycheck-budget";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { categoryVisual } from "@/lib/visual-meta";
+import { PAYCHECK_DEDUCTION_ICON, categoryVisual } from "@/lib/visual-meta";
 import { Plus } from "lucide-react";
 
 export const Route = createFileRoute("/app/paycheck")({
@@ -372,7 +372,7 @@ function PeriodBudget({
           {deducted.length > 0 ? (
             <div className="space-y-1 rounded-md bg-muted/40 p-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                🧾 Paycheck-deducted (not counted)
+                {PAYCHECK_DEDUCTION_ICON} Paycheck-deducted (not counted)
               </p>
               {deducted.map((o) => (
                 <div
@@ -380,7 +380,7 @@ function PeriodBudget({
                   className="flex items-center justify-between text-sm text-muted-foreground"
                 >
                   <span className="flex-1">
-                    🏷️ {o.name}
+                    {PAYCHECK_DEDUCTION_ICON} {o.name}
                     <span className="ml-2 text-xs">{o.dueDate}</span>
                   </span>
                   <span>{formatMoney(o.amount)}</span>
