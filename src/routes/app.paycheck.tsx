@@ -267,6 +267,17 @@ function PeriodBudget({
   const secondaryTotal = sum(secondary.map(eventAmount));
 
   const cats = useMemo(() => spendingCategories(categories), [categories]);
+  const catGroups = useMemo(() => {
+    const map = new Map<string, typeof cats>();
+    for (const c of cats) {
+      const key = (c as { parent_category?: string | null }).parent_category?.trim() || "Ungrouped";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(c);
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([parent, rows]) => [parent, rows.slice().sort((a, b) => a.name.localeCompare(b.name))] as const);
+  }, [cats]);
   const mine = useMemo(
     () => allocations.filter((a) => a.income_event_id === event.id),
     [allocations, event.id],
