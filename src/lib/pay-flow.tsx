@@ -128,26 +128,42 @@ export function usePayFlow() {
               No accounts yet — add an account first.
             </p>
           ) : null}
-          {options.map((a) => (
-            <Button
-              key={a.id}
-              variant={a.id === defaultAccountId ? "default" : "outline"}
-              className="h-12 w-full justify-start"
-              onClick={() => {
-                const c = choice!;
-                setChoice(null);
-                void perform(c.payable, c.action, a.id, c.amount);
-              }}
-            >
-              {a.name}
-              {a.account_type ? (
-                <span className="ml-2 text-xs opacity-70">{a.account_type}</span>
-              ) : null}
-              {a.id === defaultAccountId ? (
-                <span className="ml-auto text-xs opacity-80">Last used</span>
-              ) : null}
-            </Button>
-          ))}
+          {options.map((a) => {
+            const visual = accountTypeVisual(a.account_type);
+            const inst = institutions.find((i) => i.id === a.institution_id);
+            const last4 = accountLast4(a.account_number);
+            return (
+              <Button
+                key={a.id}
+                variant={a.id === defaultAccountId ? "default" : "outline"}
+                className="h-14 w-full justify-start gap-2"
+                onClick={() => {
+                  const c = choice!;
+                  setChoice(null);
+                  void perform(c.payable, c.action, a.id, c.amount);
+                }}
+              >
+                <span aria-hidden className="text-lg" title={a.account_type ?? undefined}>
+                  {visual.icon}
+                </span>
+                <span className="truncate">{a.name}</span>
+                {inst || last4 ? (
+                  <span className="ml-2 flex items-center gap-1 rounded-full bg-muted/40 px-2 py-0.5 text-xs">
+                    <InstitutionLogo
+                      logoUrl={inst?.logo_url}
+                      type={inst?.institution_type}
+                      size={16}
+                    />
+                    {last4 ? <span className="tabular-nums">•••{last4}</span> : null}
+                  </span>
+                ) : null}
+                {a.id === defaultAccountId ? (
+                  <span className="ml-auto text-xs opacity-80">Last used</span>
+                ) : null}
+              </Button>
+            );
+          })}
+
         </div>
       </DialogContent>
     </Dialog>
