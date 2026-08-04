@@ -66,6 +66,7 @@ import {
 } from "@/lib/paycheck-budget";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { categoryVisual } from "@/lib/visual-meta";
 import { Plus } from "lucide-react";
 
 export const Route = createFileRoute("/app/paycheck")({
