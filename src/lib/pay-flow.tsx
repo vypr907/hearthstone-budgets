@@ -8,8 +8,11 @@ import {
   useMarkUnpaid,
   type Payable,
 } from "@/lib/payments";
-import { useAccounts, useTransactions } from "@/lib/data-hooks";
-import { formatMoney } from "@/lib/format";
+import { useAccounts, useInstitutions, useTransactions } from "@/lib/data-hooks";
+import { accountLast4, formatMoney } from "@/lib/format";
+import { accountTypeVisual } from "@/lib/visual-meta";
+import { InstitutionLogo } from "@/components/InstitutionLogo";
+
 import {
   Dialog,
   DialogContent,
