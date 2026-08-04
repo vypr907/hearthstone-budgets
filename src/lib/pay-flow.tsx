@@ -43,6 +43,8 @@ function defaultCycleAmount(payable: Payable) {
  */
 export function usePayFlow() {
   const { data: accounts = [] } = useAccounts();
+  const { data: institutions = [] } = useInstitutions();
+
   const { data: transactions = [] } = useTransactions();
   const submit = useMarkSubmitted();
   const clear = useMarkCleared();
