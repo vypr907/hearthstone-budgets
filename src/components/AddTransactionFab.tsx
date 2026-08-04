@@ -113,10 +113,11 @@ export function AddTransactionFab() {
                 <SelectContent>
                   {accounts.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
-                      {a.name}
+                      {accountLabel(a, institutionName[a.institution_id ?? ""])}
                     </SelectItem>
                   ))}
                 </SelectContent>
+
               </Select>
             </div>
 
