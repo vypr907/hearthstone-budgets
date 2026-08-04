@@ -58,6 +58,14 @@ export function AddTransactionFab() {
     [categories],
   );
 
+  const { data: institutions = [] } = useInstitutions();
+  const institutionName = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const i of institutions) m[i.id] = i.name;
+    return m;
+  }, [institutions]);
+
+
   function reset() {
     setAccountId("");
     setAmount("");
