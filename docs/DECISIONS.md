@@ -653,3 +653,78 @@ Status: Decided 2026-08-03. Implemented 2026-08-03 in
 list rows and detail view. Debts count toward Current Due when debtDueDate()
 (ADR-017) is on or before today; bills use billCycleDue()/billRemainingOwed()
 (ADR-019). Institutions with neither accounts nor obligations render "—".
+
+## ADR-032: Paycheck-Deduction Debts Excluded from Cash Obligations
+
+Decision:
+Add `debts.is_paycheck_deduction boolean not null default false`. When true, the debt
+is excluded from Paycheck Budget's obligations-in-range total and Dashboard's monthly
+obligations total (it never touches a spendable account), but still appears in Debts,
+Everything, and the payoff-strategy calculator unchanged.
+
+Reason:
+TSP Loan and similar debts are serviced via payroll/HSA deduction before the paycheck
+ever hits a tracked account. Counting them as "due this period" double-subtracts money
+that was never actually available to spend.
+
+Status: Decided 2026-08-04. Not yet implemented.
+
+## ADR-033: Auto-Generated Envelope Goals for Non-Monthly Bills
+
+Decision:
+Add `savings_goals.account_id` (nullable FK to accounts — several goals may share one
+account, e.g. all point at a "Annuals" savings account) and `savings_goals.linked_bill_id`
+(nullable FK to bills, unique). When a bill's billing_cycle is quarterly, bimonthly,
+annually, or custom (i.e. > 1 month), the app auto-creates one savings_goals row with
+linked_bill_id set, target_amount = the bill's amount, target_date = the bill's
+next_due_date. Biweekly bills do NOT get an envelope — their monthly-equivalent is
+just amount × 2, no separate saving needed since they occur within the month.
+
+Monthly-equivalent (for obligations/budget totals per ADR-034):
+- monthly: amount
+- biweekly: amount × 2
+- quarterly: amount / 3
+- bimonthly: amount / 2
+- annually: amount / 12
+- custom: not automatically prorated — flagged for manual monthly-equivalent entry
+  (open question, see below)
+
+A dedicated "Add to envelope" action on the bill card creates a transaction with
+linked_goal_id = the envelope's id, status='cleared', separate from the bill's own
+payment transaction (linked_bill_id) to its institution. This lets money be set aside
+ahead of the due date without it looking like the bill was paid.
+
+Reason:
+A quarterly $18 bill (Solo) shouldn't blow a monthly budget the one month it's due,
+nor should it be invisible the other two months. Prorating it into monthly obligations
+plus a real envelope balance solves both — matches the existing savings_goals /
+ledger-derived-balance pattern (ADR-027) instead of inventing a second mechanism.
+
+Open question: `custom` billing_cycle has no fixed interval, so it can't be
+auto-prorated the same way. Needs either a stored cycle-length-in-months field or
+manual monthly-equivalent entry — deferred until a real `custom` bill needs this.
+
+Status: Decided 2026-08-04. Not yet implemented.
+
+## ADR-034: Budget Totals Include Linked Bill Amounts, Shown as Two Parts
+
+Decision:
+For a spending category, "Budgeted" displayed on Dashboard/Spending =
+spending_budgets.budgeted_amount + sum of monthly-equivalent amounts of bills linked
+to that category_id (via ADR-033's monthly-equivalent, see below). The two parts are
+always shown separately (e.g. "$20 spending + $12.65 bills = $32.65"), never merged
+into one opaque number. Same split applies to "Spent": manual/ledger spending vs.
+bill payments already made this cycle.
+
+The Dashboard hero card is rebuilt around Spendable balance as the primary number
+(not obligations), absorbing the existing lower "monthly obligations" breakdown card
+into itself rather than showing both. A new card is added: bills/debts amount still
+owed this pay period/month, grouped by category. Net Worth Trend moves to the bottom
+of the Dashboard.
+
+Reason:
+Rocket Money/Mint-style "$40 left" hides that $30 of it is already spoken for by an
+upcoming bill. Splitting spendable-vs-committed makes the number trustworthy at a
+glance instead of requiring mental math against the Bills screen.
+
+Status: Decided 2026-08-04. Not yet implemented.
