@@ -121,3 +121,56 @@ function addMonths(date: Date, months: number, targetDay: number) {
   date.setDate(Math.min(targetDay, last));
 }
 
+/**
+ * ADR-033: what a bill costs per month, whatever its billing cycle.
+ * Returns null for `custom` cycles — those have no fixed interval and are
+ * displayed as "—" rather than guessed at.
+ */
+export function monthlyEquivalent(bill: {
+  amount?: number | null;
+  billing_cycle?: string | null;
+}): number | null {
+  const amount = Number(bill.amount ?? 0);
+  switch (normalizeCycle(bill.billing_cycle) || "monthly") {
+    case "biweekly":
+      return amount * 2;
+    case "quarterly":
+      return amount / 3;
+    case "bimonthly":
+      return amount / 2;
+    case "annually":
+    case "annual":
+    case "yearly":
+      return amount / 12;
+    case "custom":
+      return null;
+    default:
+      return amount;
+  }
+}
+
+/** ADR-033: cycles long enough to need their own savings envelope. */
+export function needsEnvelope(cycle: string | null | undefined): boolean {
+  return ["quarterly", "bimonthly", "annually", "annual", "yearly"].includes(
+    normalizeCycle(cycle),
+  );
+}
+
+/** Last 4 digits of an account number, or null when none is stored. */
+export function accountLast4(accountNumber: string | null | undefined): string | null {
+  const digits = (accountNumber ?? "").replace(/\D/g, "");
+  return digits.length >= 4 ? digits.slice(-4) : null;
+}
+
+/** "Checking - Navy Federal - •••1234" (segments omitted when unknown). */
+export function accountLabel(
+  account: { name: string; account_number?: string | null },
+  institutionName?: string | null,
+): string {
+  const last4 = accountLast4(account.account_number);
+  return [account.name, institutionName || null, last4 ? `•••${last4}` : null]
+    .filter(Boolean)
+    .join(" - ");
+}
+
+
