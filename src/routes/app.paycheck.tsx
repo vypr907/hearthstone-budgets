@@ -66,6 +66,7 @@ import {
 } from "@/lib/paycheck-budget";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { categoryVisual } from "@/lib/visual-meta";
 import { Plus } from "lucide-react";
 
 export const Route = createFileRoute("/app/paycheck")({
@@ -267,6 +268,17 @@ function PeriodBudget({
   const secondaryTotal = sum(secondary.map(eventAmount));
 
   const cats = useMemo(() => spendingCategories(categories), [categories]);
+  const catGroups = useMemo(() => {
+    const map = new Map<string, typeof cats>();
+    for (const c of cats) {
+      const key = (c as { parent_category?: string | null }).parent_category?.trim() || "Ungrouped";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(c);
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([parent, rows]) => [parent, rows.slice().sort((a, b) => a.name.localeCompare(b.name))] as const);
+  }, [cats]);
   const mine = useMemo(
     () => allocations.filter((a) => a.income_event_id === event.id),
     [allocations, event.id],
@@ -355,34 +367,53 @@ function PeriodBudget({
       <Card>
         <CardContent className="space-y-4 p-4">
           <h2 className="text-base font-semibold">Allocations</h2>
-          {cats.map((c) => {
-            const v = valueFor(c.id);
-            return (
-              <div key={c.id} className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <Label className="flex-1 text-sm">{c.name}</Label>
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    className="h-11 w-28 text-right"
-                    value={v === 0 ? "" : String(v)}
-                    placeholder="0"
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, [c.id]: Number(e.target.value || 0) }))
-                    }
-                    onBlur={() => commit(c.id, v)}
-                  />
-                </div>
-                <Slider
-                  value={[Math.min(v, sliderMax)]}
-                  max={sliderMax}
-                  step={5}
-                  onValueChange={([n]) => setDraft((d) => ({ ...d, [c.id]: n }))}
-                  onValueCommit={([n]) => commit(c.id, n)}
-                />
-              </div>
-            );
-          })}
+          {catGroups.map(([parent, rows]) => (
+            <div key={parent} className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                {parent}
+              </p>
+              {rows.map((c) => {
+                const v = valueFor(c.id);
+                const vis = categoryVisual(c);
+                return (
+                  <div
+                    key={c.id}
+                    className="space-y-2 border-l-4 pl-3"
+                    style={{ borderColor: vis.color }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        aria-hidden
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-base"
+                        style={{ background: `${vis.color}22` }}
+                      >
+                        {vis.icon}
+                      </span>
+                      <Label className="min-w-0 flex-1 truncate text-sm">{c.name}</Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        className="h-11 w-28 text-right"
+                        value={v === 0 ? "" : String(v)}
+                        placeholder="0"
+                        onChange={(e) =>
+                          setDraft((d) => ({ ...d, [c.id]: Number(e.target.value || 0) }))
+                        }
+                        onBlur={() => commit(c.id, v)}
+                      />
+                    </div>
+                    <Slider
+                      value={[Math.min(v, sliderMax)]}
+                      max={sliderMax}
+                      step={5}
+                      onValueChange={([n]) => setDraft((d) => ({ ...d, [c.id]: n }))}
+                      onValueCommit={([n]) => commit(c.id, n)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ))}
           <div className="flex items-center justify-between border-t pt-2 text-sm font-semibold">
             <span>Allocated</span>
             <span>{formatMoney(allocated)}</span>
