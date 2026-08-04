@@ -16,7 +16,7 @@ import {
   type Household,
   type ExportFormat,
 } from "./supabase";
-import { advanceDate } from "./format";
+import { advanceDate, needsEnvelope } from "./format";
 import { useAuth } from "./auth-context";
 
 export function useCategories() {
