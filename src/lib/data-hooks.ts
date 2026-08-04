@@ -142,17 +142,53 @@ export function useUpsertBill() {
   return useMutation({
     mutationFn: async (bill: Partial<Bill> & { name: string; amount: number }) => {
       const payload = { ...bill, household_id: householdId };
+      let saved: Bill;
       if (bill.id) {
-        const { error } = await supabase.from("bills").update(payload).eq("id", bill.id);
+        const { data, error } = await supabase
+          .from("bills")
+          .update(payload)
+          .eq("id", bill.id)
+          .select("*")
+          .single();
         if (error) throw error;
+        saved = data as Bill;
       } else {
-        const { error } = await supabase.from("bills").insert(payload);
+        const { data, error } = await supabase
+          .from("bills")
+          .insert(payload)
+          .select("*")
+          .single();
         if (error) throw error;
+        saved = data as Bill;
       }
+
+      // ADR-033: non-monthly bills get exactly one auto-created envelope goal.
+      if (needsEnvelope(saved.billing_cycle)) {
+        const { data: existing } = await supabase
+          .from("savings_goals")
+          .select("id")
+          .eq("linked_bill_id", saved.id)
+          .limit(1);
+        if (!existing || existing.length === 0) {
+          const { error } = await supabase.from("savings_goals").insert({
+            household_id: householdId,
+            name: `${saved.name} envelope`,
+            target_amount: Number(saved.amount ?? 0),
+            target_date: saved.next_due_date ?? null,
+            linked_bill_id: saved.id,
+          });
+          if (error) throw error;
+        }
+      }
+      return saved;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bills"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["savings_goals"] });
+    },
   });
 }
+
 
 export function useDeleteBill() {
   const qc = useQueryClient();
