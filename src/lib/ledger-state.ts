@@ -42,14 +42,14 @@ const day = (d: string | null | undefined) => (d ? d.slice(0, 10) : "");
  * payments that resolved it now sit in the *previous* window — that window is
  * still the cycle covering today, hence the `resolved` lookback below.
  */
-export function useCycleState() {
-  const { data: transactions = [] } = useTransactions();
-
-  return useMemo(() => {
-    const today = todayISO();
-    const monthStart = `${today.slice(0, 7)}-01`;
-
-    return function infoOf(p: Payable): CycleInfo {
+export function deriveCycleInfo(
+  p: Payable,
+  transactions: Transaction[],
+  today: string,
+): CycleInfo {
+  const monthStart = `${today.slice(0, 7)}-01`;
+  {
+    {
       const linked = transactions.filter((t) =>
         p.kind === "bill" ? t.linked_bill_id === p.id : t.linked_debt_id === p.id,
       );
@@ -105,7 +105,15 @@ export function useCycleState() {
         pending,
         resolved,
       };
-    };
+    }
+  }
+}
+
+export function useCycleState() {
+  const { data: transactions = [] } = useTransactions();
+  return useMemo(() => {
+    const today = todayISO();
+    return (p: Payable) => deriveCycleInfo(p, transactions, today);
   }, [transactions]);
 }
 
