@@ -306,7 +306,9 @@ function BillDetailDialog({
           </DetailGrid>
           <DetailText label="Notes" value={bill.notes} />
           <PayActions payable={toPayable("bill", bill)} />
+          <SetAsideAction bill={bill} />
           <RecentBillTransactions billId={bill.id} />
+
 
         </div>
         <DialogFooter className="gap-2">
