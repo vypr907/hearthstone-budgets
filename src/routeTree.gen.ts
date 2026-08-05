@@ -9,29 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppIndexRouteImport } from './routes/app.index'
-import { Route as AppTransactionsRouteImport } from './routes/app.transactions'
-import { Route as AppSpendingRouteImport } from './routes/app.spending'
-import { Route as AppSnapshotRouteImport } from './routes/app.snapshot'
-import { Route as AppSettingsRouteImport } from './routes/app.settings'
-import { Route as AppPaymentScheduleRouteImport } from './routes/app.payment-schedule'
-import { Route as AppPaycheckRouteImport } from './routes/app.paycheck'
-import { Route as AppMoreRouteImport } from './routes/app.more'
-import { Route as AppInstitutionsRouteImport } from './routes/app.institutions'
-import { Route as AppGoalsRouteImport } from './routes/app.goals'
-import { Route as AppEverythingRouteImport } from './routes/app.everything'
-import { Route as AppDebtsRouteImport } from './routes/app.debts'
-import { Route as AppDebtStrategyRouteImport } from './routes/app.debt-strategy'
-import { Route as AppCategoriesRouteImport } from './routes/app.categories'
-import { Route as AppBillsRouteImport } from './routes/app.bills'
 import { Route as AppAccountsRouteImport } from './routes/app.accounts'
+import { Route as AppBillsRouteImport } from './routes/app.bills'
+import { Route as AppCategoriesRouteImport } from './routes/app.categories'
+import { Route as AppDebtStrategyRouteImport } from './routes/app.debt-strategy'
+import { Route as AppDebtsRouteImport } from './routes/app.debts'
+import { Route as AppEverythingRouteImport } from './routes/app.everything'
+import { Route as AppGoalsRouteImport } from './routes/app.goals'
+import { Route as AppInstitutionsRouteImport } from './routes/app.institutions'
+import { Route as AppMoreRouteImport } from './routes/app.more'
+import { Route as AppPaycheckRouteImport } from './routes/app.paycheck'
+import { Route as AppPaymentScheduleRouteImport } from './routes/app.payment-schedule'
+import { Route as AppSettingsRouteImport } from './routes/app.settings'
+import { Route as AppSnapshotRouteImport } from './routes/app.snapshot'
+import { Route as AppSpendingRouteImport } from './routes/app.spending'
+import { Route as AppTransactionsRouteImport } from './routes/app.transactions'
 
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -39,9 +39,9 @@ const AppRoute = AppRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -49,69 +49,9 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
-const AppTransactionsRoute = AppTransactionsRouteImport.update({
-  id: '/transactions',
-  path: '/transactions',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSpendingRoute = AppSpendingRouteImport.update({
-  id: '/spending',
-  path: '/spending',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSnapshotRoute = AppSnapshotRouteImport.update({
-  id: '/snapshot',
-  path: '/snapshot',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsRoute = AppSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPaymentScheduleRoute = AppPaymentScheduleRouteImport.update({
-  id: '/payment-schedule',
-  path: '/payment-schedule',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPaycheckRoute = AppPaycheckRouteImport.update({
-  id: '/paycheck',
-  path: '/paycheck',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppMoreRoute = AppMoreRouteImport.update({
-  id: '/more',
-  path: '/more',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppInstitutionsRoute = AppInstitutionsRouteImport.update({
-  id: '/institutions',
-  path: '/institutions',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppGoalsRoute = AppGoalsRouteImport.update({
-  id: '/goals',
-  path: '/goals',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppEverythingRoute = AppEverythingRouteImport.update({
-  id: '/everything',
-  path: '/everything',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDebtsRoute = AppDebtsRouteImport.update({
-  id: '/debts',
-  path: '/debts',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDebtStrategyRoute = AppDebtStrategyRouteImport.update({
-  id: '/debt-strategy',
-  path: '/debt-strategy',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCategoriesRoute = AppCategoriesRouteImport.update({
-  id: '/categories',
-  path: '/categories',
+const AppAccountsRoute = AppAccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
   getParentRoute: () => AppRoute,
 } as any)
 const AppBillsRoute = AppBillsRouteImport.update({
@@ -119,9 +59,69 @@ const AppBillsRoute = AppBillsRouteImport.update({
   path: '/bills',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAccountsRoute = AppAccountsRouteImport.update({
-  id: '/accounts',
-  path: '/accounts',
+const AppCategoriesRoute = AppCategoriesRouteImport.update({
+  id: '/categories',
+  path: '/categories',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDebtStrategyRoute = AppDebtStrategyRouteImport.update({
+  id: '/debt-strategy',
+  path: '/debt-strategy',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDebtsRoute = AppDebtsRouteImport.update({
+  id: '/debts',
+  path: '/debts',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEverythingRoute = AppEverythingRouteImport.update({
+  id: '/everything',
+  path: '/everything',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGoalsRoute = AppGoalsRouteImport.update({
+  id: '/goals',
+  path: '/goals',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppInstitutionsRoute = AppInstitutionsRouteImport.update({
+  id: '/institutions',
+  path: '/institutions',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMoreRoute = AppMoreRouteImport.update({
+  id: '/more',
+  path: '/more',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPaycheckRoute = AppPaycheckRouteImport.update({
+  id: '/paycheck',
+  path: '/paycheck',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPaymentScheduleRoute = AppPaymentScheduleRouteImport.update({
+  id: '/payment-schedule',
+  path: '/payment-schedule',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSnapshotRoute = AppSnapshotRouteImport.update({
+  id: '/snapshot',
+  path: '/snapshot',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSpendingRoute = AppSpendingRouteImport.update({
+  id: '/spending',
+  path: '/spending',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTransactionsRoute = AppTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
   getParentRoute: () => AppRoute,
 } as any)
 
@@ -261,11 +261,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -275,11 +275,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -289,95 +289,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/transactions': {
-      id: '/app/transactions'
-      path: '/transactions'
-      fullPath: '/app/transactions'
-      preLoaderRoute: typeof AppTransactionsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/spending': {
-      id: '/app/spending'
-      path: '/spending'
-      fullPath: '/app/spending'
-      preLoaderRoute: typeof AppSpendingRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/snapshot': {
-      id: '/app/snapshot'
-      path: '/snapshot'
-      fullPath: '/app/snapshot'
-      preLoaderRoute: typeof AppSnapshotRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/settings': {
-      id: '/app/settings'
-      path: '/settings'
-      fullPath: '/app/settings'
-      preLoaderRoute: typeof AppSettingsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/payment-schedule': {
-      id: '/app/payment-schedule'
-      path: '/payment-schedule'
-      fullPath: '/app/payment-schedule'
-      preLoaderRoute: typeof AppPaymentScheduleRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/paycheck': {
-      id: '/app/paycheck'
-      path: '/paycheck'
-      fullPath: '/app/paycheck'
-      preLoaderRoute: typeof AppPaycheckRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/more': {
-      id: '/app/more'
-      path: '/more'
-      fullPath: '/app/more'
-      preLoaderRoute: typeof AppMoreRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/institutions': {
-      id: '/app/institutions'
-      path: '/institutions'
-      fullPath: '/app/institutions'
-      preLoaderRoute: typeof AppInstitutionsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/goals': {
-      id: '/app/goals'
-      path: '/goals'
-      fullPath: '/app/goals'
-      preLoaderRoute: typeof AppGoalsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/everything': {
-      id: '/app/everything'
-      path: '/everything'
-      fullPath: '/app/everything'
-      preLoaderRoute: typeof AppEverythingRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/debts': {
-      id: '/app/debts'
-      path: '/debts'
-      fullPath: '/app/debts'
-      preLoaderRoute: typeof AppDebtsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/debt-strategy': {
-      id: '/app/debt-strategy'
-      path: '/debt-strategy'
-      fullPath: '/app/debt-strategy'
-      preLoaderRoute: typeof AppDebtStrategyRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/categories': {
-      id: '/app/categories'
-      path: '/categories'
-      fullPath: '/app/categories'
-      preLoaderRoute: typeof AppCategoriesRouteImport
+    '/app/accounts': {
+      id: '/app/accounts'
+      path: '/accounts'
+      fullPath: '/app/accounts'
+      preLoaderRoute: typeof AppAccountsRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/bills': {
@@ -387,11 +303,95 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBillsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/accounts': {
-      id: '/app/accounts'
-      path: '/accounts'
-      fullPath: '/app/accounts'
-      preLoaderRoute: typeof AppAccountsRouteImport
+    '/app/categories': {
+      id: '/app/categories'
+      path: '/categories'
+      fullPath: '/app/categories'
+      preLoaderRoute: typeof AppCategoriesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/debt-strategy': {
+      id: '/app/debt-strategy'
+      path: '/debt-strategy'
+      fullPath: '/app/debt-strategy'
+      preLoaderRoute: typeof AppDebtStrategyRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/debts': {
+      id: '/app/debts'
+      path: '/debts'
+      fullPath: '/app/debts'
+      preLoaderRoute: typeof AppDebtsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/everything': {
+      id: '/app/everything'
+      path: '/everything'
+      fullPath: '/app/everything'
+      preLoaderRoute: typeof AppEverythingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/goals': {
+      id: '/app/goals'
+      path: '/goals'
+      fullPath: '/app/goals'
+      preLoaderRoute: typeof AppGoalsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/institutions': {
+      id: '/app/institutions'
+      path: '/institutions'
+      fullPath: '/app/institutions'
+      preLoaderRoute: typeof AppInstitutionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/more': {
+      id: '/app/more'
+      path: '/more'
+      fullPath: '/app/more'
+      preLoaderRoute: typeof AppMoreRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/paycheck': {
+      id: '/app/paycheck'
+      path: '/paycheck'
+      fullPath: '/app/paycheck'
+      preLoaderRoute: typeof AppPaycheckRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/payment-schedule': {
+      id: '/app/payment-schedule'
+      path: '/payment-schedule'
+      fullPath: '/app/payment-schedule'
+      preLoaderRoute: typeof AppPaymentScheduleRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/settings': {
+      id: '/app/settings'
+      path: '/settings'
+      fullPath: '/app/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/snapshot': {
+      id: '/app/snapshot'
+      path: '/snapshot'
+      fullPath: '/app/snapshot'
+      preLoaderRoute: typeof AppSnapshotRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/spending': {
+      id: '/app/spending'
+      path: '/spending'
+      fullPath: '/app/spending'
+      preLoaderRoute: typeof AppSpendingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/transactions': {
+      id: '/app/transactions'
+      path: '/transactions'
+      fullPath: '/app/transactions'
+      preLoaderRoute: typeof AppTransactionsRouteImport
       parentRoute: typeof AppRoute
     }
   }

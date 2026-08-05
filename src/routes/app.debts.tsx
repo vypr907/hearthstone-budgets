@@ -11,6 +11,8 @@ import {
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
+import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
+
 import { useCycleState } from "@/lib/ledger-state";
 import { toPayable, debtRemainingOwed } from "@/lib/payments";
 import {
@@ -151,9 +153,11 @@ function DebtsPage() {
     <>
       <AppHeader title="Debts" />
       <div className="space-y-3 p-4">
+        <StrandedDebtRepair debts={debts} />
         <Button className="h-12 w-full text-base" onClick={() => setEditing({})}>
           <Plus className="mr-2 h-5 w-5" /> Add debt
         </Button>
+
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && debts.length === 0 && (

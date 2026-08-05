@@ -3,8 +3,11 @@
 - [x] Verify `debts.cycle_paid_to_date` exists in Supabase before relying on debt partials.
 - [x] ADR-036 ledger-derived 4-state payment cycle + full-cycle reset.
 - [x] ADR-037 payable-first payment writes and repair delete.
-- [ ] ADR-038 envelope Set Aside transfers.
-- [ ] ADR-039 savings goals in pay_period_allocations.
+- [x] ADR-038 envelope Set Aside transfers.
+- [x] ADR-039 savings goals in pay_period_allocations.
+- [x] ADR-037 repair scan for stranded pre-fix debt payments.
+- [ ] Redo the cleaned-up debt payments through Submit / Mark cleared and confirm status,
+      remaining balance, paid-this-cycle and next due date all advance.
 
 ## Discovered 2026-08-03
 - [x] Run the ADR-027 savings_goals SQL (table, linked_goal_id column, RLS policy) in Supabase.

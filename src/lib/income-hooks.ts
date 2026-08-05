@@ -140,7 +140,10 @@ export function useDeleteIncomeEvent() {
   });
 }
 
-/** Set (or clear) one category's allocation for one paycheck. */
+/**
+ * Set (or clear) one allocation for one paycheck. ADR-039: a row targets either
+ * a category OR a savings goal, never both (DB check constraint).
+ */
 export function useSetAllocation() {
   const { householdId } = useAuth();
   const qc = useQueryClient();
@@ -148,9 +151,18 @@ export function useSetAllocation() {
     mutationFn: async (args: {
       id?: string;
       incomeEventId: string;
-      categoryId: string;
+      categoryId?: string | null;
+      goalId?: string | null;
       amount: number;
     }) => {
+      if (args.categoryId && args.goalId) {
+        throw new Error(
+          "An allocation can target a category or a savings goal, not both.",
+        );
+      }
+      if (!args.categoryId && !args.goalId) {
+        throw new Error("An allocation needs either a category or a savings goal.");
+      }
       if (!args.amount) {
         if (args.id) {
           const { error } = await supabase
@@ -165,7 +177,8 @@ export function useSetAllocation() {
         ...(args.id ? { id: args.id } : {}),
         household_id: householdId!,
         income_event_id: args.incomeEventId,
-        category_id: args.categoryId,
+        category_id: args.categoryId ?? null,
+        goal_id: args.goalId ?? null,
         allocated_amount: args.amount,
       };
       const { error } = await supabase.from("pay_period_allocations").upsert(payload);
