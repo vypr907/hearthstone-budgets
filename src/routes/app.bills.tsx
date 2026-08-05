@@ -279,7 +279,7 @@ function BillDetailDialog({
             <DetailItem label="Billing cycle" value={bill.billing_cycle ?? "—"} />
             <DetailItem
               label="Payment status"
-              value={<StatusBadge />}
+              value={<StatusBadge status={bill.payment_status} />}
             />
             <DetailItem label="Manual or auto" value={bill.manual_or_auto ?? "—"} />
             <DetailItem
