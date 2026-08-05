@@ -197,11 +197,26 @@ export function usePayFlow() {
     </Dialog>
   );
 
+  const paidSoFar = ask
+    ? ask.payable.kind === "bill"
+      ? Number(ask.payable.bill?.cycle_paid_to_date ?? 0)
+      : Number(ask.payable.debt?.cycle_paid_to_date ?? 0)
+    : 0;
+  const cycleTarget = ask
+    ? ask.stage === "cycle"
+      ? 0
+      : ask.payable.kind === "bill" && ask.payable.bill
+        ? billCycleDue(ask.payable.bill)
+        : Number(ask.payable.debt?.minimum_payment ?? 0)
+    : 0;
+
   const amountPrompt = (
     <Dialog open={!!ask} onOpenChange={(o) => !o && setAsk(null)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Amount owed this cycle</DialogTitle>
+          <DialogTitle>
+            {ask?.stage === "cycle" ? "Amount owed this cycle" : "How much are you paying now?"}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-2">
           <Label htmlFor="pay-amount">{ask?.payable.name}</Label>
@@ -214,10 +229,12 @@ export function usePayFlow() {
             value={askValue}
             onChange={(e) => setAskValue(e.target.value)}
           />
-          {ask?.payable.bill && Number(ask.payable.bill.cycle_paid_to_date ?? 0) > 0 ? (
+          {ask?.stage === "pay" ? (
             <p className="text-xs text-muted-foreground">
-              {formatMoney(Number(ask.payable.bill.cycle_paid_to_date ?? 0))} already paid
-              of {formatMoney(billCycleDue(ask.payable.bill))} due this cycle.
+              {paidSoFar > 0
+                ? `${formatMoney(paidSoFar)} already paid of ${formatMoney(cycleTarget)} due this cycle. `
+                : ""}
+              Pay less than the full amount to record a partial payment.
             </p>
           ) : null}
         </div>
@@ -231,8 +248,14 @@ export function usePayFlow() {
                 return;
               }
               const a = ask!;
+              if (a.stage === "cycle") {
+                // Variable bill: now ask how much of that is being paid right now.
+                setAsk({ ...a, stage: "pay", cycleAmount: value });
+                setAskValue(String(defaultPayAmount(a.payable, value) || ""));
+                return;
+              }
               setAsk(null);
-              resolveAccount(a.payable, a.action, value);
+              resolveAccount(a.payable, a.action, value, a.cycleAmount);
             }}
           >
             Continue
@@ -241,6 +264,7 @@ export function usePayFlow() {
       </DialogContent>
     </Dialog>
   );
+
 
 
   return {
