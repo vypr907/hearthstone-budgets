@@ -469,6 +469,27 @@ export function useDeleteTransaction() {
   });
 }
 
+/**
+ * Repair delete: removes a ledger row that is linked to a bill/debt without
+ * touching the payable. Used from bill/debt detail to clean up stray rows left
+ * by a failed payment write; the 4-state view (ADR-036) recomputes afterwards.
+ */
+export function useDeleteLinkedTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (t: Transaction) => {
+      const { error } = await supabase.from("transactions").delete().eq("id", t.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+    },
+  });
+}
+
+
 /* ---------------- Institution categories (join table) ---------------- */
 
 /** Map of institution_id -> category_id[] from the institution_categories join table. */
