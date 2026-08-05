@@ -812,6 +812,11 @@ makes that failure mode a clean no-op, verified updates turn silent 0-row writes
 visible errors, and the repair delete lets the user clean up rows stranded by earlier
 failures without hand-editing the database.
 
+A repair scan (`findStrandedDebtPayments()` / `StrandedDebtRepair`, on the Debts screen)
+lists debts whose current cycle has cleared ledger rows while `cycle_paid_to_date` is
+still 0 and the cycle never resolved — the exact pre-fix symptom — and deletes those rows
+so the payment can be redone through the normal Submit / Mark cleared flow.
+
 Extends: ADR-035, ADR-036.
 
 Status: Decided 2026-08-05. Implemented 2026-08-05.
@@ -845,7 +850,8 @@ two-sided transfer keeps every account's balance accurate to the real bank pictu
 Open item: no guard against setting aside more than once in the same month — left manual/
 unrestricted for now; revisit if double set-asides become a real problem in practice.
 
-Status: Decided 2026-08-05. Not yet implemented.
+Status: Decided 2026-08-05. Implemented 2026-08-05 (`src/components/SetAsideAction.tsx`,
+rendered on the bill detail view when a linked envelope goal exists).
 
 ## ADR-039: Savings Goals in Pay Period Allocations (Resolves ADR-024 Open Question)
 
@@ -862,4 +868,7 @@ manually direct extra paycheck money into a specific savings goal (e.g. an envel
 the same screen where they already allocate to spending categories, rather than only
 being able to fund goals through the separate Add/Withdraw action.
 
-Status: Decided 2026-08-05. Not yet implemented.
+Status: Decided 2026-08-05. Implemented 2026-08-05. `useSetAllocation()` takes
+`categoryId` OR `goalId` and rejects both/neither client-side before the DB check
+constraint fires; the period "Left to allocate" figure counts goal rows alongside
+category rows.

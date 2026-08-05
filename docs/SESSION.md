@@ -57,3 +57,22 @@ no injectable session); logic is covered by the unit test above.
 
 Known issues: existing bad rows must be cleaned up manually via the new delete buttons;
 the debt row itself may still need its payment status corrected by re-running the cycle.
+
+- ADR-037 repair scan: `src/components/StrandedDebtRepair.tsx` (+ pure
+  `findStrandedDebtPayments()`) shows an amber card on the Debts screen listing debts whose
+  current cycle has cleared ledger rows while `cycle_paid_to_date` is 0 and the cycle never
+  resolved. "Clean up" deletes those rows via `useDeleteLinkedTransaction()` so the payment
+  can be redone through the normal flow.
+- ADR-038 Set Aside: `src/components/SetAsideAction.tsx` on bill detail (only when a
+  savings goal has `linked_bill_id` = the bill). Prompts source account + amount
+  (default `monthlyEquivalent(bill)`), prompts for and saves `savings_goals.account_id`
+  when unset, then writes two cleared transactions — the debit (no goal link) and the
+  credit tagged `linked_goal_id`. No transfer table.
+- ADR-039 goal allocations: `PayPeriodAllocation.goal_id` added; `useSetAllocation()` now
+  accepts `categoryId` OR `goalId` and throws when both/neither are given; Paycheck Budget
+  gained a "Savings goals" allocation block using the same slider/input UI, and the
+  Allocated / Left-to-allocate math includes goal rows.
+
+Known issues: the repair scan is heuristic (cleared rows + zero cycle credit + unresolved
+cycle); it can't see rows the ledger never received. Set Aside has no guard against two
+set-asides in the same month (open item in ADR-038).

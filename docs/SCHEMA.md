@@ -497,3 +497,16 @@ where `linked_goal_id = goal.id and status = 'cleared'` (ADR-003).
 - `institutions.logo_url text` — nullable logo image URL (usually a derived favicon).
 
 All three are display-only; no logic depends on them being non-null.
+
+
+## ADR-039 columns (2026-08-05)
+
+`pay_period_allocations`
+
+| column | type | notes |
+|---|---|---|
+| category_id | uuid references categories(id) | now **nullable** |
+| goal_id | uuid references savings_goals(id) | nullable; set instead of category_id |
+
+Check constraint: exactly one of `category_id` / `goal_id` is non-null — a row allocates
+to a spending category OR a savings goal, never both.
