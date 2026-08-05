@@ -112,7 +112,7 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
     const update: Record<string, unknown> = { remaining_balance: nextBalance };
     if (nextBalance === 0 && !debt.date_paid_off) update.date_paid_off = todayISO();
 
-    if (target > 0 && paid + 0.005 < nextBalance + paid && paid + 0.005 < target) {
+    if (target > 0 && paid + 0.005 < target) {
       // Shortfall: stay pending in the same cycle so a follow-up can be submitted.
       update.payment_status = "pending";
       update.cycle_paid_to_date = paid;
