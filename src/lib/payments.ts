@@ -95,11 +95,35 @@ export function payableRemainingOwed(p: Payable) {
 }
 
 /**
+ * Update a bill/debt row and verify it actually changed. A silent 0-row update
+ * (RLS, stale schema cache) previously left the ledger written but the payable
+ * untouched — the "both transactions cleared but nothing updated" bug.
+ */
+async function updateRow(
+  tableName: "bills" | "debts",
+  id: string,
+  update: Record<string, unknown>,
+) {
+  const { data, error } = await supabase
+    .from(tableName)
+    .update(update)
+    .eq("id", id)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error(
+      `Could not update this ${tableName === "bills" ? "bill" : "debt"} — no row was changed.`,
+    );
+  }
+}
+
+/**
  * Apply a cleared payment of `clearedAmount` to the bill/debt row: credit the
  * cycle, and only resolve the cycle (advance the due date, reset the counters)
  * once the cycle target is met. Shared by the Submit/Clear flow and by manual
  * transactions linked to a bill/debt (ADR-035).
  */
+
 export async function applyClearedPayment(p: Payable, clearedAmount: number) {
   if (p.kind === "debt") {
     const debt = p.debt!;
