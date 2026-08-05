@@ -239,6 +239,9 @@ export function useMarkSubmitted() {
     mutationFn: async ({ payable, accountId, amount, cycleAmount }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const amt = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
+      // Mark the payable pending first so a failed status write never leaves an
+      // orphan ledger row behind.
+      await updateRow(table(p.kind), p.id, { payment_status: "pending" });
       const { error } = await supabase.from("transactions").insert({
         household_id: householdId,
         account_id: accountId,
@@ -250,11 +253,7 @@ export function useMarkSubmitted() {
         [linkColumn(p.kind)]: p.id,
       });
       if (error) throw error;
-      const { error: e2 } = await supabase
-        .from(table(p.kind))
-        .update({ payment_status: "pending" })
-        .eq("id", p.id);
-      if (e2) throw e2;
+
       const owed = payableRemainingOwed(p) - amt;
       return owed > 0.005 ? { remaining_owed: owed } : {};
     },
