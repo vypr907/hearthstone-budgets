@@ -10,8 +10,7 @@ import {
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
-import { toPayable debtRemainingOwed,
-} from "@/lib/payments";
+import { toPayable, debtRemainingOwed } from "@/lib/payments";
 import {
   DetailGrid,
   DetailItem,
