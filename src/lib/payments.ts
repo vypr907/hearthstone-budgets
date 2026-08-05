@@ -116,8 +116,7 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
       // Shortfall: stay pending in the same cycle so a follow-up can be submitted.
       update.payment_status = "pending";
       update.cycle_paid_to_date = paid;
-      const { error } = await supabase.from("debts").update(update).eq("id", p.id);
-      if (error) throw error;
+      await updateRow("debts", p.id, update);
       return { remaining_owed: target - paid };
     }
 
@@ -132,8 +131,7 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
       // Monthly debts have no next_due_date to roll; keep the cleared marker.
       update.payment_status = "cleared";
     }
-    const { error } = await supabase.from("debts").update(update).eq("id", p.id);
-    if (error) throw error;
+    await updateRow("debts", p.id, update);
     return { next_due_date: nextDue };
   }
 
@@ -142,32 +140,25 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
   const paid = Number(bill.cycle_paid_to_date ?? 0) + clearedAmount;
 
   if (paid + 0.005 < dueThisCycle) {
-    const { error } = await supabase
-      .from("bills")
-      .update({
-        payment_status: "pending",
-        cycle_paid_to_date: paid,
-        cycle_amount_due: dueThisCycle,
-      })
-      .eq("id", bill.id);
-    if (error) throw error;
+    await updateRow("bills", bill.id, {
+      payment_status: "pending",
+      cycle_paid_to_date: paid,
+      cycle_amount_due: dueThisCycle,
+    });
     return { remaining_owed: dueThisCycle - paid };
   }
 
   const base = bill.next_due_date ?? todayISO();
   const nextDue = advanceDate(base, bill.billing_cycle);
-  const { error } = await supabase
-    .from("bills")
-    .update({
-      payment_status: "unpaid",
-      next_due_date: nextDue,
-      cycle_paid_to_date: 0,
-      cycle_amount_due: null,
-    })
-    .eq("id", bill.id);
-  if (error) throw error;
+  await updateRow("bills", bill.id, {
+    payment_status: "unpaid",
+    next_due_date: nextDue,
+    cycle_paid_to_date: 0,
+    cycle_amount_due: null,
+  });
   return { next_due_date: nextDue };
 }
+
 
 
 
