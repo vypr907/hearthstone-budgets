@@ -276,9 +276,15 @@ export function useMarkCleared() {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const requested = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       const existing = await findLinkedTransaction(p, "pending");
-      let clearedAmount = requested;
+      const clearedAmount = existing
+        ? Math.abs(Number(existing.amount ?? requested))
+        : requested;
+
+      // Update the bill/debt FIRST: if that fails we bail out before touching the
+      // ledger, instead of stranding a cleared transaction with no effect.
+      const result = await applyClearedPayment(p, clearedAmount);
+
       if (existing) {
-        clearedAmount = Math.abs(Number(existing.amount ?? requested));
         const { error } = await supabase
           .from("transactions")
           .update({ status: "cleared" })
@@ -298,8 +304,9 @@ export function useMarkCleared() {
         if (error) throw error;
       }
 
-      return applyClearedPayment(p, clearedAmount);
+      return result;
     },
+
     onSuccess: done,
   });
 }
