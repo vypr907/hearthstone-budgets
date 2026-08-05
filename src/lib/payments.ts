@@ -52,9 +52,16 @@ const linkColumn = (kind: PayableKind) =>
   kind === "bill" ? "linked_bill_id" : "linked_debt_id";
 /**
  * Payment mutations need a resolved account: transactions.account_id is NOT NULL.
- * `amount` overrides the payable's default (variable-amount bills, partial payments).
+ * `amount` is the amount being paid right now (ADR-035: every submit/clear can be
+ * a partial payment). `cycleAmount` sets what's owed for the whole cycle and is
+ * only prompted for variable-amount bills.
  */
-export type PayInput = { payable: Payable; accountId: string; amount?: number };
+export type PayInput = {
+  payable: Payable;
+  accountId: string;
+  amount?: number;
+  cycleAmount?: number;
+};
 
 const table = (kind: PayableKind) => (kind === "bill" ? "bills" : "debts");
 
@@ -69,6 +76,99 @@ export function billRemainingOwed(bill: Bill) {
   const paid = Number(bill.cycle_paid_to_date ?? 0);
   return Math.max(0, billCycleDue(bill) - paid);
 }
+
+/** ADR-035: debts track cycles like bills — the cycle target is the minimum payment. */
+export function debtCycleDue(debt: Debt) {
+  return Number(debt.minimum_payment || 0);
+}
+
+/** Still owed toward this debt's current cycle minimum (0 when settled). */
+export function debtRemainingOwed(debt: Debt) {
+  const paid = Number(debt.cycle_paid_to_date ?? 0);
+  return Math.max(0, debtCycleDue(debt) - paid);
+}
+
+/** Remaining owed this cycle for either kind of payable. */
+export function payableRemainingOwed(p: Payable) {
+  if (p.kind === "bill") return p.bill ? billRemainingOwed(p.bill) : p.amount;
+  return p.debt ? debtRemainingOwed(p.debt) : p.amount;
+}
+
+/**
+ * Apply a cleared payment of `clearedAmount` to the bill/debt row: credit the
+ * cycle, and only resolve the cycle (advance the due date, reset the counters)
+ * once the cycle target is met. Shared by the Submit/Clear flow and by manual
+ * transactions linked to a bill/debt (ADR-035).
+ */
+export async function applyClearedPayment(p: Payable, clearedAmount: number) {
+  if (p.kind === "debt") {
+    const debt = p.debt!;
+    const remaining = Number(debt.remaining_balance ?? 0);
+    const nextBalance = Math.max(0, remaining - clearedAmount);
+    const target = debtCycleDue(debt);
+    const paid = Number(debt.cycle_paid_to_date ?? 0) + clearedAmount;
+    const cycle = (debt.billing_cycle ?? "monthly").toLowerCase();
+
+    const update: Record<string, unknown> = { remaining_balance: nextBalance };
+    if (nextBalance === 0 && !debt.date_paid_off) update.date_paid_off = todayISO();
+
+    if (target > 0 && paid + 0.005 < nextBalance + paid && paid + 0.005 < target) {
+      // Shortfall: stay pending in the same cycle so a follow-up can be submitted.
+      update.payment_status = "pending";
+      update.cycle_paid_to_date = paid;
+      const { error } = await supabase.from("debts").update(update).eq("id", p.id);
+      if (error) throw error;
+      return { remaining_owed: target - paid };
+    }
+
+    // Cycle satisfied: reset counters, and roll non-monthly debts forward.
+    update.cycle_paid_to_date = 0;
+    let nextDue: string | null = null;
+    if (cycle !== "monthly") {
+      nextDue = advanceDate(debt.next_due_date ?? todayISO(), debt.billing_cycle);
+      update.next_due_date = nextDue;
+      update.payment_status = "unpaid";
+    } else {
+      // Monthly debts have no next_due_date to roll; keep the cleared marker.
+      update.payment_status = "cleared";
+    }
+    const { error } = await supabase.from("debts").update(update).eq("id", p.id);
+    if (error) throw error;
+    return { next_due_date: nextDue };
+  }
+
+  const bill = p.bill!;
+  const dueThisCycle = billCycleDue(bill);
+  const paid = Number(bill.cycle_paid_to_date ?? 0) + clearedAmount;
+
+  if (paid + 0.005 < dueThisCycle) {
+    const { error } = await supabase
+      .from("bills")
+      .update({
+        payment_status: "pending",
+        cycle_paid_to_date: paid,
+        cycle_amount_due: dueThisCycle,
+      })
+      .eq("id", bill.id);
+    if (error) throw error;
+    return { remaining_owed: dueThisCycle - paid };
+  }
+
+  const base = bill.next_due_date ?? todayISO();
+  const nextDue = advanceDate(base, bill.billing_cycle);
+  const { error } = await supabase
+    .from("bills")
+    .update({
+      payment_status: "unpaid",
+      next_due_date: nextDue,
+      cycle_paid_to_date: 0,
+      cycle_amount_due: null,
+    })
+    .eq("id", bill.id);
+  if (error) throw error;
+  return { next_due_date: nextDue };
+}
+
 
 
 async function findLinkedTransaction(p: Payable, status?: string) {
