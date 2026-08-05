@@ -309,3 +309,44 @@
 ### Still Open
 
 * "Currently due" for debts is defined as due date ≤ today, so a debt due later this month contributes to Current Balance but not Current Due.
+
+## 2026-08-04 – ADR-032: Paycheck-Deducted Debts
+
+### Completed
+
+* Debt form gained a "Paid via paycheck/HSA deduction" toggle writing `debts.is_paycheck_deduction`, with a badge on the Debts list and detail.
+* Deducted debts are excluded from `obligationsInRange()` and surfaced separately via `deductedObligationsInRange()` in the Paycheck Budget "Due this period" card as "Paycheck-deducted (not counted)".
+
+## 2026-08-04 – Debts: Paid-Off Handling & Detail Polish
+
+### Completed
+
+* A payment that zeroes `remaining_balance` now sets `date_paid_off` (`src/lib/payments.ts`).
+* Debts list hides zero-balance debts behind a "Show paid off" switch, sorts them to the bottom and shows the paid-off date.
+* Billing Cycle labels are title-cased.
+* Debt detail gained a "Recent transactions" section (last 10 by `linked_debt_id`).
+
+## 2026-08-04 – ADR-033: Bill Envelopes & Goal Accounts
+
+### Completed
+
+* `monthlyEquivalent()` and `needsEnvelope()` added to `src/lib/format.ts`.
+* `useUpsertBill()` returns the saved row and auto-creates one `savings_goals` envelope (`linked_bill_id`) for quarterly, bimonthly and annual bills.
+* Goal form can link an optional `account_id`; envelope goals are flagged in the goals list.
+
+### Still Open
+
+* Bill card "Add to envelope" quick-transaction action.
+
+## 2026-08-04 – Account Labels & Pay-Time Picker Polish
+
+### Completed
+
+* Add Transaction and the pay-time account picker show "{name} - {institution} - •••{last4}".
+* The picker renders the account-type icon and an institution-logo badge (`accountLast4`, `accountLabel`, `accountTypeVisual`).
+
+### Still Open
+
+* ADR-034 Dashboard hero rework, budget/actual bills split, "owed this pay period by category" card, and moving Net Worth Trend to the bottom.
+* Spending screen "Budgeted: $X spending + $Y bills = $Z" split.
+* Status Snapshot balances section, pay-period progress bar, and `buildSnapshotSummary()`.
