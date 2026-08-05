@@ -11,6 +11,8 @@ import {
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
+import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
+
 import { useCycleState } from "@/lib/ledger-state";
 import { toPayable, debtRemainingOwed } from "@/lib/payments";
 import {
