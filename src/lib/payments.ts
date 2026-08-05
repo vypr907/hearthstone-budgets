@@ -194,41 +194,54 @@ function useAfterPayment() {
 }
 
 /**
- * Mark submitted: create a pending ledger transaction and set the
- * bill/debt payment_status to 'pending'. For variable-amount bills the caller
- * passes the amount owed this cycle, which is stored on the bill the first
- * time a payment is made in the cycle.
+ * ADR-035: a cycle's target amount is fixed the first time a payment is made in
+ * it. Variable bills use the prompted `cycleAmount`; fixed bills use bills.amount
+ * with no prompt. Returns the payable with the stored value applied.
+ */
+async function ensureCycleAmount(p: Payable, cycleAmount?: number): Promise<Payable> {
+  if (p.kind !== "bill" || !p.bill) return p;
+  if (p.bill.cycle_amount_due != null) return p;
+  const value = p.bill.is_variable_amount
+    ? Math.abs(Number(cycleAmount ?? p.bill.amount ?? p.amount) || 0)
+    : Number(p.bill.amount || 0);
+  const { error } = await supabase
+    .from("bills")
+    .update({ cycle_amount_due: value })
+    .eq("id", p.id);
+  if (error) throw error;
+  return { ...p, bill: { ...p.bill, cycle_amount_due: value } };
+}
+
+/**
+ * Mark submitted: create a pending ledger transaction for the amount being paid
+ * now (which may be a partial payment) and set payment_status to 'pending'.
+ * Submitting again while already pending adds another partial payment.
  */
 export function useMarkSubmitted() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable: p, accountId, amount }: PayInput) => {
-      const amt = Math.abs(Number(amount ?? p.amount) || 0);
-      const existing = await findLinkedTransaction(p, "pending");
-      if (!existing) {
-        const { error } = await supabase.from("transactions").insert({
-          household_id: householdId,
-          account_id: accountId,
-          category_id: p.category_id,
-          amount: -amt,
-          status: "pending",
-          description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
-          transaction_date: todayISO(),
-          [linkColumn(p.kind)]: p.id,
-        });
-        if (error) throw error;
-      }
-      const update: Record<string, unknown> = { payment_status: "pending" };
-      if (p.kind === "bill" && p.bill?.is_variable_amount && p.bill.cycle_amount_due == null) {
-        // First payment of this cycle sets what's owed for the cycle.
-        update.cycle_amount_due = amount != null ? Math.abs(Number(amount)) : p.amount;
-      }
+    mutationFn: async ({ payable, accountId, amount, cycleAmount }: PayInput) => {
+      const p = await ensureCycleAmount(payable, cycleAmount);
+      const amt = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
+      const { error } = await supabase.from("transactions").insert({
+        household_id: householdId,
+        account_id: accountId,
+        category_id: p.category_id,
+        amount: -amt,
+        status: "pending",
+        description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
+        transaction_date: todayISO(),
+        [linkColumn(p.kind)]: p.id,
+      });
+      if (error) throw error;
       const { error: e2 } = await supabase
         .from(table(p.kind))
-        .update(update)
+        .update({ payment_status: "pending" })
         .eq("id", p.id);
       if (e2) throw e2;
+      const owed = payableRemainingOwed(p) - amt;
+      return owed > 0.005 ? { remaining_owed: owed } : {};
     },
     onSuccess: done,
   });
@@ -237,15 +250,16 @@ export function useMarkSubmitted() {
 
 /**
  * Mark cleared: clear the linked pending transaction (creating one if the
- * payment was never submitted), set payment_status, reduce debt balances,
- * and roll bills forward to their next cycle.
+ * payment was never submitted), then credit the cycle through
+ * `applyClearedPayment` — resolving the cycle only once it is fully covered.
  */
 export function useMarkCleared() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable: p, accountId, amount }: PayInput) => {
-      const requested = Math.abs(Number(amount ?? p.amount) || 0);
+    mutationFn: async ({ payable, accountId, amount, cycleAmount }: PayInput) => {
+      const p = await ensureCycleAmount(payable, cycleAmount);
+      const requested = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       const existing = await findLinkedTransaction(p, "pending");
       let clearedAmount = requested;
       if (existing) {
@@ -269,69 +283,12 @@ export function useMarkCleared() {
         if (error) throw error;
       }
 
-      if (p.kind === "debt") {
-        const remaining = Number(p.debt?.remaining_balance ?? 0);
-        const next = Math.max(0, remaining - clearedAmount);
-        const cycle = (p.debt?.billing_cycle ?? "monthly").toLowerCase();
-        const update: Record<string, unknown> = {
-          payment_status: "cleared",
-          remaining_balance: next,
-        };
-        // A payment that zeroes the balance retires the debt.
-        if (next === 0 && !p.debt?.date_paid_off) update.date_paid_off = todayISO();
-        // Non-monthly debts roll forward on their own cycle, like bills.
-        let nextDue: string | null = null;
-        if (cycle !== "monthly") {
-          nextDue = advanceDate(p.debt?.next_due_date ?? todayISO(), p.debt?.billing_cycle);
-          update.next_due_date = nextDue;
-        }
-
-        const { error } = await supabase.from("debts").update(update).eq("id", p.id);
-        if (error) throw error;
-        return { next_due_date: nextDue };
-      }
-
-      // Bills: credit the cycle, and only roll forward once the cycle is fully paid.
-      const bill = p.bill!;
-      const dueThisCycle =
-        bill.cycle_amount_due != null
-          ? Number(bill.cycle_amount_due)
-          : requested > 0 && bill.is_variable_amount
-            ? requested
-            : Number(bill.amount || 0);
-      const paid = Number(bill.cycle_paid_to_date ?? 0) + clearedAmount;
-
-      if (paid + 0.005 < dueThisCycle) {
-        // Partial payment: stay pending in the same cycle so a follow-up can be submitted.
-        const { error } = await supabase
-          .from("bills")
-          .update({
-            payment_status: "pending",
-            cycle_paid_to_date: paid,
-            cycle_amount_due: dueThisCycle,
-          })
-          .eq("id", bill.id);
-        if (error) throw error;
-        return { remaining_owed: dueThisCycle - paid };
-      }
-
-      const base = bill.next_due_date ?? todayISO();
-      const nextDue = advanceDate(base, bill.billing_cycle);
-      const { error: e2 } = await supabase
-        .from("bills")
-        .update({
-          payment_status: "unpaid",
-          next_due_date: nextDue,
-          cycle_paid_to_date: 0,
-          cycle_amount_due: null,
-        })
-        .eq("id", bill.id);
-      if (e2) throw e2;
-      return { next_due_date: nextDue };
+      return applyClearedPayment(p, clearedAmount);
     },
     onSuccess: done,
   });
 }
+
 
 
 /**
