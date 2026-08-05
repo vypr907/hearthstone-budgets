@@ -667,6 +667,8 @@ function DebtDialog({
 /** Last 10 ledger rows linked to this debt, newest first. */
 function RecentDebtTransactions({ debtId }: { debtId: string }) {
   const { data: transactions = [] } = useTransactions();
+  const del = useDeleteLinkedTransaction();
+
   const rows = useMemo(
     () =>
       transactions
