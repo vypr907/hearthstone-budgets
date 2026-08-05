@@ -76,6 +76,7 @@ function BillsPage() {
   const { data: categories = [] } = useCategories();
   const [editing, setEditing] = useState<Partial<Bill> | null>(null);
   const [detail, setDetail] = useState<Bill | null>(null);
+  const infoOf = useCycleState();
 
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("due");

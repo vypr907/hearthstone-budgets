@@ -10,6 +10,7 @@ import {
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
+import { useCycleState } from "@/lib/ledger-state";
 import { toPayable, debtRemainingOwed } from "@/lib/payments";
 import {
   DetailGrid,
@@ -85,6 +86,7 @@ function DebtsPage() {
   const { data: debts = [], isLoading } = useDebts();
   const [editing, setEditing] = useState<Partial<Debt> | null>(null);
   const [detail, setDetail] = useState<Debt | null>(null);
+  const infoOf = useCycleState();
   const { data: categories = [] } = useCategories();
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("priority");
@@ -285,11 +287,14 @@ function DebtsPage() {
                     </p>
                   </div>
                 </div>
-                {debtRemainingOwed(d) > 0 && Number(d.cycle_paid_to_date ?? 0) > 0 ? (
-                  <p className="mt-2 text-xs font-medium text-destructive">
-                    {formatMoney(debtRemainingOwed(d))} still owed this cycle
-                  </p>
-                ) : null}
+                {(() => {
+                  const info = infoOf(toPayable("debt", d));
+                  return info.clearedSum > 0 && info.remaining > 0 ? (
+                    <p className="mt-2 text-xs font-medium text-destructive">
+                      {formatMoney(info.remaining)} still owed this cycle
+                    </p>
+                  ) : null;
+                })()}
                 <ItemBar className="mt-2" value={pctPaid} color={itemColor(i)} />
                 <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                   {Math.round(pctPaid)}% paid off
