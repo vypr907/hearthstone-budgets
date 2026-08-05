@@ -734,6 +734,7 @@ upcoming bill. Splitting spendable-vs-committed makes the number trustworthy at 
 glance instead of requiring mental math against the Bills screen.
 
 Status: Decided 2026-08-04. Not yet implemented.
+
 ## ADR-035: Universal Partial Payments for Bills and Debts
 Decision:
 Every bill and debt submit/clear prompts for the amount being paid now, defaulting to
