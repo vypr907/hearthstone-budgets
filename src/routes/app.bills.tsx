@@ -6,6 +6,7 @@ import {
   useUpsertBill,
   useCategories,
   useInstitutions,
+  useTransactions,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -191,9 +192,9 @@ function BillsPage() {
                           ) : null}
                           {b.is_variable_amount ? <span>· variable</span> : null}
                           <StatusBadge status={b.payment_status} />
-                          {Number(b.cycle_paid_to_date ?? 0) > 0 && billRemainingOwed(b) > 0 ? (
+                          {b.cycle_amount_due != null && billRemainingOwed(b) > 0 ? (
                             <span className="font-medium text-destructive">
-                              {formatMoney(billRemainingOwed(b))} still owed
+                              {formatMoney(billRemainingOwed(b))} still owed this cycle
                             </span>
                           ) : null}
                         </div>
@@ -261,9 +262,7 @@ function BillDetailDialog({
   const institution = institutions.find((i) => i.id === bill.institution_id);
   // Only surface cycle figures when they add information beyond bills.amount.
   const showCycle =
-    Number(bill.cycle_paid_to_date ?? 0) > 0 ||
-    (bill.cycle_amount_due != null &&
-      Number(bill.cycle_amount_due) !== Number(bill.amount || 0));
+    Number(bill.cycle_paid_to_date ?? 0) > 0 || bill.cycle_amount_due != null;
 
 
   return (
@@ -302,6 +301,7 @@ function BillDetailDialog({
           </DetailGrid>
           <DetailText label="Notes" value={bill.notes} />
           <PayActions payable={toPayable("bill", bill)} status={bill.payment_status} />
+          <RecentBillTransactions billId={bill.id} />
 
         </div>
         <DialogFooter className="gap-2">
@@ -314,6 +314,44 @@ function BillDetailDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Last 10 ledger rows linked to this bill, newest first (ADR-035). */
+function RecentBillTransactions({ billId }: { billId: string }) {
+  const { data: transactions = [] } = useTransactions();
+  const rows = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.linked_bill_id === billId)
+        .sort((a, b) => (b.transaction_date ?? "").localeCompare(a.transaction_date ?? ""))
+        .slice(0, 10),
+    [transactions, billId],
+  );
+
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Recent transactions
+      </p>
+      {rows.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">No payments logged yet.</p>
+      ) : (
+        <div className="mt-1 divide-y divide-border/50">
+          {rows.map((t) => (
+            <div key={t.id} className="flex items-center justify-between py-2 text-sm">
+              <span className="min-w-0 flex-1 truncate">
+                {t.transaction_date?.slice(0, 10)}
+                {t.description ? ` · ${t.description}` : ""}
+              </span>
+              <span className="ml-2 shrink-0 tabular-nums">
+                {formatMoney(Number(t.amount ?? 0))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   billCycleDue,
   billRemainingOwed,
+  payableRemainingOwed,
   useMarkCleared,
   useMarkSubmitted,
   useMarkUnpaid,
@@ -25,15 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Action = "submitted" | "cleared";
+type Stage = "cycle" | "pay";
 
-/** Amount to pre-fill for a variable-amount bill's current cycle. */
-function defaultCycleAmount(payable: Payable) {
-  const bill = payable.bill;
-  if (!bill) return payable.amount;
-  const paid = Number(bill.cycle_paid_to_date ?? 0);
-  if (paid > 0) return billRemainingOwed(bill);
-  return billCycleDue(bill);
-}
 
 /**
  * Shared mark-paid flow. transactions.account_id is NOT NULL, but bills/debts
@@ -50,9 +44,14 @@ export function usePayFlow() {
   const clear = useMarkCleared();
   const undo = useMarkUnpaid();
   const [choice, setChoice] = useState<
-    { payable: Payable; action: Action; amount?: number } | null
+    { payable: Payable; action: Action; amount?: number; cycleAmount?: number } | null
   >(null);
-  const [ask, setAsk] = useState<{ payable: Payable; action: Action } | null>(null);
+  const [ask, setAsk] = useState<{
+    payable: Payable;
+    action: Action;
+    stage: Stage;
+    cycleAmount?: number;
+  } | null>(null);
   const [askValue, setAskValue] = useState("");
 
   const busy = submit.isPending || clear.isPending || undo.isPending;
@@ -62,12 +61,14 @@ export function usePayFlow() {
     action: Action,
     accountId: string,
     amount?: number,
+    cycleAmount?: number,
   ) {
     try {
       const res = (await (action === "submitted" ? submit : clear).mutateAsync({
         payable,
         accountId,
         amount,
+        cycleAmount,
       })) as
         | { next_due_date?: string | null; remaining_owed?: number }
         | undefined;
@@ -94,19 +95,42 @@ export function usePayFlow() {
     return match?.account_id ?? null;
   }
 
-  function resolveAccount(payable: Payable, action: Action, amount?: number) {
+  function resolveAccount(
+    payable: Payable,
+    action: Action,
+    amount?: number,
+    cycleAmount?: number,
+  ) {
     // Any household account can pay any bill/debt (ADR-007 correction 2026-08-03).
-    setChoice({ payable, action, amount });
+    setChoice({ payable, action, amount, cycleAmount });
   }
 
+  /** Amount to pre-fill for the "paying now" prompt: whatever is still owed. */
+  function defaultPayAmount(payable: Payable, cycleAmount?: number) {
+    if (payable.kind === "bill" && payable.bill) {
+      if (cycleAmount != null) {
+        return Math.max(0, cycleAmount - Number(payable.bill.cycle_paid_to_date ?? 0));
+      }
+      return billRemainingOwed(payable.bill) || billCycleDue(payable.bill);
+    }
+    return payableRemainingOwed(payable) || payable.amount;
+  }
+
+  /** Ask what's owed this cycle (variable bills only), then how much is being paid now. */
   function start(payable: Payable, action: Action) {
-    if (payable.kind === "bill" && payable.bill?.is_variable_amount) {
-      setAskValue(String(defaultCycleAmount(payable) || ""));
-      setAsk({ payable, action });
+    const needsCycle =
+      payable.kind === "bill" &&
+      !!payable.bill?.is_variable_amount &&
+      payable.bill?.cycle_amount_due == null;
+    if (needsCycle) {
+      setAskValue(String(billCycleDue(payable.bill!) || ""));
+      setAsk({ payable, action, stage: "cycle" });
       return;
     }
-    resolveAccount(payable, action);
+    setAskValue(String(defaultPayAmount(payable) || ""));
+    setAsk({ payable, action, stage: "pay" });
   }
+
 
   async function markUnpaid(payable: Payable) {
     try {
@@ -145,7 +169,7 @@ export function usePayFlow() {
                 onClick={() => {
                   const c = choice!;
                   setChoice(null);
-                  void perform(c.payable, c.action, a.id, c.amount);
+                  void perform(c.payable, c.action, a.id, c.amount, c.cycleAmount);
                 }}
               >
                 <span aria-hidden className="text-lg" title={a.account_type ?? undefined}>
@@ -174,11 +198,26 @@ export function usePayFlow() {
     </Dialog>
   );
 
+  const paidSoFar = ask
+    ? ask.payable.kind === "bill"
+      ? Number(ask.payable.bill?.cycle_paid_to_date ?? 0)
+      : Number(ask.payable.debt?.cycle_paid_to_date ?? 0)
+    : 0;
+  const cycleTarget = ask
+    ? ask.stage === "cycle"
+      ? 0
+      : ask.payable.kind === "bill" && ask.payable.bill
+        ? billCycleDue(ask.payable.bill)
+        : Number(ask.payable.debt?.minimum_payment ?? 0)
+    : 0;
+
   const amountPrompt = (
     <Dialog open={!!ask} onOpenChange={(o) => !o && setAsk(null)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Amount owed this cycle</DialogTitle>
+          <DialogTitle>
+            {ask?.stage === "cycle" ? "Amount owed this cycle" : "How much are you paying now?"}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-2">
           <Label htmlFor="pay-amount">{ask?.payable.name}</Label>
@@ -191,10 +230,12 @@ export function usePayFlow() {
             value={askValue}
             onChange={(e) => setAskValue(e.target.value)}
           />
-          {ask?.payable.bill && Number(ask.payable.bill.cycle_paid_to_date ?? 0) > 0 ? (
+          {ask?.stage === "pay" ? (
             <p className="text-xs text-muted-foreground">
-              {formatMoney(Number(ask.payable.bill.cycle_paid_to_date ?? 0))} already paid
-              of {formatMoney(billCycleDue(ask.payable.bill))} due this cycle.
+              {paidSoFar > 0
+                ? `${formatMoney(paidSoFar)} already paid of ${formatMoney(cycleTarget)} due this cycle. `
+                : ""}
+              Pay less than the full amount to record a partial payment.
             </p>
           ) : null}
         </div>
@@ -208,8 +249,14 @@ export function usePayFlow() {
                 return;
               }
               const a = ask!;
+              if (a.stage === "cycle") {
+                // Variable bill: now ask how much of that is being paid right now.
+                setAsk({ ...a, stage: "pay", cycleAmount: value });
+                setAskValue(String(defaultPayAmount(a.payable, value) || ""));
+                return;
+              }
               setAsk(null);
-              resolveAccount(a.payable, a.action, value);
+              resolveAccount(a.payable, a.action, value, a.cycleAmount);
             }}
           >
             Continue
@@ -218,6 +265,7 @@ export function usePayFlow() {
       </DialogContent>
     </Dialog>
   );
+
 
 
   return {

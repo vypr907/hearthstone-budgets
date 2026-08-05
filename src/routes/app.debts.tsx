@@ -10,7 +10,7 @@ import {
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
-import { toPayable } from "@/lib/payments";
+import { toPayable, debtRemainingOwed } from "@/lib/payments";
 import {
   DetailGrid,
   DetailItem,
@@ -285,6 +285,11 @@ function DebtsPage() {
                     </p>
                   </div>
                 </div>
+                {debtRemainingOwed(d) > 0 && Number(d.cycle_paid_to_date ?? 0) > 0 ? (
+                  <p className="mt-2 text-xs font-medium text-destructive">
+                    {formatMoney(debtRemainingOwed(d))} still owed this cycle
+                  </p>
+                ) : null}
                 <ItemBar className="mt-2" value={pctPaid} color={itemColor(i)} />
                 <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                   {Math.round(pctPaid)}% paid off
@@ -351,6 +356,8 @@ function DebtDetailDialog({
             />
             <DetailMoney label="Remaining balance" value={debt.remaining_balance} />
             <DetailMoney label="Minimum payment" value={debt.minimum_payment} />
+            <DetailMoney label="Paid this cycle" value={Number(debt.cycle_paid_to_date ?? 0)} />
+            <DetailMoney label="Still owed this cycle" value={debtRemainingOwed(debt)} />
             <DetailItem
               label="Interest rate"
               value={

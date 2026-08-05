@@ -1,3 +1,7 @@
+## Discovered 2026-08-05
+- [x] ADR-035 universal partial payments (bills, debts, linked manual transactions).
+- [ ] Verify `debts.cycle_paid_to_date` exists in Supabase before relying on debt partials.
+
 ## Discovered 2026-08-03
 - [ ] Run the ADR-027 savings_goals SQL (table, linked_goal_id column, RLS policy) in Supabase.
 - [x] Build the Savings Goals screen (ADR-027).

@@ -102,6 +102,8 @@ export type Debt = {
   date_paid_off: string | null;
   /** ADR-032: serviced by payroll/HSA deduction — excluded from cash obligations. */
   is_paycheck_deduction?: boolean | null;
+  /** ADR-035: paid so far toward the current cycle's minimum payment. */
+  cycle_paid_to_date?: number | null;
   created_at: string;
   updated_at: string;
 };

@@ -330,6 +330,8 @@ debts (
     priority_order integer,
     notes text,
     date_paid_off date,
+    is_paycheck_deduction boolean default false, -- ADR-032: serviced by payroll/HSA deduction
+    cycle_paid_to_date numeric default 0,        -- ADR-035: cleared payments applied to the current cycle
     created_at timestamptz default now(),
     updated_at timestamptz default now()
 )

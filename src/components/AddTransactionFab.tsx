@@ -20,11 +20,14 @@ import {
 } from "@/components/ui/select";
 import {
   useAccounts,
+  useBills,
   useCategories,
+  useDebts,
   useInstitutions,
   useUpsertTransaction,
 } from "@/lib/data-hooks";
 import { accountLabel } from "@/lib/format";
+import { applyClearedPayment, toPayable } from "@/lib/payments";
 import { useQueryClient } from "@tanstack/react-query";
 
 
@@ -36,6 +39,7 @@ function todayISO() {
 }
 
 const NO_CATEGORY = "__none__";
+const NO_LINK = "__none__";
 
 /**
  * One-tap manual entry. Date defaults to today and status to 'cleared' —
@@ -52,6 +56,10 @@ export function AddTransactionFab() {
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState(NO_CATEGORY);
   const [description, setDescription] = useState("");
+  /** "bill:<id>" or "debt:<id>" — mutually exclusive, optional (ADR-035). */
+  const [link, setLink] = useState(NO_LINK);
+  const { data: bills = [] } = useBills();
+  const { data: debts = [] } = useDebts();
 
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
@@ -71,6 +79,7 @@ export function AddTransactionFab() {
     setAmount("");
     setCategoryId(NO_CATEGORY);
     setDescription("");
+    setLink(NO_LINK);
   }
 
   async function submit() {
@@ -83,6 +92,9 @@ export function AddTransactionFab() {
       toast.error("Enter an amount");
       return;
     }
+    const [linkKind, linkId] = link === NO_LINK ? [null, null] : link.split(":");
+    const bill = linkKind === "bill" ? bills.find((b) => b.id === linkId) : undefined;
+    const debt = linkKind === "debt" ? debts.find((d) => d.id === linkId) : undefined;
     try {
       await save.mutateAsync({
         account_id: accountId,
@@ -92,7 +104,16 @@ export function AddTransactionFab() {
         description: description.trim() || null,
         status: "cleared",
         transaction_date: todayISO(),
+        ...(bill ? { linked_bill_id: bill.id } : {}),
+        ...(debt ? { linked_debt_id: debt.id } : {}),
       });
+      // A linked entry is a real payment: run the same cycle update as Submit/Clear.
+      if (bill || debt) {
+        const payable = bill ? toPayable("bill", bill) : toPayable("debt", debt!);
+        await applyClearedPayment(payable, Math.abs(n));
+        qc.invalidateQueries({ queryKey: ["bills"] });
+        qc.invalidateQueries({ queryKey: ["debts"] });
+      }
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
       qc.invalidateQueries({ queryKey: ["spending_actuals"] });
       toast.success("Transaction added");
@@ -169,6 +190,31 @@ export function AddTransactionFab() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Link to bill/debt (optional)</Label>
+              <Select value={link} onValueChange={setLink}>
+                <SelectTrigger className="h-12">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_LINK}>Not linked</SelectItem>
+                  {bills.map((b) => (
+                    <SelectItem key={`bill-${b.id}`} value={`bill:${b.id}`}>
+                      🧾 {b.name}
+                    </SelectItem>
+                  ))}
+                  {debts.map((d) => (
+                    <SelectItem key={`debt-${d.id}`} value={`debt:${d.id}`}>
+                      💳 {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Linked entries count toward that bill or debt's current cycle.
+              </p>
             </div>
 
             <div className="space-y-2">

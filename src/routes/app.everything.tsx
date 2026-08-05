@@ -7,7 +7,7 @@ import {
   useResetDebtsMonth,
 } from "@/lib/data-hooks";
 import { usePayFlow } from "@/lib/pay-flow";
-import { toPayable, type Payable } from "@/lib/payments";
+import { billRemainingOwed, debtRemainingOwed, toPayable, type Payable } from "@/lib/payments";
 import { useLedgerState, type LedgerState } from "@/lib/ledger-state";
 import { formatMoney, debtDueDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -274,6 +274,22 @@ function EverythingPage() {
                         ? ` · ${categoryName[r.category_id]}`
                         : ""}
                     </p>
+                    {(() => {
+                      const owed = r.bill
+                        ? r.bill.cycle_amount_due != null
+                          ? billRemainingOwed(r.bill)
+                          : 0
+                        : r.debt
+                          ? Number(r.debt.cycle_paid_to_date ?? 0) > 0
+                            ? debtRemainingOwed(r.debt)
+                            : 0
+                          : 0;
+                      return owed > 0 ? (
+                        <p className="text-xs font-medium text-destructive">
+                          {formatMoney(owed)} still owed this cycle
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
                   <p className="shrink-0 font-semibold">{formatMoney(r.amount)}</p>
                 </CardContent>
