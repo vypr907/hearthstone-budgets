@@ -43,9 +43,14 @@ export function usePayFlow() {
   const clear = useMarkCleared();
   const undo = useMarkUnpaid();
   const [choice, setChoice] = useState<
-    { payable: Payable; action: Action; amount?: number } | null
+    { payable: Payable; action: Action; amount?: number; cycleAmount?: number } | null
   >(null);
-  const [ask, setAsk] = useState<{ payable: Payable; action: Action } | null>(null);
+  const [ask, setAsk] = useState<{
+    payable: Payable;
+    action: Action;
+    stage: Stage;
+    cycleAmount?: number;
+  } | null>(null);
   const [askValue, setAskValue] = useState("");
 
   const busy = submit.isPending || clear.isPending || undo.isPending;
@@ -55,12 +60,14 @@ export function usePayFlow() {
     action: Action,
     accountId: string,
     amount?: number,
+    cycleAmount?: number,
   ) {
     try {
       const res = (await (action === "submitted" ? submit : clear).mutateAsync({
         payable,
         accountId,
         amount,
+        cycleAmount,
       })) as
         | { next_due_date?: string | null; remaining_owed?: number }
         | undefined;
@@ -87,19 +94,42 @@ export function usePayFlow() {
     return match?.account_id ?? null;
   }
 
-  function resolveAccount(payable: Payable, action: Action, amount?: number) {
+  function resolveAccount(
+    payable: Payable,
+    action: Action,
+    amount?: number,
+    cycleAmount?: number,
+  ) {
     // Any household account can pay any bill/debt (ADR-007 correction 2026-08-03).
-    setChoice({ payable, action, amount });
+    setChoice({ payable, action, amount, cycleAmount });
   }
 
+  /** Amount to pre-fill for the "paying now" prompt: whatever is still owed. */
+  function defaultPayAmount(payable: Payable, cycleAmount?: number) {
+    if (payable.kind === "bill" && payable.bill) {
+      if (cycleAmount != null) {
+        return Math.max(0, cycleAmount - Number(payable.bill.cycle_paid_to_date ?? 0));
+      }
+      return billRemainingOwed(payable.bill) || billCycleDue(payable.bill);
+    }
+    return payableRemainingOwed(payable) || payable.amount;
+  }
+
+  /** Ask what's owed this cycle (variable bills only), then how much is being paid now. */
   function start(payable: Payable, action: Action) {
-    if (payable.kind === "bill" && payable.bill?.is_variable_amount) {
-      setAskValue(String(defaultCycleAmount(payable) || ""));
-      setAsk({ payable, action });
+    const needsCycle =
+      payable.kind === "bill" &&
+      !!payable.bill?.is_variable_amount &&
+      payable.bill?.cycle_amount_due == null;
+    if (needsCycle) {
+      setAskValue(String(billCycleDue(payable.bill!) || ""));
+      setAsk({ payable, action, stage: "cycle" });
       return;
     }
-    resolveAccount(payable, action);
+    setAskValue(String(defaultPayAmount(payable) || ""));
+    setAsk({ payable, action, stage: "pay" });
   }
+
 
   async function markUnpaid(payable: Payable) {
     try {
