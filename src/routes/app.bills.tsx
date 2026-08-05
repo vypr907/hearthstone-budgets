@@ -279,7 +279,7 @@ function BillDetailDialog({
             <DetailItem label="Billing cycle" value={bill.billing_cycle ?? "—"} />
             <DetailItem
               label="Payment status"
-              value={<StatusBadge status={bill.payment_status} />}
+              value={<StatusBadge />}
             />
             <DetailItem label="Manual or auto" value={bill.manual_or_auto ?? "—"} />
             <DetailItem
@@ -299,7 +299,7 @@ function BillDetailDialog({
             ) : null}
           </DetailGrid>
           <DetailText label="Notes" value={bill.notes} />
-          <PayActions payable={toPayable("bill", bill)} status={bill.payment_status} />
+          <PayActions payable={toPayable("bill", bill)} />
           <RecentBillTransactions billId={bill.id} />
 
         </div>

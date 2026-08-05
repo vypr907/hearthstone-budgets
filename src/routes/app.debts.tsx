@@ -428,7 +428,7 @@ function DebtDetailDialog({
           </DetailGrid>
 
           <DetailText label="Notes" value={debt.notes} />
-          <PayActions payable={toPayable("debt", debt)} status={debt.payment_status} />
+          <PayActions payable={toPayable("debt", debt)} />
 
           <RecentDebtTransactions debtId={debt.id} />
 
