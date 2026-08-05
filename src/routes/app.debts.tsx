@@ -296,7 +296,6 @@ function DebtsPage() {
                 </p>
                 <PayActions
                   payable={toPayable("debt", d)}
-                  status={d.payment_status}
                   className="mt-2"
                 />
               </CardContent>

@@ -220,7 +220,6 @@ function BillsPage() {
                     ) : null}
                     <PayActions
                       payable={toPayable("bill", b)}
-                      status={b.payment_status}
                       className="mt-2"
                     />
                   </CardContent>
