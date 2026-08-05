@@ -252,6 +252,7 @@ function PeriodBudget({
   const setAllocation = useSetAllocation();
   const { data: splits = [] } = useIncomeSourceSplits(primarySourceId);
   const { data: accounts = [] } = useAccounts();
+  const { data: goals = [] } = useSavingsGoals();
 
   const obligations = useMemo(
     () => obligationsInRange(bills, debts, start, end),
@@ -292,12 +293,17 @@ function PeriodBudget({
     [allocations, event.id],
   );
   const rowFor = (categoryId: string) => mine.find((a) => a.category_id === categoryId);
+  // ADR-039: goal-based allocation rows live in the same table, keyed by goal_id.
+  const goalRowFor = (goalId: string) => mine.find((a) => a.goal_id === goalId);
 
   const [draft, setDraft] = useState<Record<string, number>>({});
   const valueFor = (categoryId: string) =>
     draft[categoryId] ?? Number(rowFor(categoryId)?.allocated_amount ?? 0);
+  const goalValueFor = (goalId: string) =>
+    draft[`goal:${goalId}`] ?? Number(goalRowFor(goalId)?.allocated_amount ?? 0);
 
-  const allocated = sum(cats.map((c) => valueFor(c.id)));
+  const allocated =
+    sum(cats.map((c) => valueFor(c.id))) + sum(goals.map((g) => goalValueFor(g.id)));
   const income = eventAmount(event) + secondaryTotal;
   const left = income - obligationsTotal - allocated;
 
@@ -307,6 +313,19 @@ function PeriodBudget({
         id: rowFor(categoryId)?.id,
         incomeEventId: event.id,
         categoryId,
+        amount: Math.max(0, Math.round(amount * 100) / 100),
+      });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const commitGoal = async (goalId: string, amount: number) => {
+    try {
+      await setAllocation.mutateAsync({
+        id: goalRowFor(goalId)?.id,
+        incomeEventId: event.id,
+        goalId,
         amount: Math.max(0, Math.round(amount * 100) / 100),
       });
     } catch (e) {
@@ -442,6 +461,55 @@ function PeriodBudget({
               })}
             </div>
           ))}
+          {goals.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Savings goals
+              </p>
+              {goals.map((g) => {
+                const v = goalValueFor(g.id);
+                return (
+                  <div
+                    key={g.id}
+                    className="space-y-2 border-l-4 border-primary/60 pl-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        aria-hidden
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary/10 text-base"
+                      >
+                        {g.icon || "\u{1F3E6}"}
+                      </span>
+                      <Label className="min-w-0 flex-1 truncate text-sm">{g.name}</Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        className="h-11 w-28 text-right"
+                        value={v === 0 ? "" : String(v)}
+                        placeholder="0"
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            [`goal:${g.id}`]: Number(e.target.value || 0),
+                          }))
+                        }
+                        onBlur={() => commitGoal(g.id, v)}
+                      />
+                    </div>
+                    <Slider
+                      value={[Math.min(v, sliderMax)]}
+                      max={sliderMax}
+                      step={5}
+                      onValueChange={([n]) =>
+                        setDraft((d) => ({ ...d, [`goal:${g.id}`]: n }))
+                      }
+                      onValueCommit={([n]) => commitGoal(g.id, n)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
           <div className="flex items-center justify-between border-t pt-2 text-sm font-semibold">
             <span>Allocated</span>
             <span>{formatMoney(allocated)}</span>
