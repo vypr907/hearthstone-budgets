@@ -815,3 +815,51 @@ failures without hand-editing the database.
 Extends: ADR-035, ADR-036.
 
 Status: Decided 2026-08-05. Implemented 2026-08-05.
+
+## ADR-038: Envelope Set Aside Transfers
+
+Decision:
+Bills with a linked envelope goal (savings_goals.linked_bill_id, from ADR-033) gain a
+"Set Aside" action. Tapping it prompts for a source account (any household account) and
+an amount, defaulting to monthlyEquivalent(bill) (ADR-033, computed live — no stored
+monthly_amount column). If the envelope's account_id is unset, the user is first prompted
+to choose/assign a destination account, which is saved back to savings_goals.account_id.
+
+Confirming creates two cleared transactions in one action (a true transfer, not a single
+tagged entry):
+1. Debit: -amount on the chosen source account, no linked_goal_id, description
+   "Set aside: <bill name> → <envelope name>".
+2. Credit: +amount on the envelope's account_id, linked_goal_id = the envelope's id.
+
+The credit transaction is what drives the envelope's derived current_amount (ADR-027,
+unchanged) — the debit transaction only reduces the source account's balance, exactly
+like a normal manual outflow. No new "transfer" table or transfer_id is introduced; the
+pairing exists only in the UI action, not as a stored relationship.
+
+Reason:
+An envelope's saved balance should represent real money that actually left a spendable
+account, not just a mental earmark — otherwise the household's total balance would be
+double-counted (spendable + envelope, for money that was never actually moved). A true
+two-sided transfer keeps every account's balance accurate to the real bank picture.
+
+Open item: no guard against setting aside more than once in the same month — left manual/
+unrestricted for now; revisit if double set-asides become a real problem in practice.
+
+Status: Decided 2026-08-05. Not yet implemented.
+
+## ADR-039: Savings Goals in Pay Period Allocations (Resolves ADR-024 Open Question)
+
+Decision:
+Add `pay_period_allocations.goal_id uuid references savings_goals(id)` (nullable).
+`category_id` becomes nullable. Exactly one of `category_id` / `goal_id` must be set,
+enforced by a check constraint — a row allocates to a spending category OR a savings
+goal, never both. The Paycheck Budget allocation screen gains goal rows alongside
+category rows, using the same slider/input UI, writing to goal_id instead of category_id.
+
+Reason:
+Resolves the open question logged in ADR-024's cross-reference note: households want to
+manually direct extra paycheck money into a specific savings goal (e.g. an envelope) in
+the same screen where they already allocate to spending categories, rather than only
+being able to fund goals through the separate Add/Withdraw action.
+
+Status: Decided 2026-08-05. Not yet implemented.

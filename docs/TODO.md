@@ -1,15 +1,19 @@
 ## Discovered 2026-08-05
 - [x] ADR-035 universal partial payments (bills, debts, linked manual transactions).
-- [ ] Verify `debts.cycle_paid_to_date` exists in Supabase before relying on debt partials.
+- [x] Verify `debts.cycle_paid_to_date` exists in Supabase before relying on debt partials.
+- [x] ADR-036 ledger-derived 4-state payment cycle + full-cycle reset.
+- [x] ADR-037 payable-first payment writes and repair delete.
+- [ ] ADR-038 envelope Set Aside transfers.
+- [ ] ADR-039 savings goals in pay_period_allocations.
 
 ## Discovered 2026-08-03
-- [ ] Run the ADR-027 savings_goals SQL (table, linked_goal_id column, RLS policy) in Supabase.
+- [x] Run the ADR-027 savings_goals SQL (table, linked_goal_id column, RLS policy) in Supabase.
 - [x] Build the Savings Goals screen (ADR-027).
-- [ ] Open question: whether savings goals should appear in pay_period_allocations (ADR-024 cross-reference).
+- [x] Open question: whether savings goals should appear in pay_period_allocations (ADR-024/039 cross-reference).
 
 
 ## Discovered 2026-08-02
-- [ ] Decide whether the combined spendable total should use available credit rather than raw balance for credit accounts.
+- [x] Decide whether the combined spendable total should use available credit rather than raw balance for credit accounts.
 - [x] Expose is_spendable and credit_limit in the account edit dialog.
 
 ## Discovered 2026-07-31
