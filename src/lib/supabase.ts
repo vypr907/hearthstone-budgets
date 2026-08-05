@@ -233,6 +233,8 @@ export type PayPeriodAllocation = {
   household_id: string;
   income_event_id: string;
   category_id: string | null;
+  /** ADR-039: set instead of category_id when the row allocates to a savings goal. */
+  goal_id?: string | null;
   allocated_amount: number | null;
 };
 
