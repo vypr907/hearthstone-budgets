@@ -35,3 +35,10 @@
 Known issues: end-to-end verification in the live app wasn't possible (external Supabase,
 no injectable session); logic is covered by the unit test above.
 
+- Reported runtime error on Debt "Mark Cleared": PostgREST `Could not find the
+  'cycle_paid_to_date' column of 'debts' in the schema cache`. Root cause: the ADR-035
+  debts column was never applied to the live Supabase project (bills columns were).
+  Fix is a DB migration the user runs in their own project:
+  `alter table public.debts add column if not exists cycle_paid_to_date numeric not null default 0;`
+  followed by `notify pgrst, 'reload schema';`. No app code change required — SCHEMA.md
+  already documents the column (line ~334).
