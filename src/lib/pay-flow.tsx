@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   billCycleDue,
   billRemainingOwed,
+  payableRemainingOwed,
   useMarkCleared,
   useMarkSubmitted,
   useMarkUnpaid,
@@ -168,7 +169,7 @@ export function usePayFlow() {
                 onClick={() => {
                   const c = choice!;
                   setChoice(null);
-                  void perform(c.payable, c.action, a.id, c.amount);
+                  void perform(c.payable, c.action, a.id, c.amount, c.cycleAmount);
                 }}
               >
                 <span aria-hidden className="text-lg" title={a.account_type ?? undefined}>
