@@ -45,3 +45,4 @@ with check (exists (select 1 from public.household_members m
 - [ ] ADR-033 bill card "Add to envelope" quick-transaction action
 - [ ] ADR-034 Dashboard hero rework, budget/actual bills split, owed-this-period card, Net Worth to bottom
 - [ ] Snapshot: balances by account type, pay-period progress bar, buildSnapshotSummary()
+- [x] ADR-036 ledger-derived 4-state payment cycle + full-cycle reset

@@ -15,3 +15,23 @@
   - Bill detail gained a Recent transactions section (last 10 by `linked_bill_id`).
   - Add Transaction gained an optional "Link to bill/debt" selector routed through
     `applyClearedPayment()`.
+- ADR-036 implemented: ledger-derived 4-state payment cycle (supersedes ADR-010).
+  - `ledger-state.ts`: pure `deriveCycleInfo()` + `useCycleState()` returning
+    { state, due, clearedSum, remaining, transactions, pending, resolved };
+    states are unpaid / pending / partial / cleared. A resolved cycle is detected by
+    looking back one interval, since clearing advances the due date.
+  - `payments.ts`: new `useResetCycle()` — deletes every transaction in the resolved
+    cycle, zeroes cycle_paid_to_date, reverts payment_status and next_due_date
+    (extends ADR-008 to multi-transaction cycles).
+  - `pay-flow.tsx`: `tap(payable, info)` drives the machine — unpaid/partial prompt for
+    an amount and create a pending tx, pending clears the latest pending tx on its own
+    account (no re-prompt), cleared shows the "undo all payments this cycle?" confirm.
+  - `PayActions` is now a single state-aware button used by Bills and Debts; Everything's
+    tap icon uses the shared `stateVisual()` (unpaid neutral, pending yellow clock,
+    partial orange, cleared green check) via new `--state-*` tokens in styles.css.
+  - `src/lib/ledger-state.test.ts` covers the Rent 2 case ($609: 500 pending → partial
+    $109 remaining → 109 pending → cleared/rolled → reset deletes both transactions).
+
+Known issues: end-to-end verification in the live app wasn't possible (external Supabase,
+no injectable session); logic is covered by the unit test above.
+
