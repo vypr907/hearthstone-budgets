@@ -43,7 +43,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAccounts, useCategories } from "@/lib/data-hooks";
+import { useAccounts, useCategories, useSavingsGoals } from "@/lib/data-hooks";
 import { useBills, useDebts } from "@/lib/data-hooks";
 import {
   useDeleteIncomeEvent,
