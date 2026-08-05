@@ -313,15 +313,24 @@ export function useMarkUnpaid() {
         if (wasCleared) {
           const amount = Math.abs(Number(tx?.amount ?? p.amount));
           update.remaining_balance = Number(p.debt?.remaining_balance ?? 0) + amount;
-          const cycle = (p.debt?.billing_cycle ?? "monthly").toLowerCase();
-          if (cycle !== "monthly" && p.debt?.next_due_date) {
-            update.next_due_date = reverseDate(p.debt.next_due_date, p.debt.billing_cycle);
+          const paid = Number(p.debt?.cycle_paid_to_date ?? 0);
+          if (paid > 0) {
+            // Reversing a partial payment: stay in the same cycle, take it back off.
+            update.cycle_paid_to_date = Math.max(0, paid - amount);
+          } else {
+            // The clear resolved the cycle — undo that roll-forward.
+            const cycle = (p.debt?.billing_cycle ?? "monthly").toLowerCase();
+            if (cycle !== "monthly" && p.debt?.next_due_date) {
+              update.next_due_date = reverseDate(p.debt.next_due_date, p.debt.billing_cycle);
+            }
+            update.cycle_paid_to_date = 0;
           }
         }
         const { error } = await supabase.from("debts").update(update).eq("id", p.id);
         if (error) throw error;
         return;
       }
+
 
 
       const bill = p.bill;
