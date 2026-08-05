@@ -49,10 +49,11 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Account balances use snapshots plus transactions after snapshot.
 - Bills and debts remain synchronized with transaction records.
 - account_type is always stored lowercase.
-- Variable bills track cycle_amount_due / cycle_paid_to_date; a cycle only rolls forward when fully paid.
+- All bills track cycle_amount_due / cycle_paid_to_date and debts track cycle_paid_to_date; a cycle only rolls forward when fully paid (ADR-035).
+- Every submit/clear prompts for the amount being paid now and may be a partial payment (ADR-035).
 - Debts with known_finance_charge do not accrue interest_rate in payoff simulations.
 - Credit accounts with no credit_limit are excluded from the combined spendable total and flagged on the Dashboard.
 - Pay-time account picker lists ALL household accounts, defaulting to the account that last paid that bill/debt; never scoped to the vendor's institution (ADR-007 correction).
 - A debt payment that zeroes remaining_balance stamps date_paid_off; paid-off debts are hidden by default.
 - Institution logo_url is only ever suggested from login_url for the user to confirm — never written silently.
-- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, savings_goals.account_id/linked_bill_id) must exist before those screens work.
+- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, debts.cycle_paid_to_date, savings_goals.account_id/linked_bill_id) must exist before those screens work.
