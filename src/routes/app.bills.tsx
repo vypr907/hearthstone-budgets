@@ -7,6 +7,7 @@ import {
   useCategories,
   useInstitutions,
   useTransactions,
+  useDeleteLinkedTransaction,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
