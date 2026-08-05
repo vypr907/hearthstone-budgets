@@ -25,15 +25,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Action = "submitted" | "cleared";
+type Stage = "cycle" | "pay";
 
-/** Amount to pre-fill for a variable-amount bill's current cycle. */
-function defaultCycleAmount(payable: Payable) {
-  const bill = payable.bill;
-  if (!bill) return payable.amount;
-  const paid = Number(bill.cycle_paid_to_date ?? 0);
-  if (paid > 0) return billRemainingOwed(bill);
-  return billCycleDue(bill);
-}
 
 /**
  * Shared mark-paid flow. transactions.account_id is NOT NULL, but bills/debts
