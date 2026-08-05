@@ -1,56 +1,50 @@
 import { Button } from "@/components/ui/button";
 import { usePayFlow } from "@/lib/pay-flow";
+import { useCycleState, stateVisual } from "@/lib/ledger-state";
+import { formatMoney } from "@/lib/format";
 import type { Payable } from "@/lib/payments";
 
-/** Shared submit/clear/undo controls for bills and debts. */
+const ACTION_LABEL: Record<string, string> = {
+  unpaid: "Submit payment",
+  partial: "Submit another payment",
+  pending: "Mark cleared",
+  cleared: "Reset this cycle",
+};
+
+/**
+ * Single tap control shared by Bills, Debts and Everything (ADR-036): the
+ * button reflects the ledger-derived state and advances the state machine.
+ */
 export function PayActions({
   payable,
-  status,
   className,
 }: {
   payable: Payable;
-  status: string | null | undefined;
   className?: string;
 }) {
-  const { start, markUnpaid, busy, picker } = usePayFlow();
+  const { tap, busy, picker } = usePayFlow();
+  const infoOf = useCycleState();
+  const info = infoOf(payable);
+  const { Icon, className: color, label } = stateVisual(info.state);
 
   return (
     <>
-      <div className={`grid grid-cols-3 gap-2 ${className ?? ""}`}>
-        <Button
-          variant={status === "pending" ? "default" : "outline"}
-          className="h-11"
-          disabled={busy}
-          onClick={(e) => {
-            e.stopPropagation();
-            start(payable, "submitted");
-          }}
-        >
-          Submitted
-        </Button>
-        <Button
-          variant={status === "cleared" ? "default" : "outline"}
-          className="h-11"
-          disabled={busy}
-          onClick={(e) => {
-            e.stopPropagation();
-            start(payable, "cleared");
-          }}
-        >
-          Cleared
-        </Button>
-        <Button
-          variant="ghost"
-          className="h-11"
-          disabled={busy}
-          onClick={(e) => {
-            e.stopPropagation();
-            void markUnpaid(payable);
-          }}
-        >
-          Undo
-        </Button>
-      </div>
+      <Button
+        variant={info.state === "cleared" ? "outline" : "default"}
+        className={`h-12 w-full justify-start gap-2 ${className ?? ""}`}
+        disabled={busy}
+        onClick={(e) => {
+          e.stopPropagation();
+          tap(payable, info);
+        }}
+      >
+        <Icon className={`h-5 w-5 ${info.state === "cleared" ? color : ""}`} />
+        <span>{ACTION_LABEL[info.state]}</span>
+        <span className="ml-auto text-xs opacity-80">
+          {label}
+          {info.remaining > 0 ? ` · ${formatMoney(info.remaining)} left` : ""}
+        </span>
+      </Button>
       {picker}
     </>
   );
