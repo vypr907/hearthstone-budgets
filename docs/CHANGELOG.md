@@ -350,3 +350,61 @@
 * ADR-034 Dashboard hero rework, budget/actual bills split, "owed this pay period by category" card, and moving Net Worth Trend to the bottom.
 * Spending screen "Budgeted: $X spending + $Y bills = $Z" split.
 * Status Snapshot balances section, pay-period progress bar, and `buildSnapshotSummary()`.
+
+## 2026-08-05 – ADR-035: Universal Partial Payments
+
+### Completed
+
+* `src/lib/payments.ts` gained `debtCycleDue()`, `debtRemainingOwed()`, `payableRemainingOwed()`, a shared `applyClearedPayment()` and `ensureCycleAmount()`.
+* Submit always writes a new pending transaction, so a pending item can still take another partial payment; fixed bills get `cycle_amount_due` set on the first submit of a cycle.
+* Debts now track `cycle_paid_to_date`; a debt cycle resolves only at >= `minimum_payment`, and Undo reverses partial credits.
+* `pay-flow.tsx` prompts in two stages: variable-bill "owed this cycle", then a universal "how much are you paying now?" defaulting to remaining owed.
+* "$X still owed this cycle" shows on Bills list/detail, Debts list/detail and Everything.
+* Bill detail gained a Recent transactions section (last 10 by `linked_bill_id`); Add Transaction gained an optional "Link to bill/debt" selector routed through `applyClearedPayment()`.
+
+## 2026-08-05 – ADR-036: Ledger-Derived 4-State Payment Cycle
+
+### Completed
+
+* `src/lib/ledger-state.ts` provides pure `deriveCycleInfo()` and `useCycleState()` returning `{ state, due, clearedSum, remaining, transactions, pending, resolved }` with states unpaid / pending / partial / cleared; a resolved cycle is detected by looking back one interval, since clearing advances the due date.
+* `useResetCycle()` deletes every transaction in the resolved cycle, zeroes `cycle_paid_to_date` and reverts payment status and `next_due_date` (extends ADR-008 to multi-transaction cycles).
+* `pay-flow.tsx` `tap()` drives the machine: unpaid/partial prompt and create a pending tx, pending clears the latest pending tx on its own account, cleared shows an "undo all payments this cycle?" confirm.
+* `PayActions` is a single state-aware button shared by Bills and Debts; Everything uses the shared `stateVisual()` (neutral / yellow clock / orange partial / green check) via new `--state-*` tokens in `styles.css`.
+* `src/lib/ledger-state.test.ts` covers the Rent 2 case ($609: 500 pending → $109 partial → pending → cleared/rolled → reset deletes both rows).
+
+### Still Open
+
+* End-to-end verification in the live app wasn't possible (external Supabase, no injectable session); logic is covered by the unit test.
+
+## 2026-08-05 – ADR-037: Payable-First Payment Writes & Repair Tools
+
+### Completed
+
+* Live Supabase was missing `debts.cycle_paid_to_date`, which stranded cleared ledger rows against untouched debt rows. Fix applied in the user's project: `alter table public.debts add column if not exists cycle_paid_to_date numeric not null default 0;` plus `notify pgrst, 'reload schema';`.
+* `payments.ts` `updateRow()` does bill/debt updates with `.select("id")` and throws when 0 rows change, so silent RLS/schema-cache failures surface.
+* Submit and Clear now update the bill/debt FIRST and write the ledger row second, so a failed payable write can no longer strand an orphan transaction.
+* `useDeleteLinkedTransaction()` removes a ledger row linked to a bill/debt without touching the payable; Bill and Debt detail "Recent transactions" rows show status and a confirm-gated trash button.
+* `src/components/StrandedDebtRepair.tsx` (+ pure `findStrandedDebtPayments()`) shows an amber card on Debts listing debts whose current cycle has cleared rows while `cycle_paid_to_date` is 0 and the cycle never resolved; "Clean up" deletes those rows so the payment can be redone.
+
+### Still Open
+
+* The repair scan is heuristic; it can't see rows the ledger never received.
+* Cleaned-up debt payments still need to be redone through Submit / Mark cleared to confirm status, remaining balance, paid-this-cycle and next due date all advance.
+
+## 2026-08-05 – ADR-038: Envelope "Set Aside" Transfers
+
+### Completed
+
+* `src/components/SetAsideAction.tsx` appears on bill detail when a savings goal has `linked_bill_id` = the bill.
+* Prompts for source account and amount (default `monthlyEquivalent(bill)`), prompts for and saves `savings_goals.account_id` when unset, then writes two cleared transactions — the debit (no goal link) and the credit tagged `linked_goal_id`. No transfer table.
+
+### Still Open
+
+* No guard against two set-asides in the same month.
+
+## 2026-08-05 – ADR-039: Savings Goals in Paycheck Allocations
+
+### Completed
+
+* `PayPeriodAllocation.goal_id` added; `useSetAllocation()` accepts `categoryId` OR `goalId` and throws when both or neither are given.
+* Paycheck Budget gained a "Savings goals" allocation block using the same slider/input UI, and the Allocated / Left-to-allocate math includes goal rows.
