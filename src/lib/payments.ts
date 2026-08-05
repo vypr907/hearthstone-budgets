@@ -357,3 +357,63 @@ export function useMarkUnpaid() {
   });
 }
 
+
+/**
+ * ADR-036 full reset: undo an entire cycle, not just its latest transaction.
+ * Deletes every transaction tied to the cycle, zeroes cycle_paid_to_date and
+ * reverts payment_status / next_due_date to their pre-clear values (extends
+ * ADR-008 to multi-transaction cycles).
+ */
+export type ResetCycleInput = {
+  payable: Payable;
+  transactionIds: string[];
+  /** Total cleared in the cycle — added back to a debt's remaining balance. */
+  clearedTotal: number;
+  /** True when clearing had already advanced the due date. */
+  resolved: boolean;
+};
+
+export function useResetCycle() {
+  const done = useAfterPayment();
+  return useMutation({
+    mutationFn: async ({ payable, transactionIds, clearedTotal, resolved }: ResetCycleInput) => {
+      if (transactionIds.length > 0) {
+        const { error } = await supabase
+          .from("transactions")
+          .delete()
+          .in("id", transactionIds);
+        if (error) throw error;
+      }
+
+      if (payable.kind === "debt") {
+        const debt = payable.debt!;
+        const update: Record<string, unknown> = {
+          payment_status: "unpaid",
+          cycle_paid_to_date: 0,
+          remaining_balance: Number(debt.remaining_balance ?? 0) + clearedTotal,
+          date_paid_off: null,
+        };
+        const cycle = (debt.billing_cycle ?? "monthly").toLowerCase();
+        if (resolved && cycle !== "monthly" && debt.next_due_date) {
+          update.next_due_date = reverseDate(debt.next_due_date, debt.billing_cycle);
+        }
+        const { error } = await supabase.from("debts").update(update).eq("id", payable.id);
+        if (error) throw error;
+        return;
+      }
+
+      const bill = payable.bill!;
+      const update: Record<string, unknown> = {
+        payment_status: "unpaid",
+        cycle_paid_to_date: 0,
+        cycle_amount_due: null,
+      };
+      if (resolved && bill.next_due_date) {
+        update.next_due_date = reverseDate(bill.next_due_date, bill.billing_cycle);
+      }
+      const { error } = await supabase.from("bills").update(update).eq("id", payable.id);
+      if (error) throw error;
+    },
+    onSuccess: done,
+  });
+}

@@ -734,6 +734,7 @@ upcoming bill. Splitting spendable-vs-committed makes the number trustworthy at 
 glance instead of requiring mental math against the Bills screen.
 
 Status: Decided 2026-08-04. Not yet implemented.
+
 ## ADR-035: Universal Partial Payments for Bills and Debts
 Decision:
 Every bill and debt submit/clear prompts for the amount being paid now, defaulting to
@@ -789,4 +790,9 @@ Supersedes: ADR-010. Extends: ADR-008 (reversal now clears every transaction in 
 resolved cycle, not just the latest one) and ADR-009 (checked = CLEARED state, unchanged
 in spirit, now precisely defined).
 
-Status: Decided 2026-08-04. Not yet implemented.
+Status: Decided 2026-08-04. Implemented 2026-08-05.
+Notes: state derives from `deriveCycleInfo()` in ledger-state.ts. Because clearing the
+final payment advances the due date, a resolved cycle's transactions fall into the
+previous window; the derivation looks back one interval (while today <= the new cycle
+start) so a just-resolved item reads CLEARED rather than UNPAID. Reset uses
+`useResetCycle()` and deletes every transaction in that window.

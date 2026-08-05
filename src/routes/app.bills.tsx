@@ -35,6 +35,7 @@ import type { Bill, BillingCycle } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailMoney, DetailText, StatusBadge } from "@/components/detail";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
+import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
@@ -75,6 +76,7 @@ function BillsPage() {
   const { data: categories = [] } = useCategories();
   const [editing, setEditing] = useState<Partial<Bill> | null>(null);
   const [detail, setDetail] = useState<Bill | null>(null);
+  const infoOf = useCycleState();
 
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("due");
@@ -167,6 +169,8 @@ function BillsPage() {
                 </h2>
               )}
               {items.map((b, i) => {
+                const info = infoOf(toPayable("bill", b));
+                const stateLabel = stateVisual(info.state).label;
                 const due = billCycleDue(b);
                 const paid = Number(b.cycle_paid_to_date ?? 0);
                 const pct = due > 0 ? Math.min(100, (paid / due) * 100) : 0;
@@ -191,12 +195,13 @@ function BillsPage() {
                             <span>· {categoryName[b.category_id]}</span>
                           ) : null}
                           {b.is_variable_amount ? <span>· variable</span> : null}
-                          <StatusBadge status={b.payment_status} />
-                          {b.cycle_amount_due != null && billRemainingOwed(b) > 0 ? (
+                          <StatusBadge status={info.state} />
+                          {info.clearedSum > 0 && info.remaining > 0 ? (
                             <span className="font-medium text-destructive">
-                              {formatMoney(billRemainingOwed(b))} still owed this cycle
+                              {formatMoney(info.remaining)} still owed this cycle
                             </span>
                           ) : null}
+                          <span className="sr-only">{stateLabel}</span>
                         </div>
                       </div>
                       <p className="shrink-0 text-lg font-extrabold tabular-nums">
@@ -220,7 +225,6 @@ function BillsPage() {
                     ) : null}
                     <PayActions
                       payable={toPayable("bill", b)}
-                      status={b.payment_status}
                       className="mt-2"
                     />
                   </CardContent>
@@ -300,7 +304,7 @@ function BillDetailDialog({
             ) : null}
           </DetailGrid>
           <DetailText label="Notes" value={bill.notes} />
-          <PayActions payable={toPayable("bill", bill)} status={bill.payment_status} />
+          <PayActions payable={toPayable("bill", bill)} />
           <RecentBillTransactions billId={bill.id} />
 
         </div>

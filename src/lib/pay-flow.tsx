@@ -7,8 +7,10 @@ import {
   useMarkCleared,
   useMarkSubmitted,
   useMarkUnpaid,
+  useResetCycle,
   type Payable,
 } from "@/lib/payments";
+import type { CycleInfo } from "@/lib/ledger-state";
 import { useAccounts, useInstitutions, useTransactions } from "@/lib/data-hooks";
 import { accountLast4, formatMoney } from "@/lib/format";
 import { accountTypeVisual } from "@/lib/visual-meta";
@@ -43,6 +45,10 @@ export function usePayFlow() {
   const submit = useMarkSubmitted();
   const clear = useMarkCleared();
   const undo = useMarkUnpaid();
+  const reset = useResetCycle();
+  const [confirmReset, setConfirmReset] = useState<
+    { payable: Payable; info: CycleInfo } | null
+  >(null);
   const [choice, setChoice] = useState<
     { payable: Payable; action: Action; amount?: number; cycleAmount?: number } | null
   >(null);
@@ -54,7 +60,8 @@ export function usePayFlow() {
   } | null>(null);
   const [askValue, setAskValue] = useState("");
 
-  const busy = submit.isPending || clear.isPending || undo.isPending;
+  const busy =
+    submit.isPending || clear.isPending || undo.isPending || reset.isPending;
 
   async function perform(
     payable: Payable,
@@ -131,6 +138,38 @@ export function usePayFlow() {
     setAsk({ payable, action, stage: "pay" });
   }
 
+
+  /**
+   * ADR-036 tap handler, driven by the ledger-derived state:
+   * unpaid/partial → prompt + new pending transaction, pending → clear it,
+   * cleared → confirm, then reverse the whole cycle.
+   */
+  function tap(payable: Payable, info: CycleInfo) {
+    if (info.state === "cleared") {
+      setConfirmReset({ payable, info });
+      return;
+    }
+    if (info.state === "pending") {
+      const accountId = info.pending?.account_id;
+      if (!accountId) {
+        resolveAccount(payable, "cleared", Math.abs(Number(info.pending?.amount ?? 0)) || undefined);
+        return;
+      }
+      void perform(payable, "cleared", accountId);
+      return;
+    }
+    // unpaid or partial: submit a new (possibly partial) payment.
+    setAskValue(String(info.remaining || defaultPayAmount(payable) || ""));
+    setAsk({ payable, action: "submitted", stage: needsCycleAmount(payable) ? "cycle" : "pay" });
+  }
+
+  function needsCycleAmount(payable: Payable) {
+    return (
+      payable.kind === "bill" &&
+      !!payable.bill?.is_variable_amount &&
+      payable.bill?.cycle_amount_due == null
+    );
+  }
 
   async function markUnpaid(payable: Payable) {
     try {
@@ -268,14 +307,62 @@ export function usePayFlow() {
 
 
 
+  const resetConfirm = (
+    <Dialog open={!!confirmReset} onOpenChange={(o) => !o && setConfirmReset(null)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            This will reset this {confirmReset?.payable.kind ?? "bill"} — undo all payments
+            this cycle?
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          {confirmReset
+            ? `${confirmReset.info.transactions.length} transaction(s) totalling ${formatMoney(
+                confirmReset.info.clearedSum,
+              )} will be deleted and ${confirmReset.payable.name} returns to unpaid.`
+            : null}
+        </p>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" className="h-12" onClick={() => setConfirmReset(null)}>
+            Cancel
+          </Button>
+          <Button
+            className="h-12"
+            disabled={busy}
+            onClick={async () => {
+              const c = confirmReset!;
+              setConfirmReset(null);
+              try {
+                await reset.mutateAsync({
+                  payable: c.payable,
+                  transactionIds: c.info.transactions.map((t) => t.id),
+                  clearedTotal: c.info.clearedSum,
+                  resolved: c.info.resolved,
+                });
+                toast.success(`${c.payable.name} reset to unpaid`);
+              } catch (e) {
+                toast.error((e as Error).message);
+              }
+            }}
+          >
+            Continue
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   return {
     start,
+    tap,
     markUnpaid,
     busy,
     picker: (
       <>
         {picker}
         {amountPrompt}
+        {resetConfirm}
       </>
     ),
   };

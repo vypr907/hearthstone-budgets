@@ -6,6 +6,8 @@ export function statusVariant(status: string | null | undefined) {
   switch (status) {
     case "pending":
       return "secondary" as const;
+    case "partial":
+      return "destructive" as const;
     case "cleared":
       return "outline" as const;
     default:

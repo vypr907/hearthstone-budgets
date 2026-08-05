@@ -7,8 +7,8 @@ import {
   useResetDebtsMonth,
 } from "@/lib/data-hooks";
 import { usePayFlow } from "@/lib/pay-flow";
-import { billRemainingOwed, debtRemainingOwed, toPayable, type Payable } from "@/lib/payments";
-import { useLedgerState, type LedgerState } from "@/lib/ledger-state";
+import { toPayable, type Payable } from "@/lib/payments";
+import { useCycleState, stateVisual, type CycleInfo, type LedgerState } from "@/lib/ledger-state";
 import { formatMoney, debtDueDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState, useMemo } from "react";
-import { CheckCircle2, Circle, Clock, RotateCcw, Search } from "lucide-react";
+import { RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
 import { StatusBadge } from "@/components/detail";
@@ -59,6 +59,7 @@ type Row = {
   payment_status: string | null;
   payable: Payable;
   state: LedgerState;
+  info: CycleInfo;
   bill?: Bill;
   debt?: Debt;
 };
@@ -68,8 +69,8 @@ function EverythingPage() {
   const { data: debts = [] } = useDebts();
   const { data: categories = [] } = useCategories();
   const resetDebts = useResetDebtsMonth();
-  const { start, markUnpaid, busy, picker } = usePayFlow();
-  const stateOf = useLedgerState();
+  const { tap, busy, picker } = usePayFlow();
+  const infoOf = useCycleState();
 
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "bills" | "debts" | "unpaid" | "paid">(
@@ -88,6 +89,7 @@ function EverythingPage() {
     const all: Row[] = [
       ...bills.map((b) => {
         const payable = toPayable("bill", b);
+        const info = infoOf(payable);
         return {
           id: b.id,
           kind: "Bill" as const,
@@ -98,12 +100,14 @@ function EverythingPage() {
           cycle: b.billing_cycle,
           payment_status: b.payment_status,
           payable,
-          state: stateOf(payable),
+          state: info.state,
+          info,
           bill: b,
         };
       }),
       ...debts.map((d) => {
         const payable = toPayable("debt", d);
+        const info = infoOf(payable);
         return {
           id: d.id,
           kind: "Debt" as const,
@@ -114,7 +118,8 @@ function EverythingPage() {
           cycle: "monthly",
           payment_status: d.payment_status,
           payable,
-          state: stateOf(payable),
+          state: info.state,
+          info,
           debt: d,
         };
       }),
@@ -140,7 +145,7 @@ function EverythingPage() {
       return (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31");
     });
     return out;
-  }, [bills, debts, filter, category, q, sort, stateOf]);
+  }, [bills, debts, filter, category, q, sort, infoOf]);
 
   async function handleResetDebts() {
     if (!confirm("Reset all debt payments to unpaid for the new month?")) return;
@@ -152,11 +157,9 @@ function EverythingPage() {
     }
   }
 
-  /** Tap cycles unpaid → pending → cleared → (undo back to unpaid). */
+  /** ADR-036: the shared ledger-derived state machine drives every tap. */
   function handleTap(r: Row) {
-    if (r.state === "unpaid") start(r.payable, "submitted");
-    else if (r.state === "pending") start(r.payable, "cleared");
-    else void markUnpaid(r.payable);
+    tap(r.payable, r.info);
   }
 
   return (
@@ -231,12 +234,7 @@ function EverythingPage() {
           )}
           {rows.map((r) => {
             const paid = r.state === "cleared";
-            const Icon =
-              r.state === "cleared"
-                ? CheckCircle2
-                : r.state === "pending"
-                  ? Clock
-                  : Circle;
+            const { Icon, className: stateColor } = stateVisual(r.state);
             return (
               <Card key={`${r.kind}-${r.id}`}>
                 <CardContent className="flex items-center gap-3 p-3">
@@ -247,15 +245,7 @@ function EverythingPage() {
                     onClick={() => handleTap(r)}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border disabled:opacity-50"
                   >
-                    <Icon
-                      className={`h-6 w-6 ${
-                        r.state === "cleared"
-                          ? "text-primary"
-                          : r.state === "pending"
-                            ? "text-muted-foreground"
-                            : "text-muted-foreground/60"
-                      }`}
-                    />
+                    <Icon className={`h-6 w-6 ${stateColor}`} />
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -274,22 +264,11 @@ function EverythingPage() {
                         ? ` · ${categoryName[r.category_id]}`
                         : ""}
                     </p>
-                    {(() => {
-                      const owed = r.bill
-                        ? r.bill.cycle_amount_due != null
-                          ? billRemainingOwed(r.bill)
-                          : 0
-                        : r.debt
-                          ? Number(r.debt.cycle_paid_to_date ?? 0) > 0
-                            ? debtRemainingOwed(r.debt)
-                            : 0
-                          : 0;
-                      return owed > 0 ? (
-                        <p className="text-xs font-medium text-destructive">
-                          {formatMoney(owed)} still owed this cycle
-                        </p>
-                      ) : null;
-                    })()}
+                    {r.info.clearedSum > 0 && r.info.remaining > 0 ? (
+                      <p className="text-xs font-medium text-destructive">
+                        {formatMoney(r.info.remaining)} still owed this cycle
+                      </p>
+                    ) : null}
                   </div>
                   <p className="shrink-0 font-semibold">{formatMoney(r.amount)}</p>
                 </CardContent>
