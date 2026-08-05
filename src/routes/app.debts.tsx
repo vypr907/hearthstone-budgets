@@ -709,7 +709,7 @@ function RecentDebtTransactions({ debtId }: { debtId: string }) {
                   if (!confirm("Delete this ledger transaction? The debt row is left as-is.")) return;
                   del.mutate(t, {
                     onSuccess: () => toast.success("Transaction deleted"),
-                    onError: (e) => toast.error((e as Error).message),
+                    onError: (e: unknown) => toast.error((e as Error).message),
                   });
                 }}
               >
