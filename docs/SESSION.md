@@ -42,3 +42,18 @@ no injectable session); logic is covered by the unit test above.
   `alter table public.debts add column if not exists cycle_paid_to_date numeric not null default 0;`
   followed by `notify pgrst, 'reload schema';`. No app code change required — SCHEMA.md
   already documents the column (line ~334).
+
+- Payment-write ordering hardening (follow-up to ADR-035/036): the debts
+  `cycle_paid_to_date` failure left cleared/extra ledger rows with an untouched debt row
+  (status stuck pending, remaining balance / paid-this-cycle / next due unchanged).
+  - `payments.ts`: new `updateRow()` helper does bill/debt updates with `.select("id")`
+    and throws when 0 rows change, so silent RLS/schema-cache failures surface.
+  - Submit and Clear now update the bill/debt FIRST and write the ledger row second, so a
+    failed payable write can no longer strand an orphan transaction.
+  - `data-hooks.ts`: new `useDeleteLinkedTransaction()` (repair delete) removes a ledger
+    row linked to a bill/debt without touching the payable.
+  - Bill and Debt detail "Recent transactions" rows now show status and a trash button
+    (confirm-gated) so stray rows from the failed write can be deleted.
+
+Known issues: existing bad rows must be cleaned up manually via the new delete buttons;
+the debt row itself may still need its payment status corrected by re-running the cycle.

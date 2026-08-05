@@ -796,3 +796,22 @@ final payment advances the due date, a resolved cycle's transactions fall into t
 previous window; the derivation looks back one interval (while today <= the new cycle
 start) so a just-resolved item reads CLEARED rather than UNPAID. Reset uses
 `useResetCycle()` and deletes every transaction in that window.
+
+## ADR-037: Payable-First Payment Writes and Repair Delete
+Decision:
+Submit and Clear write the bill/debt row before writing the ledger row, and every
+bill/debt payment update goes through `updateRow()`, which uses `.select("id")` and throws
+if no row changed. Ledger rows linked to a bill/debt can be deleted from the bill/debt
+detail view via `useDeleteLinkedTransaction()` (repair only — the payable is untouched).
+
+Reason:
+A missing `debts.cycle_paid_to_date` column made the payable update fail after the ledger
+write had already succeeded, leaving extra/cleared transactions with a debt whose status,
+remaining balance, cycle paid and due date never moved. Ordering the payable write first
+makes that failure mode a clean no-op, verified updates turn silent 0-row writes into
+visible errors, and the repair delete lets the user clean up rows stranded by earlier
+failures without hand-editing the database.
+
+Extends: ADR-035, ADR-036.
+
+Status: Decided 2026-08-05. Implemented 2026-08-05.

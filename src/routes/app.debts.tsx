@@ -7,6 +7,7 @@ import {
   useCategories,
   useAccounts,
   useTransactions,
+  useDeleteLinkedTransaction,
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
@@ -666,6 +667,8 @@ function DebtDialog({
 /** Last 10 ledger rows linked to this debt, newest first. */
 function RecentDebtTransactions({ debtId }: { debtId: string }) {
   const { data: transactions = [] } = useTransactions();
+  const del = useDeleteLinkedTransaction();
+
   const rows = useMemo(
     () =>
       transactions
@@ -690,13 +693,33 @@ function RecentDebtTransactions({ debtId }: { debtId: string }) {
                 {t.transaction_date?.slice(0, 10)}
                 {t.description ? ` · ${t.description}` : ""}
               </span>
+              <span className="ml-2 shrink-0 text-xs capitalize text-muted-foreground">
+                {t.status ?? "—"}
+              </span>
               <span className="ml-2 shrink-0 tabular-nums">
                 {formatMoney(Number(t.amount ?? 0))}
               </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-1 h-9 w-9 shrink-0"
+                aria-label="Delete transaction"
+                disabled={del.isPending}
+                onClick={() => {
+                  if (!confirm("Delete this ledger transaction? The debt row is left as-is.")) return;
+                  del.mutate(t, {
+                    onSuccess: () => toast.success("Transaction deleted"),
+                    onError: (e: unknown) => toast.error((e as Error).message),
+                  });
+                }}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
             </div>
           ))}
         </div>
       )}
+
     </div>
   );
 }

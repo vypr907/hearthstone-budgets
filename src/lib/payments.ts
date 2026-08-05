@@ -95,11 +95,35 @@ export function payableRemainingOwed(p: Payable) {
 }
 
 /**
+ * Update a bill/debt row and verify it actually changed. A silent 0-row update
+ * (RLS, stale schema cache) previously left the ledger written but the payable
+ * untouched — the "both transactions cleared but nothing updated" bug.
+ */
+async function updateRow(
+  tableName: "bills" | "debts",
+  id: string,
+  update: Record<string, unknown>,
+) {
+  const { data, error } = await supabase
+    .from(tableName)
+    .update(update)
+    .eq("id", id)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error(
+      `Could not update this ${tableName === "bills" ? "bill" : "debt"} — no row was changed.`,
+    );
+  }
+}
+
+/**
  * Apply a cleared payment of `clearedAmount` to the bill/debt row: credit the
  * cycle, and only resolve the cycle (advance the due date, reset the counters)
  * once the cycle target is met. Shared by the Submit/Clear flow and by manual
  * transactions linked to a bill/debt (ADR-035).
  */
+
 export async function applyClearedPayment(p: Payable, clearedAmount: number) {
   if (p.kind === "debt") {
     const debt = p.debt!;
@@ -116,8 +140,7 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
       // Shortfall: stay pending in the same cycle so a follow-up can be submitted.
       update.payment_status = "pending";
       update.cycle_paid_to_date = paid;
-      const { error } = await supabase.from("debts").update(update).eq("id", p.id);
-      if (error) throw error;
+      await updateRow("debts", p.id, update);
       return { remaining_owed: target - paid };
     }
 
@@ -132,8 +155,7 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
       // Monthly debts have no next_due_date to roll; keep the cleared marker.
       update.payment_status = "cleared";
     }
-    const { error } = await supabase.from("debts").update(update).eq("id", p.id);
-    if (error) throw error;
+    await updateRow("debts", p.id, update);
     return { next_due_date: nextDue };
   }
 
@@ -142,32 +164,25 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
   const paid = Number(bill.cycle_paid_to_date ?? 0) + clearedAmount;
 
   if (paid + 0.005 < dueThisCycle) {
-    const { error } = await supabase
-      .from("bills")
-      .update({
-        payment_status: "pending",
-        cycle_paid_to_date: paid,
-        cycle_amount_due: dueThisCycle,
-      })
-      .eq("id", bill.id);
-    if (error) throw error;
+    await updateRow("bills", bill.id, {
+      payment_status: "pending",
+      cycle_paid_to_date: paid,
+      cycle_amount_due: dueThisCycle,
+    });
     return { remaining_owed: dueThisCycle - paid };
   }
 
   const base = bill.next_due_date ?? todayISO();
   const nextDue = advanceDate(base, bill.billing_cycle);
-  const { error } = await supabase
-    .from("bills")
-    .update({
-      payment_status: "unpaid",
-      next_due_date: nextDue,
-      cycle_paid_to_date: 0,
-      cycle_amount_due: null,
-    })
-    .eq("id", bill.id);
-  if (error) throw error;
+  await updateRow("bills", bill.id, {
+    payment_status: "unpaid",
+    next_due_date: nextDue,
+    cycle_paid_to_date: 0,
+    cycle_amount_due: null,
+  });
   return { next_due_date: nextDue };
 }
+
 
 
 
@@ -224,6 +239,9 @@ export function useMarkSubmitted() {
     mutationFn: async ({ payable, accountId, amount, cycleAmount }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const amt = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
+      // Mark the payable pending first so a failed status write never leaves an
+      // orphan ledger row behind.
+      await updateRow(table(p.kind), p.id, { payment_status: "pending" });
       const { error } = await supabase.from("transactions").insert({
         household_id: householdId,
         account_id: accountId,
@@ -235,11 +253,7 @@ export function useMarkSubmitted() {
         [linkColumn(p.kind)]: p.id,
       });
       if (error) throw error;
-      const { error: e2 } = await supabase
-        .from(table(p.kind))
-        .update({ payment_status: "pending" })
-        .eq("id", p.id);
-      if (e2) throw e2;
+
       const owed = payableRemainingOwed(p) - amt;
       return owed > 0.005 ? { remaining_owed: owed } : {};
     },
@@ -261,9 +275,15 @@ export function useMarkCleared() {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const requested = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       const existing = await findLinkedTransaction(p, "pending");
-      let clearedAmount = requested;
+      const clearedAmount = existing
+        ? Math.abs(Number(existing.amount ?? requested))
+        : requested;
+
+      // Update the bill/debt FIRST: if that fails we bail out before touching the
+      // ledger, instead of stranding a cleared transaction with no effect.
+      const result = await applyClearedPayment(p, clearedAmount);
+
       if (existing) {
-        clearedAmount = Math.abs(Number(existing.amount ?? requested));
         const { error } = await supabase
           .from("transactions")
           .update({ status: "cleared" })
@@ -283,8 +303,9 @@ export function useMarkCleared() {
         if (error) throw error;
       }
 
-      return applyClearedPayment(p, clearedAmount);
+      return result;
     },
+
     onSuccess: done,
   });
 }
