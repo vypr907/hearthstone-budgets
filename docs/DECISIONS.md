@@ -125,6 +125,8 @@ underlying rollover behavior on Bills/Debts.
 
 Status: Implemented 2026-07-28.
 
+*Superseded in practice by ADR-036's ledger-derived state machine -- see there for the current definition of 'cleared'*
+
 ## ADR-010: Everything Checkbox Cycles Through Submit-Then-Clear
 
 Decision:
@@ -751,3 +753,40 @@ recorded and cycles resolved on the first payment regardless of amount.
 Status: Decided 2026-08-05. Implemented.
 Notes: monthly debts have no `next_due_date` to roll, so a resolved monthly cycle keeps
 `payment_status = 'cleared'` rather than resetting to 'unpaid'.
+
+## ADR-036: Ledger-Derived 4-State Payment Cycle (Supersedes ADR-010)
+
+Decision:
+Replace the fixed unpaid → pending → cleared → unpaid tap cycle (ADR-010) with a state
+derived live from the ledger, shared across Bills, Debts, and Everything via the existing
+payments.ts / ledger-state.ts modules:
+
+- **UNPAID** — no transactions this cycle. Tap: prompt for amount, create a pending
+  transaction → PENDING.
+- **PENDING** — latest transaction for this cycle has status='pending'. Tap: clear that
+  transaction (cycle_paid_to_date += amount, per ADR-035). If remaining > 0 → PARTIAL.
+  If remaining <= 0 → CLEARED (cycle resolves: payment_status unpaid, due date advances,
+  cycle_paid_to_date resets, per existing ADR-019/035 rollover).
+- **PARTIAL** — no pending transaction, but cleared sum < amount due. Tap: prompt for
+  amount, create a new pending transaction → PENDING.
+- **CLEARED** — cleared sum >= amount due (cycle already resolved). Tap: show a confirm
+  dialog ("This will reset this bill/debt — undo all payments this cycle?"). On confirm,
+  full reversal per ADR-008, extended to delete ALL transactions tied to the cycle just
+  resolved (not only the most recent), reset cycle_paid_to_date to 0, revert payment_status
+  and due date → UNPAID. On cancel, no change.
+
+Icons: UNPAID = neutral/empty, PENDING = clock (yellow), PARTIAL = remaining-balance
+indicator (orange), CLEARED = checkmark (green).
+
+Reason:
+ADR-010's fixed 3-tap cycle assumed exactly one transaction per cycle. ADR-035 made that
+false — a cycle can need any number of submit/clear rounds. Deriving state from the actual
+ledger (not tap count) makes Bills, Debts, and Everything agree by construction, since
+they already share payments.ts, and finally makes Undo only reachable from a genuinely
+fully-paid cycle instead of firing on whatever the 3rd tap happens to be.
+
+Supersedes: ADR-010. Extends: ADR-008 (reversal now clears every transaction in the
+resolved cycle, not just the latest one) and ADR-009 (checked = CLEARED state, unchanged
+in spirit, now precisely defined).
+
+Status: Decided 2026-08-04. Not yet implemented.

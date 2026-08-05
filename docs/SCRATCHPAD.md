@@ -135,52 +135,8 @@ update bills set cycle_paid_to_date = 0 where cycle_paid_to_date is null;
 ```
 
 
-## Lovable Prompt:
-Fixing partial-payment support across Bills, Debts, and manual transaction entry, per
-ADR-035 in DECISIONS.md (already pasted/pushed). Schema for this batch
-(debts.cycle_paid_to_date; bills.cycle_amount_due/cycle_paid_to_date backfilled) is already
-applied in Supabase. Inspect the current bill/debt payment flow (src/lib/payments.ts) before
-writing code — this changes existing submit/clear logic, not just adds new fields.
+## Next Lovable Prompt:
 
-1. BILLS — universal partial payment
-Remove the is_variable_amount gate on the "amount to submit now" prompt — every bill submit
-(fixed or variable) now prompts for a payment amount, defaulting to remaining owed
-(cycle_amount_due - cycle_paid_to_date), editable down for a partial payment. Keep the
-existing is_variable_amount prompt for "what's actually owed this cycle" unchanged — that
-still only fires for variable bills and still sets cycle_amount_due. For fixed bills,
-cycle_amount_due is set to bills.amount automatically on first submit of a cycle if not
-already set (no prompt). Submit stays available any time remaining-this-cycle > 0,
-regardless of the bill's current payment_status — fix the case where a pending bill's
-Submit button became a no-op once already pending; it should let the user submit another
-partial payment toward the same cycle.
-
-2. DEBTS — cycle tracking (mirrors bills)
-Clearing a debt payment adds the transaction amount to debts.cycle_paid_to_date (new
-column) and reduces remaining_balance by the real amount paid (existing rule, unchanged).
-The cycle resolves (advance due date, reset payment_status to unpaid, reset
-cycle_paid_to_date to 0) only once cycle_paid_to_date >= minimum_payment; a shortfall keeps
-payment_status pending and Submit available for a follow-up payment, same UX pattern as
-bills. Add a "$X still owed this cycle" indicator to Debts list/detail whenever
-minimum_payment - cycle_paid_to_date > 0.
-
-3. BILLS — same remaining-owed indicator
-Show "$X still owed this cycle" on Bills list/detail and the Everything screen for any bill
-with cycle_amount_due - cycle_paid_to_date > 0 (previously this only showed for variable
-bills — now universal, reusing the same display already built for those).
-
-4. BILL DETAIL — Recent Transactions section
-Add a "Recent Transactions" section to the bill detail view: last 10 transactions where
-linked_bill_id = this bill, newest first — same pattern as the existing debt detail
-Recent Transactions section.
-
-5. MANUAL TRANSACTION ENTRY — link to bill/debt
-Add an optional "Link to bill/debt" selector to the quick Add Transaction form (mutually
-exclusive: pick a bill OR a debt OR neither). When set, saving the transaction must route
-through the same cycle-update logic as the Submit/Clear payment flow — incrementing
-cycle_paid_to_date and resolving or keeping-pending the cycle exactly as a normal payment
-would — rather than saving as a plain unlinked transaction with no effect on the bill/debt.
-
-Work through these in order and report back after each typechecks cleanly.
 
 ## Every 4 weeks billing cycle
 Short answer: not strictly, if you're willing to use `custom` — but `custom` currently has no automatic date-advance or monthly-equivalent logic (that's the open question flagged in ADR-033), so in practice you'd be hand-editing `next_due_date` every 4 weeks and the bill wouldn't show up correctly in monthly obligations. For a clean, self-advancing experience, yes — add a real cycle value.
@@ -209,3 +165,37 @@ title-cased option in the Billing Cycle dropdown on both the bill and debt forms
 ```
 
 One alternative worth knowing about, if you expect more oddball cadences later (every 6 weeks, every 10 weeks, etc.): instead of adding a new enum value each time, add a `cycle_interval_days integer` column used only when `billing_cycle = 'custom'`, and generalize `advanceDate()`/`monthlyEquivalent()` to read it. That's the real fix for ADR-033's open question, but it's a bigger lift than this one subscription needs right now — happy to draft that ADR instead if you'd rather solve it generically.
+
+
+# Daily Summary prompt
+Read docs/SESSION.md, docs/CONTEXT.md, and docs/CHANGELOG.md.
+
+1. Summarize the changes logged in SESSION.md into new dated entries appended to
+   docs/CHANGELOG.md, following its existing format (## <date> – <short title>, then
+   ### Completed / relevant subsections). Don't rewrite or reformat CHANGELOG's existing
+   entries — only append new ones for what's in SESSION.md.
+
+2. Update docs/CONTEXT.md's "Current Status" phase list and any "Locked Decisions" /
+   "Important Rules" sections that changed based on SESSION.md's content (e.g. new fields,
+   new tables, new behavior). Keep CONTEXT.md's existing structure and brevity — it's meant
+   to stay a compact briefing, not grow into a full changelog.
+
+3. Once both files are updated, clear docs/SESSION.md back to an empty template (just a
+   header, e.g. "## Session Notes" with no entries) so it's ready for the next work session.
+
+Show me the diffs for all three files before finalizing.
+
+
+# Things to work on
+## Dashboard
+- Overdue card that lists the bills that are overdue, curently shows the amount of the bill/debt, want this to show the amount that is overdue. Example, Rent 2 shows $609, but I had logged a payment of $500, so the overdue amount should then show $109.
+- The Payoff Progress card shows several debts that have been paid off
+
+## Paycheck Budget
+- Allocations card with the sliders for each category, I want a small label with "last month's spend" and "avg spend" to help inform allocation decisions without switching screens
+
+## Payment Schedule
+- love that it shows the next 12 months payment plan, but would like a collapsible "previous months" section to verify activity. (reason: I'm still building this app, but since it's now August, it shifted, and I can't see July's schedule)
+
+## Spending
+- want to be able to edit the actual spend from previous months. If I manually edit the actual total spend, it should not ADD any transactions that have been logged. It should assume that the transactions are included if I'm manually editing a total. I just want to be able to track the total, without worrying if I've missed logging a transaction
