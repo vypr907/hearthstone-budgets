@@ -11,11 +11,12 @@ import {
   useSpendingActuals,
   useSpendingBudgets,
   useStartNewSpendingMonth,
+  useBills,
   useTransactions,
   useUpsertSpendingActual,
   useUpsertSpendingBudget,
 } from "@/lib/data-hooks";
-import { buildActualResolver } from "@/lib/spending-actuals";
+import { billsBudgetedByCategory, buildActualResolver } from "@/lib/spending-actuals";
 import { formatMoney } from "@/lib/format";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -70,8 +71,11 @@ type Row = {
   name: string;
   budgetId?: string;
   budgeted: number;
+  billsBudgeted: number;
   actualId?: string;
   actual: number;
+  billsSpent: number;
+  spendingSpent: number;
   actualSource: "ledger" | "manual" | "override";
   hasLedger: boolean;
   avg3: number;
@@ -94,6 +98,7 @@ function SpendingPage() {
   const { data: budgets = [], isLoading } = useSpendingBudgets();
   const { data: actuals = [] } = useSpendingActuals();
   const { data: transactions = [] } = useTransactions();
+  const { data: bills = [] } = useBills();
 
   const saveBudget = useUpsertSpendingBudget();
   const saveActual = useUpsertSpendingActual();
@@ -135,9 +140,11 @@ function SpendingPage() {
   }, [categories]);
 
   const resolver = useMemo(
-    () => buildActualResolver(actuals, transactions),
-    [actuals, transactions],
+    () => buildActualResolver(actuals, transactions, bills),
+    [actuals, transactions, bills],
   );
+
+  const billsBudget = useMemo(() => billsBudgetedByCategory(bills), [bills]);
 
   const groups = useMemo(() => {
     const last3 = [0, 1, 2].map((n) => shiftMonth(activeMonth, -n));
@@ -157,8 +164,11 @@ function SpendingPage() {
           name: categoryById[catId]?.name ?? "Uncategorized",
           budgetId: b.id,
           budgeted: Number(b.budgeted_amount || 0),
+          billsBudgeted: billsBudget.get(catId) ?? 0,
           actualId: current.rowId,
           actual: current.amount,
+          billsSpent: current.billsSpent,
+          spendingSpent: current.spendingSpent,
           actualSource: current.source,
           hasLedger: !!current.hasLedger,
           avg3,
@@ -179,14 +189,18 @@ function SpendingPage() {
       g.rows.sort((a, b) => a.name.localeCompare(b.name));
 
     return [...byParent.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [budgets, resolver, categoryById, activeMonth]);
+  }, [budgets, resolver, categoryById, activeMonth, billsBudget]);
 
 
   const totals = useMemo(() => {
     const all = groups.flatMap((g) => g.rows);
     return {
-      budgeted: all.reduce((s, r) => s + r.budgeted, 0),
+      budgeted: all.reduce((s, r) => s + r.budgeted + r.billsBudgeted, 0),
+      spendingBudgeted: all.reduce((s, r) => s + r.budgeted, 0),
+      billsBudgeted: all.reduce((s, r) => s + r.billsBudgeted, 0),
       actual: all.reduce((s, r) => s + r.actual, 0),
+      billsSpent: all.reduce((s, r) => s + r.billsSpent, 0),
+      spendingSpent: all.reduce((s, r) => s + r.spendingSpent, 0),
       avg3: all.reduce((s, r) => s + r.avg3, 0),
     };
   }, [groups]);
@@ -359,8 +373,12 @@ function SpendingPage() {
         ) : (
           groups.map((g) => {
             const sub = {
-              budgeted: g.rows.reduce((s, r) => s + r.budgeted, 0),
+              budgeted: g.rows.reduce((s, r) => s + r.budgeted + r.billsBudgeted, 0),
+              spendingBudgeted: g.rows.reduce((s, r) => s + r.budgeted, 0),
+              billsBudgeted: g.rows.reduce((s, r) => s + r.billsBudgeted, 0),
               actual: g.rows.reduce((s, r) => s + r.actual, 0),
+              billsSpent: g.rows.reduce((s, r) => s + r.billsSpent, 0),
+              spendingSpent: g.rows.reduce((s, r) => s + r.spendingSpent, 0),
               avg3: g.rows.reduce((s, r) => s + r.avg3, 0),
             };
             return (
@@ -370,13 +388,14 @@ function SpendingPage() {
                     {g.name}
                   </p>
                   {g.rows.map((r, i) => {
+                    const totalBudget = r.budgeted + r.billsBudgeted;
                     const pct =
-                      r.budgeted > 0
-                        ? Math.min(100, (r.actual / r.budgeted) * 100)
+                      totalBudget > 0
+                        ? Math.min(100, (r.actual / totalBudget) * 100)
                         : r.actual > 0
                           ? 100
                           : 0;
-                    const over = r.budgeted > 0 && r.actual > r.budgeted;
+                    const over = totalBudget > 0 && r.actual > totalBudget;
                     return (
                     <div
                       key={r.categoryId}
@@ -419,8 +438,19 @@ function SpendingPage() {
                           }
                         >
                           {over
-                            ? `${formatMoney(r.actual - r.budgeted)} over`
-                            : `${formatMoney(r.budgeted - r.actual)} left`}
+                            ? `${formatMoney(r.actual - totalBudget)} over`
+                            : `${formatMoney(totalBudget - r.actual)} left`}
+                        </span>
+                        {/* ADR-034: never merge spending and bill load. */}
+                        <span className="text-[10px] tabular-nums text-muted-foreground">
+                          Budget {formatMoney(r.budgeted)} spending +{" "}
+                          {formatMoney(r.billsBudgeted)} bills ={" "}
+                          {formatMoney(totalBudget)}
+                        </span>
+                        <span className="text-[10px] tabular-nums text-muted-foreground">
+                          Spent {formatMoney(r.spendingSpent)} spending +{" "}
+                          {formatMoney(r.billsSpent)} bills ={" "}
+                          {formatMoney(r.actual)}
                         </span>
                       </span>
                       <button
