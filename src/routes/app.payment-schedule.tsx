@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,9 +12,9 @@ import {
   useToggleScheduleCheckoff,
 } from "@/lib/data-hooks";
 import { activeDebts, type StrategyKey } from "@/lib/debt-payoff";
-import { buildSchedule } from "@/lib/payment-schedule";
+import { buildSchedule, monthKeyOf } from "@/lib/payment-schedule";
 import { formatMoney } from "@/lib/format";
-import { CheckCircle2, Circle } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle } from "lucide-react";
 
 export const Route = createFileRoute("/app/payment-schedule")({
   head: () => ({
@@ -57,6 +57,19 @@ function PaymentSchedulePage() {
   );
 
   const done = new Set(checked);
+  const [showPast, setShowPast] = useState(false);
+
+  // Previous months are history, not a simulation: past balances are gone, so
+  // we only surface the month and its check-off state.
+  const pastMonths = useMemo(() => {
+    const now = new Date();
+    const current = monthKeyOf(now);
+    const keys = new Set<string>();
+    for (let i = 1; i <= 6; i++)
+      keys.add(monthKeyOf(new Date(now.getFullYear(), now.getMonth() - i, 1)));
+    for (const m of checked) if (m < current) keys.add(m);
+    return [...keys].sort().reverse();
+  }, [checked]);
 
   const onToggle = async (month: string) => {
     try {
@@ -86,6 +99,57 @@ function PaymentSchedulePage() {
             </div>
           </CardContent>
         </Card>
+
+        {pastMonths.length > 0 ? (
+          <Card>
+            <CardContent className="p-0">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 p-4 text-left"
+                onClick={() => setShowPast((v) => !v)}
+              >
+                <span className="flex-1 text-sm font-semibold">Previous months</span>
+                <span className="text-xs text-muted-foreground">
+                  {pastMonths.filter((m) => done.has(m)).length}/{pastMonths.length} paid
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${showPast ? "rotate-180" : ""}`}
+                />
+              </button>
+              {showPast ? (
+                <div className="divide-y border-t">
+                  {pastMonths.map((m) => {
+                    const [y, mo] = m.split("-").map(Number);
+                    const label = new Date(y, mo - 1, 1).toLocaleDateString("en-US", {
+                      month: "short",
+                      year: "numeric",
+                    });
+                    const isDone = done.has(m);
+                    return (
+                      <div key={m} className="flex items-center gap-3 px-4 py-3">
+                        <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
+                        <Button
+                          variant={isDone ? "default" : "outline"}
+                          size="sm"
+                          className="h-10 shrink-0 gap-2"
+                          disabled={toggle.isPending}
+                          onClick={() => onToggle(m)}
+                        >
+                          {isDone ? (
+                            <CheckCircle2 className="h-4 w-4" />
+                          ) : (
+                            <Circle className="h-4 w-4" />
+                          )}
+                          {isDone ? "Paid" : "Mark paid"}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {plan.length === 0 ? (
           <Card>
