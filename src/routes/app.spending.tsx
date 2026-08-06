@@ -390,16 +390,30 @@ function SpendingPage() {
                       >
                         {formatMoney(r.budgeted)}
                       </button>
-                      {r.actualSource === "ledger" ? (
-                        <span
-                          className="h-10 w-20 self-center text-right text-base font-bold tabular-nums"
-                          title="From logged transactions this month"
-                        >
-                          {formatMoney(r.actual)}
-                        </span>
-                      ) : (
+                      <span className="flex items-center justify-end gap-1">
+                        {r.actualSource === "override" ? (
+                          <button
+                            aria-label={`Use transaction total for ${r.name}`}
+                            title="Manual override — tap to revert to the transaction total"
+                            className="shrink-0 text-muted-foreground"
+                            onClick={() =>
+                              r.actualId &&
+                              clearOverride
+                                .mutateAsync({ id: r.actualId })
+                                .then(() => toast.success(`${r.name} back on transactions`))
+                                .catch((e) => toast.error((e as Error).message))
+                            }
+                          >
+                            <PencilLine className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
                         <button
                           className="h-10 w-20 rounded-md text-right text-base font-bold tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
+                          title={
+                            r.actualSource === "ledger"
+                              ? "From logged transactions this month"
+                              : undefined
+                          }
                           onClick={() =>
                             setEditing({
                               row: r,
@@ -410,7 +424,8 @@ function SpendingPage() {
                         >
                           {formatMoney(r.actual)}
                         </button>
-                      )}
+                      </span>
+
 
                       <span className="w-20 text-right tabular-nums text-muted-foreground">
                         {formatMoney(r.avg3)}
