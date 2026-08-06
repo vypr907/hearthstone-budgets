@@ -48,8 +48,8 @@
       per category.
 - [ ] Payment Schedule: collapsible "previous months" section (currently only
       forward-looking 12 months; July fell off after month rollover).
-- [ ] Snapshot: balances-by-account-type section, pay-period progress bar,
-      buildSnapshotSummary().
+- [x] Snapshot: balances-by-account-type section, pay-period progress bar,
+      buildSnapshotSummary() — done 2026-08-06.
 - 2026-08-06 — Spending month navigator. Prev/next month arrows above the category list
   (tap the month label to jump back to the current month), defaulting to the real calendar
   month. Rows, subtotals, 3-month average and the ADR-041 edit/override flow all follow the
@@ -64,3 +64,14 @@
   credit tagged `linked_goal_id`), so setting money aside never touches the bill's own
   pay/clear state. Cards for bills without a linked envelope goal render nothing.
   Known issues: none observed.
+
+- 2026-08-06 — ADR-028 Status Snapshot additions. New "Balances" card shows per-account-type
+  subtotals (checking, savings, credit, investment, retirement, plus any other types) using
+  the existing balances.ts spendable formula, headlined by the ADR-023 combined spendable
+  total. New pay-period card shows a progress bar of amount covered vs. still owed for the
+  current pay period (falls back to the calendar month when no primary income event covers
+  today), reusing obligationsInRange() and the ADR-035 remaining-owed helpers. New rule-based
+  `buildSnapshotSummary()` in src/lib/snapshot.ts renders a plain-text paragraph covering
+  obligations vs. spendable, overdue items and comfortable surplus; it is a pure function
+  with no network call so it can be swapped for an LLM version later.
+  Known issues: none observed; snapshot export path unchanged.

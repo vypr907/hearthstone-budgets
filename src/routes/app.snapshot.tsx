@@ -5,11 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Download, Loader2 } from "lucide-react";
-import { useBills, useDebts, useHousehold } from "@/lib/data-hooks";
+import {
+  useAccounts,
+  useBills,
+  useDebts,
+  useHousehold,
+  useLatestBalances,
+  useTransactions,
+} from "@/lib/data-hooks";
 import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
 import { useLedgerState } from "@/lib/ledger-state";
 import { formatMoney } from "@/lib/format";
 import { EmojiIcon, ItemBar, ProgressRing, itemColor } from "@/components/viz";
+import { computeBalances } from "@/lib/balances";
+import { eventDate, periodRange } from "@/lib/paycheck-budget";
 import {
   buildSnapshot,
   exportSnapshot,
@@ -17,6 +26,9 @@ import {
   todayISO,
   topByAmount,
   SNAPSHOT_MAX_ROWS,
+  buildBalanceSubtotals,
+  buildPeriodProgress,
+  buildSnapshotSummary,
   type SnapshotRow,
 } from "@/lib/snapshot";
 
@@ -94,6 +106,9 @@ function SnapshotPage() {
   const { data: household } = useHousehold();
   const { data: sources = [] } = useIncomeSources();
   const { data: events = [] } = useIncomeEvents();
+  const { data: accounts = [] } = useAccounts();
+  const { data: latest = {} } = useLatestBalances();
+  const { data: transactions = [] } = useTransactions();
   const stateOf = useLedgerState();
   const nodeRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
@@ -119,6 +134,49 @@ function SnapshotPage() {
       )
       .sort((a, b) => (a.expected_date ?? "").localeCompare(b.expected_date ?? ""))[0];
   }, [events, sources]);
+
+  const balances = useMemo(
+    () => computeBalances(accounts, latest, transactions),
+    [accounts, latest, transactions],
+  );
+  const balanceSummary = useMemo(
+    () => buildBalanceSubtotals(accounts, balances),
+    [accounts, balances],
+  );
+
+  /** Current pay period, falling back to the calendar month (ADR-034). */
+  const period = useMemo(() => {
+    const today = todayISO();
+    const primary = sources.find((s) => s.is_primary) ?? null;
+    const primaryEvents = events
+      .filter((e) => primary && e.income_source_id === primary.id)
+      .sort((a, b) => (eventDate(a) ?? "").localeCompare(eventDate(b) ?? ""));
+    const current = [...primaryEvents]
+      .reverse()
+      .find((e) => (eventDate(e) ?? "") <= today);
+    const range = current ? periodRange(current, primaryEvents) : null;
+    if (range) return { ...range, label: "pay period" };
+    const d = new Date();
+    const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    const end = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
+    return { start, end, label: "month" };
+  }, [sources, events]);
+
+  const progress = useMemo(
+    () => buildPeriodProgress(bills, debts, period),
+    [bills, debts, period],
+  );
+
+  const summary = useMemo(
+    () =>
+      buildSnapshotSummary({
+        snapshot: snap,
+        progress,
+        spendableTotal: balanceSummary.spendableTotal,
+      }),
+    [snap, progress, balanceSummary.spendableTotal],
+  );
 
   const format = household?.export_format === "pdf" ? "pdf" : "png";
 
@@ -244,6 +302,65 @@ function SnapshotPage() {
             </CardContent>
           </Card>
 
+
+          <Card style={{ boxShadow: "var(--shadow-card)" }}>
+            <CardContent className="p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Balances
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-primary">
+                  {formatMoney(balanceSummary.spendableTotal)}
+                </p>
+              </div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Combined spendable
+              </p>
+              {balanceSummary.rows.length === 0 ? (
+                <p className="mt-2 text-sm text-muted-foreground">No accounts yet.</p>
+              ) : (
+                <div className="mt-2 divide-y divide-border/40">
+                  {balanceSummary.rows.map((r) => (
+                    <div key={r.type} className="flex items-center justify-between py-1.5">
+                      <p className="text-sm font-semibold">{r.label}</p>
+                      <p className="text-sm font-bold tabular-nums">{formatMoney(r.total)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card style={{ boxShadow: "var(--shadow-card)" }}>
+            <CardContent className="p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  This {progress.label}
+                </p>
+                <p className="text-sm font-bold tabular-nums">
+                  {Math.round(progress.pct)}% covered
+                </p>
+              </div>
+              <ItemBar value={progress.pct} color="var(--primary)" className="mt-2" />
+              <div className="mt-2 flex items-baseline justify-between text-sm">
+                <p className="font-semibold text-muted-foreground">
+                  Paid {formatMoney(progress.paid)}
+                </p>
+                <p className="font-bold tabular-nums">
+                  {formatMoney(progress.owed)} still owed
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card style={{ boxShadow: "var(--shadow-card)" }}>
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Summary
+              </p>
+              <p className="mt-1 text-sm leading-relaxed">{summary}</p>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardContent className="p-4">

@@ -575,6 +575,16 @@ Implementation notes:
 
 Status: Decided 2026-08-03. Implemented 2026-08-03 (/app/snapshot + /app/settings). Uses html2canvas-pro (drop-in html2canvas fork) because html2canvas 1.4.1 cannot parse the app's oklch color tokens.
 
+### Addition 2026-08-06
+Decision: The snapshot also renders (a) a Balances card with per-account-type subtotals plus
+the ADR-023 combined spendable total, (b) a pay-period progress bar of covered vs. still owed
+for the current pay period (calendar month fallback), and (c) a rule-based text summary from
+`buildSnapshotSummary()` in src/lib/snapshot.ts.
+Reason: The one-page export needed context (what's in the accounts, how far through the period
+we are) rather than only a due list. The summary is isolated in one pure function with plain
+string templates so an LLM-generated version can replace it without touching the UI.
+Status: Decided 2026-08-06. Implemented.
+
 ## ADR-029: Category Visual Metadata (Icon, Color)
 
 Decision:
