@@ -58,3 +58,4 @@ with check (exists (select 1 from public.household_members m
 - [ ] Snapshot: balances by account type, pay-period progress bar, buildSnapshotSummary()
 - [x] ADR-036 ledger-derived 4-state payment cycle + full-cycle reset
 - [x] ADR-037 payable-first payment writes, verified updates, linked-transaction repair delete
+- [x] Spending: month navigator (prev/next) — done 2026-08-06.
