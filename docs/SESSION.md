@@ -75,3 +75,10 @@
   obligations vs. spendable, overdue items and comfortable surplus; it is a pure function
   with no network call so it can be swapped for an LLM version later.
   Known issues: none observed; snapshot export path unchanged.
+
+- 2026-08-06 — ADR-042. Paycheck Budget allocation rows now show "Last month $X · 3-mo
+  avg $Y" per category (buildActualResolver over spending actuals + transactions, so
+  manual overrides are respected) with a "Use avg" link that commits the rounded average.
+  Payment Schedule gained a collapsible "Previous months" card covering the last 6 months
+  plus any older checked-off month, each with its Mark paid toggle.
+  Known issues: past months show no per-debt breakdown by design — balances have moved on.
