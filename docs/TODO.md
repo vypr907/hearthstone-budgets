@@ -1,5 +1,6 @@
 ## Discovered 2026-08-06
 - [x] ADR-040 generalized custom billing cycle (cycle_interval_days on bills/debts).
+- [x] ADR-041 manual override for spending actuals (is_manual_override).
 
 ## Discovered 2026-08-05
 - [x] ADR-035 universal partial payments (bills, debts, linked manual transactions).
