@@ -44,6 +44,13 @@ import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
 
 
+import {
+  CustomCycleFields,
+  deriveCustomInterval,
+  toIntervalDays,
+  type CycleUnit,
+} from "@/components/CustomCycleFields";
+
 const CYCLES: BillingCycle[] = [
   "monthly",
   "biweekly",
@@ -398,6 +405,8 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   const [manual, setManual] = useState("none");
   const [notes, setNotes] = useState("");
   const [variable, setVariable] = useState(false);
+  const [cycleCount, setCycleCount] = useState("");
+  const [cycleUnit, setCycleUnit] = useState<CycleUnit>("days");
 
   const open = bill !== null;
   const isEdit = !!bill?.id;
@@ -415,12 +424,20 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setManual(bill?.manual_or_auto ?? "none");
     setNotes(bill?.notes ?? "");
     setVariable(!!bill?.is_variable_amount);
+    const derived = deriveCustomInterval(bill?.cycle_interval_days);
+    setCycleCount(derived.count);
+    setCycleUnit(derived.unit);
   }
   if (!open && lastKey !== "") setLastKey("");
 
   async function save() {
     if (!name.trim() || !amount) {
       toast.error("Name and amount are required");
+      return;
+    }
+    const intervalDays = cycle === "custom" ? toIntervalDays(cycleCount, cycleUnit) : null;
+    if (cycle === "custom" && !intervalDays) {
+      toast.error("Enter how often this custom bill repeats");
       return;
     }
     try {
@@ -430,6 +447,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         amount: Number(amount),
         next_due_date: dueDay || null,
         billing_cycle: cycle,
+        cycle_interval_days: intervalDays,
         category_id: categoryId === "none" ? null : categoryId,
         institution_id: institutionId === "none" ? null : institutionId,
         manual_or_auto: manual === "none" ? null : manual,
@@ -514,6 +532,14 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               </SelectContent>
             </Select>
           </div>
+          {cycle === "custom" ? (
+            <CustomCycleFields
+              count={cycleCount}
+              unit={cycleUnit}
+              onCountChange={setCycleCount}
+              onUnitChange={setCycleUnit}
+            />
+          ) : null}
           <div>
             <Label>Category</Label>
             <Select value={categoryId} onValueChange={setCategoryId}>

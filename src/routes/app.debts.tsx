@@ -54,6 +54,13 @@ import { Switch } from "@/components/ui/switch";
 import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel } from "@/lib/visual-meta";
 
 
+import {
+  CustomCycleFields,
+  deriveCustomInterval,
+  toIntervalDays,
+  type CycleUnit,
+} from "@/components/CustomCycleFields";
+
 const CYCLES: BillingCycle[] = [
   "monthly",
   "biweekly",
@@ -488,6 +495,8 @@ function DebtDialog({
   const [debtType, setDebtType] = useState("");
   const [notes, setNotes] = useState("");
   const [deduction, setDeduction] = useState(false);
+  const [cycleCount, setCycleCount] = useState("");
+  const [cycleUnit, setCycleUnit] = useState<CycleUnit>("days");
 
   const open = debt !== null;
   const isEdit = !!debt?.id;
@@ -505,12 +514,20 @@ function DebtDialog({
     setDebtType(debt?.debt_type ?? "");
     setNotes(debt?.notes ?? "");
     setDeduction(debt?.is_paycheck_deduction === true);
+    const derived = deriveCustomInterval(debt?.cycle_interval_days);
+    setCycleCount(derived.count);
+    setCycleUnit(derived.unit);
   }
   if (!open && lastKey !== "") setLastKey("");
 
   async function save() {
     if (!name.trim()) {
       toast.error("Name is required");
+      return;
+    }
+    const intervalDays = cycle === "custom" ? toIntervalDays(cycleCount, cycleUnit) : null;
+    if (cycle === "custom" && !intervalDays) {
+      toast.error("Enter how often this custom debt repeats");
       return;
     }
     try {
@@ -522,6 +539,7 @@ function DebtDialog({
         minimum_payment: minPay ? Number(minPay) : null,
         due_day: cycle === "monthly" ? (dueDay ? Number(dueDay) : null) : debt?.due_day ?? null,
         billing_cycle: cycle,
+        cycle_interval_days: intervalDays,
         next_due_date: cycle === "monthly" ? debt?.next_due_date ?? null : nextDue || null,
         debt_type: debtType || null,
         notes: notes || null,
@@ -636,6 +654,14 @@ function DebtDialog({
               </SelectContent>
             </Select>
           </div>
+          {cycle === "custom" ? (
+            <CustomCycleFields
+              count={cycleCount}
+              unit={cycleUnit}
+              onCountChange={setCycleCount}
+              onUnitChange={setCycleUnit}
+            />
+          ) : null}
           <div className="flex items-center justify-between rounded-md border p-3">
             <div className="pr-3">
               <Label htmlFor="d-deduction">Paid via paycheck/HSA deduction</Label>
