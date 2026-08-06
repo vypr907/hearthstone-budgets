@@ -71,7 +71,8 @@ type Row = {
   budgeted: number;
   actualId?: string;
   actual: number;
-  actualSource: "ledger" | "manual";
+  actualSource: "ledger" | "manual" | "override";
+  hasLedger: boolean;
   avg3: number;
   description?: string | null;
   icon: string;
