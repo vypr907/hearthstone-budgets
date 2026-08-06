@@ -131,13 +131,28 @@ export function SetAsideAction({
 
   return (
     <>
-      <Button variant="outline" className="h-12 w-full justify-start gap-2" onClick={start}>
-        <PiggyBank className="h-5 w-5" />
-        <span>Set aside</span>
-        <span className="ml-auto text-xs opacity-80">
-          {goal.name} · {formatMoney(suggested)}/mo
-        </span>
-      </Button>
+      {compact ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 gap-1.5 px-3"
+          onClick={(e) => {
+            e.stopPropagation();
+            start();
+          }}
+        >
+          <PiggyBank className="h-4 w-4" />
+          <span className="text-xs">Add to envelope</span>
+        </Button>
+      ) : (
+        <Button variant="outline" className="h-12 w-full justify-start gap-2" onClick={start}>
+          <PiggyBank className="h-5 w-5" />
+          <span>Set aside</span>
+          <span className="ml-auto text-xs opacity-80">
+            {goal.name} · {formatMoney(suggested)}/mo
+          </span>
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
         <DialogContent>
