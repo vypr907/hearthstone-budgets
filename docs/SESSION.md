@@ -27,13 +27,21 @@
   income source's latest event, falling back to the calendar month.
   Known issues: none observed.
 
+- 2026-08-06 — ADR-034 budget split. buildActualResolver() now also splits ledger spend
+  into ordinary spending vs. payments linked to bills (bill-linked transactions inherit
+  the bill's category when the transaction has none), and new billsBudgetedByCategory()
+  sums monthlyEquivalent() per category. Spending rows, subtotals and grand total, plus
+  the Dashboard budget-vs-actual card, now always show "$X spending + $Y bills = $Z" for
+  both Budgeted and Spent; progress/over-under now measures against the combined budget.
+  Known issues: manual overrides (ADR-041) report their whole total as spending, since an
+  override intentionally replaces the ledger split.
+
 ## Backlog (queued 2026-08-06, ordered for independent sessions)
 
 - [x] ADR-040: Generalized custom billing cycle — done 2026-08-06.
 - [x] Dashboard bug: Overdue card shows remaining owed — done 2026-08-06.
 - [x] Dashboard bug: Payoff Progress excludes paid-off debts — done 2026-08-06.
-- [ ] ADR-034: Dashboard hero rework / owed-this-period card / Net Worth to bottom
-      done 2026-08-06; budget-vs-actual bills split still pending.
+- [x] ADR-034 fully implemented 2026-08-06 (Dashboard rework + budget/actual bills split).
 - [ ] ADR-033 remainder: bill card "Add to envelope" quick-transaction action.
 - [x] ADR-041: manual override for spending actuals — done 2026-08-06.
 - [ ] Paycheck Budget: allocation sliders show "last month spend" / "avg spend"
