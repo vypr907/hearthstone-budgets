@@ -981,3 +981,28 @@ Implementation notes:
   toggle/icon on the cell, so a mistaken override isn't permanent.
 
 Status: Decided 2026-08-06. Not yet implemented.
+
+## ADR-040: Generalized Custom Billing Cycle (cycle_interval_days)
+Decision:
+`bills.cycle_interval_days` and `debts.cycle_interval_days` (integer, nullable)
+store a day count and are the only interval storage for `billing_cycle = 'custom'`.
+- Forms show a number input + Days/Weeks toggle only when the cycle is Custom;
+  weeks are multiplied by 7 before writing. Saving a custom bill/debt without a
+  value is blocked. On edit the unit is derived from the stored day count
+  (divisible by 7 and >= 7 -> Weeks, else Days) — no stored unit preference.
+- `shiftDate()`/`advanceDate()`/`reverseDate()` take an optional `intervalDays`
+  and add a `custom` branch shifting by that many days (same pattern as the
+  14-day biweekly branch). A custom cycle with no interval throws
+  `MissingCycleIntervalError` so the failure surfaces instead of silently
+  no-op'ing; read-only/derivation paths use `shiftDateSafe()` which keeps the
+  date unchanged rather than throwing mid-render.
+- `monthlyEquivalent()` prorates custom cycles as
+  `amount * (365.25 / cycle_interval_days) / 12`, returning null when unset.
+- Supersedes the previously-considered `every_4_weeks` enum option.
+Reason: real cadences (every 4 weeks, every 10 days) don't fit a fixed enum; a
+single day-count column covers all of them with no further schema churn.
+Status: Decided 2026-08-06. Implemented.
+
+Migration/backfill: none. Existing custom bills/debts with a null
+`cycle_interval_days` keep today's behavior (no auto-advance, not prorated into
+monthly obligations) until they're edited.

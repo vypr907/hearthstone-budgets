@@ -283,6 +283,7 @@ bills (
     is_variable_amount boolean default false, -- prompt for the amount owed each cycle
     cycle_amount_due numeric,                 -- actual amount owed for the current cycle
     cycle_paid_to_date numeric default 0,     -- cleared payments applied to the current cycle
+    cycle_interval_days integer,              -- ADR-040: interval in days when billing_cycle = 'custom'
     notes text,
     is_active boolean default true,
     created_at timestamptz default now(),
@@ -332,6 +333,7 @@ debts (
     date_paid_off date,
     is_paycheck_deduction boolean default false, -- ADR-032: serviced by payroll/HSA deduction
     cycle_paid_to_date numeric default 0,        -- ADR-035: cleared payments applied to the current cycle
+    cycle_interval_days integer,                 -- ADR-040: interval in days when billing_cycle = 'custom'
     created_at timestamptz default now(),
     updated_at timestamptz default now()
 )
