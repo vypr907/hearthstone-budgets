@@ -42,6 +42,7 @@ import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+import { formatTypeLabel } from "@/lib/visual-meta";
 
 
 import {
@@ -57,6 +58,7 @@ const CYCLES: BillingCycle[] = [
   "quarterly",
   "bimonthly",
   "annually",
+  "custom",
 ];
 
 export const Route = createFileRoute("/app/bills")({
@@ -446,11 +448,11 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         name: name.trim(),
         amount: Number(amount),
         next_due_date: dueDay || null,
-        billing_cycle: cycle,
+        billing_cycle: cycle.trim().toLowerCase() as BillingCycle,
         cycle_interval_days: intervalDays,
         category_id: categoryId === "none" ? null : categoryId,
         institution_id: institutionId === "none" ? null : institutionId,
-        manual_or_auto: manual === "none" ? null : manual,
+        manual_or_auto: manual === "none" ? null : manual.trim().toLowerCase(),
         notes: notes || null,
         is_variable_amount: variable,
       });
@@ -526,7 +528,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               <SelectContent>
                 {CYCLES.map((c) => (
                   <SelectItem key={c} value={c}>
-                    {c}
+                    {formatTypeLabel(c)}
                   </SelectItem>
                 ))}
               </SelectContent>
