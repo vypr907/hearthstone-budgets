@@ -52,3 +52,5 @@ Show me the diffs for all three files before finalizing.
 
 
 # Things to work on
+- When adding a new Institution, Categories should be a dropdown with the items and icons. Type should be a dropdown, and there should be an option to select/add linked accounts.
+- When adding a new Bill, the dropdown for Institution should include an option for New or Add Institution, which opens the form for Add Institution.
