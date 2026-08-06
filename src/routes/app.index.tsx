@@ -380,73 +380,6 @@ function Dashboard() {
 
 
 
-        {netWorthData.length > 1 && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Net worth trend
-              </p>
-              <p className="mt-1 text-3xl font-extrabold tabular-nums">
-                {formatMoney(netWorth[netWorth.length - 1]?.total ?? 0)}
-              </p>
-
-              <div className="mt-3 h-48 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={netWorthData} margin={{ left: 4, right: 8, top: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis
-                      width={48}
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={11}
-                      tickFormatter={(v: number) => `$${Math.round(v / 100) / 10}k`}
-                    />
-                    <Tooltip
-                      formatter={(v: number, n: string) => [formatMoney(v), n]}
-                      contentStyle={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 8,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="total"
-                      name="Total"
-                      stroke="var(--primary)"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                    {netWorthTypes.map((t, i) => (
-                      <Line
-                        key={t}
-                        type="monotone"
-                        dataKey={t}
-                        name={t}
-                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                        strokeWidth={1.5}
-                        dot={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                {netWorthTypes.map((t, i) => (
-                  <span key={t} className="flex items-center gap-1 capitalize">
-                    <span
-                      className="inline-block h-2 w-2 rounded-full"
-                      style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
-                    />
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {spendingByCategory.rows.length > 0 && (
           <Card>
@@ -600,6 +533,74 @@ function Dashboard() {
             </div>
           )}
         </div>
+
+        {netWorthData.length > 1 && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Net worth trend
+              </p>
+              <p className="mt-1 text-3xl font-extrabold tabular-nums">
+                {formatMoney(netWorth[netWorth.length - 1]?.total ?? 0)}
+              </p>
+
+              <div className="mt-3 h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={netWorthData} margin={{ left: 4, right: 8, top: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                    <YAxis
+                      width={48}
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={11}
+                      tickFormatter={(v: number) => `$${Math.round(v / 100) / 10}k`}
+                    />
+                    <Tooltip
+                      formatter={(v: number, n: string) => [formatMoney(v), n]}
+                      contentStyle={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="total"
+                      name="Total"
+                      stroke="var(--primary)"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    {netWorthTypes.map((t, i) => (
+                      <Line
+                        key={t}
+                        type="monotone"
+                        dataKey={t}
+                        name={t}
+                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                        strokeWidth={1.5}
+                        dot={false}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {netWorthTypes.map((t, i) => (
+                  <span key={t} className="flex items-center gap-1 capitalize">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                    />
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </>
   );
