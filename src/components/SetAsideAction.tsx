@@ -41,7 +41,14 @@ function todayISO() {
  * drives the envelope's derived balance, ADR-027). No transfer table exists;
  * the pairing lives only in this action.
  */
-export function SetAsideAction({ bill }: { bill: Bill }) {
+export function SetAsideAction({
+  bill,
+  compact = false,
+}: {
+  bill: Bill;
+  /** ADR-033: card-sized "Add to envelope" button instead of the full-width row. */
+  compact?: boolean;
+}) {
   const { data: goals = [] } = useSavingsGoals();
   const { data: accounts = [] } = useAccounts();
   const upsertGoal = useUpsertSavingsGoal();
