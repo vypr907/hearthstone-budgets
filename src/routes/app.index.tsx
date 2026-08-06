@@ -22,6 +22,7 @@ import {
   spendableContribution,
 } from "@/lib/balances";
 import { buildActualResolver } from "@/lib/spending-actuals";
+import { todayISO } from "@/lib/snapshot";
 import { billRemainingOwed, debtRemainingOwed } from "@/lib/payments";
 import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
 import { eventDate, obligationsInRange, periodRange } from "@/lib/paycheck-budget";
@@ -171,6 +172,7 @@ function Dashboard() {
   const payoffProgress = useMemo(
     () =>
       debts
+        .filter((d) => !d.date_paid_off)
         .map((d) => {
           const start = Number(d.starting_balance ?? 0);
           const remaining = Number(d.remaining_balance ?? 0);
@@ -178,7 +180,7 @@ function Dashboard() {
           const pct = start > 0 ? Math.min(100, (paid / start) * 100) : 0;
           return { id: d.id, name: d.name, start, remaining, paid, pct };
         })
-        .filter((d) => d.start > 0)
+        .filter((d) => d.start > 0 && d.remaining > 0)
         .sort((a, b) => b.pct - a.pct),
     [debts],
   );
