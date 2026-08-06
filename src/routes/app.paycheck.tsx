@@ -43,7 +43,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAccounts, useCategories, useSavingsGoals } from "@/lib/data-hooks";
+import {
+  useAccounts,
+  useCategories,
+  useSavingsGoals,
+  useSpendingActuals,
+  useTransactions,
+  monthKey,
+  shiftMonth,
+} from "@/lib/data-hooks";
+import { buildActualResolver } from "@/lib/spending-actuals";
 import { useBills, useDebts } from "@/lib/data-hooks";
 import {
   useDeleteIncomeEvent,
@@ -253,6 +262,32 @@ function PeriodBudget({
   const { data: splits = [] } = useIncomeSourceSplits(primarySourceId);
   const { data: accounts = [] } = useAccounts();
   const { data: goals = [] } = useSavingsGoals();
+  const { data: spendActuals = [] } = useSpendingActuals();
+  const { data: allTransactions = [] } = useTransactions();
+
+  // Per-category spend history: last completed month and 3-month average,
+  // resolved through the same ledger/override rules as the Spending screen.
+  const spendHistory = useMemo(() => {
+    const resolver = buildActualResolver(spendActuals, allTransactions, bills);
+    const thisMonth = monthKey();
+    const lastMonth = shiftMonth(thisMonth, -1);
+    const window = [1, 2, 3].map((n) => shiftMonth(thisMonth, -n));
+    const out = new Map<string, { last: number | null; avg: number | null }>();
+    for (const c of categories) {
+      const seen = window.filter((m) => resolver.has(c.id, m));
+      out.set(c.id, {
+        last: resolver.has(c.id, lastMonth)
+          ? resolver.resolve(c.id, lastMonth).amount
+          : null,
+        avg: seen.length
+          ? seen.reduce((s, m) => s + resolver.resolve(c.id, m).amount, 0) / seen.length
+          : null,
+      });
+    }
+    return out;
+  }, [spendActuals, allTransactions, bills, categories]);
+
+
 
   const obligations = useMemo(
     () => obligationsInRange(bills, debts, start, end),
@@ -456,6 +491,32 @@ function PeriodBudget({
                       onValueChange={([n]) => setDraft((d) => ({ ...d, [c.id]: n }))}
                       onValueCommit={([n]) => commit(c.id, n)}
                     />
+                    {(() => {
+                      const hist = spendHistory.get(c.id);
+                      if (!hist || (hist.last == null && hist.avg == null)) return null;
+                      const avg = hist.avg == null ? null : Math.round(hist.avg);
+                      return (
+                        <p className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          <span>
+                            Last month{" "}
+                            {hist.last == null ? "—" : formatMoney(hist.last)} · 3-mo avg{" "}
+                            {hist.avg == null ? "—" : formatMoney(hist.avg)}
+                          </span>
+                          {avg != null && avg > 0 ? (
+                            <button
+                              type="button"
+                              className="underline underline-offset-2 hover:text-foreground"
+                              onClick={() => {
+                                setDraft((d) => ({ ...d, [c.id]: avg }));
+                                void commit(c.id, avg);
+                              }}
+                            >
+                              Use avg
+                            </button>
+                          ) : null}
+                        </p>
+                      );
+                    })()}
                   </div>
                 );
               })}

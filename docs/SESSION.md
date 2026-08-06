@@ -44,10 +44,10 @@
 - [x] ADR-034 fully implemented 2026-08-06 (Dashboard rework + budget/actual bills split).
 - [x] ADR-033 remainder: bill card "Add to envelope" quick-transaction action — done 2026-08-06.
 - [x] ADR-041: manual override for spending actuals — done 2026-08-06.
-- [ ] Paycheck Budget: allocation sliders show "last month spend" / "avg spend"
-      per category.
-- [ ] Payment Schedule: collapsible "previous months" section (currently only
-      forward-looking 12 months; July fell off after month rollover).
+- [x] Paycheck Budget: allocation sliders show "last month spend" / "avg spend"
+      per category — done 2026-08-06 (ADR-042).
+- [x] Payment Schedule: collapsible "previous months" section — done 2026-08-06
+      (ADR-042).
 - [x] Snapshot: balances-by-account-type section, pay-period progress bar,
       buildSnapshotSummary() — done 2026-08-06.
 - 2026-08-06 — Spending month navigator. Prev/next month arrows above the category list
@@ -75,3 +75,10 @@
   obligations vs. spendable, overdue items and comfortable surplus; it is a pure function
   with no network call so it can be swapped for an LLM version later.
   Known issues: none observed; snapshot export path unchanged.
+
+- 2026-08-06 — ADR-042. Paycheck Budget allocation rows now show "Last month $X · 3-mo
+  avg $Y" per category (buildActualResolver over spending actuals + transactions, so
+  manual overrides are respected) with a "Use avg" link that commits the rounded average.
+  Payment Schedule gained a collapsible "Previous months" card covering the last 6 months
+  plus any older checked-off month, each with its Mark paid toggle.
+  Known issues: past months show no per-debt breakdown by design — balances have moved on.
