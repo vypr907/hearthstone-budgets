@@ -873,26 +873,29 @@ Status: Decided 2026-08-05. Implemented 2026-08-05. `useSetAllocation()` takes
 constraint fires; the period "Left to allocate" figure counts goal rows alongside
 category rows.
 
-## ADR-040: Generalized Custom Billing Cycle (cycle_interval_days)
+## ADR-040: Generalized Custom Billing Cycle (cycle_interval_days) KEEP VERSION
 
 Decision:
-Add `cycle_interval_days integer` to both `bills` and `debts`, used only when
-`billing_cycle = 'custom'`. Generalize the shared `advanceDate()`/`reverseDate()`
-helpers to accept a day-count for `custom` (reading `cycle_interval_days`) instead
-of only handling the fixed enum intervals. Generalize `monthlyEquivalent()`
-(src/lib/format.ts, ADR-033) the same way: for `custom`,
-`amount * (365.25 / cycle_interval_days) / 12`.
+Add `cycle_interval_days integer` to both `bills` and `debts`, used only when `billing_cycle = 'custom'`. Generalize the shared `advanceDate()`/`reverseDate()` helpers to accept a day-count for `custom` (reading `cycle_interval_days`) instead of only handling the fixed enum intervals. Generalize `monthlyEquivalent()` (src/lib/format.ts, ADR-033) the same way: for `custom`, `amount * (365.25 / cycle_interval_days) / 12`.
 
-No new `billing_cycle` enum values are added (e.g. no `every_4_weeks`) — any
-day-count cadence, current or future, is expressed via `custom` +
-`cycle_interval_days` instead of a growing enum.
+- No new `billing_cycle` enum values are added (e.g. no `every_4_weeks`) — any day-count cadence, current or future, is expressed via `custom` + `cycle_interval_days` instead of a growing enum. `bills.cycle_interval_days` and `debts cycle_interval_days` (integer, nullable) store a day count and are the only interval storage for `billing_cycle = 'custom'`.
+- Forms show a number input + Days/Weeks toggle only when the cycle is Custom;
+  weeks are multiplied by 7 before writing. Saving a custom bill/debt without a
+  value is blocked. On edit the unit is derived from the stored day count
+  (divisible by 7 and >= 7 -> Weeks, else Days) — no stored unit preference.
+- `shiftDate()`/`advanceDate()`/`reverseDate()` take an optional `intervalDays`
+  and add a `custom` branch shifting by that many days (same pattern as the
+  14-day biweekly branch). A custom cycle with no interval throws
+  `MissingCycleIntervalError` so the failure surfaces instead of silently
+  no-op'ing; read-only/derivation paths use `shiftDateSafe()` which keeps the
+  date unchanged rather than throwing mid-render.
+- `monthlyEquivalent()` prorates custom cycles as
+  `amount * (365.25 / cycle_interval_days) / 12`, returning null when unset.
+
 
 Reason:
-ADR-033 flagged `custom` as unprorated and non-advancing, with two options: add
-enum values per cadence, or generalize with a stored interval. Given more
-non-monthly cadences are expected (a 4-week subscription now, others later), the
-interval column is the one-time fix — each new odd cadence becomes a data entry,
-not a schema/code change.
+ADR-033 flagged `custom` as unprorated and non-advancing, with two options: add enum values per cadence, or generalize with a stored interval. Given more non-monthly cadences are expected (a 4-week subscription now, others later), the
+interval column is the one-time fix — each new odd cadence becomes a data entry, not a schema/code change.
 
 Schema change:
 ```sql
@@ -914,14 +917,13 @@ Migration steps:
    whichever unit divides evenly (weeks if divisible by 7 and >= 7, else days), not a
    separately stored preference.
 3. `advanceDate()`/`reverseDate()`: add a `custom` branch reading
-   `cycle_interval_days` (fallback: treat missing value as an error state, not a
-   silent no-op — a custom bill without an interval shouldn't advance).
+   `cycle_interval_days` (fallback: treat missing value as an error state, not a silent no-op — a custom bill without an interval shouldn't advance).
 4. `monthlyEquivalent()`: add the same `custom` branch.
 5. Existing `custom` rows (if any) will have `cycle_interval_days = null` until
-   edited — they keep today's non-advancing behavior until then, no backfill
-   required.
+   edited — they keep today's non-advancing behavior until then, no backfill required.
 
-Status: Decided 2026-08-06. Not yet implemented.
+Status: Decided 2026-08-06. Implemented.
+
 
 ## ADR-041: Manual Override for Past-Month Spending Actuals (Amends ADR-012)
 
@@ -982,27 +984,27 @@ Implementation notes:
 
 Status: Decided 2026-08-06. Not yet implemented.
 
-## ADR-040: Generalized Custom Billing Cycle (cycle_interval_days)
-Decision:
-`bills.cycle_interval_days` and `debts.cycle_interval_days` (integer, nullable)
-store a day count and are the only interval storage for `billing_cycle = 'custom'`.
-- Forms show a number input + Days/Weeks toggle only when the cycle is Custom;
-  weeks are multiplied by 7 before writing. Saving a custom bill/debt without a
-  value is blocked. On edit the unit is derived from the stored day count
-  (divisible by 7 and >= 7 -> Weeks, else Days) — no stored unit preference.
-- `shiftDate()`/`advanceDate()`/`reverseDate()` take an optional `intervalDays`
-  and add a `custom` branch shifting by that many days (same pattern as the
-  14-day biweekly branch). A custom cycle with no interval throws
-  `MissingCycleIntervalError` so the failure surfaces instead of silently
-  no-op'ing; read-only/derivation paths use `shiftDateSafe()` which keeps the
-  date unchanged rather than throwing mid-render.
-- `monthlyEquivalent()` prorates custom cycles as
-  `amount * (365.25 / cycle_interval_days) / 12`, returning null when unset.
-- Supersedes the previously-considered `every_4_weeks` enum option.
-Reason: real cadences (every 4 weeks, every 10 days) don't fit a fixed enum; a
-single day-count column covers all of them with no further schema churn.
-Status: Decided 2026-08-06. Implemented.
 
-Migration/backfill: none. Existing custom bills/debts with a null
-`cycle_interval_days` keep today's behavior (no auto-advance, not prorated into
-monthly obligations) until they're edited.
+
+## ADR-042: billing_cycle and manual_or_auto Are Always Stored Lowercase (Extends ADR-022's Pattern)
+
+Decision:
+The bill and debt add/edit forms normalize both billing_cycle and manual_or_auto with
+.trim().toLowerCase() before writing, identical to ADR-022's account_type rule. A
+one-time data correction lowercases existing non-lowercase values in both columns,
+across bills and debts.
+
+Reason:
+Both columns existed in mixed case (e.g. "Monthly"/"Auto" instead of "monthly"/"auto"),
+which List/Detail views tolerated via a display-formatter but which broke the Edit
+forms' selects, since select options match on exact value. Same root cause and same
+fix pattern as ADR-022, applied to two more free-text-turned-enum columns.
+
+Verified scope (2026-08-06):
+- debts.billing_cycle: 30 of 35 rows are "Monthly" (capitalized); bills.billing_cycle
+  is already all-lowercase and unaffected.
+- bills.manual_or_auto: all 39 non-null rows are "Auto"/"Manual" (capitalized).
+- debts.manual_or_auto: all 33 non-null rows are "Auto"/"Manual" (capitalized); 2 rows
+  are null (unaffected, left as-is).
+
+Status: Decided 2026-08-06. Not yet implemented.
