@@ -152,6 +152,7 @@ function SpendingPage() {
           actualId: current.rowId,
           actual: current.amount,
           actualSource: current.source,
+          hasLedger: !!current.hasLedger,
           avg3,
           description: b.description ?? null,
           ...categoryVisual(categoryById[catId]),
