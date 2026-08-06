@@ -906,8 +906,13 @@ alter table debts add column cycle_interval_days integer;
 
 Migration steps:
 1. Run the SQL above.
-2. Bill/debt form: when Billing Cycle = "Custom", show a "Repeats every N days"
-   number input bound to `cycle_interval_days`. Other cycle values hide it.
+2. Bill/debt form: when Billing Cycle = "Custom", show two inputs — a number field and
+   a Days/Weeks unit selector. The stored cycle_interval_days is always in days: when
+   the user picks "Weeks," multiply their entered number by 7 before saving (e.g. "4
+   weeks" saves as 28). The unit selector is a UI-only convenience — cycle_interval_days
+   remains the single source of truth, so editing an existing custom bill/debt shows
+   whichever unit divides evenly (weeks if divisible by 7 and >= 7, else days), not a
+   separately stored preference.
 3. `advanceDate()`/`reverseDate()`: add a `custom` branch reading
    `cycle_interval_days` (fallback: treat missing value as an error state, not a
    silent no-op — a custom bill without an interval shouldn't advance).
