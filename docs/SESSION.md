@@ -1,7 +1,7 @@
 ## Session Notes
 ## Backlog (queued 2026-08-06, ordered for independent sessions)
 
-- [ ] ADR-037: Generalized custom billing cycle (cycle_interval_days on bills/debts;
+- [ ] ADR-040: Generalized custom billing cycle (cycle_interval_days on bills/debts;
       generalize advanceDate/reverseDate/monthlyEquivalent). Supersedes the
       every_4_weeks-enum option — chosen for future oddball cadences.
 - [ ] Dashboard bug: Overdue card shows full bill/debt amount instead of remaining
@@ -11,7 +11,7 @@
 - [ ] ADR-034 (decided, not implemented): Dashboard hero rework, budget/actual
       bills split, owed-this-period card, Net Worth Trend moved to bottom.
 - [ ] ADR-033 remainder: bill card "Add to envelope" quick-transaction action.
-- [ ] ADR-038 (not yet drafted): manual override for past-month spending actuals —
+- [ ] ADR-041: manual override for past-month spending actuals —
       editing a month's actual total should NOT also sum ledger transactions for
       that month; treat manual edit as authoritative, amends ADR-012.
 - [ ] Paycheck Budget: allocation sliders show "last month spend" / "avg spend"

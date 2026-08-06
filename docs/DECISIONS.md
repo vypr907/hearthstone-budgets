@@ -872,3 +872,107 @@ Status: Decided 2026-08-05. Implemented 2026-08-05. `useSetAllocation()` takes
 `categoryId` OR `goalId` and rejects both/neither client-side before the DB check
 constraint fires; the period "Left to allocate" figure counts goal rows alongside
 category rows.
+
+## ADR-040: Generalized Custom Billing Cycle (cycle_interval_days)
+
+Decision:
+Add `cycle_interval_days integer` to both `bills` and `debts`, used only when
+`billing_cycle = 'custom'`. Generalize the shared `advanceDate()`/`reverseDate()`
+helpers to accept a day-count for `custom` (reading `cycle_interval_days`) instead
+of only handling the fixed enum intervals. Generalize `monthlyEquivalent()`
+(src/lib/format.ts, ADR-033) the same way: for `custom`,
+`amount * (365.25 / cycle_interval_days) / 12`.
+
+No new `billing_cycle` enum values are added (e.g. no `every_4_weeks`) — any
+day-count cadence, current or future, is expressed via `custom` +
+`cycle_interval_days` instead of a growing enum.
+
+Reason:
+ADR-033 flagged `custom` as unprorated and non-advancing, with two options: add
+enum values per cadence, or generalize with a stored interval. Given more
+non-monthly cadences are expected (a 4-week subscription now, others later), the
+interval column is the one-time fix — each new odd cadence becomes a data entry,
+not a schema/code change.
+
+Schema change:
+```sql
+alter table bills add column cycle_interval_days integer;
+alter table debts add column cycle_interval_days integer;
+```
+
+`cycle_interval_days` is nullable; required only when `billing_cycle = 'custom'`
+(enforced in the UI form, not a DB constraint, consistent with existing
+`is_variable_amount`-gated fields like `cycle_amount_due`).
+
+Migration steps:
+1. Run the SQL above.
+2. Bill/debt form: when Billing Cycle = "Custom", show a "Repeats every N days"
+   number input bound to `cycle_interval_days`. Other cycle values hide it.
+3. `advanceDate()`/`reverseDate()`: add a `custom` branch reading
+   `cycle_interval_days` (fallback: treat missing value as an error state, not a
+   silent no-op — a custom bill without an interval shouldn't advance).
+4. `monthlyEquivalent()`: add the same `custom` branch.
+5. Existing `custom` rows (if any) will have `cycle_interval_days = null` until
+   edited — they keep today's non-advancing behavior until then, no backfill
+   required.
+
+Status: Decided 2026-08-06. Not yet implemented.
+
+## ADR-041: Manual Override for Past-Month Spending Actuals (Amends ADR-012)
+
+Decision:
+Allow editing `spending_actuals.actual_amount` for any month, including past
+months, even when ledger transactions exist for that category/month. A manual
+edit is treated as an authoritative override for that (category_id, month) pair
+going forward — it does NOT get added to or reconciled against ledger-derived
+transaction sums, and does not create, delete, or alter any transactions.
+
+Once a `spending_actuals` row for a given (category_id, month) has been manually
+edited, display for that cell uses the stored `actual_amount` directly instead of
+re-summing transactions — a "manually edited" indicator (e.g. small icon/label)
+distinguishes it from a live ledger-derived cell so the source is never ambiguous.
+
+Reason:
+ADR-012 made ledger-derived cells non-editable to prevent double-counting on the
+*current* month, where new transactions keep arriving. Past months are static —
+nothing new will be logged against July once it's August — so the double-counting
+risk that motivated non-editability doesn't apply retroactively. The real problem
+being solved is trust: the user may not be certain every transaction was logged,
+and wants the ability to assert "the true total was $X" without needing to
+audit/backfill missing transaction rows.
+
+This does not change current-month behavior: the present month's actuals remain
+ledger-derived-first per ADR-012 as long as no manual edit has been made for it.
+
+Schema change:
+None. `spending_actuals` already stores one row per (household_id, category_id,
+month) via its existing unique constraint — this only changes which value wins at
+render time and removes the edit-lock for months with transactions.
+
+Implementation notes:
+- Add a boolean-equivalent signal for "this cell was manually overridden." Since
+  there's no schema change, this can be derived as: a `spending_actuals` row
+  exists for (category_id, month) AND its `updated_at` is later than the most
+  recent transaction in that category/month — OR, simpler and more explicit, add
+  `spending_actuals.is_manual_override boolean not null default false`, set true
+  whenever the user edits the field directly. (Recommend the explicit column —
+  timestamp-comparison heuristics are fragile if a transaction is logged after
+  the override.)
+- If the explicit column is added:
+```sql
+  alter table spending_actuals add column is_manual_override boolean not null default false;
+```
+- Render logic (Spending screen, current ADR-012 resolver): if
+  `is_manual_override = true` for that cell, use `actual_amount` as-is and skip
+  the ledger sum entirely. Otherwise, keep ADR-012's existing behavior
+  (ledger-derived if transactions exist, else manual value).
+- Editing a cell that currently has `is_manual_override = false` and existing
+  ledger transactions should prompt/confirm once ("This category has logged
+  transactions this month — manually editing will use your total instead of the
+  transaction sum going forward"), since it's a one-way trust decision per cell
+  until unset.
+- Consider whether to expose an "unlock / go back to ledger-derived" action
+  (setting `is_manual_override` back to false) — recommend yes, as a small
+  toggle/icon on the cell, so a mistaken override isn't permanent.
+
+Status: Decided 2026-08-06. Not yet implemented.
