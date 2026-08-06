@@ -100,12 +100,17 @@ function SpendingPage() {
   const clearOverride = useClearSpendingOverride();
   const startMonth = useStartNewSpendingMonth();
 
-  // The active month is the newest month present in the ledger of actuals,
+  // The ledger month is the newest month present in the actuals ledger,
   // never earlier than the real calendar month.
   const latestMonth = actuals[0]?.month?.slice(0, 10);
   const thisMonth = monthKey();
-  const activeMonth =
+  const ledgerMonth =
     latestMonth && latestMonth > thisMonth ? latestMonth : thisMonth;
+
+  // Month navigator (defaults to the current calendar month).
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const activeMonth = selectedMonth ?? thisMonth;
+
 
   const createCategory = useCreateCategory();
   const [adding, setAdding] = useState(false);
