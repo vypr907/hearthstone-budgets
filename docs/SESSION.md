@@ -42,7 +42,7 @@
 - [x] Dashboard bug: Overdue card shows remaining owed — done 2026-08-06.
 - [x] Dashboard bug: Payoff Progress excludes paid-off debts — done 2026-08-06.
 - [x] ADR-034 fully implemented 2026-08-06 (Dashboard rework + budget/actual bills split).
-- [ ] ADR-033 remainder: bill card "Add to envelope" quick-transaction action.
+- [x] ADR-033 remainder: bill card "Add to envelope" quick-transaction action — done 2026-08-06.
 - [x] ADR-041: manual override for spending actuals — done 2026-08-06.
 - [ ] Paycheck Budget: allocation sliders show "last month spend" / "avg spend"
       per category.
@@ -56,3 +56,11 @@
   selected month; "Start new month" stays anchored to the ledger's newest month and now
   jumps the view to the new month.
   Known issues: none observed; data is already loaded client-side, so no new queries.
+
+- 2026-08-06 — ADR-033 bill card "Add to envelope". `SetAsideAction` gained a `compact`
+  variant (small PiggyBank button) rendered on each bill card in the Bills list, below the
+  pay actions and click-isolated from the card's detail-open handler. It reuses the exact
+  ADR-038 two-transaction Set Aside flow (cleared debit from the source account + cleared
+  credit tagged `linked_goal_id`), so setting money aside never touches the bill's own
+  pay/clear state. Cards for bills without a linked envelope goal render nothing.
+  Known issues: none observed.
