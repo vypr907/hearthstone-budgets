@@ -710,7 +710,7 @@ manual monthly-equivalent entry — deferred until a real `custom` bill needs th
 
 Status: Decided 2026-08-04. Partly implemented 2026-08-04 — `monthlyEquivalent()` /
 `needsEnvelope()` in format.ts, envelope auto-creation in `useUpsertBill()`, optional
-`account_id` on the goal form. The bill-card "Add to envelope" action is pending.
+`account_id` on the goal form. The bill-card "Add to envelope" action ships the compact SetAsideAction (2026-08-06).
 
 ## ADR-034: Budget Totals Include Linked Bill Amounts, Shown as Two Parts
 
