@@ -262,6 +262,32 @@ function PeriodBudget({
   const { data: splits = [] } = useIncomeSourceSplits(primarySourceId);
   const { data: accounts = [] } = useAccounts();
   const { data: goals = [] } = useSavingsGoals();
+  const { data: spendActuals = [] } = useSpendingActuals();
+  const { data: allTransactions = [] } = useTransactions();
+
+  // Per-category spend history: last completed month and 3-month average,
+  // resolved through the same ledger/override rules as the Spending screen.
+  const spendHistory = useMemo(() => {
+    const resolver = buildActualResolver(spendActuals, allTransactions, bills);
+    const thisMonth = monthKey();
+    const lastMonth = shiftMonth(thisMonth, -1);
+    const window = [1, 2, 3].map((n) => shiftMonth(thisMonth, -n));
+    const out = new Map<string, { last: number | null; avg: number | null }>();
+    for (const c of categories) {
+      const seen = window.filter((m) => resolver.has(c.id, m));
+      out.set(c.id, {
+        last: resolver.has(c.id, lastMonth)
+          ? resolver.resolve(c.id, lastMonth).amount
+          : null,
+        avg: seen.length
+          ? seen.reduce((s, m) => s + resolver.resolve(c.id, m).amount, 0) / seen.length
+          : null,
+      });
+    }
+    return out;
+  }, [spendActuals, allTransactions, bills, categories]);
+
+
 
   const obligations = useMemo(
     () => obligationsInRange(bills, debts, start, end),
