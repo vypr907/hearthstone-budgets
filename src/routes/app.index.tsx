@@ -21,7 +21,7 @@ import {
   creditOwed,
   spendableContribution,
 } from "@/lib/balances";
-import { buildActualResolver } from "@/lib/spending-actuals";
+import { billsBudgetedByCategory, buildActualResolver } from "@/lib/spending-actuals";
 import { todayISO } from "@/lib/snapshot";
 import { billRemainingOwed, debtRemainingOwed } from "@/lib/payments";
 import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
@@ -188,21 +188,48 @@ function Dashboard() {
   /** Budget vs actual for the current month, grouped by parent_category. */
   const budgetChart = useMemo(() => {
     const month = monthKey(new Date());
-    const resolver = buildActualResolver(actuals, transactions);
+    const resolver = buildActualResolver(actuals, transactions, bills);
+    const billsBudget = billsBudgetedByCategory(bills);
     const byId: Record<string, (typeof categories)[number]> = {};
     for (const c of categories) byId[c.id] = c;
-    const groups = new Map<string, { name: string; budgeted: number; actual: number }>();
+    const groups = new Map<
+      string,
+      {
+        name: string;
+        budgeted: number;
+        spendingBudgeted: number;
+        billsBudgeted: number;
+        actual: number;
+        spendingSpent: number;
+        billsSpent: number;
+      }
+    >();
     for (const b of budgets) {
       if (!b.category_id) continue;
       const parent = byId[b.category_id]?.parent_category?.trim() || "";
       const key = parent || "__none__";
-      const g = groups.get(key) ?? { name: parent || "Ungrouped", budgeted: 0, actual: 0 };
-      g.budgeted += Number(b.budgeted_amount || 0);
-      g.actual += resolver.resolve(b.category_id, month).amount;
+      const g = groups.get(key) ?? {
+        name: parent || "Ungrouped",
+        budgeted: 0,
+        spendingBudgeted: 0,
+        billsBudgeted: 0,
+        actual: 0,
+        spendingSpent: 0,
+        billsSpent: 0,
+      };
+      const spendingBudget = Number(b.budgeted_amount || 0);
+      const billBudget = billsBudget.get(b.category_id) ?? 0;
+      const current = resolver.resolve(b.category_id, month);
+      g.spendingBudgeted += spendingBudget;
+      g.billsBudgeted += billBudget;
+      g.budgeted += spendingBudget + billBudget;
+      g.actual += current.amount;
+      g.spendingSpent += current.spendingSpent;
+      g.billsSpent += current.billsSpent;
       groups.set(key, g);
     }
     return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [budgets, actuals, transactions, categories]);
+  }, [budgets, actuals, transactions, categories, bills]);
 
 
 
@@ -446,6 +473,12 @@ function Dashboard() {
                         </div>
                         <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                           {formatMoney(g.actual)} of {formatMoney(g.budgeted)} used
+                        </p>
+                        <p className="text-[10px] tabular-nums text-muted-foreground">
+                          Budget {formatMoney(g.spendingBudgeted)} spending +{" "}
+                          {formatMoney(g.billsBudgeted)} bills · Spent{" "}
+                          {formatMoney(g.spendingSpent)} spending +{" "}
+                          {formatMoney(g.billsSpent)} bills
                         </p>
                       </div>
                     </div>

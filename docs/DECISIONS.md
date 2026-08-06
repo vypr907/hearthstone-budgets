@@ -736,7 +736,8 @@ glance instead of requiring mental math against the Bills screen.
 Status: Decided 2026-08-04. Dashboard portion implemented 2026-08-06 (hero rebuilt around
 combined spendable with per-period bill/debt set-aside totals, "still owed this period"
 card grouped by category, Net Worth Trend moved to the bottom, overdue amounts and payoff
-progress corrected). Spending/Dashboard budget split still pending.
+progress corrected). Budget/actual spending-vs-bills split implemented 2026-08-06 on the
+Spending screen and the Dashboard budget-vs-actual card.
 
 
 ## ADR-035: Universal Partial Payments for Bills and Debts

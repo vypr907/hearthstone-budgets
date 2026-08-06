@@ -54,7 +54,7 @@ with check (exists (select 1 from public.household_members m
 - [x] ADR-033 monthlyEquivalent(), envelope auto-creation, goal account_id
 - [x] Account labels + pay-time picker polish (icon, logo, last 4)
 - [ ] ADR-033 bill card "Add to envelope" quick-transaction action
-- [~] ADR-034 Dashboard hero rework, owed-this-period card, Net Worth to bottom — done 2026-08-06; budget/actual bills split pending
+- [x] ADR-034 Dashboard hero rework, budget/actual bills split, owed-this-period card, Net Worth to bottom — done 2026-08-06
 - [ ] Snapshot: balances by account type, pay-period progress bar, buildSnapshotSummary()
 - [x] ADR-036 ledger-derived 4-state payment cycle + full-cycle reset
 - [x] ADR-037 payable-first payment writes, verified updates, linked-transaction repair delete
