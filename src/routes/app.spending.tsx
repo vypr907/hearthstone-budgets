@@ -96,6 +96,7 @@ function SpendingPage() {
 
   const saveBudget = useUpsertSpendingBudget();
   const saveActual = useUpsertSpendingActual();
+  const clearOverride = useClearSpendingOverride();
   const startMonth = useStartNewSpendingMonth();
 
   // The active month is the newest month present in the ledger of actuals,
