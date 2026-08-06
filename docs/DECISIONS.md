@@ -938,7 +938,10 @@ Reason:
 ADR-012 locked cells whenever transactions existed, so a partially-logged month could never be corrected to the real total. The override flag keeps the ledger as the default source of truth while letting a human total win when they say so.
 
 Status: Decided 2026-08-06. Override mechanism implemented 2026-08-06. Month
-navigation to actually reach past-month cells not yet implemented — see backlog.
+navigation (prev/next arrows above the category list, defaulting to the current
+calendar month, with "Start new month" still anchored to the ledger's newest
+month) implemented 2026-08-06 — the edit/override flow applies to the selected
+month.
 
 
 
