@@ -67,20 +67,39 @@ function normalizeCycle(cycle: string | null | undefined): string {
   return (cycle ?? "").toLowerCase().replace(/[\s_-]/g, "");
 }
 
+/** ADR-040: thrown when a custom-cycle payable has no cycle_interval_days set. */
+export class MissingCycleIntervalError extends Error {
+  constructor() {
+    super(
+      "This item uses a custom billing cycle but has no interval set — edit it and enter a number of days or weeks.",
+    );
+    this.name = "MissingCycleIntervalError";
+  }
+}
+
 /**
  * Shift an ISO date by one billing-cycle interval.
- * direction 1 advances (clearing), -1 reverses (undo). 'custom' never moves.
+ * direction 1 advances (clearing), -1 reverses (undo).
+ * ADR-040: 'custom' shifts by cycle_interval_days; a null interval is an error.
  */
 export function shiftDate(
   date: string,
   cycle: string | null | undefined,
   direction: 1 | -1 = 1,
+  intervalDays?: number | null,
 ): string {
   const key = normalizeCycle(cycle);
-  if (key === "custom") return date.slice(0, 10);
   const [y, m, d] = date.slice(0, 10).split("-").map(Number);
   const base = new Date(y, m - 1, d);
   switch (key) {
+    case "custom": {
+      const days = Number(intervalDays ?? 0);
+      if (!intervalDays || !Number.isFinite(days) || days <= 0) {
+        throw new MissingCycleIntervalError();
+      }
+      base.setDate(base.getDate() + days * direction);
+      break;
+    }
     case "biweekly":
       base.setDate(base.getDate() + 14 * direction);
       break;
@@ -104,14 +123,40 @@ export function shiftDate(
 }
 
 /** Advance an ISO date by one billing-cycle interval. */
-export function advanceDate(date: string, cycle: string | null | undefined): string {
-  return shiftDate(date, cycle, 1);
+export function advanceDate(
+  date: string,
+  cycle: string | null | undefined,
+  intervalDays?: number | null,
+): string {
+  return shiftDate(date, cycle, 1, intervalDays);
 }
 
 /** Reverse an ISO date by one billing-cycle interval (undo). */
-export function reverseDate(date: string, cycle: string | null | undefined): string {
-  return shiftDate(date, cycle, -1);
+export function reverseDate(
+  date: string,
+  cycle: string | null | undefined,
+  intervalDays?: number | null,
+): string {
+  return shiftDate(date, cycle, -1, intervalDays);
 }
+
+/**
+ * Read-only shift for display/derivation paths: an unset custom interval keeps
+ * today's behavior (the date doesn't move) instead of throwing mid-render.
+ */
+export function shiftDateSafe(
+  date: string,
+  cycle: string | null | undefined,
+  direction: 1 | -1,
+  intervalDays?: number | null,
+): string {
+  try {
+    return shiftDate(date, cycle, direction, intervalDays);
+  } catch {
+    return date.slice(0, 10);
+  }
+}
+
 
 
 function addMonths(date: Date, months: number, targetDay: number) {
