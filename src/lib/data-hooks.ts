@@ -655,16 +655,21 @@ export function useUpsertSpendingActual() {
       categoryId,
       month,
       amount,
+      manualOverride,
     }: {
       id?: string;
       categoryId: string;
       month: string;
       amount: number;
+      /** ADR-041: mark this cell as taking priority over the ledger sum. */
+      manualOverride?: boolean;
     }) => {
+      const overridePatch =
+        manualOverride === undefined ? {} : { is_manual_override: manualOverride };
       if (id) {
         const { error } = await supabase
           .from("spending_actuals")
-          .update({ actual_amount: amount })
+          .update({ actual_amount: amount, ...overridePatch })
           .eq("id", id);
         if (error) throw error;
         return;
@@ -674,7 +679,23 @@ export function useUpsertSpendingActual() {
         category_id: categoryId,
         month,
         actual_amount: amount,
+        ...overridePatch,
       });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["spending_actuals"] }),
+  });
+}
+
+/** ADR-041: clear the manual override so the cell reverts to ledger-derived-first. */
+export function useClearSpendingOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await supabase
+        .from("spending_actuals")
+        .update({ is_manual_override: false })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["spending_actuals"] }),
