@@ -925,64 +925,20 @@ Migration steps:
 Status: Decided 2026-08-06. Implemented.
 
 
-## ADR-041: Manual Override for Past-Month Spending Actuals (Amends ADR-012)
+## ADR-041: Manual Override for Spending Actuals (amends ADR-012)
 
 Decision:
-Allow editing `spending_actuals.actual_amount` for any month, including past
-months, even when ledger transactions exist for that category/month. A manual
-edit is treated as an authoritative override for that (category_id, month) pair
-going forward — it does NOT get added to or reconciled against ledger-derived
-transaction sums, and does not create, delete, or alter any transactions.
+`spending_actuals.is_manual_override boolean default false` decides which value a Spending cell shows. Every `actual_amount` cell is editable, for any month, whether or not transactions exist. Rendering priority per (category_id, month): manual override wins; else the ledger sum of that category's transactions that month (ADR-012); else the stored `actual_amount`.
 
-Once a `spending_actuals` row for a given (category_id, month) has been manually
-edited, display for that cell uses the stored `actual_amount` directly instead of
-re-summing transactions — a "manually edited" indicator (e.g. small icon/label)
-distinguishes it from a live ledger-derived cell so the source is never ambiguous.
+- Saving an edit writes `actual_amount` and sets `is_manual_override = true`. It never creates, edits, or deletes `transactions` rows.
+- Editing a cell that is currently ledger-derived (override false + transactions exist) first shows a one-time confirm dialog; cancel makes no change.
+- Overridden cells show a pencil indicator that doubles as a revert action: it sets `is_manual_override = false`, keeping the stored `actual_amount` but restoring ledger-derived-first display.
 
 Reason:
-ADR-012 made ledger-derived cells non-editable to prevent double-counting on the
-*current* month, where new transactions keep arriving. Past months are static —
-nothing new will be logged against July once it's August — so the double-counting
-risk that motivated non-editability doesn't apply retroactively. The real problem
-being solved is trust: the user may not be certain every transaction was logged,
-and wants the ability to assert "the true total was $X" without needing to
-audit/backfill missing transaction rows.
+ADR-012 locked cells whenever transactions existed, so a partially-logged month could never be corrected to the real total. The override flag keeps the ledger as the default source of truth while letting a human total win when they say so.
 
-This does not change current-month behavior: the present month's actuals remain
-ledger-derived-first per ADR-012 as long as no manual edit has been made for it.
-
-Schema change:
-None. `spending_actuals` already stores one row per (household_id, category_id,
-month) via its existing unique constraint — this only changes which value wins at
-render time and removes the edit-lock for months with transactions.
-
-Implementation notes:
-- Add a boolean-equivalent signal for "this cell was manually overridden." Since
-  there's no schema change, this can be derived as: a `spending_actuals` row
-  exists for (category_id, month) AND its `updated_at` is later than the most
-  recent transaction in that category/month — OR, simpler and more explicit, add
-  `spending_actuals.is_manual_override boolean not null default false`, set true
-  whenever the user edits the field directly. (Recommend the explicit column —
-  timestamp-comparison heuristics are fragile if a transaction is logged after
-  the override.)
-- If the explicit column is added:
-```sql
-  alter table spending_actuals add column is_manual_override boolean not null default false;
-```
-- Render logic (Spending screen, current ADR-012 resolver): if
-  `is_manual_override = true` for that cell, use `actual_amount` as-is and skip
-  the ledger sum entirely. Otherwise, keep ADR-012's existing behavior
-  (ledger-derived if transactions exist, else manual value).
-- Editing a cell that currently has `is_manual_override = false` and existing
-  ledger transactions should prompt/confirm once ("This category has logged
-  transactions this month — manually editing will use your total instead of the
-  transaction sum going forward"), since it's a one-way trust decision per cell
-  until unset.
-- Consider whether to expose an "unlock / go back to ledger-derived" action
-  (setting `is_manual_override` back to false) — recommend yes, as a small
-  toggle/icon on the cell, so a mistaken override isn't permanent.
-
-Status: Decided 2026-08-06. Not yet implemented.
+Status: Decided 2026-08-06. Override mechanism implemented 2026-08-06. Month
+navigation to actually reach past-month cells not yet implemented — see backlog.
 
 
 
@@ -1008,17 +964,3 @@ Verified scope (2026-08-06):
   are null (unaffected, left as-is).
 
 Status: Decided 2026-08-06. Not yet implemented.
-
-## ADR-041: Manual Override for Spending Actuals (amends ADR-012)
-
-Decision:
-`spending_actuals.is_manual_override boolean default false` decides which value a Spending cell shows. Every `actual_amount` cell is editable, for any month, whether or not transactions exist. Rendering priority per (category_id, month): manual override wins; else the ledger sum of that category's transactions that month (ADR-012); else the stored `actual_amount`.
-
-- Saving an edit writes `actual_amount` and sets `is_manual_override = true`. It never creates, edits, or deletes `transactions` rows.
-- Editing a cell that is currently ledger-derived (override false + transactions exist) first shows a one-time confirm dialog; cancel makes no change.
-- Overridden cells show a pencil indicator that doubles as a revert action: it sets `is_manual_override = false`, keeping the stored `actual_amount` but restoring ledger-derived-first display.
-
-Reason:
-ADR-012 locked cells whenever transactions existed, so a partially-logged month could never be corrected to the real total. The override flag keeps the ledger as the default source of truth while letting a human total win when they say so.
-
-Status: Decided 2026-08-06. Implemented.
