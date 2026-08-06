@@ -6,6 +6,7 @@ import {
   monthKey,
   shiftMonth,
   useCategories,
+  useClearSpendingOverride,
   useCreateCategory,
   useSpendingActuals,
   useSpendingBudgets,
@@ -28,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CalendarPlus, HelpCircle, Plus } from "lucide-react";
+import { CalendarPlus, HelpCircle, PencilLine, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ProgressRing, itemColor } from "@/components/viz";
@@ -402,7 +403,7 @@ function SpendingPage() {
                               clearOverride
                                 .mutateAsync({ id: r.actualId })
                                 .then(() => toast.success(`${r.name} back on transactions`))
-                                .catch((e) => toast.error((e as Error).message))
+                                .catch((e: unknown) => toast.error((e as Error).message))
                             }
                           >
                             <PencilLine className="h-3.5 w-3.5" />
