@@ -42,6 +42,7 @@ import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+import { formatTypeLabel } from "@/lib/visual-meta";
 
 
 import {
@@ -57,6 +58,7 @@ const CYCLES: BillingCycle[] = [
   "quarterly",
   "bimonthly",
   "annually",
+  "custom",
 ];
 
 export const Route = createFileRoute("/app/bills")({
