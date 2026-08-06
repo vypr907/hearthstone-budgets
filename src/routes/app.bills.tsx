@@ -448,7 +448,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         name: name.trim(),
         amount: Number(amount),
         next_due_date: dueDay || null,
-        billing_cycle: cycle.trim().toLowerCase(),
+        billing_cycle: cycle.trim().toLowerCase() as BillingCycle,
         cycle_interval_days: intervalDays,
         category_id: categoryId === "none" ? null : categoryId,
         institution_id: institutionId === "none" ? null : institutionId,
