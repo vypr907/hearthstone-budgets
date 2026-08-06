@@ -733,7 +733,11 @@ Rocket Money/Mint-style "$40 left" hides that $30 of it is already spoken for by
 upcoming bill. Splitting spendable-vs-committed makes the number trustworthy at a
 glance instead of requiring mental math against the Bills screen.
 
-Status: Decided 2026-08-04. Not yet implemented.
+Status: Decided 2026-08-04. Dashboard portion implemented 2026-08-06 (hero rebuilt around
+combined spendable with per-period bill/debt set-aside totals, "still owed this period"
+card grouped by category, Net Worth Trend moved to the bottom, overdue amounts and payoff
+progress corrected). Spending/Dashboard budget split still pending.
+
 
 ## ADR-035: Universal Partial Payments for Bills and Debts
 Decision:
