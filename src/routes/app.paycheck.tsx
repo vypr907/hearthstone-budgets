@@ -491,6 +491,32 @@ function PeriodBudget({
                       onValueChange={([n]) => setDraft((d) => ({ ...d, [c.id]: n }))}
                       onValueCommit={([n]) => commit(c.id, n)}
                     />
+                    {(() => {
+                      const hist = spendHistory.get(c.id);
+                      if (!hist || (hist.last == null && hist.avg == null)) return null;
+                      const avg = hist.avg == null ? null : Math.round(hist.avg);
+                      return (
+                        <p className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          <span>
+                            Last month{" "}
+                            {hist.last == null ? "—" : formatMoney(hist.last)} · 3-mo avg{" "}
+                            {hist.avg == null ? "—" : formatMoney(hist.avg)}
+                          </span>
+                          {avg != null && avg > 0 ? (
+                            <button
+                              type="button"
+                              className="underline underline-offset-2 hover:text-foreground"
+                              onClick={() => {
+                                setDraft((d) => ({ ...d, [c.id]: avg }));
+                                void commit(c.id, avg);
+                              }}
+                            >
+                              Use avg
+                            </button>
+                          ) : null}
+                        </p>
+                      );
+                    })()}
                   </div>
                 );
               })}
