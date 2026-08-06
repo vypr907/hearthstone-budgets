@@ -407,6 +407,7 @@ spending_actuals (
     category_id uuid references categories(id),
     month date not null,
     actual_amount numeric not null,
+    is_manual_override boolean not null default false, -- ADR-041
     created_at timestamptz default now()
 )
 ```

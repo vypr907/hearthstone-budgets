@@ -74,6 +74,8 @@ export type SpendingActual = {
   /** First day of the month, ISO date. */
   month: string;
   actual_amount: number;
+  /** When true, actual_amount wins over the ledger-derived sum (ADR-041). */
+  is_manual_override?: boolean | null;
   created_at?: string | null;
 };
 

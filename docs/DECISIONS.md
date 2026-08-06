@@ -1008,3 +1008,17 @@ Verified scope (2026-08-06):
   are null (unaffected, left as-is).
 
 Status: Decided 2026-08-06. Not yet implemented.
+
+## ADR-041: Manual Override for Spending Actuals (amends ADR-012)
+
+Decision:
+`spending_actuals.is_manual_override boolean default false` decides which value a Spending cell shows. Every `actual_amount` cell is editable, for any month, whether or not transactions exist. Rendering priority per (category_id, month): manual override wins; else the ledger sum of that category's transactions that month (ADR-012); else the stored `actual_amount`.
+
+- Saving an edit writes `actual_amount` and sets `is_manual_override = true`. It never creates, edits, or deletes `transactions` rows.
+- Editing a cell that is currently ledger-derived (override false + transactions exist) first shows a one-time confirm dialog; cancel makes no change.
+- Overridden cells show a pencil indicator that doubles as a revert action: it sets `is_manual_override = false`, keeping the stored `actual_amount` but restoring ledger-derived-first display.
+
+Reason:
+ADR-012 locked cells whenever transactions existed, so a partially-logged month could never be corrected to the real total. The override flag keeps the ledger as the default source of truth while letting a human total win when they say so.
+
+Status: Decided 2026-08-06. Implemented.

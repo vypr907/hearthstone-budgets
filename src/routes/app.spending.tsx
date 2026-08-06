@@ -6,6 +6,7 @@ import {
   monthKey,
   shiftMonth,
   useCategories,
+  useClearSpendingOverride,
   useCreateCategory,
   useSpendingActuals,
   useSpendingBudgets,
@@ -28,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CalendarPlus, HelpCircle, Plus } from "lucide-react";
+import { CalendarPlus, HelpCircle, PencilLine, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ProgressRing, itemColor } from "@/components/viz";
@@ -71,7 +72,8 @@ type Row = {
   budgeted: number;
   actualId?: string;
   actual: number;
-  actualSource: "ledger" | "manual";
+  actualSource: "ledger" | "manual" | "override";
+  hasLedger: boolean;
   avg3: number;
   description?: string | null;
   icon: string;
@@ -95,6 +97,7 @@ function SpendingPage() {
 
   const saveBudget = useUpsertSpendingBudget();
   const saveActual = useUpsertSpendingActual();
+  const clearOverride = useClearSpendingOverride();
   const startMonth = useStartNewSpendingMonth();
 
   // The active month is the newest month present in the ledger of actuals,
@@ -118,6 +121,7 @@ function SpendingPage() {
   const [editing, setEditing] = useState<
     { row: Row; field: "budgeted" | "actual"; value: string } | null
   >(null);
+  const [confirming, setConfirming] = useState(false);
 
   const categoryById = useMemo(() => {
     const m: Record<string, (typeof categories)[number]> = {};
@@ -151,6 +155,7 @@ function SpendingPage() {
           actualId: current.rowId,
           actual: current.amount,
           actualSource: current.source,
+          hasLedger: !!current.hasLedger,
           avg3,
           description: b.description ?? null,
           ...categoryVisual(categoryById[catId]),
@@ -181,11 +186,21 @@ function SpendingPage() {
     };
   }, [groups]);
 
-  async function submitEdit() {
+  async function submitEdit(force = false) {
     if (!editing) return;
     const amount = Number(editing.value);
     if (!Number.isFinite(amount)) {
       toast.error("Enter a number");
+      return;
+    }
+    // ADR-041: warn once before a manual total starts overriding logged spend.
+    if (
+      !force &&
+      editing.field === "actual" &&
+      editing.row.actualSource === "ledger" &&
+      editing.row.hasLedger
+    ) {
+      setConfirming(true);
       return;
     }
     try {
@@ -201,9 +216,11 @@ function SpendingPage() {
           categoryId: editing.row.categoryId,
           month: activeMonth,
           amount,
+          manualOverride: true,
         });
       }
       toast.success(`${editing.row.name} updated`);
+      setConfirming(false);
       setEditing(null);
     } catch (e) {
       toast.error((e as Error).message);
@@ -388,16 +405,30 @@ function SpendingPage() {
                       >
                         {formatMoney(r.budgeted)}
                       </button>
-                      {r.actualSource === "ledger" ? (
-                        <span
-                          className="h-10 w-20 self-center text-right text-base font-bold tabular-nums"
-                          title="From logged transactions this month"
-                        >
-                          {formatMoney(r.actual)}
-                        </span>
-                      ) : (
+                      <span className="flex items-center justify-end gap-1">
+                        {r.actualSource === "override" ? (
+                          <button
+                            aria-label={`Use transaction total for ${r.name}`}
+                            title="Manual override — tap to revert to the transaction total"
+                            className="shrink-0 text-muted-foreground"
+                            onClick={() =>
+                              r.actualId &&
+                              clearOverride
+                                .mutateAsync({ id: r.actualId })
+                                .then(() => toast.success(`${r.name} back on transactions`))
+                                .catch((e: unknown) => toast.error((e as Error).message))
+                            }
+                          >
+                            <PencilLine className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
                         <button
                           className="h-10 w-20 rounded-md text-right text-base font-bold tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
+                          title={
+                            r.actualSource === "ledger"
+                              ? "From logged transactions this month"
+                              : undefined
+                          }
                           onClick={() =>
                             setEditing({
                               row: r,
@@ -408,7 +439,8 @@ function SpendingPage() {
                         >
                           {formatMoney(r.actual)}
                         </button>
-                      )}
+                      </span>
+
 
                       <span className="w-20 text-right tabular-nums text-muted-foreground">
                         {formatMoney(r.avg3)}
@@ -595,9 +627,37 @@ function SpendingPage() {
             <Button
               className="h-12 w-full"
               disabled={saveBudget.isPending || saveActual.isPending}
-              onClick={submitEdit}
+              onClick={() => submitEdit()}
             >
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Override the transaction total?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This category has logged transactions this month — manually editing will
+            use your total instead of the transaction sum going forward.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              className="h-12 w-full"
+              onClick={() => setConfirming(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="h-12 w-full"
+              disabled={saveActual.isPending}
+              onClick={() => submitEdit(true)}
+            >
+              Use my total
             </Button>
           </DialogFooter>
         </DialogContent>

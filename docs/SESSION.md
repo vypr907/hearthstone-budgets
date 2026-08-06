@@ -10,6 +10,13 @@
   `amount * (365.25 / days) / 12`. No backfill: existing custom rows without an interval
   behave exactly as before until edited.
   Known issues: none observed; monthly/biweekly/quarterly/bimonthly/annually paths untouched.
+- 2026-08-06 — ADR-041 manual override for spending actuals. Every actual cell on the
+  Spending screen is now editable; `spending_actuals.is_manual_override` gives a manual
+  total display priority over the ledger sum, saving an edit sets the flag (never touching
+  transactions), a one-time confirm warns before overriding a month with logged spend, and
+  a pencil indicator on overridden cells reverts to ledger-derived-first.
+  Known issues: none observed; Dashboard totals and transaction creation untouched.
+
 ## Backlog (queued 2026-08-06, ordered for independent sessions)
 
 - [x] ADR-040: Generalized custom billing cycle — done 2026-08-06.
@@ -20,9 +27,7 @@
 - [ ] ADR-034 (decided, not implemented): Dashboard hero rework, budget/actual
       bills split, owed-this-period card, Net Worth Trend moved to bottom.
 - [ ] ADR-033 remainder: bill card "Add to envelope" quick-transaction action.
-- [ ] ADR-041: manual override for past-month spending actuals —
-      editing a month's actual total should NOT also sum ledger transactions for
-      that month; treat manual edit as authoritative, amends ADR-012.
+- [x] ADR-041: manual override for spending actuals — done 2026-08-06.
 - [ ] Paycheck Budget: allocation sliders show "last month spend" / "avg spend"
       per category.
 - [ ] Payment Schedule: collapsible "previous months" section (currently only

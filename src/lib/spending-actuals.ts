@@ -32,14 +32,31 @@ export function buildActualResolver(
       const key = `${categoryId}|${month}`;
       const ledger = fromLedger.get(key);
       const row = manual.get(key);
+      // ADR-041: a manual override wins over the ledger sum.
+      if (row?.is_manual_override) {
+        return {
+          amount: Number(row.actual_amount || 0),
+          source: "override" as const,
+          rowId: row.id,
+          hasRow: true,
+          hasLedger: ledger !== undefined,
+        };
+      }
       if (ledger !== undefined) {
-        return { amount: ledger, source: "ledger" as const, rowId: row?.id };
+        return {
+          amount: ledger,
+          source: "ledger" as const,
+          rowId: row?.id,
+          hasRow: !!row,
+          hasLedger: true,
+        };
       }
       return {
         amount: row ? Number(row.actual_amount || 0) : 0,
         source: "manual" as const,
         rowId: row?.id,
         hasRow: !!row,
+        hasLedger: false,
       };
     },
     /** True when the month has any manual row or ledger spend. */
