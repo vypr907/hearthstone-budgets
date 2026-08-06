@@ -513,11 +513,17 @@ function SpendingPage() {
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                       Subtotal
                     </span>
-                    <span className="w-20 text-right font-bold tabular-nums">
+                    <span className="flex w-20 flex-col items-end font-bold tabular-nums">
                       {formatMoney(sub.budgeted)}
+                      <span className="text-[10px] font-normal text-muted-foreground">
+                        {formatMoney(sub.spendingBudgeted)} + {formatMoney(sub.billsBudgeted)}
+                      </span>
                     </span>
-                    <span className="w-20 text-right font-bold tabular-nums">
+                    <span className="flex w-20 flex-col items-end font-bold tabular-nums">
                       {formatMoney(sub.actual)}
+                      <span className="text-[10px] font-normal text-muted-foreground">
+                        {formatMoney(sub.spendingSpent)} + {formatMoney(sub.billsSpent)}
+                      </span>
                     </span>
                     <span className="w-20 text-right font-bold tabular-nums">
                       {formatMoney(sub.avg3)}
@@ -534,11 +540,17 @@ function SpendingPage() {
           <Card>
             <CardContent className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 p-4 text-sm font-semibold">
               <span>Grand total</span>
-              <span className="w-20 text-right tabular-nums">
+              <span className="flex w-20 flex-col items-end tabular-nums">
                 {formatMoney(totals.budgeted)}
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {formatMoney(totals.spendingBudgeted)} + {formatMoney(totals.billsBudgeted)}
+                </span>
               </span>
-              <span className="w-20 text-right tabular-nums">
+              <span className="flex w-20 flex-col items-end tabular-nums">
                 {formatMoney(totals.actual)}
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {formatMoney(totals.spendingSpent)} + {formatMoney(totals.billsSpent)}
+                </span>
               </span>
               <span className="w-20 text-right tabular-nums">
                 {formatMoney(totals.avg3)}
