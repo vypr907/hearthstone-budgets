@@ -448,11 +448,11 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         name: name.trim(),
         amount: Number(amount),
         next_due_date: dueDay || null,
-        billing_cycle: cycle,
+        billing_cycle: cycle.trim().toLowerCase(),
         cycle_interval_days: intervalDays,
         category_id: categoryId === "none" ? null : categoryId,
         institution_id: institutionId === "none" ? null : institutionId,
-        manual_or_auto: manual === "none" ? null : manual,
+        manual_or_auto: manual === "none" ? null : manual.trim().toLowerCase(),
         notes: notes || null,
         is_variable_amount: variable,
       });
