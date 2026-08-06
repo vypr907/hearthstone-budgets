@@ -148,7 +148,11 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
     update.cycle_paid_to_date = 0;
     let nextDue: string | null = null;
     if (cycle !== "monthly") {
-      nextDue = advanceDate(debt.next_due_date ?? todayISO(), debt.billing_cycle);
+      nextDue = advanceDate(
+        debt.next_due_date ?? todayISO(),
+        debt.billing_cycle,
+        debt.cycle_interval_days,
+      );
       update.next_due_date = nextDue;
       update.payment_status = "unpaid";
     } else {
@@ -173,7 +177,7 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
   }
 
   const base = bill.next_due_date ?? todayISO();
-  const nextDue = advanceDate(base, bill.billing_cycle);
+  const nextDue = advanceDate(base, bill.billing_cycle, bill.cycle_interval_days);
   await updateRow("bills", bill.id, {
     payment_status: "unpaid",
     next_due_date: nextDue,
@@ -342,7 +346,11 @@ export function useMarkUnpaid() {
             // The clear resolved the cycle — undo that roll-forward.
             const cycle = (p.debt?.billing_cycle ?? "monthly").toLowerCase();
             if (cycle !== "monthly" && p.debt?.next_due_date) {
-              update.next_due_date = reverseDate(p.debt.next_due_date, p.debt.billing_cycle);
+              update.next_due_date = reverseDate(
+                p.debt.next_due_date,
+                p.debt.billing_cycle,
+                p.debt.cycle_interval_days,
+              );
             }
             update.cycle_paid_to_date = 0;
           }
@@ -366,7 +374,11 @@ export function useMarkUnpaid() {
           if (next === 0 && !bill?.is_variable_amount) update.cycle_amount_due = null;
         } else if (bill?.next_due_date) {
           // The clear rolled the bill into its next cycle — undo that roll-forward.
-          update.next_due_date = reverseDate(bill.next_due_date, bill.billing_cycle);
+          update.next_due_date = reverseDate(
+            bill.next_due_date,
+            bill.billing_cycle,
+            bill.cycle_interval_days,
+          );
           update.cycle_paid_to_date = 0;
           update.cycle_amount_due = null;
         }
@@ -416,7 +428,11 @@ export function useResetCycle() {
         };
         const cycle = (debt.billing_cycle ?? "monthly").toLowerCase();
         if (resolved && cycle !== "monthly" && debt.next_due_date) {
-          update.next_due_date = reverseDate(debt.next_due_date, debt.billing_cycle);
+          update.next_due_date = reverseDate(
+            debt.next_due_date,
+            debt.billing_cycle,
+            debt.cycle_interval_days,
+          );
         }
         const { error } = await supabase.from("debts").update(update).eq("id", payable.id);
         if (error) throw error;
@@ -430,7 +446,11 @@ export function useResetCycle() {
         cycle_amount_due: null,
       };
       if (resolved && bill.next_due_date) {
-        update.next_due_date = reverseDate(bill.next_due_date, bill.billing_cycle);
+        update.next_due_date = reverseDate(
+            bill.next_due_date,
+            bill.billing_cycle,
+            bill.cycle_interval_days,
+          );
       }
       const { error } = await supabase.from("bills").update(update).eq("id", payable.id);
       if (error) throw error;

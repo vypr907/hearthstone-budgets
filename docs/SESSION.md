@@ -1,9 +1,18 @@
 ## Session Notes
+
+- 2026-08-06 — ADR-040 generalized custom billing cycles. Bill and Debt forms now show a
+  number input + Days/Weeks toggle when Billing Cycle = Custom, convert to days on save
+  (weeks x 7), block saving without a value, and derive the displayed unit from the stored
+  `cycle_interval_days` when editing. `advanceDate()`/`reverseDate()`/`shiftDate()` gained a
+  `custom` branch that shifts by `cycle_interval_days`; a null interval throws
+  `MissingCycleIntervalError` (surfaced as a toast on payment actions) while render-only
+  paths use the new `shiftDateSafe()`. `monthlyEquivalent()` prorates custom cycles as
+  `amount * (365.25 / days) / 12`. No backfill: existing custom rows without an interval
+  behave exactly as before until edited.
+  Known issues: none observed; monthly/biweekly/quarterly/bimonthly/annually paths untouched.
 ## Backlog (queued 2026-08-06, ordered for independent sessions)
 
-- [ ] ADR-040: Generalized custom billing cycle (cycle_interval_days on bills/debts;
-      generalize advanceDate/reverseDate/monthlyEquivalent). Supersedes the
-      every_4_weeks-enum option — chosen for future oddball cadences.
+- [x] ADR-040: Generalized custom billing cycle — done 2026-08-06.
 - [ ] Dashboard bug: Overdue card shows full bill/debt amount instead of remaining
       owed (reuse billRemainingOwed()/debtRemainingOwed() from ADR-035).
 - [ ] Dashboard bug: Payoff Progress card includes paid-off debts (needs same

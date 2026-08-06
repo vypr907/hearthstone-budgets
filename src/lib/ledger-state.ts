@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { CheckCircle2, Circle, Clock, PieChart } from "lucide-react";
 import { useTransactions } from "./data-hooks";
-import { reverseDate } from "./format";
+import { shiftDateSafe } from "./format";
 import { billCycleDue, debtCycleDue, type Payable } from "./payments";
 import type { Transaction } from "./supabase";
 
@@ -60,7 +60,9 @@ export function deriveCycleInfo(
       const dueDate = day(
         p.kind === "bill" ? p.bill?.next_due_date : p.debt?.next_due_date,
       );
-      const openStart = dueDate ? reverseDate(dueDate, cycleName) : monthStart;
+      const cycleDays =
+        p.kind === "bill" ? p.bill?.cycle_interval_days : p.debt?.cycle_interval_days;
+      const openStart = dueDate ? shiftDateSafe(dueDate, cycleName, -1, cycleDays) : monthStart;
 
       const between = (t: Transaction, start: string, end: string) => {
         const d = day(t.transaction_date);
@@ -72,7 +74,7 @@ export function deriveCycleInfo(
 
       if (cycleTx.length === 0 && dueDate && today <= openStart) {
         // The cycle covering today may already have been resolved and rolled forward.
-        const prevStart = reverseDate(openStart, cycleName);
+        const prevStart = shiftDateSafe(openStart, cycleName, -1, cycleDays);
         const prev = linked.filter((t) => between(t, prevStart, openStart));
         const clearedPrev = prev
           .filter((t) => t.status === "cleared")

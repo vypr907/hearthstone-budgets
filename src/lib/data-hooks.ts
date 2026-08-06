@@ -271,7 +271,7 @@ export function useClearBill() {
       if (e1) throw e1;
 
       const base = bill.next_due_date ?? new Date().toISOString().slice(0, 10);
-      const next = advanceDate(base, bill.billing_cycle);
+      const next = advanceDate(base, bill.billing_cycle, bill.cycle_interval_days);
       const { error: e2 } = await supabase
         .from("bills")
         .update({ payment_status: "unpaid", next_due_date: next })

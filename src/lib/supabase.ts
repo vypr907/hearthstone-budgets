@@ -31,6 +31,8 @@ export type Bill = {
   manual_or_auto: string | null;
   next_due_date: string | null;
   billing_cycle: BillingCycle | null;
+  /** ADR-040: interval in days when billing_cycle is "custom". */
+  cycle_interval_days?: number | null;
   payment_status: string | null;
   notes: string | null;
   is_active: boolean | null;
@@ -92,6 +94,8 @@ export type Debt = {
   due_day: number | null;
   next_due_date: string | null;
   billing_cycle: BillingCycle | null;
+  /** ADR-040: interval in days when billing_cycle is "custom". */
+  cycle_interval_days?: number | null;
   payment_status: string | null;
 
   on_payment_plan: boolean | null;
