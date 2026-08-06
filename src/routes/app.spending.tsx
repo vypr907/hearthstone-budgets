@@ -121,6 +121,7 @@ function SpendingPage() {
   const [editing, setEditing] = useState<
     { row: Row; field: "budgeted" | "actual"; value: string } | null
   >(null);
+  const [confirming, setConfirming] = useState(false);
 
   const categoryById = useMemo(() => {
     const m: Record<string, (typeof categories)[number]> = {};
@@ -626,7 +627,7 @@ function SpendingPage() {
             <Button
               className="h-12 w-full"
               disabled={saveBudget.isPending || saveActual.isPending}
-              onClick={submitEdit}
+              onClick={() => submitEdit()}
             >
               Save
             </Button>
