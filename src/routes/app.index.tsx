@@ -22,9 +22,15 @@ import {
   spendableContribution,
 } from "@/lib/balances";
 import { buildActualResolver } from "@/lib/spending-actuals";
+import { todayISO } from "@/lib/snapshot";
+import { billRemainingOwed, debtRemainingOwed } from "@/lib/payments";
+import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
+import { eventDate, obligationsInRange, periodRange } from "@/lib/paycheck-budget";
+import { categoryVisual } from "@/lib/visual-meta";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { EmojiIcon, ItemBar, ProgressRing, emojiFor, itemColor } from "@/components/viz";
+
 
 import { netWorthTrend } from "@/lib/net-worth";
 import {
@@ -78,6 +84,9 @@ function Dashboard() {
   const { data: actuals = [] } = useSpendingActuals();
   const { data: categories = [] } = useCategories();
   const { data: balanceHistory = [] } = useAllAccountBalances();
+  const { data: sources = [] } = useIncomeSources();
+  const { data: events = [] } = useIncomeEvents();
+
 
   const balances = useMemo(
     () => computeBalances(accounts, latest, transactions),
@@ -163,6 +172,7 @@ function Dashboard() {
   const payoffProgress = useMemo(
     () =>
       debts
+        .filter((d) => !d.date_paid_off)
         .map((d) => {
           const start = Number(d.starting_balance ?? 0);
           const remaining = Number(d.remaining_balance ?? 0);
@@ -170,7 +180,7 @@ function Dashboard() {
           const pct = start > 0 ? Math.min(100, (paid / start) * 100) : 0;
           return { id: d.id, name: d.name, start, remaining, paid, pct };
         })
-        .filter((d) => d.start > 0)
+        .filter((d) => d.start > 0 && d.remaining > 0)
         .sort((a, b) => b.pct - a.pct),
     [debts],
   );
@@ -196,14 +206,86 @@ function Dashboard() {
 
 
 
-  const totalBills = bills
-    .filter((b) => b.is_active !== false)
-    .reduce((s, b) => s + Number(b.amount || 0), 0);
-  const totalDebtPayments = debts.reduce(
-    (s, d) => s + Number(d.minimum_payment || 0),
-    0,
+  /**
+   * ADR-034: the active pay period (primary paycheck to next primary paycheck),
+   * falling back to the calendar month when no income event covers today.
+   */
+  const period = useMemo(() => {
+    const today = todayISO();
+    const primary = sources.find((s) => s.is_primary) ?? null;
+    const primaryEvents = events
+      .filter((e) => primary && e.income_source_id === primary.id)
+      .sort((a, b) => (eventDate(a) ?? "").localeCompare(eventDate(b) ?? ""));
+    const current = [...primaryEvents]
+      .reverse()
+      .find((e) => (eventDate(e) ?? "") <= today);
+    const range = current ? periodRange(current, primaryEvents) : null;
+    if (range) return { ...range, label: "pay period" as const };
+    const d = new Date();
+    const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    const end = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
+    return { start, end, label: "month" as const };
+  }, [sources, events]);
+
+  /** Bills and debts due inside the period (paycheck-deducted debts excluded). */
+  const periodObligations = useMemo(
+    () => obligationsInRange(bills, debts, period.start, period.end),
+    [bills, debts, period],
   );
-  const totalObligations = totalBills + totalDebtPayments;
+
+  const periodTotals = useMemo(() => {
+    let billTotal = 0;
+    let debtTotal = 0;
+    for (const o of periodObligations) {
+      if (o.kind === "bill") billTotal += o.amount;
+      else debtTotal += o.amount;
+    }
+    return { bills: billTotal, debts: debtTotal, total: billTotal + debtTotal };
+  }, [periodObligations]);
+
+  /** ADR-034: what's still owed in the period, grouped by category. */
+  const owedByCategory = useMemo(() => {
+    const billById = new Map(bills.map((b) => [b.id, b]));
+    const debtById = new Map(debts.map((d) => [d.id, d]));
+    const catById = new Map(categories.map((c) => [c.id, c]));
+    type Item = { id: string; kind: "bill" | "debt"; name: string; dueDate: string; amount: number };
+    const groups = new Map<
+      string,
+      { id: string; name: string; icon: string; color: string; total: number; items: Item[] }
+    >();
+    let total = 0;
+    for (const o of periodObligations) {
+      const row = o.kind === "bill" ? billById.get(o.id) : debtById.get(o.id);
+      if (!row) continue;
+      const amount =
+        o.kind === "bill"
+          ? billRemainingOwed(row as Parameters<typeof billRemainingOwed>[0])
+          : debtRemainingOwed(row as Parameters<typeof debtRemainingOwed>[0]);
+      if (amount <= 0) continue;
+      const cat = row.category_id ? catById.get(row.category_id) : null;
+      const visual = categoryVisual(cat ?? null);
+      const key = cat?.id ?? "__none__";
+      const g =
+        groups.get(key) ??
+        {
+          id: key,
+          name: cat?.name ?? "Uncategorized",
+          icon: visual.icon,
+          color: visual.color,
+          total: 0,
+          items: [] as Item[],
+        };
+      g.total += amount;
+      g.items.push({ id: o.id, kind: o.kind, name: o.name, dueDate: o.dueDate, amount });
+      groups.set(key, g);
+      total += amount;
+    }
+    return {
+      total,
+      groups: [...groups.values()].sort((a, b) => b.total - a.total),
+    };
+  }, [periodObligations, bills, debts, categories]);
 
   const overdue = [
     ...bills
@@ -211,7 +293,7 @@ function Dashboard() {
       .map((b) => ({
         id: `bill-${b.id}`,
         name: b.name,
-        amount: Number(b.amount || 0),
+        amount: billRemainingOwed(b),
         due_date: b.next_due_date!.slice(0, 10),
         kind: "Bill" as const,
       })),
@@ -220,11 +302,12 @@ function Dashboard() {
       .map((d) => ({
         id: `debt-${d.id}`,
         name: d.name,
-        amount: Number(d.minimum_payment || 0),
+        amount: debtRemainingOwed(d),
         due_date: debtDueDate(d)!,
         kind: "Debt" as const,
       })),
   ].sort((a, b) => a.due_date.localeCompare(b.due_date));
+
 
   /** Hero: total debt remaining vs. how much has already been paid off. */
   const payoffTotals = payoffProgress.reduce(
@@ -251,31 +334,30 @@ function Dashboard() {
         >
           <div className="p-5">
             <p className="text-[11px] font-semibold uppercase tracking-widest opacity-80">
-              {payoffProgress.length} active debt
-              {payoffProgress.length === 1 ? "" : "s"}
+              Combined spendable
             </p>
             <p className="mt-1 text-4xl font-extrabold tracking-tight tabular-nums">
-              {formatMoney(payoffTotals.remaining)}
+              {formatMoney(spendable.total)}
             </p>
             <p className="mt-1 text-sm opacity-90">
-              to go · {Math.round(paidPct)}% paid off ·{" "}
-              {formatMoney(payoffTotals.paid)} eliminated
+              {formatMoney(periodTotals.total)} set aside this {period.label} ·{" "}
+              {formatMoney(payoffTotals.remaining)} debt to go
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-[12px] bg-white/15 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
-                  Spendable
+                  Bills this {period.label}
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {formatMoney(spendable.total)}
+                  {formatMoney(periodTotals.bills)}
                 </p>
               </div>
               <div className="rounded-[12px] bg-white/15 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
-                  Monthly obligations
+                  Debts this {period.label}
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {formatMoney(totalObligations)}
+                  {formatMoney(periodTotals.debts)}
                 </p>
               </div>
             </div>
@@ -284,6 +366,7 @@ function Dashboard() {
             <div className="h-full bg-white/85" style={{ width: `${paidPct}%` }} />
           </div>
         </div>
+
 
         <Card>
           <CardContent className="p-4">
@@ -375,73 +458,6 @@ function Dashboard() {
 
 
 
-        {netWorthData.length > 1 && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Net worth trend
-              </p>
-              <p className="mt-1 text-3xl font-extrabold tabular-nums">
-                {formatMoney(netWorth[netWorth.length - 1]?.total ?? 0)}
-              </p>
-
-              <div className="mt-3 h-48 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={netWorthData} margin={{ left: 4, right: 8, top: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis
-                      width={48}
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={11}
-                      tickFormatter={(v: number) => `$${Math.round(v / 100) / 10}k`}
-                    />
-                    <Tooltip
-                      formatter={(v: number, n: string) => [formatMoney(v), n]}
-                      contentStyle={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 8,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="total"
-                      name="Total"
-                      stroke="var(--primary)"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                    {netWorthTypes.map((t, i) => (
-                      <Line
-                        key={t}
-                        type="monotone"
-                        dataKey={t}
-                        name={t}
-                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                        strokeWidth={1.5}
-                        dot={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                {netWorthTypes.map((t, i) => (
-                  <span key={t} className="flex items-center gap-1 capitalize">
-                    <span
-                      className="inline-block h-2 w-2 rounded-full"
-                      style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
-                    />
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {spendingByCategory.rows.length > 0 && (
           <Card>
@@ -512,29 +528,54 @@ function Dashboard() {
         <Card>
           <CardContent className="p-4">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Total monthly obligations
+              Still owed this {period.label}
             </p>
             <p className="mt-1 text-3xl font-extrabold tabular-nums">
-              {formatMoney(totalObligations)}
+              {formatMoney(owedByCategory.total)}
             </p>
-            <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-[12px] bg-muted/60 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Monthly bills
-                </p>
-                <p className="text-xl font-bold tabular-nums">{formatMoney(totalBills)}</p>
+            {owedByCategory.groups.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Nothing left owed in this period.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-3">
+                {owedByCategory.groups.map((g) => (
+                  <div
+                    key={g.id}
+                    className="rounded-[12px] border-l-4 bg-muted/40 p-3"
+                    style={{ borderLeftColor: g.color }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium">
+                        <span aria-hidden>{g.icon}</span>
+                        <span className="truncate">{g.name}</span>
+                      </span>
+                      <span className="shrink-0 text-sm font-bold tabular-nums">
+                        {formatMoney(g.total)}
+                      </span>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {g.items.map((it) => (
+                        <div
+                          key={`${it.kind}-${it.id}`}
+                          className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                        >
+                          <span className="truncate">
+                            {it.name} · due {it.dueDate}
+                          </span>
+                          <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                            {formatMoney(it.amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="rounded-[12px] bg-muted/60 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Monthly debts
-                </p>
-                <p className="text-xl font-bold tabular-nums">
-                  {formatMoney(totalDebtPayments)}
-                </p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
+
 
 
         <div>
@@ -570,6 +611,74 @@ function Dashboard() {
             </div>
           )}
         </div>
+
+        {netWorthData.length > 1 && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Net worth trend
+              </p>
+              <p className="mt-1 text-3xl font-extrabold tabular-nums">
+                {formatMoney(netWorth[netWorth.length - 1]?.total ?? 0)}
+              </p>
+
+              <div className="mt-3 h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={netWorthData} margin={{ left: 4, right: 8, top: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                    <YAxis
+                      width={48}
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={11}
+                      tickFormatter={(v: number) => `$${Math.round(v / 100) / 10}k`}
+                    />
+                    <Tooltip
+                      formatter={(v: number, n: string) => [formatMoney(v), n]}
+                      contentStyle={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="total"
+                      name="Total"
+                      stroke="var(--primary)"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    {netWorthTypes.map((t, i) => (
+                      <Line
+                        key={t}
+                        type="monotone"
+                        dataKey={t}
+                        name={t}
+                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                        strokeWidth={1.5}
+                        dot={false}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {netWorthTypes.map((t, i) => (
+                  <span key={t} className="flex items-center gap-1 capitalize">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                    />
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </>
   );

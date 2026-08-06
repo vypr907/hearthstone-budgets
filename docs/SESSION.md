@@ -17,15 +17,23 @@
   a pencil indicator on overridden cells reverts to ledger-derived-first.
   Known issues: none observed; Dashboard totals and transaction creation untouched.
 
+- 2026-08-06 — ADR-034 Dashboard rework. Hero now leads with combined spendable balance
+  and folds the old "monthly obligations" card in as bills-this-period / debts-this-period
+  set-aside totals (paycheck-deducted debts excluded via obligationsInRange). New "Still
+  owed this pay period" card groups remaining owed by category with icon + colour accent.
+  Net Worth Trend moved to the very bottom. Overdue card now shows billRemainingOwed()/
+  debtRemainingOwed() instead of the full amount, and Payoff Progress filters out paid-off
+  debts (date_paid_off set or remaining_balance <= 0). Pay period comes from the primary
+  income source's latest event, falling back to the calendar month.
+  Known issues: none observed.
+
 ## Backlog (queued 2026-08-06, ordered for independent sessions)
 
 - [x] ADR-040: Generalized custom billing cycle — done 2026-08-06.
-- [ ] Dashboard bug: Overdue card shows full bill/debt amount instead of remaining
-      owed (reuse billRemainingOwed()/debtRemainingOwed() from ADR-035).
-- [ ] Dashboard bug: Payoff Progress card includes paid-off debts (needs same
-      remaining_balance > 0 filter as Debts list).
-- [ ] ADR-034 (decided, not implemented): Dashboard hero rework, budget/actual
-      bills split, owed-this-period card, Net Worth Trend moved to bottom.
+- [x] Dashboard bug: Overdue card shows remaining owed — done 2026-08-06.
+- [x] Dashboard bug: Payoff Progress excludes paid-off debts — done 2026-08-06.
+- [ ] ADR-034: Dashboard hero rework / owed-this-period card / Net Worth to bottom
+      done 2026-08-06; budget-vs-actual bills split still pending.
 - [ ] ADR-033 remainder: bill card "Add to envelope" quick-transaction action.
 - [x] ADR-041: manual override for spending actuals — done 2026-08-06.
 - [ ] Paycheck Budget: allocation sliders show "last month spend" / "avg spend"
