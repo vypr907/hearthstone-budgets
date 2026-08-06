@@ -13,8 +13,10 @@ import {
 } from "@/lib/data-hooks";
 import { activeDebts, type StrategyKey } from "@/lib/debt-payoff";
 import { buildSchedule, monthKeyOf } from "@/lib/payment-schedule";
+import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { formatMoney } from "@/lib/format";
 import { CheckCircle2, ChevronDown, Circle } from "lucide-react";
+
 
 export const Route = createFileRoute("/app/payment-schedule")({
   head: () => ({
