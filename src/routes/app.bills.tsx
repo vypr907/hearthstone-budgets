@@ -528,7 +528,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               <SelectContent>
                 {CYCLES.map((c) => (
                   <SelectItem key={c} value={c}>
-                    {c}
+                    {formatTypeLabel(c)}
                   </SelectItem>
                 ))}
               </SelectContent>
