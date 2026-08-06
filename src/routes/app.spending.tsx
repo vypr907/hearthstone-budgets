@@ -185,11 +185,21 @@ function SpendingPage() {
     };
   }, [groups]);
 
-  async function submitEdit() {
+  async function submitEdit(force = false) {
     if (!editing) return;
     const amount = Number(editing.value);
     if (!Number.isFinite(amount)) {
       toast.error("Enter a number");
+      return;
+    }
+    // ADR-041: warn once before a manual total starts overriding logged spend.
+    if (
+      !force &&
+      editing.field === "actual" &&
+      editing.row.actualSource === "ledger" &&
+      editing.row.hasLedger
+    ) {
+      setConfirming(true);
       return;
     }
     try {
@@ -205,9 +215,11 @@ function SpendingPage() {
           categoryId: editing.row.categoryId,
           month: activeMonth,
           amount,
+          manualOverride: true,
         });
       }
       toast.success(`${editing.row.name} updated`);
+      setConfirming(false);
       setEditing(null);
     } catch (e) {
       toast.error((e as Error).message);
