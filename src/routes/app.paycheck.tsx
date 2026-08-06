@@ -43,7 +43,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAccounts, useCategories, useSavingsGoals } from "@/lib/data-hooks";
+import {
+  useAccounts,
+  useCategories,
+  useSavingsGoals,
+  useSpendingActuals,
+  useTransactions,
+  monthKey,
+  shiftMonth,
+} from "@/lib/data-hooks";
+import { buildActualResolver } from "@/lib/spending-actuals";
 import { useBills, useDebts } from "@/lib/data-hooks";
 import {
   useDeleteIncomeEvent,
