@@ -517,29 +517,54 @@ function Dashboard() {
         <Card>
           <CardContent className="p-4">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Total monthly obligations
+              Still owed this {period.label}
             </p>
             <p className="mt-1 text-3xl font-extrabold tabular-nums">
-              {formatMoney(totalObligations)}
+              {formatMoney(owedByCategory.total)}
             </p>
-            <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-[12px] bg-muted/60 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Monthly bills
-                </p>
-                <p className="text-xl font-bold tabular-nums">{formatMoney(totalBills)}</p>
+            {owedByCategory.groups.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Nothing left owed in this period.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-3">
+                {owedByCategory.groups.map((g) => (
+                  <div
+                    key={g.id}
+                    className="rounded-[12px] border-l-4 bg-muted/40 p-3"
+                    style={{ borderLeftColor: g.color }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium">
+                        <span aria-hidden>{g.icon}</span>
+                        <span className="truncate">{g.name}</span>
+                      </span>
+                      <span className="shrink-0 text-sm font-bold tabular-nums">
+                        {formatMoney(g.total)}
+                      </span>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {g.items.map((it) => (
+                        <div
+                          key={`${it.kind}-${it.id}`}
+                          className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                        >
+                          <span className="truncate">
+                            {it.name} · due {it.dueDate}
+                          </span>
+                          <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                            {formatMoney(it.amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="rounded-[12px] bg-muted/60 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Monthly debts
-                </p>
-                <p className="text-xl font-bold tabular-nums">
-                  {formatMoney(totalDebtPayments)}
-                </p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
+
 
 
         <div>
