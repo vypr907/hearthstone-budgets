@@ -167,13 +167,14 @@ function addMonths(date: Date, months: number, targetDay: number) {
 }
 
 /**
- * ADR-033: what a bill costs per month, whatever its billing cycle.
- * Returns null for `custom` cycles — those have no fixed interval and are
- * displayed as "—" rather than guessed at.
+ * ADR-033/ADR-040: what a bill costs per month, whatever its billing cycle.
+ * Custom cycles prorate by cycle_interval_days; a custom cycle with no interval
+ * set keeps today's behavior and returns null (displayed as "—").
  */
 export function monthlyEquivalent(bill: {
   amount?: number | null;
   billing_cycle?: string | null;
+  cycle_interval_days?: number | null;
 }): number | null {
   const amount = Number(bill.amount ?? 0);
   switch (normalizeCycle(bill.billing_cycle) || "monthly") {
@@ -187,12 +188,16 @@ export function monthlyEquivalent(bill: {
     case "annual":
     case "yearly":
       return amount / 12;
-    case "custom":
-      return null;
+    case "custom": {
+      const days = Number(bill.cycle_interval_days ?? 0);
+      if (!days || !Number.isFinite(days) || days <= 0) return null;
+      return (amount * (365.25 / days)) / 12;
+    }
     default:
       return amount;
   }
 }
+
 
 /** ADR-033: cycles long enough to need their own savings envelope. */
 export function needsEnvelope(cycle: string | null | undefined): boolean {
