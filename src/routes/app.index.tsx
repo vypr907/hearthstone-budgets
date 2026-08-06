@@ -83,6 +83,9 @@ function Dashboard() {
   const { data: actuals = [] } = useSpendingActuals();
   const { data: categories = [] } = useCategories();
   const { data: balanceHistory = [] } = useAllAccountBalances();
+  const { data: sources = [] } = useIncomeSources();
+  const { data: events = [] } = useIncomeEvents();
+
 
   const balances = useMemo(
     () => computeBalances(accounts, latest, transactions),
