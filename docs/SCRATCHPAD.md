@@ -1,19 +1,22 @@
 # Features I want
-- [ ] [high] per-paycheck budgeting
-- [ ] [med] future budgeting
+- [x] [high] per-paycheck budgeting
+- [x] [med] future budgeting
 - [ ] [med] bill calendar (sync with Google calendar)
 - [ ] [low] tracking for side income, like UberEats driving
-- [ ] [high] be able to handle partial payments and payment reversals
-- [ ] [med] bill/debt that is pending should not show 'Submitted' button
+- [/] [high] be able to handle partial payments and payment reversals
+- [x] [med] bill/debt that is pending should not show 'Submitted' button
 - [ ] [low] simple AI chatbot to help answer questions, generate summaries, guide user around the app, etc
 - [ ] [low] sync with banks like Rocket or Tilt
 - [ ] [high] ability to add fees/extras
-- [ ] [high] generate 1 page reports
+- [x] [high] generate 1 page reports
 - [ ] [low] colour themes customization
+- [ ] [med] ability to add PDF/image receipts
+- [ ] [med] ability to split transactions
+- [ ] [high] ability to split paycheck to accounts | marking income as received adds transaction to appropriate account
 
 # Views
 - [x] bill detail
-- [ ] institutions - category icons / capitalization / group by / linked bills/debts
+- [x] institutions - category icons / capitalization / group by / linked bills/debts
 - [ ] account detail
 - [ ] 
 
@@ -173,14 +176,14 @@ Read docs/SESSION.md, docs/CONTEXT.md, and docs/CHANGELOG.md.
 1. Summarize the changes logged in SESSION.md into new dated entries appended to
    docs/CHANGELOG.md, following its existing format (## <date> – <short title>, then
    ### Completed / relevant subsections). Don't rewrite or reformat CHANGELOG's existing
-   entries — only append new ones for what's in SESSION.md.
-
-2. Update docs/CONTEXT.md's "Current Status" phase list and any "Locked Decisions" /
+   entries — only append new ones for what's in SESSION.md. If there are any entries left in ## Backlog section, be sure to add/update them in docs/TODO.md
+2. Update docs/TODO.md entries with work done since last update.
+3. Update docs/CONTEXT.md's "Current Status" phase list and any "Locked Decisions" /
    "Important Rules" sections that changed based on SESSION.md's content (e.g. new fields,
    new tables, new behavior). Keep CONTEXT.md's existing structure and brevity — it's meant
    to stay a compact briefing, not grow into a full changelog.
 
-3. Once both files are updated, clear docs/SESSION.md back to an empty template (just a
+4. Once both files are updated, clear docs/SESSION.md back to an empty template (just a
    header, e.g. "## Session Notes" with no entries) so it's ready for the next work session.
 
 Show me the diffs for all three files before finalizing.
