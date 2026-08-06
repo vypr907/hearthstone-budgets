@@ -34,3 +34,9 @@
       forward-looking 12 months; July fell off after month rollover).
 - [ ] Snapshot: balances-by-account-type section, pay-period progress bar,
       buildSnapshotSummary().
+- 2026-08-06 — Spending month navigator. Prev/next month arrows above the category list
+  (tap the month label to jump back to the current month), defaulting to the real calendar
+  month. Rows, subtotals, 3-month average and the ADR-041 edit/override flow all follow the
+  selected month; "Start new month" stays anchored to the ledger's newest month and now
+  jumps the view to the new month.
+  Known issues: none observed; data is already loaded client-side, so no new queries.
