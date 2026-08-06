@@ -983,7 +983,7 @@ Verified scope (2026-08-06):
 
 Status: Decided 2026-08-06. Not yet implemented.
 
-## ADR-042: Spend history hints on paycheck allocations & schedule history
+## ADR-043: Spend history hints on paycheck allocations & schedule history
 Decision:
 Each category allocation row on the Paycheck Budget screen shows "Last month $X ·
 3-mo avg $Y" derived from buildActualResolver() (same ledger/override rules as the
