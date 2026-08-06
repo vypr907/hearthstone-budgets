@@ -239,6 +239,9 @@ function BillsPage() {
                       payable={toPayable("bill", b)}
                       className="mt-2"
                     />
+                    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                      <SetAsideAction bill={b} compact />
+                    </div>
                   </CardContent>
                 </Card>
                 );
