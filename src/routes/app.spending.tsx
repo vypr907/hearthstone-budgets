@@ -29,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CalendarPlus, HelpCircle, PencilLine, Plus } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight, HelpCircle, PencilLine, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ProgressRing, itemColor } from "@/components/viz";
