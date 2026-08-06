@@ -256,31 +256,30 @@ function Dashboard() {
         >
           <div className="p-5">
             <p className="text-[11px] font-semibold uppercase tracking-widest opacity-80">
-              {payoffProgress.length} active debt
-              {payoffProgress.length === 1 ? "" : "s"}
+              Combined spendable
             </p>
             <p className="mt-1 text-4xl font-extrabold tracking-tight tabular-nums">
-              {formatMoney(payoffTotals.remaining)}
+              {formatMoney(spendable.total)}
             </p>
             <p className="mt-1 text-sm opacity-90">
-              to go · {Math.round(paidPct)}% paid off ·{" "}
-              {formatMoney(payoffTotals.paid)} eliminated
+              {formatMoney(periodTotals.total)} set aside this {period.label} ·{" "}
+              {formatMoney(payoffTotals.remaining)} debt to go
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-[12px] bg-white/15 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
-                  Spendable
+                  Bills this {period.label}
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {formatMoney(spendable.total)}
+                  {formatMoney(periodTotals.bills)}
                 </p>
               </div>
               <div className="rounded-[12px] bg-white/15 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
-                  Monthly obligations
+                  Debts this {period.label}
                 </p>
                 <p className="text-xl font-bold tabular-nums">
-                  {formatMoney(totalObligations)}
+                  {formatMoney(periodTotals.debts)}
                 </p>
               </div>
             </div>
@@ -289,6 +288,7 @@ function Dashboard() {
             <div className="h-full bg-white/85" style={{ width: `${paidPct}%` }} />
           </div>
         </div>
+
 
         <Card>
           <CardContent className="p-4">
