@@ -61,6 +61,30 @@ function PaymentSchedulePage() {
   const done = new Set(checked);
   const [showPast, setShowPast] = useState(false);
 
+  // ADR-036 ledger state per debt, only meaningful for the current cycle, so we
+  // label rows in the current month card only.
+  const infoOf = useCycleState();
+  const currentMonth = monthKeyOf(new Date());
+  const statusByDebt = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof infoOf>>();
+    for (const d of debts) {
+      map.set(
+        d.id,
+        infoOf({
+          kind: "debt",
+          id: d.id,
+          name: d.name,
+          amount: Number(d.minimum_payment ?? 0),
+          category_id: d.category_id ?? null,
+          institution_id: d.institution_id ?? null,
+          debt: d,
+        }),
+      );
+    }
+    return map;
+  }, [debts, infoOf]);
+
+
   // Previous months are history, not a simulation: past balances are gone, so
   // we only surface the month and its check-off state.
   const pastMonths = useMemo(() => {
