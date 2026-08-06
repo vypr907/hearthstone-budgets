@@ -276,13 +276,14 @@ function SpendingPage() {
   }
 
   async function handleStartNewMonth() {
-    const next = shiftMonth(activeMonth, 1);
+    const next = shiftMonth(ledgerMonth, 1);
     try {
       await startMonth.mutateAsync({
         nextMonth: next,
         categoryIds: groups.flatMap((g) => g.rows.map((r) => r.categoryId)),
       });
-      toast.success(`${monthLabel(activeMonth)} locked in · now on ${monthLabel(next)}`);
+      setSelectedMonth(next);
+      toast.success(`${monthLabel(ledgerMonth)} locked in · now on ${monthLabel(next)}`);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -293,22 +294,46 @@ function SpendingPage() {
       <AppHeader title="Spending" />
       <div className="space-y-3 p-4">
         <div className="flex items-center gap-2">
-          <div className="flex-1">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Active month
-            </p>
-            <p className="text-base font-semibold">{monthLabel(activeMonth)}</p>
-          </div>
           <Button
             variant="outline"
-            className="h-12"
-            disabled={startMonth.isPending || groups.length === 0}
-            onClick={handleStartNewMonth}
+            size="icon"
+            className="h-12 w-12 shrink-0"
+            aria-label="Previous month"
+            onClick={() => setSelectedMonth(shiftMonth(activeMonth, -1))}
           >
-            <CalendarPlus className="mr-2 h-4 w-4" />
-            Start new month
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <button
+            className="flex-1 text-center"
+            onClick={() => setSelectedMonth(thisMonth)}
+            aria-label="Jump to current month"
+          >
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {activeMonth === thisMonth ? "Active month" : "Viewing"}
+            </p>
+            <p className="text-base font-semibold">{monthLabel(activeMonth)}</p>
+          </button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-12 w-12 shrink-0"
+            aria-label="Next month"
+            onClick={() => setSelectedMonth(shiftMonth(activeMonth, 1))}
+          >
+            <ChevronRight className="h-5 w-5" />
           </Button>
         </div>
+
+        <Button
+          variant="outline"
+          className="h-12 w-full"
+          disabled={startMonth.isPending || groups.length === 0}
+          onClick={handleStartNewMonth}
+        >
+          <CalendarPlus className="mr-2 h-4 w-4" />
+          Start new month ({monthLabel(shiftMonth(ledgerMonth, 1))})
+        </Button>
+
 
         <Button className="h-12 w-full" onClick={() => setAdding(true)}>
           <Plus className="mr-2 h-4 w-4" />
