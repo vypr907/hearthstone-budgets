@@ -186,6 +186,12 @@ function PaymentSchedulePage() {
         ) : (
           schedule.map((m) => {
             const isDone = done.has(m.month);
+            const isCurrent = m.month === currentMonth;
+            const clearedCount = isCurrent
+              ? m.payments.filter((p) => statusByDebt.get(p.debtId)?.state === "cleared")
+                  .length
+              : 0;
+            const allCleared = isCurrent && m.payments.length > 0 && clearedCount === m.payments.length;
             return (
               <Card key={m.month} className={isDone ? "opacity-70" : undefined}>
                 <CardContent className="p-0">
@@ -195,10 +201,11 @@ function PaymentSchedulePage() {
                       <p className="text-xs text-muted-foreground">
                         {m.payments.length} payment{m.payments.length === 1 ? "" : "s"} ·{" "}
                         {formatMoney(m.total)}
+                        {isCurrent ? ` · ${clearedCount}/${m.payments.length} cleared` : ""}
                       </p>
                     </div>
                     <Button
-                      variant={isDone ? "default" : "outline"}
+                      variant={isDone ? "default" : allCleared ? "default" : "outline"}
                       size="sm"
                       className="h-11 shrink-0 gap-2"
                       disabled={toggle.isPending}
@@ -218,25 +225,42 @@ function PaymentSchedulePage() {
                         Nothing scheduled — all debts paid off.
                       </p>
                     ) : (
-                      m.payments.map((p) => (
-                        <div
-                          key={p.debtId}
-                          className="flex items-center gap-3 px-4 py-3 text-sm"
-                        >
-                          <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                          {p.payoff && <Badge variant="secondary">Paid off</Badge>}
-                          <span className="shrink-0 text-right tabular-nums">
-                            <span className="block font-medium">
-                              {formatMoney(p.amount)}
+                      m.payments.map((p) => {
+                        const info = isCurrent ? statusByDebt.get(p.debtId) : undefined;
+                        const visual = info ? stateVisual(info.state) : null;
+                        return (
+                          <div
+                            key={p.debtId}
+                            className="flex items-center gap-3 px-4 py-3 text-sm"
+                          >
+                            <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                            {visual && info && info.state !== "unpaid" ? (
+                              <Badge
+                                variant="outline"
+                                className={`shrink-0 gap-1 ${visual.className}`}
+                              >
+                                <visual.Icon className="h-3 w-3" />
+                                {visual.label}
+                                {info.state === "partial"
+                                  ? ` · ${formatMoney(info.remaining)} left`
+                                  : ""}
+                              </Badge>
+                            ) : null}
+                            {p.payoff && <Badge variant="secondary">Paid off</Badge>}
+                            <span className="shrink-0 text-right tabular-nums">
+                              <span className="block font-medium">
+                                {formatMoney(p.amount)}
+                              </span>
+                              <span className="block text-xs text-muted-foreground">
+                                {formatMoney(p.remaining)} left
+                              </span>
                             </span>
-                            <span className="block text-xs text-muted-foreground">
-                              {formatMoney(p.remaining)} left
-                            </span>
-                          </span>
-                        </div>
-                      ))
+                          </div>
+                        );
+                      })
                     )}
                   </div>
+
                 </CardContent>
               </Card>
             );
