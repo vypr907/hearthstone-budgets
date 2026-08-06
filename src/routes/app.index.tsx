@@ -22,9 +22,14 @@ import {
   spendableContribution,
 } from "@/lib/balances";
 import { buildActualResolver } from "@/lib/spending-actuals";
+import { billRemainingOwed, debtRemainingOwed } from "@/lib/payments";
+import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
+import { eventDate, obligationsInRange, periodRange } from "@/lib/paycheck-budget";
+import { categoryVisual } from "@/lib/visual-meta";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { EmojiIcon, ItemBar, ProgressRing, emojiFor, itemColor } from "@/components/viz";
+
 
 import { netWorthTrend } from "@/lib/net-worth";
 import {
