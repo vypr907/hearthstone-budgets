@@ -44,10 +44,10 @@
 - [x] ADR-034 fully implemented 2026-08-06 (Dashboard rework + budget/actual bills split).
 - [x] ADR-033 remainder: bill card "Add to envelope" quick-transaction action — done 2026-08-06.
 - [x] ADR-041: manual override for spending actuals — done 2026-08-06.
-- [ ] Paycheck Budget: allocation sliders show "last month spend" / "avg spend"
-      per category.
-- [ ] Payment Schedule: collapsible "previous months" section (currently only
-      forward-looking 12 months; July fell off after month rollover).
+- [x] Paycheck Budget: allocation sliders show "last month spend" / "avg spend"
+      per category — done 2026-08-06 (ADR-042).
+- [x] Payment Schedule: collapsible "previous months" section — done 2026-08-06
+      (ADR-042).
 - [x] Snapshot: balances-by-account-type section, pay-period progress bar,
       buildSnapshotSummary() — done 2026-08-06.
 - 2026-08-06 — Spending month navigator. Prev/next month arrows above the category list
