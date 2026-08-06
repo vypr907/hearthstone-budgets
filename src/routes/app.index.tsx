@@ -201,14 +201,86 @@ function Dashboard() {
 
 
 
-  const totalBills = bills
-    .filter((b) => b.is_active !== false)
-    .reduce((s, b) => s + Number(b.amount || 0), 0);
-  const totalDebtPayments = debts.reduce(
-    (s, d) => s + Number(d.minimum_payment || 0),
-    0,
+  /**
+   * ADR-034: the active pay period (primary paycheck to next primary paycheck),
+   * falling back to the calendar month when no income event covers today.
+   */
+  const period = useMemo(() => {
+    const today = todayISO();
+    const primary = sources.find((s) => s.is_primary) ?? null;
+    const primaryEvents = events
+      .filter((e) => primary && e.income_source_id === primary.id)
+      .sort((a, b) => (eventDate(a) ?? "").localeCompare(eventDate(b) ?? ""));
+    const current = [...primaryEvents]
+      .reverse()
+      .find((e) => (eventDate(e) ?? "") <= today);
+    const range = current ? periodRange(current, primaryEvents) : null;
+    if (range) return { ...range, label: "pay period" as const };
+    const d = new Date();
+    const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    const end = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
+    return { start, end, label: "month" as const };
+  }, [sources, events]);
+
+  /** Bills and debts due inside the period (paycheck-deducted debts excluded). */
+  const periodObligations = useMemo(
+    () => obligationsInRange(bills, debts, period.start, period.end),
+    [bills, debts, period],
   );
-  const totalObligations = totalBills + totalDebtPayments;
+
+  const periodTotals = useMemo(() => {
+    let billTotal = 0;
+    let debtTotal = 0;
+    for (const o of periodObligations) {
+      if (o.kind === "bill") billTotal += o.amount;
+      else debtTotal += o.amount;
+    }
+    return { bills: billTotal, debts: debtTotal, total: billTotal + debtTotal };
+  }, [periodObligations]);
+
+  /** ADR-034: what's still owed in the period, grouped by category. */
+  const owedByCategory = useMemo(() => {
+    const billById = new Map(bills.map((b) => [b.id, b]));
+    const debtById = new Map(debts.map((d) => [d.id, d]));
+    const catById = new Map(categories.map((c) => [c.id, c]));
+    type Item = { id: string; kind: "bill" | "debt"; name: string; dueDate: string; amount: number };
+    const groups = new Map<
+      string,
+      { id: string; name: string; icon: string; color: string; total: number; items: Item[] }
+    >();
+    let total = 0;
+    for (const o of periodObligations) {
+      const row = o.kind === "bill" ? billById.get(o.id) : debtById.get(o.id);
+      if (!row) continue;
+      const amount =
+        o.kind === "bill"
+          ? billRemainingOwed(row as Parameters<typeof billRemainingOwed>[0])
+          : debtRemainingOwed(row as Parameters<typeof debtRemainingOwed>[0]);
+      if (amount <= 0) continue;
+      const cat = row.category_id ? catById.get(row.category_id) : null;
+      const visual = categoryVisual(cat ?? null);
+      const key = cat?.id ?? "__none__";
+      const g =
+        groups.get(key) ??
+        {
+          id: key,
+          name: cat?.name ?? "Uncategorized",
+          icon: visual.icon,
+          color: visual.color,
+          total: 0,
+          items: [] as Item[],
+        };
+      g.total += amount;
+      g.items.push({ id: o.id, kind: o.kind, name: o.name, dueDate: o.dueDate, amount });
+      groups.set(key, g);
+      total += amount;
+    }
+    return {
+      total,
+      groups: [...groups.values()].sort((a, b) => b.total - a.total),
+    };
+  }, [periodObligations, bills, debts, categories]);
 
   const overdue = [
     ...bills
@@ -216,7 +288,7 @@ function Dashboard() {
       .map((b) => ({
         id: `bill-${b.id}`,
         name: b.name,
-        amount: Number(b.amount || 0),
+        amount: billRemainingOwed(b),
         due_date: b.next_due_date!.slice(0, 10),
         kind: "Bill" as const,
       })),
@@ -225,11 +297,12 @@ function Dashboard() {
       .map((d) => ({
         id: `debt-${d.id}`,
         name: d.name,
-        amount: Number(d.minimum_payment || 0),
+        amount: debtRemainingOwed(d),
         due_date: debtDueDate(d)!,
         kind: "Debt" as const,
       })),
   ].sort((a, b) => a.due_date.localeCompare(b.due_date));
+
 
   /** Hero: total debt remaining vs. how much has already been paid off. */
   const payoffTotals = payoffProgress.reduce(
