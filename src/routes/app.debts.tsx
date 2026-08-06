@@ -538,7 +538,7 @@ function DebtDialog({
         interest_rate: rate ? Number(rate) : null,
         minimum_payment: minPay ? Number(minPay) : null,
         due_day: cycle === "monthly" ? (dueDay ? Number(dueDay) : null) : debt?.due_day ?? null,
-        billing_cycle: cycle,
+        billing_cycle: cycle.trim().toLowerCase() as BillingCycle,
         cycle_interval_days: intervalDays,
         next_due_date: cycle === "monthly" ? debt?.next_due_date ?? null : nextDue || null,
         debt_type: debtType || null,
