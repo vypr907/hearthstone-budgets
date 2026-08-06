@@ -634,6 +634,34 @@ function SpendingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Override the transaction total?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This category has logged transactions this month — manually editing will
+            use your total instead of the transaction sum going forward.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              className="h-12 w-full"
+              onClick={() => setConfirming(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="h-12 w-full"
+              disabled={saveActual.isPending}
+              onClick={() => submitEdit(true)}
+            >
+              Use my total
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
