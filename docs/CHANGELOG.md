@@ -408,3 +408,76 @@
 
 * `PayPeriodAllocation.goal_id` added; `useSetAllocation()` accepts `categoryId` OR `goalId` and throws when both or neither are given.
 * Paycheck Budget gained a "Savings goals" allocation block using the same slider/input UI, and the Allocated / Left-to-allocate math includes goal rows.
+
+## 2026-08-06 – ADR-040: Generalized Custom Billing Cycles
+
+### Completed
+
+* Bill and Debt forms show a number input + Days/Weeks toggle (`src/components/CustomCycleFields.tsx`) when Billing Cycle = Custom; the value is converted to days on save (weeks × 7), saving is blocked without a value, and the unit is derived from the stored `cycle_interval_days` when editing.
+* `advanceDate()` / `reverseDate()` / `shiftDate()` gained a `custom` branch shifting by `cycle_interval_days`; a null interval throws `MissingCycleIntervalError` (surfaced as a toast on payment actions) while render-only paths use the new `shiftDateSafe()`.
+* `monthlyEquivalent()` prorates custom cycles as `amount * (365.25 / days) / 12`.
+* `app.bills.tsx` CYCLES gained the missing `custom` option; `billing_cycle` and `manual_or_auto` are normalized with `.trim().toLowerCase()` on save.
+
+### Notes
+
+* No backfill: existing custom rows without an interval behave exactly as before until edited. Monthly/biweekly/quarterly/bimonthly/annual paths untouched.
+
+## 2026-08-06 – ADR-041: Manual Overrides for Spending Actuals
+
+### Completed
+
+* Every actual cell on the Spending screen is editable; `spending_actuals.is_manual_override` gives a manual total display priority over the ledger sum.
+* Saving an edit sets the flag without touching transactions; a one-time confirm warns before overriding a month that already has logged spend.
+* A pencil indicator marks overridden cells and reverts them to ledger-derived-first.
+
+### Notes
+
+* Overridden cells report their whole total as spending, since an override intentionally replaces the ledger split.
+
+## 2026-08-06 – ADR-034: Dashboard Rework & Budget/Actual Bills Split
+
+### Completed
+
+* Dashboard hero leads with combined spendable balance and folds the old "monthly obligations" card in as bills-this-period / debts-this-period set-aside totals (paycheck-deducted debts excluded via `obligationsInRange`).
+* New "Still owed this pay period" card groups remaining owed by category with icon + colour accent; Net Worth Trend moved to the bottom.
+* Overdue card shows `billRemainingOwed()` / `debtRemainingOwed()` instead of the full amount; Payoff Progress filters out paid-off debts (`date_paid_off` set or `remaining_balance <= 0`).
+* Pay period comes from the primary income source's latest event, falling back to the calendar month.
+* `buildActualResolver()` now splits ledger spend into ordinary spending vs. bill-linked payments (bill-linked transactions inherit the bill's category when the transaction has none); new `billsBudgetedByCategory()` sums `monthlyEquivalent()` per category.
+* Spending rows, subtotals and grand total, plus the Dashboard budget-vs-actual card, always show "$X spending + $Y bills = $Z" for both Budgeted and Spent; progress/over-under measures against the combined budget.
+
+## 2026-08-06 – ADR-033 Bill Envelope Quick Action & Spending Month Navigator
+
+### Completed
+
+* `SetAsideAction` gained a `compact` variant (small PiggyBank button) rendered on each bill card in the Bills list, below the pay actions and click-isolated from the card's detail-open handler; it reuses the ADR-038 two-transaction Set Aside flow. Cards for bills without a linked envelope goal render nothing.
+* Spending screen gained prev/next month arrows above the category list (tap the month label to jump back to the current month), defaulting to the real calendar month. Rows, subtotals, 3-month average and the ADR-041 edit/override flow all follow the selected month; "Start new month" stays anchored to the ledger's newest month and jumps the view to it.
+
+## 2026-08-06 – ADR-028: Status Snapshot Additions
+
+### Completed
+
+* New "Balances" card shows per-account-type subtotals (checking, savings, credit, investment, retirement, plus any other types) using the existing `balances.ts` spendable formula, headlined by the ADR-023 combined spendable total.
+* New pay-period card shows a progress bar of amount covered vs. still owed for the current pay period (falls back to the calendar month when no primary income event covers today), reusing `obligationsInRange()` and the ADR-035 remaining-owed helpers.
+* New rule-based `buildSnapshotSummary()` in `src/lib/snapshot.ts` renders a plain-text paragraph covering obligations vs. spendable, overdue items and comfortable surplus; a pure function with no network call so it can be swapped for an LLM version later.
+
+## 2026-08-06 – ADR-042: Allocation Spend Hints & Payment Schedule History
+
+### Completed
+
+* Paycheck Budget allocation rows show "Last month $X · 3-mo avg $Y" per category (`buildActualResolver` over spending actuals + transactions, so manual overrides are respected) with a "Use avg" link that commits the rounded average.
+* Payment Schedule gained a collapsible "Previous months" card covering the last 6 months plus any older checked-off month, each with its Mark paid toggle.
+
+### Notes
+
+* Past months show no per-debt breakdown by design — balances have moved on.
+
+## 2026-08-06 – Payment Schedule Per-Debt Payment Status
+
+### Completed
+
+* Payment Schedule rows in the current month card show the ADR-036 ledger state per debt (Pending / Partial / Cleared badge with icon and colour; Partial also shows "$X left"), so the month-level "Mark paid" check-off can be verified before use.
+* The current month header shows an "N/M cleared" count alongside the payment count and total.
+
+### Notes
+
+* Future and past months show no status badge — ledger state is only meaningful for the debt's current cycle.

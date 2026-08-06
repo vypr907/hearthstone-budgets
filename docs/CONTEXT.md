@@ -20,8 +20,9 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Phase 6 complete: Payment Schedule & Charts
 - Phase 6.5 complete: Paycheck Budget, Savings Goals, Status Snapshot & Settings
 - Phase 6.6 complete: Visual restyle + category/institution visual metadata and institution totals
-- Phase 6.7 partial: Paycheck-deducted debts, debt paid-off handling, bill envelopes (ADR-032, ADR-033); ADR-034 Dashboard/Spending/Snapshot work pending
+- Phase 6.7 complete: Paycheck-deducted debts, debt paid-off handling, bill envelopes and the bill-card "Add to envelope" action (ADR-032, ADR-033)
 - Phase 6.8 complete: Universal partial payments, ledger-derived payment cycle, payment repair tools, envelope Set Aside, goal allocations (ADR-035 through ADR-039)
+- Phase 6.9 complete: Generalized custom cycles, spending manual overrides + month navigator, Dashboard rework and budget/actual bills split, Snapshot balances/pay-period/summary, allocation spend hints, Payment Schedule history + per-debt status (ADR-034, ADR-040, ADR-041, ADR-042)
 - Phase 7 not started: Wrap as a Real Android App (Capacitor)
 - Phase 8 not started: Publish to Google Play (Internal Testing)
 - Phase 9 not started: Cutover: Retire the Sheet
@@ -47,6 +48,9 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Payable rows are updated before the ledger row is written, and updates that change 0 rows throw (ADR-037)
 - Envelope Set Aside writes two cleared transactions, debit + goal-tagged credit; there is no transfer table (ADR-038)
 - pay_period_allocations rows target either a category_id or a goal_id, never both (ADR-039)
+- Custom billing cycles store an interval in days on bills/debts (`cycle_interval_days`); weeks are converted on save (ADR-040)
+- A spending_actuals row with is_manual_override wins over the ledger sum; overrides never touch transactions (ADR-041)
+- Budgeted and spent are always split into ordinary spending vs. bill-linked amounts (ADR-034)
 
 ## Important Rules
 - Never store passwords.
@@ -61,4 +65,6 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Pay-time account picker lists ALL household accounts, defaulting to the account that last paid that bill/debt; never scoped to the vendor's institution (ADR-007 correction).
 - A debt payment that zeroes remaining_balance stamps date_paid_off; paid-off debts are hidden by default.
 - Institution logo_url is only ever suggested from login_url for the user to confirm — never written silently.
-- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, debts.cycle_paid_to_date, savings_goals.account_id/linked_bill_id, pay_period_allocations.goal_id) must exist before those screens work.
+- A custom cycle with no cycle_interval_days throws on date math; render-only paths use shiftDateSafe().
+- Payment Schedule past months are history, not a simulation: no per-debt breakdown, check-off only. Ledger status badges appear on the current month only.
+- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, debts.cycle_paid_to_date, savings_goals.account_id/linked_bill_id, pay_period_allocations.goal_id, bills/debts.cycle_interval_days, spending_actuals.is_manual_override) must exist before those screens work.
