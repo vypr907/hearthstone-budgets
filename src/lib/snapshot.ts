@@ -1,7 +1,15 @@
-import type { Bill, Debt } from "./supabase";
+import type { Account, Bill, Debt } from "./supabase";
 import { debtDueDate } from "./format";
 import type { LedgerState } from "./ledger-state";
-import { toPayable } from "./payments";
+import {
+  billCycleDue,
+  billRemainingOwed,
+  debtCycleDue,
+  debtRemainingOwed,
+  toPayable,
+} from "./payments";
+import { obligationsInRange } from "./paycheck-budget";
+import { spendableContribution, type AccountBalanceInfo } from "./balances";
 
 export type SnapshotRow = {
   kind: "bill" | "debt";
@@ -165,4 +173,157 @@ export async function exportSnapshot(node: HTMLElement, format: "png" | "pdf") {
   link.download = `hearthstone-snapshot-${stamp}.png`;
   link.href = canvas.toDataURL("image/png");
   link.click();
+}
+
+/* ------------------------------------------------------------------ */
+/* ADR-028 additions: balances, pay-period progress, text summary      */
+/* ------------------------------------------------------------------ */
+
+export type BalanceSubtotal = { type: string; label: string; total: number };
+
+const BALANCE_TYPE_ORDER = ["checking", "savings", "credit", "investment", "retirement"];
+
+const typeLabel = (t: string) =>
+  t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+/**
+ * Per-account-type subtotals plus the combined spendable total (ADR-023).
+ * Uses the same balances.ts formula the Accounts screen renders.
+ */
+export function buildBalanceSubtotals(
+  accounts: Account[],
+  balances: Record<string, AccountBalanceInfo>,
+) {
+  const totals = new Map<string, number>();
+  let spendableTotal = 0;
+  for (const a of accounts) {
+    const b = balances[a.id]?.spendable ?? Number(a.starting_balance ?? 0);
+    const type = (a.account_type ?? "other").trim().toLowerCase();
+    totals.set(type, (totals.get(type) ?? 0) + b);
+    const contribution = spendableContribution(a, b);
+    if (contribution != null) spendableTotal += contribution;
+  }
+  const rows: BalanceSubtotal[] = [...totals.entries()]
+    .map(([type, total]) => ({ type, label: typeLabel(type), total }))
+    .sort((x, y) => {
+      const ix = BALANCE_TYPE_ORDER.indexOf(x.type);
+      const iy = BALANCE_TYPE_ORDER.indexOf(y.type);
+      return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy) || x.label.localeCompare(y.label);
+    });
+  return { rows, spendableTotal };
+}
+
+export type PeriodProgress = {
+  label: string;
+  start: string;
+  end: string;
+  total: number;
+  paid: number;
+  owed: number;
+  pct: number;
+};
+
+/**
+ * Progress through the current pay period (or month): of everything due in
+ * range, how much is already covered vs. still owed. Reuses the ADR-035
+ * remaining-owed helpers so partial payments count proportionally.
+ */
+export function buildPeriodProgress(
+  bills: Bill[],
+  debts: Debt[],
+  period: { start: string; end: string; label: string },
+): PeriodProgress {
+  const rows = obligationsInRange(bills, debts, period.start, period.end);
+  const billById = new Map(bills.map((b) => [b.id, b]));
+  const debtById = new Map(debts.map((d) => [d.id, d]));
+  let total = 0;
+  let owed = 0;
+  for (const o of rows) {
+    if (o.kind === "bill") {
+      const b = billById.get(o.id);
+      if (!b) continue;
+      total += billCycleDue(b);
+      owed += Math.max(0, billRemainingOwed(b));
+    } else {
+      const d = debtById.get(o.id);
+      if (!d) continue;
+      total += debtCycleDue(d);
+      owed += Math.max(0, debtRemainingOwed(d));
+    }
+  }
+  const paid = Math.max(0, total - owed);
+  return {
+    label: period.label,
+    start: period.start,
+    end: period.end,
+    total,
+    paid,
+    owed,
+    pct: total > 0 ? Math.min(100, (paid / total) * 100) : 0,
+  };
+}
+
+/**
+ * ADR-028: rule-based plain-text summary of the snapshot. Deliberately
+ * isolated (pure string templates, no network) so it can be swapped for an
+ * LLM-generated version later without touching the rest of the snapshot.
+ */
+export function buildSnapshotSummary(input: {
+  snapshot: ReturnType<typeof buildSnapshot>;
+  progress: PeriodProgress;
+  spendableTotal: number;
+}): string {
+  const { snapshot, progress, spendableTotal } = input;
+  const money = (n: number) =>
+    n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const lines: string[] = [];
+
+  const obligations = snapshot.overdueTotal + snapshot.upcomingTotal;
+  if (obligations <= 0) {
+    lines.push("Nothing is due right now or in the next two weeks.");
+  } else {
+    const gap = spendableTotal - obligations;
+    if (gap >= 0) {
+      lines.push(
+        `${money(obligations)} is due through the next 14 days, covered by ${money(
+          spendableTotal,
+        )} spendable — ${money(gap)} left over.`,
+      );
+    } else {
+      lines.push(
+        `${money(obligations)} is due through the next 14 days but only ${money(
+          spendableTotal,
+        )} is spendable — short by ${money(Math.abs(gap))}.`,
+      );
+    }
+  }
+
+  if (snapshot.overdue.length > 0) {
+    const worst = [...snapshot.overdue].sort((a, b) => a.daysDiff - b.daysDiff)[0];
+    lines.push(
+      `${snapshot.overdue.length} item${snapshot.overdue.length === 1 ? "" : "s"} overdue (${money(
+        snapshot.overdueTotal,
+      )}), oldest is ${worst.name} at ${Math.abs(worst.daysDiff)} day${
+        Math.abs(worst.daysDiff) === 1 ? "" : "s"
+      } past due.`,
+    );
+  } else {
+    lines.push("Nothing is overdue.");
+  }
+
+  if (progress.total > 0) {
+    lines.push(
+      `This ${progress.label} is ${Math.round(progress.pct)}% covered — ${money(
+        progress.paid,
+      )} handled, ${money(progress.owed)} still owed.`,
+    );
+  } else {
+    lines.push(`Nothing is scheduled for this ${progress.label}.`);
+  }
+
+  if (spendableTotal > obligations * 1.5 && obligations > 0) {
+    lines.push("Comfortable surplus — there's room to put extra toward savings or debt.");
+  }
+
+  return lines.join(" ");
 }
