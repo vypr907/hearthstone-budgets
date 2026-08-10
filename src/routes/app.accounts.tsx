@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
 import {
   useAccounts,
+  useCategories,
   useDeleteAccount,
   useInstitutions,
   useLatestBalances,
