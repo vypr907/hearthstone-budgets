@@ -1192,4 +1192,8 @@ Migration steps:
 4. All created transactions are status='cleared', no category_id, no linked_bill_id/
    linked_debt_id/linked_goal_id.
 
-Status: Decided 2026-08-10. Not yet implemented.
+Status: Decided 2026-08-10. Implemented 2026-08-11, with two deviations:
+- Created deposit rows share `split_group_id = income_event.id`, which both groups
+  them in the ledger UI (ADR-044) and makes "mark received" idempotent.
+- The no-splits case does not yet prompt for an account: the event is marked
+  received and no deposit row is written (enter it manually). Tracked in TODO.md.
