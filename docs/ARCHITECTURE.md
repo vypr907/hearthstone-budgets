@@ -63,3 +63,14 @@ them, and the Bill/Debt forms embed `InstitutionDialog` behind a "+ Add new
 institution" option (the `onSaved` callback selects the new row in the caller's
 picker). `InstitutionDialog` likewise embeds `AccountDialog` for its inline
 "+ Add account" action, pre-filling `institution_id`.
+
+## Spending by place and income source detail (2026-08-12)
+
+- `src/routes/app.spending-by-place.tsx` — groups cleared money-out transactions by
+  `transactions.institution_id` for a chosen month and ranks them with logo + bar
+  (ADR-053). Reached from Spending and the More grid.
+- `src/routes/app.income-source.$id.tsx` — income source detail: stats derived from
+  `income_events` via `src/lib/paycheck-budget.ts` helpers, pay-date history, an edit
+  form, and the deposit-splits editor (ADR-054).
+- `src/lib/income-hooks.ts` — adds `useUpsertIncomeSourceSplit` and
+  `useDeleteIncomeSourceSplit`; splits still drive the ADR-047 received-paycheck writes.

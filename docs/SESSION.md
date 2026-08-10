@@ -99,3 +99,23 @@
   be run in Supabase; until then invoice numbers and transaction places don't
   persist.
 - "Spending by place" view and the income-source detail route are still to come.
+
+## 2026-08-12 — Phase 10 part 2 (spending by place, income source detail)
+
+- Phase 10 migration confirmed run in Supabase: `debts.invoice_number` and
+  `transactions.institution_id` now persist.
+- New "Spending by place" screen (`/app/spending-by-place`, ADR-053): monthly
+  merchant ranking with logo, bar, dollar amount, and share of total, plus an
+  untagged-spending footnote. Linked from Spending and the More grid.
+- New income source detail route (`/app/income-source/$id`, ADR-054): YTD /
+  all-time / monthly-average stats, next expected paycheck, pay-date history,
+  Edit source form, and a full deposit-splits editor (add/edit/delete, fixed or
+  remainder, per account, optional day offset).
+- Paycheck Budget: income sources render as tappable cards with cadence,
+  received count, typical amount, and this-year total.
+- `useUpsertIncomeSourceSplit` / `useDeleteIncomeSourceSplit` added to
+  `src/lib/income-hooks.ts`.
+
+### Known issues
+- Spending by place only counts transactions that have a place attached; older
+  entries need re-tagging by hand.

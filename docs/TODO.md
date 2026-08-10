@@ -89,6 +89,7 @@ with check (exists (select 1 from public.household_members m
 - [x] ADR-052 invoice number + auto-composed invoice name
 - [x] ADR-051 smarter stranded-debt detection
 - [x] ADR-053 merchant suggestions + institution link on Add Transaction
-- [ ] "Spending by place" screen (bars per institution)
-- [ ] Income source cards + detail route (pay history, YTD/average, split editor)
-- [ ] Run the Phase 10 migration in Supabase (docs/SCHEMA.md)
+- [x] "Spending by place" screen (bars per institution) — done 2026-08-12.
+- [x] Income source cards + detail route (pay history, YTD/average, split editor) — done 2026-08-12 (ADR-054).
+- [x] Run the Phase 10 migration in Supabase — done 2026-08-12.
+- [ ] Let existing transactions be re-tagged with a place from the Transactions screen

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
@@ -355,6 +355,13 @@ function SpendingPage() {
         </Button>
 
         {groups.length > 0 ? <SpendingSummary totals={totals} /> : null}
+
+        {/* ADR-053: the merchant-level view of the same money. */}
+        <Link to="/app/spending-by-place" className="block">
+          <Button variant="outline" className="h-11 w-full">
+            See spending by place
+          </Button>
+        </Link>
 
 
         {isLoading ? (
