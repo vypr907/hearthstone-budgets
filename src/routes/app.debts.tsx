@@ -558,6 +558,10 @@ function DebtDialog({
   // ADR-049: past-due amount carried in from before tracking started.
   const [openingArrears, setOpeningArrears] = useState("");
   const [arrearsAsOf, setArrearsAsOf] = useState("");
+  // ADR-052: invoice reference number, which also composes the debt name.
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  /** Auto-naming stops the moment the name is typed by hand. */
+  const [nameTouched, setNameTouched] = useState(false);
 
   const isInvoice = debtType === "invoice";
 
