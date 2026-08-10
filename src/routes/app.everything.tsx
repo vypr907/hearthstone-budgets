@@ -228,8 +228,8 @@ function EverythingPage() {
         <div className="space-y-2 pt-2">
           {rows.length === 0 && (
             <Card>
-              <CardContent className="p-4 text-sm text-muted-foreground">
-                Nothing matches.
+              <CardContent className="p-0">
+                <EmptyState>Nothing matches.</EmptyState>
               </CardContent>
             </Card>
           )}
