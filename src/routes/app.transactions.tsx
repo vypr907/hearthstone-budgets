@@ -8,6 +8,8 @@ import {
   useCategories,
   useBills,
   useDebts,
+  useSaveSplitTransaction,
+  useDeleteSplitTransaction,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +37,13 @@ import { toast } from "sonner";
 import type { Transaction } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
 import { groupLedgerRows } from "@/lib/split-groups";
+import {
+  SplitLinesEditor,
+  emptySplitRow,
+  splitRowsTotal,
+  NO_SPLIT_CATEGORY,
+  type SplitRow,
+} from "@/components/SplitLinesEditor";
 
 export const Route = createFileRoute("/app/transactions")({
   head: () => ({
@@ -436,6 +445,221 @@ function TransactionDetail({
           )}
           {edit ? (
             <Button className="h-11" onClick={save} disabled={upsert.isPending}>
+              Save
+            </Button>
+          ) : (
+            <Button className="h-11" onClick={() => setEdit(true)}>
+              Edit
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * ADR-044: view/edit every line of one split transaction together. Saving
+ * replaces the whole group (delete + re-insert) instead of patching lines.
+ */
+function SplitTransactionDetail({
+  transaction,
+  onClose,
+}: {
+  transaction: Transaction;
+  onClose: () => void;
+}) {
+  const { data: transactions = [] } = useTransactions();
+  const { data: accounts = [] } = useAccounts();
+  const { data: categories = [] } = useCategories();
+  const saveSplit = useSaveSplitTransaction();
+  const delSplit = useDeleteSplitTransaction();
+
+  const groupId = transaction.split_group_id!;
+  const lines = useMemo(
+    () => transactions.filter((t) => t.split_group_id === groupId),
+    [transactions, groupId],
+  );
+  const total = lines.reduce((s, t) => s + Number(t.amount ?? 0), 0);
+  const sign = total < 0 ? -1 : 1;
+
+  const [edit, setEdit] = useState(false);
+  const [rows, setRows] = useState<SplitRow[]>([emptySplitRow()]);
+  const [description, setDescription] = useState("");
+  const [date, setDate] = useState("");
+  const [status, setStatus] = useState("cleared");
+  const [accountId, setAccountId] = useState("");
+
+  const [lastKey, setLastKey] = useState("");
+  if (groupId !== lastKey) {
+    setLastKey(groupId);
+    setEdit(false);
+    setDescription(transaction.description ?? "");
+    setDate(transaction.transaction_date.slice(0, 10));
+    setStatus(transaction.status ?? "cleared");
+    setAccountId(transaction.account_id ?? "");
+    setRows(
+      lines.map((l) => ({
+        categoryId: l.category_id ?? NO_SPLIT_CATEGORY,
+        amount: String(Math.abs(Number(l.amount ?? 0))),
+      })),
+    );
+  }
+
+  const editedTotal = splitRowsTotal(rows);
+
+  async function save() {
+    const kept = rows.filter((r) => Number(r.amount));
+    if (kept.length < 2) {
+      toast.error("A split needs at least two lines");
+      return;
+    }
+    if (!accountId) {
+      toast.error("Pick an account");
+      return;
+    }
+    try {
+      await saveSplit.mutateAsync({
+        splitGroupId: groupId,
+        accountId,
+        transactionDate: date,
+        description: description || null,
+        status: status as "pending" | "cleared",
+        lines: kept.map((r) => ({
+          categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
+          amount: sign * Math.abs(Number(r.amount)),
+        })),
+      });
+      toast.success("Split transaction updated");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm("Delete this split transaction and all its lines?")) return;
+    try {
+      await delSplit.mutateAsync(groupId);
+      toast.success("Split transaction deleted");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{transaction.description || "Split transaction"}</DialogTitle>
+        </DialogHeader>
+
+        {!edit ? (
+          <div className="space-y-4">
+            <DetailGrid>
+              <DetailItem label="Total" value={formatMoney(total)} />
+              <DetailItem label="Date" value={transaction.transaction_date} />
+              <DetailItem
+                label="Status"
+                value={
+                  <Badge
+                    variant={transaction.status === "cleared" ? "outline" : "secondary"}
+                    className="capitalize"
+                  >
+                    {transaction.status || "pending"}
+                  </Badge>
+                }
+              />
+              <DetailItem
+                label="Account"
+                value={accounts.find((a) => a.id === transaction.account_id)?.name ?? "—"}
+              />
+            </DetailGrid>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Category lines
+              </p>
+              <div className="mt-1 divide-y divide-border/50 rounded-md border">
+                {lines.map((l) => (
+                  <div
+                    key={l.id}
+                    className="flex items-center justify-between px-2 py-2 text-sm"
+                  >
+                    <span className="truncate">
+                      {categories.find((c) => c.id === l.category_id)?.name ??
+                        "No category"}
+                    </span>
+                    <span className="tabular-nums">{formatMoney(Number(l.amount))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DetailText label="Description" value={transaction.description} />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+              <div>
+                <Label>Status</Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">pending</SelectItem>
+                    <SelectItem value="cleared">cleared</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Account</Label>
+              <Select value={accountId} onValueChange={setAccountId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Pick an account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <SplitLinesEditor
+              rows={rows}
+              categories={categories}
+              total={editedTotal}
+              onChange={setRows}
+            />
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          <Button variant="destructive" className="h-11" onClick={handleDelete}>
+            <Trash2 className="mr-2 h-4 w-4" /> Delete
+          </Button>
+          {edit ? (
+            <Button className="h-11" onClick={save} disabled={saveSplit.isPending}>
               Save
             </Button>
           ) : (
