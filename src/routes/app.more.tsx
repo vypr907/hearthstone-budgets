@@ -54,14 +54,20 @@ function MorePage() {
   return (
     <>
       <AppHeader title="More" />
-      <div className="space-y-2 p-4">
-        {links.map(({ to, label, icon: Icon }) => (
-          <Link key={to} to={to}>
-            <Card>
-              <CardContent className="flex items-center gap-3 p-4">
-                <Icon className="h-5 w-5 text-muted-foreground" />
-                <span className="flex-1 text-base font-medium">{label}</span>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+      {/* Icon gallery — three tiles per row on phones, four from sm up. */}
+      <div className="grid grid-cols-3 gap-3 p-4 sm:grid-cols-4">
+        {links.map(({ to, label, icon: Icon }, i) => (
+          <Link key={to} to={to} className="min-w-0">
+            <Card className="h-full transition-transform active:scale-[0.97]">
+              <CardContent className="flex h-full flex-col items-center gap-2 p-3 text-center">
+                <span
+                  aria-hidden
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-[16px]"
+                  style={{ background: `color-mix(in oklab, ${itemColor(i)} 18%, transparent)` }}
+                >
+                  <Icon className="h-6 w-6" style={{ color: itemColor(i) }} />
+                </span>
+                <span className="text-xs font-semibold leading-tight">{label}</span>
               </CardContent>
             </Card>
           </Link>
@@ -70,3 +76,4 @@ function MorePage() {
     </>
   );
 }
+
