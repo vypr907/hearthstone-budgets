@@ -389,8 +389,8 @@ function Dashboard() {
               </div>
             </div>
           </div>
-          <div className="h-2 w-full bg-white/20">
-            <div className="h-full bg-white/85" style={{ width: `${paidPct}%` }} />
+          <div className="h-2 w-full bg-brand-foreground/20">
+            <div className="h-full bg-brand-foreground/85" style={{ width: `${paidPct}%` }} />
           </div>
         </div>
 
