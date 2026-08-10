@@ -76,11 +76,6 @@ function AccountsPage() {
   const [instFilter, setInstFilter] = useState("all");
 
   const institutionById = useInstitutionIndex(institutions);
-  const institutionName = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const i of institutions) m[i.id] = i.name;
-    return m;
-  }, [institutions]);
 
 
   const accountTypes = useMemo(
