@@ -3,6 +3,7 @@ import {
   supabase,
   type Bill,
   type Debt,
+  type DebtAdjustment,
   type Account,
   type AccountBalance,
   type Category,
