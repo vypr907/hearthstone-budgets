@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
+import { SectionLabel } from "@/components/SectionLabel";
 import {
   useTransactions,
   useUpsertTransaction,
