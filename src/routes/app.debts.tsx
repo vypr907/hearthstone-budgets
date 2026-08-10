@@ -686,7 +686,20 @@ function DebtDialog({
         <div className="space-y-3">
           <div>
             <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
+            <Input
+              value={name}
+              onChange={(e) => {
+                setNameTouched(true);
+                setName(e.target.value);
+              }}
+              className="h-11"
+            />
+            {isInvoice && !nameTouched ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Named automatically from the institution and invoice number — type
+                here to override.
+              </p>
+            ) : null}
           </div>
           <div>
             <Label>Type</Label>
