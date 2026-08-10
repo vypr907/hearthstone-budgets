@@ -196,8 +196,10 @@ function AccountsPage() {
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && rows.length === 0 && (
           <Card>
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              {accounts.length === 0 ? "No accounts yet." : "Nothing matches."}
+            <CardContent className="p-0">
+              <EmptyState>
+                {accounts.length === 0 ? "No accounts yet." : "Nothing matches."}
+              </EmptyState>
             </CardContent>
           </Card>
         )}
