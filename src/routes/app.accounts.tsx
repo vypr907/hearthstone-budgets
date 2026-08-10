@@ -279,51 +279,89 @@ function AccountsPage() {
 /** Bank-statement style list of the most recent ledger rows for an account. */
 function RecentActivity({ rows }: { rows: Transaction[] }) {
   const [expanded, setExpanded] = useState(false);
-  if (rows.length === 0) {
+  const { data: categories = [] } = useCategories();
+  // ADR-044: split lines collapse into one entry with an expandable breakdown.
+  const entries = useMemo(() => groupLedgerRows(rows), [rows]);
+  const [openSplits, setOpenSplits] = useState<Record<string, boolean>>({});
+  if (entries.length === 0) {
     return (
       <p className="mt-2 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
         No transactions yet.
       </p>
     );
   }
-  const shown = expanded ? rows.slice(0, 25) : rows.slice(0, 5);
+  const shown = expanded ? entries.slice(0, 25) : entries.slice(0, 5);
   return (
     <div className="mt-2 rounded-md border">
       <p className="border-b px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground">
         Recent activity
       </p>
-      {shown.map((t) => (
-        <div
-          key={t.id}
-          className="flex items-center justify-between gap-2 border-b px-2 py-2 text-sm last:border-b-0"
-        >
-          <div className="min-w-0">
-            <p className="truncate">{t.description || "Transaction"}</p>
-            <p className="text-xs text-muted-foreground">
-              {format(new Date(t.transaction_date), "MMM d")}
-              {t.status === "pending" ? " · pending" : ""}
-            </p>
+      {shown.map((entry) => {
+        const t = entry.head;
+        return (
+          <div key={entry.key} className="border-b px-2 py-2 text-sm last:border-b-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate">{t.description || "Transaction"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {format(new Date(t.transaction_date), "MMM d")}
+                  {t.status === "pending" ? " · pending" : ""}
+                  {entry.isSplit ? ` · split (${entry.rows.length})` : ""}
+                </p>
+              </div>
+              <p
+                className={`shrink-0 tabular-nums font-medium ${
+                  entry.total < 0 ? "" : "text-primary"
+                } ${t.status === "pending" ? "opacity-60" : ""}`}
+              >
+                {formatMoney(entry.total)}
+              </p>
+            </div>
+            {entry.isSplit ? (
+              <>
+                <button
+                  className="mt-1 text-xs text-muted-foreground underline decoration-dotted"
+                  onClick={() =>
+                    setOpenSplits((prev) => ({ ...prev, [entry.key]: !prev[entry.key] }))
+                  }
+                >
+                  {openSplits[entry.key] ? "Hide breakdown" : "Show breakdown"}
+                </button>
+                {openSplits[entry.key] ? (
+                  <div className="mt-1 divide-y divide-border/50 rounded-md border">
+                    {entry.rows.map((line) => (
+                      <div
+                        key={line.id}
+                        className="flex items-center justify-between px-2 py-1 text-xs"
+                      >
+                        <span className="truncate">
+                          {categories.find((c) => c.id === line.category_id)?.name ??
+                            "No category"}
+                        </span>
+                        <span className="tabular-nums">
+                          {formatMoney(Number(line.amount))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : null}
           </div>
-          <p
-            className={`shrink-0 tabular-nums font-medium ${
-              Number(t.amount) < 0 ? "" : "text-primary"
-            } ${t.status === "pending" ? "opacity-60" : ""}`}
-          >
-            {formatMoney(Number(t.amount || 0))}
-          </p>
-        </div>
-      ))}
-      {rows.length > 5 ? (
+        );
+      })}
+      {entries.length > 5 ? (
         <button
           className="w-full px-2 py-2 text-xs text-muted-foreground underline decoration-dotted"
           onClick={() => setExpanded((v) => !v)}
         >
-          {expanded ? "Show less" : `Show more (${rows.length - 5} more)`}
+          {expanded ? "Show less" : `Show more (${entries.length - 5} more)`}
         </button>
       ) : null}
     </div>
   );
 }
+
 
 
 function AccountDialog({
