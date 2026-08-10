@@ -245,6 +245,8 @@ function useAfterPayment() {
     qc.invalidateQueries({ queryKey: ["bills"] });
     qc.invalidateQueries({ queryKey: ["debts"] });
     qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.invalidateQueries({ queryKey: ["categories"] });
+    qc.invalidateQueries({ queryKey: ["accounts"] });
   };
 }
 
