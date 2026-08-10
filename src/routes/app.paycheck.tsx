@@ -824,16 +824,46 @@ function IncomeAdmin({
     sources.find((s) => s.id === id)?.name ?? "Unknown source";
 
   async function receive(e: import("@/lib/supabase").IncomeEvent) {
+    const sName = sourceName(e.income_source_id);
+    // ADR-047 follow-up: only interrupt when the source has no usable deposit
+    // splits. When splits exist, keep the one-tap behaviour.
+    const usable = await hasUsableSplits(e.income_source_id);
+    if (usable) {
+      try {
+        const res = await markReceived.mutateAsync({ event: e, sourceName: sName });
+        toast.success(
+          res.deposits > 0
+            ? `Paycheck received · ${res.deposits} deposit${res.deposits === 1 ? "" : "s"} recorded`
+            : "Paycheck received",
+        );
+      } catch (err) {
+        toast.error((err as Error).message);
+      }
+      return;
+    }
+    setDepositAccountId("");
+    setDepositAmount(eventAmount(e) ? String(eventAmount(e)) : "");
+    setDepositPrompt({ event: e, sourceName: sName });
+  }
+
+  async function confirmDeposit() {
+    if (!depositPrompt) return;
+    if (!depositAccountId) return toast.error("Pick an account");
+    const amt = Number(depositAmount || 0);
+    if (!amt) return toast.error("Enter the amount received");
     try {
       const res = await markReceived.mutateAsync({
-        event: e,
-        sourceName: sourceName(e.income_source_id),
+        event: depositPrompt.event,
+        sourceName: depositPrompt.sourceName,
+        actualAmount: amt,
+        accountId: depositAccountId,
       });
       toast.success(
         res.deposits > 0
           ? `Paycheck received · ${res.deposits} deposit${res.deposits === 1 ? "" : "s"} recorded`
           : "Paycheck received",
       );
+      setDepositPrompt(null);
     } catch (err) {
       toast.error((err as Error).message);
     }
