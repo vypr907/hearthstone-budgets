@@ -371,7 +371,7 @@ function Dashboard() {
               {formatMoney(payoffTotals.remaining)} debt to go
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-[12px] bg-white/15 p-3">
+              <div className="rounded-[12px] bg-brand-foreground/15 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
                   Bills this {period.label}
                 </p>
@@ -379,7 +379,7 @@ function Dashboard() {
                   {formatMoney(periodTotals.bills)}
                 </p>
               </div>
-              <div className="rounded-[12px] bg-white/15 p-3">
+              <div className="rounded-[12px] bg-brand-foreground/15 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
                   Debts this {period.label}
                 </p>
