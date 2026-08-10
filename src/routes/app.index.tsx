@@ -23,7 +23,9 @@ import {
 } from "@/lib/balances";
 import { billsBudgetedByCategory, buildActualResolver } from "@/lib/spending-actuals";
 import { todayISO } from "@/lib/snapshot";
-import { billRemainingOwed, debtRemainingOwed } from "@/lib/payments";
+import { billRemainingOwed, debtRemainingOwed, toPayable } from "@/lib/payments";
+import { computeArrears } from "@/lib/arrears";
+
 import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
 import { eventDate, obligationsInRange, periodRange } from "@/lib/paycheck-budget";
 import { categoryVisual } from "@/lib/visual-meta";
@@ -314,26 +316,38 @@ function Dashboard() {
     };
   }, [periodObligations, bills, debts, categories]);
 
+  // ADR-049: overdue is a money figure — missed cycles plus carried-in arrears —
+  // so an item months behind reads as more than one cycle's amount.
   const overdue = [
-    ...bills
-      .filter((b) => isDateOverdue(b.next_due_date, b.payment_status))
-      .map((b) => ({
+    ...bills.map((b) => {
+      const arrears = computeArrears(toPayable("bill", b));
+      return {
         id: `bill-${b.id}`,
         name: b.name,
-        amount: billRemainingOwed(b),
-        due_date: b.next_due_date!.slice(0, 10),
+        amount: arrears.amountOverdue || (isDateOverdue(b.next_due_date, b.payment_status) ? billRemainingOwed(b) : 0),
+        cycles: arrears.cyclesMissed,
+        due_date: arrears.oldestMissedDate ?? b.next_due_date?.slice(0, 10) ?? "",
         kind: "Bill" as const,
-      })),
-    ...debts
-      .filter((d) => isDateOverdue(debtDueDate(d), d.payment_status))
-      .map((d) => ({
+      };
+    }),
+    ...debts.map((d) => {
+      const arrears = computeArrears(toPayable("debt", d));
+      return {
         id: `debt-${d.id}`,
         name: d.name,
-        amount: debtRemainingOwed(d),
-        due_date: debtDueDate(d)!,
+        amount: arrears.amountOverdue || (isDateOverdue(debtDueDate(d), d.payment_status) ? debtRemainingOwed(d) : 0),
+        cycles: arrears.cyclesMissed,
+        due_date: arrears.oldestMissedDate ?? debtDueDate(d) ?? "",
         kind: "Debt" as const,
-      })),
-  ].sort((a, b) => a.due_date.localeCompare(b.due_date));
+      };
+    }),
+  ]
+    .filter((o) => o.amount > 0.005)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
+
+  const overdueTotal = overdue.reduce((sum, o) => sum + o.amount, 0);
+
+
 
 
   /** Hero: total debt remaining vs. how much has already been paid off. */
@@ -614,12 +628,17 @@ function Dashboard() {
         <div>
           <div className="mb-2 flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-destructive" />
-            <h2 className="text-sm font-semibold uppercase tracking-wide">Overdue</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide">Past due</h2>
+            {overdueTotal > 0 ? (
+              <span className="ml-auto text-sm font-bold tabular-nums text-destructive">
+                {formatMoney(overdueTotal)}
+              </span>
+            ) : null}
           </div>
           {overdue.length === 0 ? (
             <Card>
               <CardContent className="p-4 text-sm text-muted-foreground">
-                Nothing overdue. Nice.
+                Nothing past due. Nice.
               </CardContent>
             </Card>
           ) : (
@@ -631,9 +650,12 @@ function Dashboard() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{o.name}</p>
                       <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                        {o.kind} · due {o.due_date}
+                        {o.kind}
+                        {o.cycles > 1 ? ` · ${o.cycles} cycles behind` : ""}
+                        {o.due_date ? ` · since ${o.due_date}` : ""}
                       </p>
                     </div>
+
                     <p className="shrink-0 text-lg font-extrabold tabular-nums text-destructive">
                       {formatMoney(o.amount)}
                     </p>

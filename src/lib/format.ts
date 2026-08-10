@@ -92,6 +92,10 @@ export function shiftDate(
   const [y, m, d] = date.slice(0, 10).split("-").map(Number);
   const base = new Date(y, m - 1, d);
   switch (key) {
+    // ADR-048: one-time debts (invoices) never roll into a next cycle.
+    case "onetime":
+      return date.slice(0, 10);
+
     case "custom": {
       const days = Number(intervalDays ?? 0);
       if (!intervalDays || !Number.isFinite(days) || days <= 0) {
@@ -178,8 +182,12 @@ export function monthlyEquivalent(bill: {
 }): number | null {
   const amount = Number(bill.amount ?? 0);
   switch (normalizeCycle(bill.billing_cycle) || "monthly") {
+    // ADR-048: a one-time charge has no recurring monthly equivalent.
+    case "onetime":
+      return null;
     case "biweekly":
       return amount * 2;
+
     case "quarterly":
       return amount / 3;
     case "bimonthly":

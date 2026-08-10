@@ -767,6 +767,11 @@ function IncomeAdmin({
   const deleteEvent = useDeleteIncomeEvent();
   const markReceived = useMarkIncomeReceived();
   const { data: accounts = [] } = useAccounts();
+  const { data: ledger = [] } = useTransactions();
+  /** ADR-047 backfill: paychecks marked received before deposits were written. */
+  const hasDeposits = (eventId: string) =>
+    ledger.some((t) => t.split_group_id === eventId);
+
 
   const [sourceOpen, setSourceOpen] = useState(false);
   const [name, setName] = useState("");
@@ -1019,7 +1024,20 @@ function IncomeAdmin({
                     >
                       Mark received
                     </Button>
+                  ) : !hasDeposits(e.id) ? (
+                    // Older paychecks were marked received before deposits were
+                    // written; the same idempotent flow backfills the ledger.
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 shrink-0"
+                      disabled={markReceived.isPending}
+                      onClick={() => void receive(e)}
+                    >
+                      Post deposits
+                    </Button>
                   ) : null}
+
                 </div>
               ))
           )}

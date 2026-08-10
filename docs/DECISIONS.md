@@ -1202,3 +1202,61 @@ Status: Decided 2026-08-10. Implemented 2026-08-11, with one deviation:
   accepts an optional `accountId`; when no split row resolves to a deposit, it
   writes a single deposit into the chosen account. If no account is provided it
   throws a clear error instead of silently marking the event received.
+
+## ADR-048: Invoices as one-time charges with optional payment plans
+Decision:
+`debt_type = 'invoice'` is modelled as a real dated charge rather than a
+recurring debt.
+1. `billing_cycle` gains the value `one_time`. A one-time charge stores a real
+   `next_due_date` (labelled "Due date" in the form) and no `due_day`; it never
+   rolls forward — `advanceDate`/`shiftDate` return the same date, and
+   `monthlyEquivalent` returns null.
+2. Picking the Invoice type on a new debt defaults the cycle to `one_time`.
+   The cycle stays user-editable, so an invoice can still be recurring.
+3. The debt form always exposes both "Amount still owed" (`remaining_balance`)
+   and "Original invoice amount" (`starting_balance`). Saving falls back to the
+   remaining balance when the original is blank, so the not-null constraint on
+   `debts.starting_balance` can never be tripped from the UI.
+4. Payment plans are explicit: an `on_payment_plan` switch reveals
+   `plan_payment_count` (nullable — "unknown" is valid) and
+   `plan_final_payment` (nullable — "same amount" is valid). The instalment
+   amount reuses `minimum_payment`, which the form relabels to "Payment amount"
+   while a plan is on. No new payoff engine: existing cycle logic drives it.
+5. Clearing a one-time charge sets `payment_status = 'cleared'` when the balance
+   reaches zero and leaves the due date alone.
+
+Reason:
+An invoice is a single dated obligation, not a cycle. Forcing it into "Monthly
+with the minimum set to the balance" loses the real due date and silently rolls
+the due date forward on payment. Reusing `minimum_payment` for the instalment
+avoids a parallel amount field and keeps the existing pay/cycle flow intact.
+
+Status: Decided 2026-08-11. Implemented.
+
+
+## ADR-049: Arrears — track how much is past due, not just that something is
+Decision:
+Overdue becomes a money figure. `src/lib/arrears.ts` exports `computeArrears`,
+a pure function over a payable:
+1. Walk forward from the item's current due date in billing-cycle steps until
+   today. Every due date already passed is a missed cycle. The first (current)
+   cycle counts only what is still owed on it (`cycle_paid_to_date` netted off);
+   every later passed date counts the full cycle amount.
+2. Add `opening_arrears` — a manual figure for money already past due before
+   Hearthstone tracked the item. Cycles on or before `arrears_as_of` are skipped
+   so the manual figure and the walk cannot double count.
+3. One-time charges (ADR-048) stop after their single due date. Debts with a
+   zero remaining balance report only their carry-in.
+Bills and Debts both gain `opening_arrears` and `arrears_as_of` columns and a
+"Past due carried in" block in their forms. `PastDueBadge` renders
+"N cycles · $X past due" on Bills and Debts rows, and the Dashboard "Overdue"
+section becomes "Past due", showing the arrears total and how many cycles behind
+each item is.
+
+Reason:
+The previous signal was boolean (`isDateOverdue`) and only ever surfaced one
+cycle's remaining amount, so a bill three months behind looked the same as one
+a day late. Deriving missed cycles from the due date needs no new ledger rows,
+and the manual carry-in covers items that were already behind on day one.
+
+Status: Decided 2026-08-11. Implemented.

@@ -144,7 +144,10 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
     // Cycle satisfied: reset counters, and roll non-monthly debts forward.
     update.cycle_paid_to_date = 0;
     let nextDue: string | null = null;
-    if (cycle !== "monthly") {
+    if (cycle === "one_time") {
+      // ADR-048: a one-time charge never rolls — it closes out when it hits zero.
+      update.payment_status = nextBalance === 0 ? "cleared" : "unpaid";
+    } else if (cycle !== "monthly") {
       nextDue = advanceDate(
         debt.next_due_date ?? todayISO(),
         debt.billing_cycle,
@@ -156,6 +159,7 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
       // Monthly debts have no next_due_date to roll; keep the cleared marker.
       update.payment_status = "cleared";
     }
+
     await updateRow("debts", p.id, update);
     return { next_due_date: nextDue };
   }

@@ -69,3 +69,15 @@ with check (exists (select 1 from public.household_members m
       inline "+ Add account" on the Institution form — done 2026-08-11.
 - [x] ADR-047 follow-up: prompt for an account when the income source has no split rows — done 2026-08-11.
 - [x] Create a "Fees" category by default so ADR-046 fee rows are categorised — auto-created on first fee, done 2026-08-11.
+
+## Phase 9 part 1 (2026-08-11)
+- [x] Fix `starting_balance` not-null crash when adding a debt/invoice
+- [x] ADR-048 invoice model: one-time cycle, real due date, payment plans
+- [x] ADR-049 arrears: missed-cycle + carry-in past-due tracking with badges
+- [x] Stranded debt repair: stop re-flagging repaired debts; persistent dismissal
+- [x] Backfill deposits for older received paychecks
+- [x] Institution form: Categories as a dropdown multi-select
+- [ ] Run the ADR-048/049 migration in Supabase (docs/SCHEMA.md)
+- [ ] Phase 9 part 2 (visual): institution logos on Bills/Debts/Accounts,
+      graphical Budget vs Actual + Spending, More as an icon grid, visual
+      category rows and inline merchant creation on Add Transaction
