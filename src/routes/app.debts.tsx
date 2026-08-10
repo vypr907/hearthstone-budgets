@@ -69,7 +69,9 @@ const ADJUSTMENT_TYPES = [
   "other",
 ];
 import { format } from "date-fns";
-import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+import { ItemBar, itemColor } from "@/components/viz";
+import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
+
 import { Switch } from "@/components/ui/switch";
 import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel } from "@/lib/visual-meta";
 
@@ -117,6 +119,9 @@ export const Route = createFileRoute("/app/debts")({
 
 function DebtsPage() {
   const { data: debts = [], isLoading } = useDebts();
+  const { data: allInstitutions = [] } = useInstitutions();
+  const institutionById = useInstitutionIndex(allInstitutions);
+
   const [editing, setEditing] = useState<Partial<Debt> | null>(null);
   const [detail, setDetail] = useState<Debt | null>(null);
   const infoOf = useCycleState();
@@ -257,7 +262,12 @@ function DebtsPage() {
             >
               <CardContent className="p-3">
                 <div className="flex items-start gap-3">
-                  <EmojiIcon name={`${d.name} ${d.debt_type ?? ""}`} fallback="🏦" />
+                  <ObligationIcon
+                    institution={institutionById[d.institution_id ?? ""]}
+                    name={`${d.name} ${d.debt_type ?? ""}`}
+                    fallback="🏦"
+                  />
+
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{d.name}</p>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">

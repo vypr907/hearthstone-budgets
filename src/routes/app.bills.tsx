@@ -45,7 +45,9 @@ import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { PastDueBadge } from "@/components/PastDueBadge";
 
-import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+import { ItemBar, itemColor } from "@/components/viz";
+import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
+
 import { formatTypeLabel } from "@/lib/visual-meta";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 
@@ -92,6 +94,9 @@ export const Route = createFileRoute("/app/bills")({
 function BillsPage() {
   const { data: bills = [], isLoading } = useBills();
   const { data: categories = [] } = useCategories();
+  const { data: allInstitutions = [] } = useInstitutions();
+  const institutionById = useInstitutionIndex(allInstitutions);
+
   const [editing, setEditing] = useState<Partial<Bill> | null>(null);
   const [detail, setDetail] = useState<Bill | null>(null);
   const infoOf = useCycleState();
@@ -194,10 +199,12 @@ function BillsPage() {
                   <Card key={b.id} className="cursor-pointer" onClick={() => setDetail(b)}>
                     <CardContent className="p-3">
                       <div className="flex items-start gap-3">
-                        <EmojiIcon
+                        <ObligationIcon
+                          institution={institutionById[b.institution_id ?? ""]}
                           name={`${b.name} ${(b.category_id && categoryName[b.category_id]) || ""}`}
                           fallback="🧾"
                         />
+
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-medium">{b.name}</p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">

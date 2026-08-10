@@ -38,7 +38,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Account, Transaction } from "@/lib/supabase";
 import { format } from "date-fns";
-import { EmojiIcon } from "@/components/viz";
+import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 
 export const Route = createFileRoute("/app/accounts")({
   head: () => ({
@@ -75,11 +75,8 @@ function AccountsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [instFilter, setInstFilter] = useState("all");
 
-  const institutionName = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const i of institutions) m[i.id] = i.name;
-    return m;
-  }, [institutions]);
+  const institutionById = useInstitutionIndex(institutions);
+
 
   const accountTypes = useMemo(
     () => [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[],
@@ -211,18 +208,20 @@ function AccountsPage() {
               <Card key={a.id}>
                 <CardContent className="p-3">
                   <div className="flex items-start gap-3">
-                    <EmojiIcon name={`${a.name} ${a.account_type ?? ""}`} fallback="🏛️" />
+                    <ObligationIcon
+                      institution={institutionById[a.institution_id ?? ""]}
+                      name={`${a.name} ${a.account_type ?? ""}`}
+                      fallback="🏛️"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{a.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {a.account_type || "Account"}
-                        {a.institution_id && institutionName[a.institution_id]
-                          ? ` · ${institutionName[a.institution_id]}`
-                          : ""}
                         {b?.asOf
                           ? ` · snapshot ${format(new Date(b.asOf), "MMM d")}`
                           : " · starting balance"}
                       </p>
+
                     </div>
                     <Button
                       size="icon"

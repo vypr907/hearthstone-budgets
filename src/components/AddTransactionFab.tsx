@@ -25,8 +25,14 @@ import {
   useDebts,
   useInstitutions,
   useSaveSplitTransaction,
+  useUpsertInstitution,
   useUpsertTransaction,
 } from "@/lib/data-hooks";
+import {
+  categoryVisual,
+  guessMerchantDomain,
+  suggestedLogoUrl,
+} from "@/lib/visual-meta";
 import { Switch } from "@/components/ui/switch";
 import {
   SplitLinesEditor,
@@ -80,6 +86,32 @@ export function AddTransactionFab() {
   );
 
   const { data: institutions = [] } = useInstitutions();
+  const saveInstitution = useUpsertInstitution();
+
+  /** Trimmed description that doesn't match any known institution yet. */
+  const newMerchant = useMemo(() => {
+    const d = description.trim();
+    if (d.length < 3) return null;
+    const known = institutions.some(
+      (i) => i.name.trim().toLowerCase() === d.toLowerCase(),
+    );
+    return known ? null : d;
+  }, [description, institutions]);
+
+  async function addMerchant() {
+    if (!newMerchant) return;
+    const domain = guessMerchantDomain(newMerchant);
+    try {
+      await saveInstitution.mutateAsync({
+        name: newMerchant,
+        institution_type: "retailer",
+        logo_url: domain ? suggestedLogoUrl(domain) : null,
+      });
+      toast.success(`Added ${newMerchant}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add place");
+    }
+  }
   const institutionName = useMemo(() => {
     const m: Record<string, string> = {};
     for (const i of institutions) m[i.id] = i.name;
@@ -240,20 +272,36 @@ export function AddTransactionFab() {
             <div className="space-y-2">
               <Label>Category (optional)</Label>
               <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger className="h-12">
+                <SelectTrigger className="h-12 text-base">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_CATEGORY}>No category</SelectItem>
-                  {sortedCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                      {c.parent_category ? ` · ${c.parent_category}` : ""}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value={NO_CATEGORY} className="py-3 text-base">
+                    No category
+                  </SelectItem>
+                  {sortedCategories.map((c) => {
+                    const v = categoryVisual(c);
+                    return (
+                      <SelectItem key={c.id} value={c.id} className="py-3 text-base">
+                        <span className="flex items-center gap-2">
+                          <span
+                            aria-hidden
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded-[10px] text-base"
+                            style={{ background: `${v.color}22` }}
+                          >
+                            {v.icon}
+                          </span>
+                          <span className="font-medium" style={{ color: v.color }}>
+                            {c.name}
+                          </span>
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
+
             )}
 
             {!isSplit ? (
@@ -292,6 +340,25 @@ export function AddTransactionFab() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
+              {/* Inline merchant capture: typed places that aren't tracked yet
+                  can become an institution without leaving the form. */}
+              {newMerchant ? (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-[12px] bg-muted/50 p-2 text-left text-xs active:bg-muted"
+                  disabled={saveInstitution.isPending}
+                  onClick={() => void addMerchant()}
+                >
+                  <span aria-hidden className="text-base">
+                    🏪
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    New place? Save{" "}
+                    <span className="font-semibold">{newMerchant}</span> as an
+                    institution
+                  </span>
+                </button>
+              ) : null}
             </div>
           </div>
           <DialogFooter>

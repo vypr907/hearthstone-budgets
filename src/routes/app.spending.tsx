@@ -33,7 +33,7 @@ import {
 import { CalendarPlus, ChevronLeft, ChevronRight, HelpCircle, PencilLine, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { ProgressRing, itemColor } from "@/components/viz";
+import { ItemBar, ProgressRing, itemColor } from "@/components/viz";
 import { categoryVisual } from "@/lib/visual-meta";
 
 import {
@@ -354,13 +354,7 @@ function SpendingPage() {
           New budget item
         </Button>
 
-        <div className="grid grid-cols-[3rem_1fr_auto_auto_auto] gap-x-3 px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          <span />
-          <span>Item</span>
-          <span className="w-20 text-right">Budget</span>
-          <span className="w-20 text-right">Actual</span>
-          <span className="w-20 text-right">3-mo avg</span>
-        </div>
+        {groups.length > 0 ? <SpendingSummary totals={totals} /> : null}
 
 
         {isLoading ? (
@@ -387,146 +381,36 @@ function SpendingPage() {
                   <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                     {g.name}
                   </p>
-                  {g.rows.map((r, i) => {
-                    const totalBudget = r.budgeted + r.billsBudgeted;
-                    const pct =
-                      totalBudget > 0
-                        ? Math.min(100, (r.actual / totalBudget) * 100)
-                        : r.actual > 0
-                          ? 100
-                          : 0;
-                    const over = totalBudget > 0 && r.actual > totalBudget;
-                    return (
-                    <div
+                  {g.rows.map((r, i) => (
+                    <SpendingRow
                       key={r.categoryId}
-                      className="grid grid-cols-[3rem_1fr_auto_auto_auto] items-center gap-x-3 border-l-4 px-2 py-2 text-sm"
-                      style={{ borderColor: r.color }}
-                    >
-                      <ProgressRing
-                        value={pct}
-                        color={
-                          over
-                            ? "var(--destructive)"
-                            : (r.color ?? itemColor(i))
-                        }
-                      />
-                      <span className="flex min-w-0 flex-col">
-                        <span className="flex min-w-0 items-center gap-1">
-                          <span aria-hidden>{r.icon}</span>
-                          <span className="truncate">{r.name}</span>
-                          {r.description ? (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <button
-                                  aria-label={`About ${r.name}`}
-                                  className="shrink-0 text-muted-foreground"
-                                >
-                                  <HelpCircle className="h-4 w-4" />
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-64 text-sm">
-                                {r.description}
-                              </PopoverContent>
-                            </Popover>
-                          ) : null}
-                        </span>
-                        <span
-                          className={
-                            over
-                              ? "text-[10px] uppercase tracking-widest text-destructive"
-                              : "text-[10px] uppercase tracking-widest text-muted-foreground"
-                          }
-                        >
-                          {over
-                            ? `${formatMoney(r.actual - totalBudget)} over`
-                            : `${formatMoney(totalBudget - r.actual)} left`}
-                        </span>
-                        {/* ADR-034: never merge spending and bill load. */}
-                        <span className="text-[10px] tabular-nums text-muted-foreground">
-                          Budget {formatMoney(r.budgeted)} spending +{" "}
-                          {formatMoney(r.billsBudgeted)} bills ={" "}
-                          {formatMoney(totalBudget)}
-                        </span>
-                        <span className="text-[10px] tabular-nums text-muted-foreground">
-                          Spent {formatMoney(r.spendingSpent)} spending +{" "}
-                          {formatMoney(r.billsSpent)} bills ={" "}
-                          {formatMoney(r.actual)}
-                        </span>
-                      </span>
-                      <button
-                        className="h-10 w-20 rounded-md text-right text-base font-bold tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
-                        onClick={() =>
-                          setEditing({
-                            row: r,
-                            field: "budgeted",
-                            value: String(r.budgeted),
-                          })
-                        }
-                      >
-                        {formatMoney(r.budgeted)}
-                      </button>
-                      <span className="flex items-center justify-end gap-1">
-                        {r.actualSource === "override" ? (
-                          <button
-                            aria-label={`Use transaction total for ${r.name}`}
-                            title="Manual override — tap to revert to the transaction total"
-                            className="shrink-0 text-muted-foreground"
-                            onClick={() =>
-                              r.actualId &&
-                              clearOverride
-                                .mutateAsync({ id: r.actualId })
-                                .then(() => toast.success(`${r.name} back on transactions`))
-                                .catch((e: unknown) => toast.error((e as Error).message))
-                            }
-                          >
-                            <PencilLine className="h-3.5 w-3.5" />
-                          </button>
-                        ) : null}
-                        <button
-                          className="h-10 w-20 rounded-md text-right text-base font-bold tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
-                          title={
-                            r.actualSource === "ledger"
-                              ? "From logged transactions this month"
-                              : undefined
-                          }
-                          onClick={() =>
-                            setEditing({
-                              row: r,
-                              field: "actual",
-                              value: String(r.actual),
-                            })
-                          }
-                        >
-                          {formatMoney(r.actual)}
-                        </button>
-                      </span>
-
-
-                      <span className="w-20 text-right tabular-nums text-muted-foreground">
-                        {formatMoney(r.avg3)}
-                      </span>
-                    </div>
-                    );
-                  })}
-                  <div className="grid grid-cols-[3rem_1fr_auto_auto_auto] items-center gap-x-3 border-t border-border/60 px-2 py-2 text-sm font-medium">
-                    <span />
+                      row={r}
+                      index={i}
+                      onEdit={(field) =>
+                        setEditing({
+                          row: r,
+                          field,
+                          value: String(field === "budgeted" ? r.budgeted : r.actual),
+                        })
+                      }
+                      onClearOverride={() =>
+                        r.actualId &&
+                        clearOverride
+                          .mutateAsync({ id: r.actualId })
+                          .then(() => toast.success(`${r.name} back on transactions`))
+                          .catch((e: unknown) => toast.error((e as Error).message))
+                      }
+                    />
+                  ))}
+                  <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-2 text-xs">
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                       Subtotal
                     </span>
-                    <span className="flex w-20 flex-col items-end font-bold tabular-nums">
-                      {formatMoney(sub.budgeted)}
-                      <span className="text-[10px] font-normal text-muted-foreground">
-                        {formatMoney(sub.spendingBudgeted)} + {formatMoney(sub.billsBudgeted)}
+                    <span className="tabular-nums">
+                      <span className="font-bold">{formatMoney(sub.actual)}</span>
+                      <span className="text-muted-foreground">
+                        {" "}of {formatMoney(sub.budgeted)}
                       </span>
-                    </span>
-                    <span className="flex w-20 flex-col items-end font-bold tabular-nums">
-                      {formatMoney(sub.actual)}
-                      <span className="text-[10px] font-normal text-muted-foreground">
-                        {formatMoney(sub.spendingSpent)} + {formatMoney(sub.billsSpent)}
-                      </span>
-                    </span>
-                    <span className="w-20 text-right font-bold tabular-nums">
-                      {formatMoney(sub.avg3)}
                     </span>
                   </div>
                 </CardContent>
@@ -536,28 +420,7 @@ function SpendingPage() {
           })
         )}
 
-        {groups.length > 0 ? (
-          <Card>
-            <CardContent className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 p-4 text-sm font-semibold">
-              <span>Grand total</span>
-              <span className="flex w-20 flex-col items-end tabular-nums">
-                {formatMoney(totals.budgeted)}
-                <span className="text-[10px] font-normal text-muted-foreground">
-                  {formatMoney(totals.spendingBudgeted)} + {formatMoney(totals.billsBudgeted)}
-                </span>
-              </span>
-              <span className="flex w-20 flex-col items-end tabular-nums">
-                {formatMoney(totals.actual)}
-                <span className="text-[10px] font-normal text-muted-foreground">
-                  {formatMoney(totals.spendingSpent)} + {formatMoney(totals.billsSpent)}
-                </span>
-              </span>
-              <span className="w-20 text-right tabular-nums">
-                {formatMoney(totals.avg3)}
-              </span>
-            </CardContent>
-          </Card>
-        ) : null}
+        {null}
       </div>
 
       <Dialog open={adding} onOpenChange={setAdding}>
@@ -735,5 +598,194 @@ function SpendingPage() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+type SpendRow = {
+  categoryId: string;
+  name: string;
+  icon: string;
+  color: string;
+  description?: string | null;
+  budgeted: number;
+  billsBudgeted: number;
+  actual: number;
+  spendingSpent: number;
+  billsSpent: number;
+  avg3: number;
+  actualSource: string;
+  actualId?: string;
+};
+
+/** Chart-led month summary that replaces the old table header row. */
+function SpendingSummary({
+  totals,
+}: {
+  totals: {
+    budgeted: number;
+    spendingBudgeted: number;
+    billsBudgeted: number;
+    actual: number;
+    spendingSpent: number;
+    billsSpent: number;
+    avg3: number;
+  };
+}) {
+  const pct =
+    totals.budgeted > 0
+      ? Math.min(100, (totals.actual / totals.budgeted) * 100)
+      : totals.actual > 0
+        ? 100
+        : 0;
+  const over = totals.budgeted > 0 && totals.actual > totals.budgeted;
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Spent this month
+        </p>
+        <div className="mt-1 flex items-baseline justify-between gap-2">
+          <p className="text-3xl font-extrabold tabular-nums">
+            {formatMoney(totals.actual)}
+          </p>
+          <p className="text-xs tabular-nums text-muted-foreground">
+            of {formatMoney(totals.budgeted)}
+          </p>
+        </div>
+        <ItemBar
+          value={pct}
+          color={over ? "var(--destructive)" : "var(--brand)"}
+          className="mt-2"
+        />
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          {[
+            { label: "Spending", value: totals.spendingSpent },
+            { label: "Bills", value: totals.billsSpent },
+            { label: "3-mo avg", value: totals.avg3 },
+          ].map((s) => (
+            <div key={s.label} className="rounded-[12px] bg-muted/40 p-2">
+              <p className="text-sm font-bold tabular-nums">{formatMoney(s.value)}</p>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                {s.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Condensed category row — numbers on tap, editing kept one level down. */
+function SpendingRow({
+  row: r,
+  index: i,
+  onEdit,
+  onClearOverride,
+}: {
+  row: SpendRow;
+  index: number;
+  onEdit: (field: "budgeted" | "actual") => void;
+  onClearOverride: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const totalBudget = r.budgeted + r.billsBudgeted;
+  const pct =
+    totalBudget > 0
+      ? Math.min(100, (r.actual / totalBudget) * 100)
+      : r.actual > 0
+        ? 100
+        : 0;
+  const over = totalBudget > 0 && r.actual > totalBudget;
+  const color = over ? "var(--destructive)" : (r.color ?? itemColor(i));
+  return (
+    <div className="border-l-4 px-2 py-2" style={{ borderColor: r.color }}>
+      <button
+        type="button"
+        className="flex w-full items-center gap-3 text-left"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ProgressRing value={pct} color={color} />
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1 text-sm">
+            <span aria-hidden>{r.icon}</span>
+            <span className="truncate">{r.name}</span>
+          </span>
+          <span
+            className={
+              over
+                ? "text-[10px] uppercase tracking-widest text-destructive"
+                : "text-[10px] uppercase tracking-widest text-muted-foreground"
+            }
+          >
+            {over
+              ? `${formatMoney(r.actual - totalBudget)} over`
+              : `${formatMoney(totalBudget - r.actual)} left`}
+          </span>
+        </span>
+        <span className="shrink-0 text-right text-sm tabular-nums">
+          <span className="font-bold">{formatMoney(r.actual)}</span>
+          <span className="block text-[10px] text-muted-foreground">
+            of {formatMoney(totalBudget)}
+          </span>
+        </span>
+      </button>
+
+      {open ? (
+        <div className="mt-2 space-y-2 pl-[3.75rem]">
+          <p className="text-[10px] tabular-nums text-muted-foreground">
+            Budget {formatMoney(r.budgeted)} spending + {formatMoney(r.billsBudgeted)}{" "}
+            bills · Spent {formatMoney(r.spendingSpent)} spending +{" "}
+            {formatMoney(r.billsSpent)} bills · 3-mo avg {formatMoney(r.avg3)}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => onEdit("budgeted")}
+            >
+              Budget {formatMoney(r.budgeted)}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => onEdit("actual")}
+            >
+              Actual {formatMoney(r.actual)}
+            </Button>
+            {r.actualSource === "override" ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9"
+                aria-label={`Use transaction total for ${r.name}`}
+                onClick={onClearOverride}
+              >
+                <PencilLine className="mr-1 h-3.5 w-3.5" />
+                Use transactions
+              </Button>
+            ) : null}
+            {r.description ? (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9"
+                    aria-label={`About ${r.name}`}
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 text-sm">{r.description}</PopoverContent>
+              </Popover>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

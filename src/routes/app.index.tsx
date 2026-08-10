@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import {
   monthKey,
@@ -454,54 +454,19 @@ function Dashboard() {
               <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Budget vs actual · this month
               </p>
-              <div className="mt-3 space-y-3">
-                {budgetChart.map((g, i) => {
-                  const pct = g.budgeted
-                    ? Math.min(100, (g.actual / g.budgeted) * 100)
-                    : g.actual > 0
-                      ? 100
-                      : 0;
-                  const over = g.budgeted > 0 && g.actual > g.budgeted;
-                  return (
-                    <div key={g.name} className="flex items-center gap-3">
-                      <ProgressRing
-                        value={pct}
-                        color={over ? "var(--destructive)" : itemColor(i)}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex min-w-0 items-center gap-1.5 truncate text-sm">
-                            <span aria-hidden>{emojiFor(g.name)}</span>
-                            <span className="truncate">{g.name}</span>
-                          </span>
-                          <span className="shrink-0 text-sm font-bold tabular-nums">
-                            {formatMoney(Math.max(0, g.budgeted - g.actual))}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <ItemBar
-                            value={pct}
-                            color={over ? "var(--destructive)" : itemColor(i)}
-                            className="mt-1"
-                          />
-                        </div>
-                        <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                          {formatMoney(g.actual)} of {formatMoney(g.budgeted)} used
-                        </p>
-                        <p className="text-[10px] tabular-nums text-muted-foreground">
-                          Budget {formatMoney(g.spendingBudgeted)} spending +{" "}
-                          {formatMoney(g.billsBudgeted)} bills · Spent{" "}
-                          {formatMoney(g.spendingSpent)} spending +{" "}
-                          {formatMoney(g.billsSpent)} bills
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+              <BudgetTotals rows={budgetChart} />
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {budgetChart.map((g, i) => (
+                  <BudgetTile key={g.name} group={g} index={i} />
+                ))}
               </div>
+              <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+                Tap a category for the spending / bills split
+              </p>
             </CardContent>
           </Card>
         )}
+
 
 
 
@@ -736,5 +701,91 @@ function Dashboard() {
         )}
       </div>
     </>
+  );
+}
+
+type BudgetGroup = {
+  name: string;
+  budgeted: number;
+  spendingBudgeted: number;
+  billsBudgeted: number;
+  actual: number;
+  spendingSpent: number;
+  billsSpent: number;
+};
+
+/** Single headline bar for the whole month's budget load. */
+function BudgetTotals({ rows }: { rows: BudgetGroup[] }) {
+  const budgeted = rows.reduce((s, r) => s + r.budgeted, 0);
+  const actual = rows.reduce((s, r) => s + r.actual, 0);
+  const pct = budgeted > 0 ? Math.min(100, (actual / budgeted) * 100) : actual > 0 ? 100 : 0;
+  const over = budgeted > 0 && actual > budgeted;
+  return (
+    <div className="mt-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-3xl font-extrabold tabular-nums">{formatMoney(actual)}</p>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          of {formatMoney(budgeted)}
+        </p>
+      </div>
+      <ItemBar
+        value={pct}
+        color={over ? "var(--destructive)" : "var(--brand)"}
+        className="mt-2"
+      />
+    </div>
+  );
+}
+
+/** Compact tile per parent category — ring first, numbers on tap. */
+function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number }) {
+  const [open, setOpen] = useState(false);
+  const pct = g.budgeted
+    ? Math.min(100, (g.actual / g.budgeted) * 100)
+    : g.actual > 0
+      ? 100
+      : 0;
+  const over = g.budgeted > 0 && g.actual > g.budgeted;
+  const color = over ? "var(--destructive)" : itemColor(i);
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      className="rounded-[14px] bg-muted/40 p-3 text-left active:bg-muted"
+      aria-expanded={open}
+    >
+      <div className="flex items-center gap-2">
+        <ProgressRing value={pct} color={color} size={44} />
+        <div className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1 text-sm font-medium">
+            <span aria-hidden>{emojiFor(g.name)}</span>
+            <span className="truncate">{g.name}</span>
+          </span>
+          <span
+            className={
+              over
+                ? "text-[10px] uppercase tracking-widest text-destructive"
+                : "text-[10px] uppercase tracking-widest text-muted-foreground"
+            }
+          >
+            {over
+              ? `${formatMoney(g.actual - g.budgeted)} over`
+              : `${formatMoney(g.budgeted - g.actual)} left`}
+          </span>
+        </div>
+      </div>
+      {open ? (
+        <div className="mt-2 space-y-0.5 text-[10px] tabular-nums text-muted-foreground">
+          <p>
+            Budget {formatMoney(g.spendingBudgeted)} spending +{" "}
+            {formatMoney(g.billsBudgeted)} bills
+          </p>
+          <p>
+            Spent {formatMoney(g.spendingSpent)} spending + {formatMoney(g.billsSpent)}{" "}
+            bills
+          </p>
+        </div>
+      ) : null}
+    </button>
   );
 }
