@@ -44,6 +44,7 @@ import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { PastDueBadge } from "@/components/PastDueBadge";
+import { PastDueEditor } from "@/components/PastDueEditor";
 
 import { ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
