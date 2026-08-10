@@ -55,6 +55,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
+import { PastDueBadge } from "@/components/PastDueBadge";
+
 
 /** ADR-045: invoice joins the existing debt_type values. */
 const DEBT_TYPES = ["medical", "credit_card", "loan", "advance", "invoice", "other"];
@@ -286,6 +288,9 @@ function DebtsPage() {
                       >
                         {d.payment_status || "unpaid"}
                       </Badge>
+                      {/* ADR-049: how far behind, in money. */}
+                      <PastDueBadge payable={toPayable("debt", d)} />
+
                     </div>
                   </div>
                   <Button

@@ -43,6 +43,8 @@ import { SetAsideAction } from "@/components/SetAsideAction";
 import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
+import { PastDueBadge } from "@/components/PastDueBadge";
+
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
 import { formatTypeLabel } from "@/lib/visual-meta";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
@@ -208,6 +210,9 @@ function BillsPage() {
                             ) : null}
                             {b.is_variable_amount ? <span>· variable</span> : null}
                             <StatusBadge status={info.state} />
+                            {/* ADR-049: how far behind, in money. */}
+                            <PastDueBadge payable={toPayable("bill", b)} />
+
                             {info.clearedSum > 0 && info.remaining > 0 ? (
                               <span className="font-medium text-destructive">
                                 {formatMoney(info.remaining)} still owed this cycle
