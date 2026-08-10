@@ -191,6 +191,18 @@ export type Transaction = {
   updated_at: string;
 };
 
+/** ADR-045: a non-payment change to a debt's balance owed. */
+export type DebtAdjustment = {
+  id: string;
+  household_id: string;
+  debt_id: string;
+  amount: number;
+  adjustment_type: string | null;
+  description: string | null;
+  adjustment_date: string;
+  created_at?: string | null;
+};
+
 export type DebtStrategySettings = {
   household_id: string;
   active_strategy: string | null;
