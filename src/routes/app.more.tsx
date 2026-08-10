@@ -4,7 +4,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Building2,
   CalendarDays,
-  ChevronRight,
   PiggyBank,
   Target,
   Camera,
@@ -14,6 +13,7 @@ import {
   TrendingDown,
   Wallet,
 } from "lucide-react";
+
 
 export const Route = createFileRoute("/app/more")({
   head: () => ({
