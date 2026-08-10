@@ -75,11 +75,13 @@ function AccountsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [instFilter, setInstFilter] = useState("all");
 
+  const institutionById = useInstitutionIndex(institutions);
   const institutionName = useMemo(() => {
     const m: Record<string, string> = {};
     for (const i of institutions) m[i.id] = i.name;
     return m;
   }, [institutions]);
+
 
   const accountTypes = useMemo(
     () => [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[],
