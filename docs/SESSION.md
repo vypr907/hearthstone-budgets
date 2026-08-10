@@ -60,3 +60,23 @@
 - The ADR-048/049 migration in docs/SCHEMA.md must be run in Supabase; until then
   payment-plan and arrears fields silently don't persist.
 - Institutions and Accounts screens still define their own detail dialogs.
+
+## 2026-08-11 — Phase 9 part 2 (visual/UX)
+
+- New `ObligationIcon` (+ `useInstitutionIndex`): Bills, Debts and Accounts rows
+  now show the linked institution's logo first, falling back to institution type
+  then a name-derived emoji. Accounts rows drop the institution name text.
+- Dashboard "Budget vs actual" is now a headline spent/budgeted bar plus a
+  two-column grid of ring tiles; the spending-vs-bills split moves behind a tap.
+- Spending screen: chart-led month summary card (total spent, bar, spending /
+  bills / 3-mo-avg tiles) replaces the table header and grand-total row; each
+  category is a condensed ring row that expands for the split and edit buttons.
+- More screen is a 3-up icon gallery instead of a stacked list.
+- Add Transaction: category dropdown shows coloured icon + name rows, and typing
+  an unknown place offers an inline "save as an institution" action that guesses
+  a favicon from the merchant name (`guessMerchantDomain`).
+
+### Known issues
+- The ADR-048/049 migration in docs/SCHEMA.md must still be run in Supabase.
+- Merchant capture creates the institution only; transactions still have no
+  `institution_id` link.

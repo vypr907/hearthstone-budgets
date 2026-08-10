@@ -78,6 +78,8 @@ with check (exists (select 1 from public.household_members m
 - [x] Backfill deposits for older received paychecks
 - [x] Institution form: Categories as a dropdown multi-select
 - [ ] Run the ADR-048/049 migration in Supabase (docs/SCHEMA.md)
-- [ ] Phase 9 part 2 (visual): institution logos on Bills/Debts/Accounts,
+- [x] Phase 9 part 2 (visual): institution logos on Bills/Debts/Accounts,
       graphical Budget vs Actual + Spending, More as an icon grid, visual
-      category rows and inline merchant creation on Add Transaction
+      category rows and inline merchant creation on Add Transaction — done 2026-08-11.
+- [ ] Give transactions an `institution_id` so merchant capture can power a
+      "spending by institution" view
