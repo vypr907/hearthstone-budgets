@@ -80,6 +80,14 @@ export function AddTransactionFab() {
   const [isSplit, setIsSplit] = useState(false);
   const [splitRows, setSplitRows] = useState<SplitRow[]>([emptySplitRow()]);
 
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
+    [categories],
+  );
+
+  const { data: institutions = [] } = useInstitutions();
+  const saveInstitution = useUpsertInstitution();
+
   /** Trimmed description that doesn't match any known institution yet. */
   const newMerchant = useMemo(() => {
     const d = description.trim();
@@ -104,14 +112,6 @@ export function AddTransactionFab() {
       toast.error(e instanceof Error ? e.message : "Could not add place");
     }
   }
-
-  const sortedCategories = useMemo(
-    () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
-    [categories],
-  );
-
-  const { data: institutions = [] } = useInstitutions();
-  const saveInstitution = useUpsertInstitution();
   const institutionName = useMemo(() => {
     const m: Record<string, string> = {};
     for (const i of institutions) m[i.id] = i.name;
