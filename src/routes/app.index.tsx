@@ -454,54 +454,19 @@ function Dashboard() {
               <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Budget vs actual · this month
               </p>
-              <div className="mt-3 space-y-3">
-                {budgetChart.map((g, i) => {
-                  const pct = g.budgeted
-                    ? Math.min(100, (g.actual / g.budgeted) * 100)
-                    : g.actual > 0
-                      ? 100
-                      : 0;
-                  const over = g.budgeted > 0 && g.actual > g.budgeted;
-                  return (
-                    <div key={g.name} className="flex items-center gap-3">
-                      <ProgressRing
-                        value={pct}
-                        color={over ? "var(--destructive)" : itemColor(i)}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex min-w-0 items-center gap-1.5 truncate text-sm">
-                            <span aria-hidden>{emojiFor(g.name)}</span>
-                            <span className="truncate">{g.name}</span>
-                          </span>
-                          <span className="shrink-0 text-sm font-bold tabular-nums">
-                            {formatMoney(Math.max(0, g.budgeted - g.actual))}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <ItemBar
-                            value={pct}
-                            color={over ? "var(--destructive)" : itemColor(i)}
-                            className="mt-1"
-                          />
-                        </div>
-                        <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                          {formatMoney(g.actual)} of {formatMoney(g.budgeted)} used
-                        </p>
-                        <p className="text-[10px] tabular-nums text-muted-foreground">
-                          Budget {formatMoney(g.spendingBudgeted)} spending +{" "}
-                          {formatMoney(g.billsBudgeted)} bills · Spent{" "}
-                          {formatMoney(g.spendingSpent)} spending +{" "}
-                          {formatMoney(g.billsSpent)} bills
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+              <BudgetTotals rows={budgetChart} />
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {budgetChart.map((g, i) => (
+                  <BudgetTile key={g.name} group={g} index={i} />
+                ))}
               </div>
+              <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+                Tap a category for the spending / bills split
+              </p>
             </CardContent>
           </Card>
         )}
+
 
 
 
