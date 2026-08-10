@@ -1280,3 +1280,36 @@ repeated institution name, and capturing merchants at entry time builds the data
 needed for a later spending-by-institution view without a schema change.
 
 Status: Decided 2026-08-11. Implemented.
+
+## ADR-051: Stranded debt payments are detected by balance, not bookkeeping
+Decision: A debt stops being flagged as "stranded" once its balance has already
+come down by at least everything ever cleared against it, or once the debt row
+was updated after the newest cleared ledger row.
+
+Reason: The old check only looked at `cycle_paid_to_date`, so a payment repaired
+by hand (balance corrected, cycle columns untouched) kept showing the repair
+card forever.
+
+Status: Decided 2026-08-12. Implemented.
+
+## ADR-052: Invoice number field and auto-composed invoice names
+Decision: Debts gain `invoice_number`. When the type is Invoice and the name has
+not been typed by hand, the name auto-composes as "<Institution> - <Invoice
+number>" and updates as either input changes. Typing in the name field (or
+editing an existing debt) stops auto-naming permanently.
+
+Reason: Invoices are identified by issuer + number; typing that twice is busywork,
+but the name must still be freely editable.
+
+Status: Decided 2026-08-12. Implemented.
+
+## ADR-053: Transactions carry an institution (place)
+Decision: `transactions.institution_id` records where money was spent. Add
+Transaction suggests matching places as you type the description, one tap links
+the entry, and an unknown place can still be saved inline (auto-favicon) and is
+linked immediately. Writes tolerate the column being absent.
+
+Reason: Groundwork for a "spending by place" view, captured at entry time without
+slowing the quick-add flow.
+
+Status: Decided 2026-08-12. Implemented (view pending).

@@ -81,5 +81,14 @@ with check (exists (select 1 from public.household_members m
 - [x] Phase 9 part 2 (visual): institution logos on Bills/Debts/Accounts,
       graphical Budget vs Actual + Spending, More as an icon grid, visual
       category rows and inline merchant creation on Add Transaction — done 2026-08-11.
-- [ ] Give transactions an `institution_id` so merchant capture can power a
-      "spending by institution" view
+- [x] Give transactions an `institution_id` so merchant capture can power a
+      "spending by institution" view — done 2026-08-12 (ADR-053).
+
+## Phase 10 (2026-08-12)
+- [x] Edit/correct arrears on existing bills and debts (PastDueEditor in detail views)
+- [x] ADR-052 invoice number + auto-composed invoice name
+- [x] ADR-051 smarter stranded-debt detection
+- [x] ADR-053 merchant suggestions + institution link on Add Transaction
+- [ ] "Spending by place" screen (bars per institution)
+- [ ] Income source cards + detail route (pay history, YTD/average, split editor)
+- [ ] Run the Phase 10 migration in Supabase (docs/SCHEMA.md)

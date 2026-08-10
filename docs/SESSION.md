@@ -80,3 +80,22 @@
 - The ADR-048/049 migration in docs/SCHEMA.md must still be run in Supabase.
 - Merchant capture creates the institution only; transactions still have no
   `institution_id` link.
+
+## 2026-08-12 — Phase 10 part 1 (arrears editing, invoices, merchants)
+
+- Past due editor (ADR-049) is now reachable from both Bill and Debt detail
+  views, so arrears can be added or corrected on existing items.
+- Debts: new Invoice number field; invoice names auto-compose as
+  "<Institution> - <Invoice number>" until the name is typed by hand (ADR-052).
+  Invoice number shows on the debt detail view.
+- Stranded debt repair no longer re-flags debts whose balance already reflects
+  every cleared payment (ADR-051).
+- Add Transaction: typing a description suggests known places as one-tap chips
+  and links `transactions.institution_id`; unknown places are still saved inline
+  with a guessed favicon and linked immediately (ADR-053).
+
+### Known issues
+- The ADR-048/049 and Phase 10 (ADR-052/053) migrations in docs/SCHEMA.md must
+  be run in Supabase; until then invoice numbers and transaction places don't
+  persist.
+- "Spending by place" view and the income-source detail route are still to come.
