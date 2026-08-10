@@ -33,6 +33,10 @@ import { AccountDialog } from "@/components/AccountDialog";
 import type { Institution } from "@/lib/supabase";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { categoryVisual, formatTypeLabel, suggestedLogoUrl } from "@/lib/visual-meta";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ChevronDown } from "lucide-react";
+
 import { formatMoney } from "@/lib/format";
 
 /** Allowed institution_type values (no schema constraint — UI list only). */
