@@ -151,32 +151,52 @@ export function InstitutionDialog({
           </div>
           <div>
             <Label>Categories</Label>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {categories.length === 0 && (
-                <p className="text-sm text-muted-foreground">No categories yet.</p>
-              )}
-              {categories.map((c) => {
-                const on = catIds.includes(c.id);
-                const visual = categoryVisual(c);
-                return (
-                  <Button
-                    key={c.id}
-                    type="button"
-                    size="sm"
-                    variant={on ? "default" : "outline"}
-                    className="h-9 gap-1"
-                    onClick={() =>
-                      setCatIds((prev) => (on ? prev.filter((x) => x !== c.id) : [...prev, c.id]))
-                    }
-                  >
-                    <span aria-hidden>{visual.icon}</span>
-                    {c.name}
-                  </Button>
-                );
-              })}
-            </div>
+            {/* Dropdown multi-select — matches the category filter elsewhere. */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="outline" className="mt-1 h-11 w-full justify-between">
+                  <span className="truncate">
+                    {catIds.length === 0
+                      ? "None selected"
+                      : categories
+                          .filter((c) => catIds.includes(c.id))
+                          .map((c) => `${categoryVisual(c).icon} ${c.name}`)
+                          .join(", ")}
+                  </span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="max-h-72 w-[--radix-popover-trigger-width] overflow-y-auto p-2">
+                {categories.length === 0 ? (
+                  <p className="p-2 text-sm text-muted-foreground">No categories yet.</p>
+                ) : (
+                  categories.map((c) => {
+                    const on = catIds.includes(c.id);
+                    const visual = categoryVisual(c);
+                    return (
+                      <label
+                        key={c.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md p-2 text-sm hover:bg-muted"
+                      >
+                        <Checkbox
+                          checked={on}
+                          onCheckedChange={() =>
+                            setCatIds((prev) =>
+                              on ? prev.filter((x) => x !== c.id) : [...prev, c.id],
+                            )
+                          }
+                        />
+                        <span aria-hidden>{visual.icon}</span>
+                        <span className="truncate">{c.name}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </PopoverContent>
+            </Popover>
             <p className="mt-1 text-xs text-muted-foreground">Optional — pick any number.</p>
           </div>
+
           <div>
             <Label>Type</Label>
             <Select value={type || "none"} onValueChange={(v) => setType(v === "none" ? "" : v)}>
