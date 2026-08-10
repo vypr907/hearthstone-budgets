@@ -1024,7 +1024,20 @@ function IncomeAdmin({
                     >
                       Mark received
                     </Button>
+                  ) : !hasDeposits(e.id) ? (
+                    // Older paychecks were marked received before deposits were
+                    // written; the same idempotent flow backfills the ledger.
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 shrink-0"
+                      disabled={markReceived.isPending}
+                      onClick={() => void receive(e)}
+                    >
+                      Post deposits
+                    </Button>
                   ) : null}
+
                 </div>
               ))
           )}
