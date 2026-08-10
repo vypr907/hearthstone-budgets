@@ -1128,7 +1128,8 @@ depending on whether it was actually paid out-of-pocket (this ADR) or just added
 the balance owed (ADR-045) — the household decides per fee, the mechanisms aren't
 mutually exclusive.
 
-Status: Decided 2026-08-10. Not yet implemented.
+Status: Decided 2026-08-10. Implemented 2026-08-11 (fee field in pay-flow.tsx; fee row
+uses the household "Fees" category when one exists, otherwise no category).
 
 ## ADR-047: Marking an Income Event as Received Auto-Creates Split Transactions
 (Extends ADR-024)
