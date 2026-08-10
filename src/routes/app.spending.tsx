@@ -356,6 +356,13 @@ function SpendingPage() {
 
         {groups.length > 0 ? <SpendingSummary totals={totals} /> : null}
 
+        {/* ADR-053: the merchant-level view of the same money. */}
+        <Link to="/app/spending-by-place" className="block">
+          <Button variant="outline" className="h-11 w-full">
+            See spending by place
+          </Button>
+        </Link>
+
 
         {isLoading ? (
           <p className="p-4 text-sm text-muted-foreground">Loading…</p>
