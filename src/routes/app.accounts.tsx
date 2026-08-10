@@ -211,18 +211,20 @@ function AccountsPage() {
               <Card key={a.id}>
                 <CardContent className="p-3">
                   <div className="flex items-start gap-3">
-                    <EmojiIcon name={`${a.name} ${a.account_type ?? ""}`} fallback="🏛️" />
+                    <ObligationIcon
+                      institution={institutionById[a.institution_id ?? ""]}
+                      name={`${a.name} ${a.account_type ?? ""}`}
+                      fallback="🏛️"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{a.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {a.account_type || "Account"}
-                        {a.institution_id && institutionName[a.institution_id]
-                          ? ` · ${institutionName[a.institution_id]}`
-                          : ""}
                         {b?.asOf
                           ? ` · snapshot ${format(new Date(b.asOf), "MMM d")}`
                           : " · starting balance"}
                       </p>
+
                     </div>
                     <Button
                       size="icon"
