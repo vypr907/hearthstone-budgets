@@ -3,6 +3,7 @@ import {
   supabase,
   type Bill,
   type Debt,
+  type DebtAdjustment,
   type Account,
   type AccountBalance,
   type Category,
@@ -484,6 +485,165 @@ export function useDeleteLinkedTransaction() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+    },
+  });
+}
+
+/* ---------------- Split transactions (ADR-044) ---------------- */
+
+export type SplitLine = { categoryId: string | null; amount: number };
+
+/**
+ * ADR-044: write one transactions row per split line, all sharing a single
+ * split_group_id. Editing replaces the whole group (delete + re-insert) rather
+ * than diffing individual lines. Split rows are never linked to a bill, debt
+ * or goal.
+ */
+export function useSaveSplitTransaction() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      /** Existing group to replace; omit to create a new split. */
+      splitGroupId?: string | null;
+      accountId: string;
+      transactionDate: string;
+      description: string | null;
+      status: "pending" | "cleared";
+      lines: SplitLine[];
+    }) => {
+      const groupId = args.splitGroupId ?? crypto.randomUUID();
+      if (args.splitGroupId) {
+        const { error } = await supabase
+          .from("transactions")
+          .delete()
+          .eq("split_group_id", args.splitGroupId);
+        if (error) throw error;
+      }
+      const rows = args.lines.map((l) => ({
+        household_id: householdId,
+        account_id: args.accountId,
+        category_id: l.categoryId,
+        amount: l.amount,
+        status: args.status,
+        description: args.description,
+        transaction_date: args.transactionDate,
+        split_group_id: groupId,
+      }));
+      const { error } = await supabase.from("transactions").insert(rows);
+      if (error) throw error;
+      return groupId;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+      qc.invalidateQueries({ queryKey: ["spending_actuals"] });
+    },
+  });
+}
+
+/** Delete every row of a split group. */
+export function useDeleteSplitTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (splitGroupId: string) => {
+      const { error } = await supabase
+        .from("transactions")
+        .delete()
+        .eq("split_group_id", splitGroupId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+      qc.invalidateQueries({ queryKey: ["spending_actuals"] });
+    },
+  });
+}
+
+/* ---------------- Debt adjustments (ADR-045) ---------------- */
+
+export function useDebtAdjustments() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["debt_adjustments", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<DebtAdjustment[]> => {
+      const { data, error } = await supabase
+        .from("debt_adjustments")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("adjustment_date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as DebtAdjustment[];
+    },
+  });
+}
+
+/**
+ * ADR-045 + ADR-037 ordering: move the debt's remaining_balance first, then
+ * write the adjustment row, so a failed write never leaves a phantom balance.
+ */
+export function useAddDebtAdjustment() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      debt: Debt;
+      amount: number;
+      adjustmentType: string;
+      description: string | null;
+      adjustmentDate: string;
+    }) => {
+      const next = Math.max(
+        0,
+        Number(args.debt.remaining_balance ?? 0) + args.amount,
+      );
+      const { error: debtError } = await supabase
+        .from("debts")
+        .update({ remaining_balance: next })
+        .eq("id", args.debt.id);
+      if (debtError) throw debtError;
+      const { error } = await supabase.from("debt_adjustments").insert({
+        household_id: householdId,
+        debt_id: args.debt.id,
+        amount: args.amount,
+        adjustment_type: args.adjustmentType,
+        description: args.description,
+        adjustment_date: args.adjustmentDate,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["debt_adjustments"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+    },
+  });
+}
+
+/** Repair-delete: reverse the balance change, then drop the adjustment row. */
+export function useDeleteDebtAdjustment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { adjustment: DebtAdjustment; debt: Debt }) => {
+      const next = Math.max(
+        0,
+        Number(args.debt.remaining_balance ?? 0) - Number(args.adjustment.amount ?? 0),
+      );
+      const { error: debtError } = await supabase
+        .from("debts")
+        .update({ remaining_balance: next })
+        .eq("id", args.debt.id);
+      if (debtError) throw debtError;
+      const { error } = await supabase
+        .from("debt_adjustments")
+        .delete()
+        .eq("id", args.adjustment.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["debt_adjustments"] });
       qc.invalidateQueries({ queryKey: ["debts"] });
     },
   });

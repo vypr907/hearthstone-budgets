@@ -8,6 +8,10 @@ import {
   useAccounts,
   useTransactions,
   useDeleteLinkedTransaction,
+  useInstitutions,
+  useDebtAdjustments,
+  useAddDebtAdjustment,
+  useDeleteDebtAdjustment,
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
@@ -48,6 +52,18 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
+import { InstitutionDialog } from "@/components/InstitutionDialog";
+
+/** ADR-045: invoice joins the existing debt_type values. */
+const DEBT_TYPES = ["medical", "credit_card", "loan", "advance", "invoice", "other"];
+const ADD_INSTITUTION = "__add_institution__";
+const ADJUSTMENT_TYPES = [
+  "insurance_covered",
+  "insurance_discount",
+  "late_fee",
+  "nsf_fee",
+  "other",
+];
 import { format } from "date-fns";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
 import { Switch } from "@/components/ui/switch";
@@ -449,6 +465,8 @@ function DebtDetailDialog({
 
           <RecentDebtTransactions debtId={debt.id} />
 
+          <DebtAdjustments debt={debt} />
+
           {debt.date_paid_off && (
             <div>
               <p className="text-xs text-muted-foreground">Date paid off</p>
@@ -485,6 +503,7 @@ function DebtDialog({
 }) {
   const upsert = useUpsertDebt();
   const del = useDeleteDebt();
+  const { data: institutions = [] } = useInstitutions();
   const [name, setName] = useState("");
   const [remaining, setRemaining] = useState("");
   const [rate, setRate] = useState("");
@@ -493,6 +512,8 @@ function DebtDialog({
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [nextDue, setNextDue] = useState("");
   const [debtType, setDebtType] = useState("");
+  const [institutionId, setInstitutionId] = useState("none");
+  const [institutionDialogOpen, setInstitutionDialogOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [deduction, setDeduction] = useState(false);
   const [cycleCount, setCycleCount] = useState("");
@@ -512,6 +533,7 @@ function DebtDialog({
     setCycle((debt?.billing_cycle as BillingCycle) ?? "monthly");
     setNextDue(debt?.next_due_date ? debt.next_due_date.slice(0, 10) : "");
     setDebtType(debt?.debt_type ?? "");
+    setInstitutionId(debt?.institution_id ?? "none");
     setNotes(debt?.notes ?? "");
     setDeduction(debt?.is_paycheck_deduction === true);
     const derived = deriveCustomInterval(debt?.cycle_interval_days);
@@ -542,6 +564,7 @@ function DebtDialog({
         cycle_interval_days: intervalDays,
         next_due_date: cycle === "monthly" ? debt?.next_due_date ?? null : nextDue || null,
         debt_type: debtType || null,
+        institution_id: institutionId === "none" ? null : institutionId,
         notes: notes || null,
         is_paycheck_deduction: deduction,
       });
@@ -577,12 +600,45 @@ function DebtDialog({
           </div>
           <div>
             <Label>Type</Label>
-            <Input
-              placeholder="Credit card, loan…"
-              value={debtType}
-              onChange={(e) => setDebtType(e.target.value)}
-              className="h-11"
-            />
+            <Select value={debtType || "none"} onValueChange={(v) => setDebtType(v === "none" ? "" : v)}>
+              <SelectTrigger className="h-11">
+                <SelectValue placeholder="Pick a type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unset</SelectItem>
+                {DEBT_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {formatTypeLabel(t)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Institution</Label>
+            <Select
+              value={institutionId}
+              onValueChange={(v) => {
+                if (v === ADD_INSTITUTION) {
+                  setInstitutionDialogOpen(true);
+                  return;
+                }
+                setInstitutionId(v);
+              }}
+            >
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {institutions.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.name}
+                  </SelectItem>
+                ))}
+                <SelectItem value={ADD_INSTITUTION}>+ Add new institution</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -688,6 +744,12 @@ function DebtDialog({
             {isEdit ? "Save" : "Add"}
           </Button>
         </DialogFooter>
+        {/* Inline institution creation keeps the in-progress debt form intact. */}
+        <InstitutionDialog
+          institution={institutionDialogOpen ? {} : null}
+          onClose={() => setInstitutionDialogOpen(false)}
+          onSaved={(id) => setInstitutionId(id)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -750,6 +812,163 @@ function RecentDebtTransactions({ debtId }: { debtId: string }) {
         </div>
       )}
 
+    </div>
+  );
+}
+
+
+/**
+ * ADR-045: non-payment changes to what a debt owes (insurance coverage,
+ * discounts, late/NSF fees). Adjustments only move remaining_balance — they
+ * never touch transactions or account balances.
+ */
+function DebtAdjustments({ debt }: { debt: Debt }) {
+  const { data: allAdjustments = [] } = useDebtAdjustments();
+  const adjustments = useMemo(
+    () => allAdjustments.filter((a) => a.debt_id === debt.id),
+    [allAdjustments, debt.id],
+  );
+  const add = useAddDebtAdjustment();
+  const remove = useDeleteDebtAdjustment();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [type, setType] = useState("insurance_covered");
+  const [description, setDescription] = useState("");
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  async function save() {
+    const value = Number(amount);
+    if (!value) {
+      toast.error("Enter a non-zero amount");
+      return;
+    }
+    try {
+      await add.mutateAsync({
+        debt,
+        amount: value,
+        adjustmentType: type,
+        description: description || null,
+        adjustmentDate: date,
+      });
+      toast.success("Adjustment saved");
+      setOpen(false);
+      setAmount("");
+      setDescription("");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Adjustments
+        </p>
+        <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(true)}>
+          <Plus className="mr-1 h-4 w-4" /> Add
+        </Button>
+      </div>
+      {adjustments.length === 0 ? (
+        <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+          No adjustments yet.
+        </p>
+      ) : (
+        <div className="mt-1 divide-y divide-border/50 rounded-md border">
+          {adjustments.map((a) => (
+            <div key={a.id} className="flex items-center gap-2 px-2 py-2 text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="truncate">
+                  {formatTypeLabel(a.adjustment_type ?? "other")}
+                  {a.description ? ` · ${a.description}` : ""}
+                </p>
+                <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
+              </div>
+              <span className="shrink-0 tabular-nums font-medium">
+                {Number(a.amount) > 0 ? "+" : ""}
+                {formatMoney(Number(a.amount))}
+              </span>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0"
+                onClick={async () => {
+                  try {
+                    await remove.mutateAsync({ adjustment: a, debt });
+                    toast.success("Adjustment removed");
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add adjustment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Amount</Label>
+              <Input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="h-11"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Negative reduces what's owed (insurance, discount); positive increases it
+                (late or NSF fee).
+              </p>
+            </div>
+            <div>
+              <Label>Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ADJUSTMENT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {formatTypeLabel(t)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="h-11"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="h-11 w-full" onClick={save} disabled={add.isPending}>
+              Save adjustment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

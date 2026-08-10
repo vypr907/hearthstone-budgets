@@ -24,8 +24,17 @@ import {
   useCategories,
   useDebts,
   useInstitutions,
+  useSaveSplitTransaction,
   useUpsertTransaction,
 } from "@/lib/data-hooks";
+import { Switch } from "@/components/ui/switch";
+import {
+  SplitLinesEditor,
+  emptySplitRow,
+  splitRowsTotal,
+  NO_SPLIT_CATEGORY,
+  type SplitRow,
+} from "@/components/SplitLinesEditor";
 import { accountLabel } from "@/lib/format";
 import { applyClearedPayment, toPayable } from "@/lib/payments";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,6 +59,7 @@ export function AddTransactionFab() {
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
   const save = useUpsertTransaction();
+  const saveSplit = useSaveSplitTransaction();
   const qc = useQueryClient();
 
   const [accountId, setAccountId] = useState("");
@@ -60,6 +70,9 @@ export function AddTransactionFab() {
   const [link, setLink] = useState(NO_LINK);
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
+  /** ADR-044: split entries carry per-category lines instead of one category. */
+  const [isSplit, setIsSplit] = useState(false);
+  const [splitRows, setSplitRows] = useState<SplitRow[]>([emptySplitRow()]);
 
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
@@ -80,6 +93,8 @@ export function AddTransactionFab() {
     setCategoryId(NO_CATEGORY);
     setDescription("");
     setLink(NO_LINK);
+    setIsSplit(false);
+    setSplitRows([emptySplitRow()]);
   }
 
   async function submit() {
@@ -90,6 +105,36 @@ export function AddTransactionFab() {
     const n = Number(amount);
     if (!amount || !Number.isFinite(n) || n === 0) {
       toast.error("Enter an amount");
+      return;
+    }
+    if (isSplit) {
+      const lines = splitRows.filter((r) => Number(r.amount));
+      if (lines.length < 2) {
+        toast.error("Add at least two split lines");
+        return;
+      }
+      if (Math.abs(splitRowsTotal(lines) - n) > 0.005) {
+        toast.error("Split lines must add up to the total amount");
+        return;
+      }
+      try {
+        await saveSplit.mutateAsync({
+          accountId,
+          transactionDate: todayISO(),
+          description: description.trim() || null,
+          status: "cleared",
+          lines: lines.map((r) => ({
+            categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
+            // Positive input means money out, same as the single-row flow.
+            amount: n > 0 ? -Number(r.amount) : Number(r.amount),
+          })),
+        });
+        toast.success("Split transaction added");
+        reset();
+        setOpen(false);
+      } catch (e) {
+        toast.error((e as Error).message);
+      }
       return;
     }
     const [linkKind, linkId] = link === NO_LINK ? [null, null] : link.split(":");
@@ -174,6 +219,24 @@ export function AddTransactionFab() {
               </p>
             </div>
 
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div className="pr-3">
+                <Label htmlFor="tx-split">Split into multiple categories</Label>
+                <p className="text-xs text-muted-foreground">
+                  One entry, several category lines that must add up to the total.
+                </p>
+              </div>
+              <Switch id="tx-split" checked={isSplit} onCheckedChange={setIsSplit} />
+            </div>
+
+            {isSplit ? (
+              <SplitLinesEditor
+                rows={splitRows}
+                categories={sortedCategories}
+                total={Number(amount) || 0}
+                onChange={setSplitRows}
+              />
+            ) : (
             <div className="space-y-2">
               <Label>Category (optional)</Label>
               <Select value={categoryId} onValueChange={setCategoryId}>
@@ -191,7 +254,9 @@ export function AddTransactionFab() {
                 </SelectContent>
               </Select>
             </div>
+            )}
 
+            {!isSplit ? (
             <div className="space-y-2">
               <Label>Link to bill/debt (optional)</Label>
               <Select value={link} onValueChange={setLink}>
@@ -216,6 +281,7 @@ export function AddTransactionFab() {
                 Linked entries count toward that bill or debt's current cycle.
               </p>
             </div>
+            ) : null}
 
             <div className="space-y-2">
               <Label htmlFor="tx-desc">Description</Label>
@@ -229,8 +295,12 @@ export function AddTransactionFab() {
             </div>
           </div>
           <DialogFooter>
-            <Button className="h-12 w-full" disabled={save.isPending} onClick={submit}>
-              Save transaction
+            <Button
+              className="h-12 w-full"
+              disabled={save.isPending || saveSplit.isPending}
+              onClick={submit}
+            >
+              {isSplit ? "Save split transaction" : "Save transaction"}
             </Button>
           </DialogFooter>
         </DialogContent>
