@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import {
   monthKey,
@@ -701,5 +701,91 @@ function Dashboard() {
         )}
       </div>
     </>
+  );
+}
+
+type BudgetGroup = {
+  name: string;
+  budgeted: number;
+  spendingBudgeted: number;
+  billsBudgeted: number;
+  actual: number;
+  spendingSpent: number;
+  billsSpent: number;
+};
+
+/** Single headline bar for the whole month's budget load. */
+function BudgetTotals({ rows }: { rows: BudgetGroup[] }) {
+  const budgeted = rows.reduce((s, r) => s + r.budgeted, 0);
+  const actual = rows.reduce((s, r) => s + r.actual, 0);
+  const pct = budgeted > 0 ? Math.min(100, (actual / budgeted) * 100) : actual > 0 ? 100 : 0;
+  const over = budgeted > 0 && actual > budgeted;
+  return (
+    <div className="mt-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-3xl font-extrabold tabular-nums">{formatMoney(actual)}</p>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          of {formatMoney(budgeted)}
+        </p>
+      </div>
+      <ItemBar
+        value={pct}
+        color={over ? "var(--destructive)" : "var(--brand)"}
+        className="mt-2"
+      />
+    </div>
+  );
+}
+
+/** Compact tile per parent category — ring first, numbers on tap. */
+function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number }) {
+  const [open, setOpen] = useState(false);
+  const pct = g.budgeted
+    ? Math.min(100, (g.actual / g.budgeted) * 100)
+    : g.actual > 0
+      ? 100
+      : 0;
+  const over = g.budgeted > 0 && g.actual > g.budgeted;
+  const color = over ? "var(--destructive)" : itemColor(i);
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      className="rounded-[14px] bg-muted/40 p-3 text-left active:bg-muted"
+      aria-expanded={open}
+    >
+      <div className="flex items-center gap-2">
+        <ProgressRing value={pct} color={color} size={44} />
+        <div className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1 text-sm font-medium">
+            <span aria-hidden>{emojiFor(g.name)}</span>
+            <span className="truncate">{g.name}</span>
+          </span>
+          <span
+            className={
+              over
+                ? "text-[10px] uppercase tracking-widest text-destructive"
+                : "text-[10px] uppercase tracking-widest text-muted-foreground"
+            }
+          >
+            {over
+              ? `${formatMoney(g.actual - g.budgeted)} over`
+              : `${formatMoney(g.budgeted - g.actual)} left`}
+          </span>
+        </div>
+      </div>
+      {open ? (
+        <div className="mt-2 space-y-0.5 text-[10px] tabular-nums text-muted-foreground">
+          <p>
+            Budget {formatMoney(g.spendingBudgeted)} spending +{" "}
+            {formatMoney(g.billsBudgeted)} bills
+          </p>
+          <p>
+            Spent {formatMoney(g.spendingSpent)} spending + {formatMoney(g.billsSpent)}{" "}
+            bills
+          </p>
+        </div>
+      ) : null}
+    </button>
   );
 }
