@@ -326,3 +326,30 @@ export function useSetAllocation() {
     },
   });
 }
+
+/** ADR-054: deposit splits are editable from the income source detail view. */
+export function useUpsertIncomeSourceSplit(sourceId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (row: Partial<IncomeSourceSplit> & { income_source_id: string }) => {
+      const { error } = await supabase.from("income_source_splits").upsert(row);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["income_source_splits", sourceId] });
+    },
+  });
+}
+
+export function useDeleteIncomeSourceSplit(sourceId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("income_source_splits").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["income_source_splits", sourceId] });
+    },
+  });
+}
