@@ -12,6 +12,7 @@ import {
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import { computeBalances } from "@/lib/balances";
+import { groupLedgerRows } from "@/lib/split-groups";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
