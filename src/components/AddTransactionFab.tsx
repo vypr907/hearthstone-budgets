@@ -240,20 +240,36 @@ export function AddTransactionFab() {
             <div className="space-y-2">
               <Label>Category (optional)</Label>
               <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger className="h-12">
+                <SelectTrigger className="h-12 text-base">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_CATEGORY}>No category</SelectItem>
-                  {sortedCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                      {c.parent_category ? ` · ${c.parent_category}` : ""}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value={NO_CATEGORY} className="py-3 text-base">
+                    No category
+                  </SelectItem>
+                  {sortedCategories.map((c) => {
+                    const v = categoryVisual(c);
+                    return (
+                      <SelectItem key={c.id} value={c.id} className="py-3 text-base">
+                        <span className="flex items-center gap-2">
+                          <span
+                            aria-hidden
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded-[10px] text-base"
+                            style={{ background: `${v.color}22` }}
+                          >
+                            {v.icon}
+                          </span>
+                          <span className="font-medium" style={{ color: v.color }}>
+                            {c.name}
+                          </span>
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
+
             )}
 
             {!isSplit ? (
