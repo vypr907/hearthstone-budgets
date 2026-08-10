@@ -25,6 +25,7 @@ import { RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
 import { StatusBadge } from "@/components/detail";
+import { EmptyState } from "@/components/EmptyState";
 
 export const Route = createFileRoute("/app/everything")({
   head: () => ({
