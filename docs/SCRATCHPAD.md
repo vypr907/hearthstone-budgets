@@ -62,3 +62,4 @@ Show me the diffs for all three files before finalizing.
 - on bills detail view, no way to add fees/adjustments. need a way to separate fees/adjustments/etc that affect the balance and those that don't. Example, a late fee on a bill, adds to the balance. But a processing fee for a rent payment doesn't affect the balance at all
 - when submitting a payment, any click on the "how much are you paying now?" screen opens the bill detail view. Have to use tab in order to enter values.
 - also, when paying an overdue bill, it doesn't seem to count against the overdue amount.
+- need more sort/group/filter options for Transactions, also on Dashboard and Spending, should be a way to view all transactions for that Category/Budget Item
