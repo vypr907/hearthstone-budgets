@@ -133,3 +133,16 @@ export function suggestedLogoUrl(loginUrl: string | null | undefined) {
   if (!domain) return null;
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
 }
+
+/**
+ * Best-effort domain guess for a merchant typed into the transaction form —
+ * "Bob's Burgers" → "bobsburgers.com". Only used to pre-fill a suggested logo,
+ * which the user can clear or correct on the institution afterwards.
+ */
+export function guessMerchantDomain(name: string | null | undefined) {
+  const slug = (name ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  if (slug.length < 3) return null;
+  return `${slug}.com`;
+}
