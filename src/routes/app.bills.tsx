@@ -401,6 +401,10 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   const [cycleCount, setCycleCount] = useState("");
   const [cycleUnit, setCycleUnit] = useState<CycleUnit>("days");
   const [institutionDialogOpen, setInstitutionDialogOpen] = useState(false);
+  // ADR-049: past-due amount carried in from before tracking started.
+  const [openingArrears, setOpeningArrears] = useState("");
+  const [arrearsAsOf, setArrearsAsOf] = useState("");
+
 
   const open = bill !== null;
   const isEdit = !!bill?.id;
@@ -418,6 +422,9 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setManual(bill?.manual_or_auto ?? "none");
     setNotes(bill?.notes ?? "");
     setVariable(!!bill?.is_variable_amount);
+    setOpeningArrears(bill?.opening_arrears != null ? String(bill.opening_arrears) : "");
+    setArrearsAsOf(bill?.arrears_as_of ? bill.arrears_as_of.slice(0, 10) : "");
+
     const derived = deriveCustomInterval(bill?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
@@ -447,6 +454,9 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         manual_or_auto: manual === "none" ? null : manual.trim().toLowerCase(),
         notes: notes || null,
         is_variable_amount: variable,
+        opening_arrears: openingArrears ? Number(openingArrears) : 0,
+        arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
+
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
       onClose();
@@ -539,6 +549,36 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               onUnitChange={setCycleUnit}
             />
           ) : null}
+          {/* ADR-049: money already past due before Hearthstone tracked this. */}
+          <div className="grid grid-cols-2 gap-3 rounded-md border p-3">
+            <div className="col-span-2">
+              <Label>Past due carried in</Label>
+              <p className="text-xs text-muted-foreground">
+                Amount already overdue before tracking started. Missed cycles after the
+                as-of date are counted automatically.
+              </p>
+            </div>
+            <div>
+              <Label>Opening arrears</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={openingArrears}
+                onChange={(e) => setOpeningArrears(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <div>
+              <Label>As of</Label>
+              <Input
+                type="date"
+                value={arrearsAsOf}
+                onChange={(e) => setArrearsAsOf(e.target.value)}
+                className="h-11"
+              />
+            </div>
+          </div>
+
           <div>
             <Label>Category</Label>
             <Select value={categoryId} onValueChange={setCategoryId}>

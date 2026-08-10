@@ -86,7 +86,10 @@ const CYCLES: BillingCycle[] = [
   "bimonthly",
   "annually",
   "custom",
+  // ADR-048: invoices and other non-recurring charges.
+  "one_time",
 ];
+
 
 export const Route = createFileRoute("/app/debts")({
   head: () => ({
@@ -386,6 +389,22 @@ function DebtDetailDialog({
             <DetailMoney label="Minimum payment" value={debt.minimum_payment} />
             <DetailMoney label="Paid this cycle" value={Number(debt.cycle_paid_to_date ?? 0)} />
             <DetailMoney label="Still owed this cycle" value={debtRemainingOwed(debt)} />
+            {/* ADR-048: payment-plan shape, only meaningful when one is set. */}
+            {debt.plan_payment_count != null ? (
+              <DetailItem
+                label="Plan payments"
+                value={`${debt.plan_payment_count} payment${
+                  debt.plan_payment_count === 1 ? "" : "s"
+                }`}
+              />
+            ) : null}
+            {debt.plan_final_payment != null ? (
+              <DetailMoney label="Final payment" value={debt.plan_final_payment} />
+            ) : null}
+            {Number(debt.opening_arrears ?? 0) > 0 ? (
+              <DetailMoney label="Opening arrears" value={debt.opening_arrears} />
+            ) : null}
+
             <DetailItem
               label="Interest rate"
               value={
@@ -502,6 +521,7 @@ function DebtDialog({
   const { data: institutions = [] } = useInstitutions();
   const [name, setName] = useState("");
   const [remaining, setRemaining] = useState("");
+  const [original, setOriginal] = useState("");
   const [rate, setRate] = useState("");
   const [minPay, setMinPay] = useState("");
   const [dueDay, setDueDay] = useState("");
@@ -514,6 +534,15 @@ function DebtDialog({
   const [deduction, setDeduction] = useState(false);
   const [cycleCount, setCycleCount] = useState("");
   const [cycleUnit, setCycleUnit] = useState<CycleUnit>("days");
+  // ADR-048: invoice payment plans.
+  const [onPlan, setOnPlan] = useState(false);
+  const [planCount, setPlanCount] = useState("");
+  const [planFinal, setPlanFinal] = useState("");
+  // ADR-049: past-due amount carried in from before tracking started.
+  const [openingArrears, setOpeningArrears] = useState("");
+  const [arrearsAsOf, setArrearsAsOf] = useState("");
+
+  const isInvoice = debtType === "invoice";
 
   const open = debt !== null;
   const isEdit = !!debt?.id;
@@ -523,6 +552,7 @@ function DebtDialog({
     setLastKey(key);
     setName(debt?.name ?? "");
     setRemaining(debt?.remaining_balance != null ? String(debt.remaining_balance) : "");
+    setOriginal(debt?.starting_balance != null ? String(debt.starting_balance) : "");
     setRate(debt?.interest_rate != null ? String(debt.interest_rate) : "");
     setMinPay(debt?.minimum_payment != null ? String(debt.minimum_payment) : "");
     setDueDay(debt?.due_day != null ? String(debt.due_day) : "");
@@ -532,11 +562,23 @@ function DebtDialog({
     setInstitutionId(debt?.institution_id ?? "none");
     setNotes(debt?.notes ?? "");
     setDeduction(debt?.is_paycheck_deduction === true);
+    setOnPlan(debt?.on_payment_plan === true);
+    setPlanCount(debt?.plan_payment_count != null ? String(debt.plan_payment_count) : "");
+    setPlanFinal(debt?.plan_final_payment != null ? String(debt.plan_final_payment) : "");
+    setOpeningArrears(debt?.opening_arrears != null ? String(debt.opening_arrears) : "");
+    setArrearsAsOf(debt?.arrears_as_of ? debt.arrears_as_of.slice(0, 10) : "");
     const derived = deriveCustomInterval(debt?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
   }
   if (!open && lastKey !== "") setLastKey("");
+
+  /** Invoices default to a single dated charge unless put on a payment plan. */
+  function chooseType(v: string) {
+    const next = v === "none" ? "" : v;
+    setDebtType(next);
+    if (next === "invoice" && !isEdit && cycle === "monthly") setCycle("one_time");
+  }
 
   async function save() {
     if (!name.trim()) {
@@ -548,21 +590,35 @@ function DebtDialog({
       toast.error("Enter how often this custom debt repeats");
       return;
     }
+    const remainingNum = remaining ? Number(remaining) : null;
+    const originalNum = original ? Number(original) : null;
+    // The debts table requires starting_balance; fall back to what's owed today
+    // so a quick invoice entry never trips the not-null constraint.
+    const startingBalance =
+      originalNum ?? remainingNum ?? Number(debt?.starting_balance ?? 0) ?? 0;
+    // A one-time charge has no due day — it has a real date.
+    const dated = cycle !== "monthly";
     try {
       await upsert.mutateAsync({
         id: debt?.id,
         name: name.trim(),
-        remaining_balance: remaining ? Number(remaining) : null,
+        remaining_balance: remainingNum,
+        starting_balance: startingBalance,
         interest_rate: rate ? Number(rate) : null,
         minimum_payment: minPay ? Number(minPay) : null,
-        due_day: cycle === "monthly" ? (dueDay ? Number(dueDay) : null) : debt?.due_day ?? null,
+        due_day: dated ? null : dueDay ? Number(dueDay) : null,
         billing_cycle: cycle.trim().toLowerCase() as BillingCycle,
         cycle_interval_days: intervalDays,
-        next_due_date: cycle === "monthly" ? debt?.next_due_date ?? null : nextDue || null,
+        next_due_date: dated ? nextDue || null : debt?.next_due_date ?? null,
         debt_type: debtType || null,
         institution_id: institutionId === "none" ? null : institutionId,
         notes: notes || null,
         is_paycheck_deduction: deduction,
+        on_payment_plan: onPlan,
+        plan_payment_count: onPlan && planCount ? Number(planCount) : null,
+        plan_final_payment: onPlan && planFinal ? Number(planFinal) : null,
+        opening_arrears: openingArrears ? Number(openingArrears) : 0,
+        arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
       });
       toast.success(isEdit ? "Debt updated" : "Debt added");
       onClose();
@@ -570,6 +626,7 @@ function DebtDialog({
       toast.error((e as Error).message);
     }
   }
+
 
   async function handleDelete() {
     if (!debt?.id) return;
@@ -596,7 +653,7 @@ function DebtDialog({
           </div>
           <div>
             <Label>Type</Label>
-            <Select value={debtType || "none"} onValueChange={(v) => setDebtType(v === "none" ? "" : v)}>
+            <Select value={debtType || "none"} onValueChange={chooseType}>
               <SelectTrigger className="h-11">
                 <SelectValue placeholder="Pick a type" />
               </SelectTrigger>
@@ -638,12 +695,23 @@ function DebtDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Remaining balance</Label>
+              <Label>{isInvoice ? "Amount still owed" : "Remaining balance"}</Label>
               <Input
                 type="number"
                 step="0.01"
                 value={remaining}
                 onChange={(e) => setRemaining(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <div>
+              <Label>{isInvoice ? "Original invoice amount" : "Starting balance"}</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Same as owed"
+                value={original}
+                onChange={(e) => setOriginal(e.target.value)}
                 className="h-11"
               />
             </div>
@@ -658,7 +726,7 @@ function DebtDialog({
               />
             </div>
             <div>
-              <Label>Minimum payment</Label>
+              <Label>{onPlan ? "Payment amount" : "Minimum payment"}</Label>
               <Input
                 type="number"
                 step="0.01"
@@ -681,7 +749,7 @@ function DebtDialog({
               </div>
             ) : (
               <div>
-                <Label>Next due date</Label>
+                <Label>{cycle === "one_time" ? "Due date" : "Next due date"}</Label>
                 <Input
                   type="date"
                   value={nextDue}
@@ -705,6 +773,11 @@ function DebtDialog({
                 ))}
               </SelectContent>
             </Select>
+            {cycle === "one_time" ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                One-time charges don't roll into a next cycle — clearing the balance closes them out.
+              </p>
+            ) : null}
           </div>
           {cycle === "custom" ? (
             <CustomCycleFields
@@ -714,6 +787,76 @@ function DebtDialog({
               onUnitChange={setCycleUnit}
             />
           ) : null}
+
+          {/* ADR-048: a big invoice can be broken into a payment plan. */}
+          <div className="space-y-3 rounded-md border p-3">
+            <div className="flex items-center justify-between">
+              <div className="pr-3">
+                <Label htmlFor="d-plan">On a payment plan</Label>
+                <p className="text-xs text-muted-foreground">
+                  Pay this off in instalments instead of one lump sum.
+                </p>
+              </div>
+              <Switch id="d-plan" checked={onPlan} onCheckedChange={setOnPlan} />
+            </div>
+            {onPlan ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Number of payments</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Unknown"
+                    value={planCount}
+                    onChange={(e) => setPlanCount(e.target.value)}
+                    className="h-11"
+                  />
+                </div>
+                <div>
+                  <Label>Final payment</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="Same amount"
+                    value={planFinal}
+                    onChange={(e) => setPlanFinal(e.target.value)}
+                    className="h-11"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* ADR-049: money already past due before Hearthstone tracked this. */}
+          <div className="grid grid-cols-2 gap-3 rounded-md border p-3">
+            <div className="col-span-2">
+              <Label>Past due carried in</Label>
+              <p className="text-xs text-muted-foreground">
+                Amount already overdue before tracking started. Missed cycles after the
+                as-of date are counted automatically.
+              </p>
+            </div>
+            <div>
+              <Label>Opening arrears</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={openingArrears}
+                onChange={(e) => setOpeningArrears(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <div>
+              <Label>As of</Label>
+              <Input
+                type="date"
+                value={arrearsAsOf}
+                onChange={(e) => setArrearsAsOf(e.target.value)}
+                className="h-11"
+              />
+            </div>
+          </div>
+
           <div className="flex items-center justify-between rounded-md border p-3">
             <div className="pr-3">
               <Label htmlFor="d-deduction">Paid via paycheck/HSA deduction</Label>

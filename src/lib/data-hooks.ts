@@ -137,31 +137,40 @@ export function useInvalidate() {
   return (keys: string[]) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 }
 
+/**
+ * ADR-048/ADR-049 ship columns the household database may not have yet
+ * (invoice payment plans, opening arrears). PostgREST answers an unknown
+ * column with "Could not find the 'x' column"; rather than failing the whole
+ * save, drop that field and retry so the rest of the edit still lands.
+ */
+const MISSING_COLUMN = /Could not find the '([^']+)' column/;
+
+async function saveWithOptionalColumns<T>(
+  payload: Record<string, unknown>,
+  run: (p: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>,
+): Promise<T> {
+  let body = { ...payload };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const { data, error } = await run(body);
+    if (!error) return data as T;
+    const missing = MISSING_COLUMN.exec(error.message ?? "")?.[1];
+    if (!missing || !(missing in body)) throw error;
+    delete body[missing];
+  }
+  throw new Error("Could not save this record.");
+}
+
 export function useUpsertBill() {
   const { householdId } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (bill: Partial<Bill> & { name: string; amount: number }) => {
-      const payload = { ...bill, household_id: householdId };
-      let saved: Bill;
-      if (bill.id) {
-        const { data, error } = await supabase
-          .from("bills")
-          .update(payload)
-          .eq("id", bill.id)
-          .select("*")
-          .single();
-        if (error) throw error;
-        saved = data as Bill;
-      } else {
-        const { data, error } = await supabase
-          .from("bills")
-          .insert(payload)
-          .select("*")
-          .single();
-        if (error) throw error;
-        saved = data as Bill;
-      }
+      const payload = { ...bill, household_id: householdId } as Record<string, unknown>;
+      const saved = await saveWithOptionalColumns<Bill>(payload, async (p) =>
+        bill.id
+          ? await supabase.from("bills").update(p).eq("id", bill.id!).select("*").single()
+          : await supabase.from("bills").insert(p).select("*").single(),
+      );
 
       // ADR-033: non-monthly bills get exactly one auto-created envelope goal.
       if (needsEnvelope(saved.billing_cycle)) {
@@ -207,18 +216,17 @@ export function useUpsertDebt() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (debt: Partial<Debt> & { name: string }) => {
-      const payload = { ...debt, household_id: householdId };
-      if (debt.id) {
-        const { error } = await supabase.from("debts").update(payload).eq("id", debt.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("debts").insert(payload);
-        if (error) throw error;
-      }
+      const payload = { ...debt, household_id: householdId } as Record<string, unknown>;
+      await saveWithOptionalColumns<Debt>(payload, async (p) =>
+        debt.id
+          ? await supabase.from("debts").update(p).eq("id", debt.id!).select("*").single()
+          : await supabase.from("debts").insert(p).select("*").single(),
+      );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
   });
 }
+
 
 export function useDeleteDebt() {
   const qc = useQueryClient();

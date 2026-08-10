@@ -18,7 +18,10 @@ export type BillingCycle =
   | "quarterly"
   | "bimonthly"
   | "annually"
-  | "custom";
+  | "custom"
+  /** ADR-048: a non-recurring charge (invoice) with a single due date. */
+  | "one_time";
+
 
 
 export type Bill = {
@@ -42,6 +45,11 @@ export type Bill = {
   cycle_amount_due?: number | null;
   /** Total paid so far against the current cycle. */
   cycle_paid_to_date?: number | null;
+  /** ADR-049: past-due amount carried in from before tracking started. */
+  opening_arrears?: number | null;
+  /** ADR-049: date the opening arrears figure was accurate as of. */
+  arrears_as_of?: string | null;
+
   created_at: string;
   updated_at: string;
 };
@@ -110,6 +118,15 @@ export type Debt = {
   is_paycheck_deduction?: boolean | null;
   /** ADR-035: paid so far toward the current cycle's minimum payment. */
   cycle_paid_to_date?: number | null;
+  /** ADR-048: number of payments in the plan, when known. */
+  plan_payment_count?: number | null;
+  /** ADR-048: final payment amount when it differs from the regular payment. */
+  plan_final_payment?: number | null;
+  /** ADR-049: past-due amount carried in from before tracking started. */
+  opening_arrears?: number | null;
+  /** ADR-049: date the opening arrears figure was accurate as of. */
+  arrears_as_of?: string | null;
+
   created_at: string;
   updated_at: string;
 };
