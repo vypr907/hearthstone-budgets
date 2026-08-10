@@ -65,6 +65,7 @@ import {
   useMarkIncomeReceived,
   useUpsertIncomeSource,
 } from "@/lib/income-hooks";
+import { supabase } from "@/lib/supabase";
 import {
   eventAmount,
   eventDate,
@@ -79,6 +80,28 @@ import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PAYCHECK_DEDUCTION_ICON, categoryVisual } from "@/lib/visual-meta";
 import { Plus } from "lucide-react";
+
+/**
+ * ADR-047 follow-up: returns true when the income source has at least one
+ * split row that resolves to a deposit (a fixed row with an account + amount,
+ * or a remainder row with an account). Used to decide whether "Mark received"
+ * can stay one-tap or needs an account prompt.
+ */
+async function hasUsableSplits(incomeSourceId: string | null | undefined) {
+  if (!incomeSourceId) return false;
+  const { data, error } = await supabase
+    .from("income_source_splits")
+    .select("split_type,amount,account_id")
+    .eq("income_source_id", incomeSourceId);
+  if (error) return false;
+  for (const s of data ?? []) {
+    const isRemainder = (s.split_type ?? "fixed").toLowerCase() === "remainder";
+    const hasAccount = !!s.account_id;
+    const hasAmount = isRemainder ? true : Number(s.amount ?? 0) > 0;
+    if (hasAccount && hasAmount) return true;
+  }
+  return false;
+}
 
 export const Route = createFileRoute("/app/paycheck")({
   head: () => ({
@@ -743,6 +766,7 @@ function IncomeAdmin({
   const upsertEvent = useUpsertIncomeEvent();
   const deleteEvent = useDeleteIncomeEvent();
   const markReceived = useMarkIncomeReceived();
+  const { data: accounts = [] } = useAccounts();
 
   const [sourceOpen, setSourceOpen] = useState(false);
   const [name, setName] = useState("");
@@ -758,6 +782,15 @@ function IncomeAdmin({
   const [received, setReceived] = useState(false);
   const [actualDate, setActualDate] = useState("");
   const [actualAmount, setActualAmount] = useState("");
+
+  // ADR-047 follow-up: account prompt when an income source has no usable
+  // deposit splits. Holds the event awaiting an account + amount choice.
+  const [depositPrompt, setDepositPrompt] = useState<{
+    event: import("@/lib/supabase").IncomeEvent;
+    sourceName: string;
+  } | null>(null);
+  const [depositAccountId, setDepositAccountId] = useState("");
+  const [depositAmount, setDepositAmount] = useState("");
 
   const openEvent = (e: import("@/lib/supabase").IncomeEvent | null) => {
     setEditing(e);
@@ -813,16 +846,46 @@ function IncomeAdmin({
     sources.find((s) => s.id === id)?.name ?? "Unknown source";
 
   async function receive(e: import("@/lib/supabase").IncomeEvent) {
+    const sName = sourceName(e.income_source_id);
+    // ADR-047 follow-up: only interrupt when the source has no usable deposit
+    // splits. When splits exist, keep the one-tap behaviour.
+    const usable = await hasUsableSplits(e.income_source_id);
+    if (usable) {
+      try {
+        const res = await markReceived.mutateAsync({ event: e, sourceName: sName });
+        toast.success(
+          res.deposits > 0
+            ? `Paycheck received · ${res.deposits} deposit${res.deposits === 1 ? "" : "s"} recorded`
+            : "Paycheck received",
+        );
+      } catch (err) {
+        toast.error((err as Error).message);
+      }
+      return;
+    }
+    setDepositAccountId("");
+    setDepositAmount(eventAmount(e) ? String(eventAmount(e)) : "");
+    setDepositPrompt({ event: e, sourceName: sName });
+  }
+
+  async function confirmDeposit() {
+    if (!depositPrompt) return;
+    if (!depositAccountId) return toast.error("Pick an account");
+    const amt = Number(depositAmount || 0);
+    if (!amt) return toast.error("Enter the amount received");
     try {
       const res = await markReceived.mutateAsync({
-        event: e,
-        sourceName: sourceName(e.income_source_id),
+        event: depositPrompt.event,
+        sourceName: depositPrompt.sourceName,
+        actualAmount: amt,
+        accountId: depositAccountId,
       });
       toast.success(
         res.deposits > 0
           ? `Paycheck received · ${res.deposits} deposit${res.deposits === 1 ? "" : "s"} recorded`
           : "Paycheck received",
       );
+      setDepositPrompt(null);
     } catch (err) {
       toast.error((err as Error).message);
     }
@@ -1051,6 +1114,64 @@ function IncomeAdmin({
             ) : null}
             <Button className="h-11 flex-1" onClick={saveEvent}>
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!depositPrompt}
+        onOpenChange={(o) => !o && setDepositPrompt(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deposit this paycheck</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {depositPrompt?.sourceName ?? "This income source"} has no deposit
+            splits configured. Pick the account to record this deposit into.
+          </p>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Account</Label>
+              <Select value={depositAccountId} onValueChange={setDepositAccountId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Pick an account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Amount</Label>
+              <Input
+                className="h-11"
+                type="number"
+                inputMode="decimal"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="h-11"
+              onClick={() => setDepositPrompt(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="h-11 flex-1"
+              onClick={confirmDeposit}
+              disabled={markReceived.isPending}
+            >
+              {markReceived.isPending ? "Saving…" : "Mark received"}
             </Button>
           </DialogFooter>
         </DialogContent>

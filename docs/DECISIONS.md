@@ -1129,7 +1129,9 @@ the balance owed (ADR-045) — the household decides per fee, the mechanisms are
 mutually exclusive.
 
 Status: Decided 2026-08-10. Implemented 2026-08-11 (fee field in pay-flow.tsx; fee row
-uses the household "Fees" category when one exists, otherwise no category).
+uses the household "Fees" category when one exists). Follow-up (2026-08-11):
+`insertFeeTransaction` now auto-creates a "Fees" category if none exists, so fee
+rows are always categorised rather than occasionally uncategorised.
 
 ## ADR-047: Marking an Income Event as Received Auto-Creates Split Transactions
 (Extends ADR-024)
@@ -1192,8 +1194,11 @@ Migration steps:
 4. All created transactions are status='cleared', no category_id, no linked_bill_id/
    linked_debt_id/linked_goal_id.
 
-Status: Decided 2026-08-10. Implemented 2026-08-11, with two deviations:
+Status: Decided 2026-08-10. Implemented 2026-08-11, with one deviation:
 - Created deposit rows share `split_group_id = income_event.id`, which both groups
   them in the ledger UI (ADR-044) and makes "mark received" idempotent.
-- The no-splits case does not yet prompt for an account: the event is marked
-  received and no deposit row is written (enter it manually). Tracked in TODO.md.
+- Follow-up (2026-08-11): the no-splits / no-usable-splits case now prompts for an
+  account + amount via a dialog on the Paycheck screen. `useMarkIncomeReceived`
+  accepts an optional `accountId`; when no split row resolves to a deposit, it
+  writes a single deposit into the chosen account. If no account is provided it
+  throws a clear error instead of silently marking the event received.

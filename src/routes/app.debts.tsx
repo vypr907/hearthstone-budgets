@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { SectionLabel } from "@/components/SectionLabel";
 import {
   useDebts,
   useDeleteDebt,
@@ -185,8 +187,8 @@ function DebtsPage() {
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && debts.length === 0 && (
           <Card>
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              No debts yet.
+            <CardContent className="p-0">
+              <EmptyState>No debts yet.</EmptyState>
             </CardContent>
           </Card>
         )}
@@ -242,9 +244,7 @@ function DebtsPage() {
             return (
             <div key={d.id} className="space-y-2">
             {header ? (
-              <h2 className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                {header}
-              </h2>
+              <SectionLabel className="px-1 pt-2">{header}</SectionLabel>
             ) : null}
             <Card
               className="cursor-pointer"
@@ -299,17 +299,13 @@ function DebtsPage() {
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <div className="rounded-[12px] bg-muted/50 p-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      Remaining
-                    </p>
+                    <SectionLabel size="sub">Remaining</SectionLabel>
                     <p className="text-xl font-extrabold tabular-nums">
                       {formatMoney(Number(d.remaining_balance))}
                     </p>
                   </div>
                   <div className="rounded-[12px] bg-muted/50 p-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      Min payment
-                    </p>
+                    <SectionLabel size="sub">Min payment</SectionLabel>
                     <p className="text-xl font-extrabold tabular-nums">
                       {formatMoney(Number(d.minimum_payment))}
                     </p>
@@ -324,9 +320,9 @@ function DebtsPage() {
                   ) : null;
                 })()}
                 <ItemBar className="mt-2" value={pctPaid} color={itemColor(i)} />
-                <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <SectionLabel size="sub" className="mt-1">
                   {Math.round(pctPaid)}% paid off
-                </p>
+                </SectionLabel>
                 <PayActions
                   payable={toPayable("debt", d)}
                   className="mt-2"
@@ -772,11 +768,9 @@ function RecentDebtTransactions({ debtId }: { debtId: string }) {
 
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Recent transactions
-      </p>
+      <SectionLabel>Recent transactions</SectionLabel>
       {rows.length === 0 ? (
-        <p className="mt-1 text-sm text-muted-foreground">No payments logged yet.</p>
+        <EmptyState className="mt-1 py-2 text-left">No payments logged yet.</EmptyState>
       ) : (
         <div className="mt-1 divide-y divide-border/50">
           {rows.map((t) => (
@@ -862,9 +856,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Adjustments
-        </p>
+        <SectionLabel>Adjustments</SectionLabel>
         <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(true)}>
           <Plus className="mr-1 h-4 w-4" /> Add
         </Button>

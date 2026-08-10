@@ -67,5 +67,5 @@ with check (exists (select 1 from public.household_members m
 - [x] ADR-047 mark income received → split deposit transactions — done 2026-08-11.
 - [x] Shared InstitutionDialog/AccountDialog, inline "+ Add institution" (Bills + Debts),
       inline "+ Add account" on the Institution form — done 2026-08-11.
-- [ ] ADR-047 follow-up: prompt for an account when the income source has no split rows.
-- [ ] Create a "Fees" category by default so ADR-046 fee rows are categorised.
+- [x] ADR-047 follow-up: prompt for an account when the income source has no split rows — done 2026-08-11.
+- [x] Create a "Fees" category by default so ADR-046 fee rows are categorised — auto-created on first fee, done 2026-08-11.

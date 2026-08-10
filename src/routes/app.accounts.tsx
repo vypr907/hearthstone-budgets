@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AccountDialog } from "@/components/AccountDialog";
+import { EmptyState } from "@/components/EmptyState";
+import { SectionLabel } from "@/components/SectionLabel";
 import { AppHeader } from "@/components/AppHeader";
 import {
   useAccounts,
@@ -194,8 +196,10 @@ function AccountsPage() {
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && rows.length === 0 && (
           <Card>
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              {accounts.length === 0 ? "No accounts yet." : "Nothing matches."}
+            <CardContent className="p-0">
+              <EmptyState>
+                {accounts.length === 0 ? "No accounts yet." : "Nothing matches."}
+              </EmptyState>
             </CardContent>
           </Card>
         )}
@@ -231,17 +235,13 @@ function AccountsPage() {
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <div className="rounded-[12px] bg-muted/50 p-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        Current
-                      </p>
+                      <SectionLabel size="sub">Current</SectionLabel>
                       <p className="text-xl font-extrabold tabular-nums">
                         {formatMoney(b?.current ?? 0)}
                       </p>
                     </div>
                     <div className="rounded-[12px] bg-muted/50 p-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        Spendable
-                      </p>
+                      <SectionLabel size="sub">Spendable</SectionLabel>
                       <p className="text-xl font-extrabold tabular-nums">
                         {formatMoney(b?.spendable ?? 0)}
                       </p>

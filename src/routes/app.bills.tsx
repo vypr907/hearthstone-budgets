@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { SectionLabel } from "@/components/SectionLabel";
 import {
   useBills,
   useDeleteBill,
@@ -168,7 +170,9 @@ function BillsPage() {
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && rows.length === 0 && (
           <Card>
-            <CardContent className="p-4 text-sm text-muted-foreground">No bills match.</CardContent>
+            <CardContent className="p-0">
+              <EmptyState>No bills match.</EmptyState>
+            </CardContent>
           </Card>
         )}
 
@@ -176,9 +180,7 @@ function BillsPage() {
           {groups.map(([label, items]) => (
             <div key={label || "all"} className="space-y-2">
               {label && (
-                <h2 className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {label}
-                </h2>
+                <SectionLabel className="px-1 pt-2">{label}</SectionLabel>
               )}
               {items.map((b, i) => {
                 const info = infoOf(toPayable("bill", b));
@@ -340,11 +342,9 @@ function RecentBillTransactions({ billId }: { billId: string }) {
 
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Recent transactions
-      </p>
+      <SectionLabel>Recent transactions</SectionLabel>
       {rows.length === 0 ? (
-        <p className="mt-1 text-sm text-muted-foreground">No payments logged yet.</p>
+        <EmptyState className="mt-1 py-2 text-left">No payments logged yet.</EmptyState>
       ) : (
         <div className="mt-1 divide-y divide-border/50">
           {rows.map((t) => (

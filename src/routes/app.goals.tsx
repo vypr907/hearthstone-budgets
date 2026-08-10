@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppHeader } from "@/components/AppHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -107,9 +108,7 @@ function GoalsPage() {
           <p className="text-sm text-destructive">{(error as Error).message}</p>
         ) : null}
         {!isLoading && goals.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No savings goals yet. Create one to start a sinking fund.
-          </p>
+          <EmptyState>No savings goals yet. Create one to start a sinking fund.</EmptyState>
         ) : null}
 
         {goals.map((g, i) => {
