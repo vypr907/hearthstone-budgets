@@ -1118,6 +1118,64 @@ function IncomeAdmin({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={!!depositPrompt}
+        onOpenChange={(o) => !o && setDepositPrompt(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deposit this paycheck</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {depositPrompt?.sourceName ?? "This income source"} has no deposit
+            splits configured. Pick the account to record this deposit into.
+          </p>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Account</Label>
+              <Select value={depositAccountId} onValueChange={setDepositAccountId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Pick an account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Amount</Label>
+              <Input
+                className="h-11"
+                type="number"
+                inputMode="decimal"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="h-11"
+              onClick={() => setDepositPrompt(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="h-11 flex-1"
+              onClick={confirmDeposit}
+              disabled={markReceived.isPending}
+            >
+              {markReceived.isPending ? "Saving…" : "Mark received"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
