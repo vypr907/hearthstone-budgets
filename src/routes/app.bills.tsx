@@ -92,6 +92,9 @@ export const Route = createFileRoute("/app/bills")({
 function BillsPage() {
   const { data: bills = [], isLoading } = useBills();
   const { data: categories = [] } = useCategories();
+  const { data: allInstitutions = [] } = useInstitutions();
+  const institutionById = useInstitutionIndex(allInstitutions);
+
   const [editing, setEditing] = useState<Partial<Bill> | null>(null);
   const [detail, setDetail] = useState<Bill | null>(null);
   const infoOf = useCycleState();
