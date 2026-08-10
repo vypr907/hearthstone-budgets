@@ -8,6 +8,10 @@ import {
   useAccounts,
   useTransactions,
   useDeleteLinkedTransaction,
+  useInstitutions,
+  useDebtAdjustments,
+  useAddDebtAdjustment,
+  useDeleteDebtAdjustment,
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
@@ -48,6 +52,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
+import { InstitutionDialog } from "@/components/InstitutionDialog";
 import { format } from "date-fns";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
 import { Switch } from "@/components/ui/switch";
@@ -449,6 +454,8 @@ function DebtDetailDialog({
 
           <RecentDebtTransactions debtId={debt.id} />
 
+          <DebtAdjustments debt={debt} />
+
           {debt.date_paid_off && (
             <div>
               <p className="text-xs text-muted-foreground">Date paid off</p>
@@ -485,6 +492,7 @@ function DebtDialog({
 }) {
   const upsert = useUpsertDebt();
   const del = useDeleteDebt();
+  const { data: institutions = [] } = useInstitutions();
   const [name, setName] = useState("");
   const [remaining, setRemaining] = useState("");
   const [rate, setRate] = useState("");
@@ -493,6 +501,8 @@ function DebtDialog({
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [nextDue, setNextDue] = useState("");
   const [debtType, setDebtType] = useState("");
+  const [institutionId, setInstitutionId] = useState("none");
+  const [institutionDialogOpen, setInstitutionDialogOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [deduction, setDeduction] = useState(false);
   const [cycleCount, setCycleCount] = useState("");
@@ -512,6 +522,7 @@ function DebtDialog({
     setCycle((debt?.billing_cycle as BillingCycle) ?? "monthly");
     setNextDue(debt?.next_due_date ? debt.next_due_date.slice(0, 10) : "");
     setDebtType(debt?.debt_type ?? "");
+    setInstitutionId(debt?.institution_id ?? "none");
     setNotes(debt?.notes ?? "");
     setDeduction(debt?.is_paycheck_deduction === true);
     const derived = deriveCustomInterval(debt?.cycle_interval_days);
@@ -542,6 +553,7 @@ function DebtDialog({
         cycle_interval_days: intervalDays,
         next_due_date: cycle === "monthly" ? debt?.next_due_date ?? null : nextDue || null,
         debt_type: debtType || null,
+        institution_id: institutionId === "none" ? null : institutionId,
         notes: notes || null,
         is_paycheck_deduction: deduction,
       });
@@ -577,12 +589,45 @@ function DebtDialog({
           </div>
           <div>
             <Label>Type</Label>
-            <Input
-              placeholder="Credit card, loan…"
-              value={debtType}
-              onChange={(e) => setDebtType(e.target.value)}
-              className="h-11"
-            />
+            <Select value={debtType || "none"} onValueChange={(v) => setDebtType(v === "none" ? "" : v)}>
+              <SelectTrigger className="h-11">
+                <SelectValue placeholder="Pick a type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unset</SelectItem>
+                {DEBT_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {formatTypeLabel(t)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Institution</Label>
+            <Select
+              value={institutionId}
+              onValueChange={(v) => {
+                if (v === ADD_INSTITUTION) {
+                  setInstitutionDialogOpen(true);
+                  return;
+                }
+                setInstitutionId(v);
+              }}
+            >
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {institutions.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.name}
+                  </SelectItem>
+                ))}
+                <SelectItem value={ADD_INSTITUTION}>+ Add new institution</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -688,6 +733,12 @@ function DebtDialog({
             {isEdit ? "Save" : "Add"}
           </Button>
         </DialogFooter>
+        {/* Inline institution creation keeps the in-progress debt form intact. */}
+        <InstitutionDialog
+          institution={institutionDialogOpen ? {} : null}
+          onClose={() => setInstitutionDialogOpen(false)}
+          onSaved={(id) => setInstitutionId(id)}
+        />
       </DialogContent>
     </Dialog>
   );
