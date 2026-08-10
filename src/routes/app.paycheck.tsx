@@ -65,6 +65,7 @@ import {
   useMarkIncomeReceived,
   useUpsertIncomeSource,
 } from "@/lib/income-hooks";
+import { supabase } from "@/lib/supabase";
 import {
   eventAmount,
   eventDate,
