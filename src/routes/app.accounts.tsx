@@ -38,7 +38,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Account, Transaction } from "@/lib/supabase";
 import { format } from "date-fns";
-import { EmojiIcon } from "@/components/viz";
+import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 
 export const Route = createFileRoute("/app/accounts")({
   head: () => ({
