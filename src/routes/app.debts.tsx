@@ -856,9 +856,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Adjustments
-        </p>
+        <SectionLabel>Adjustments</SectionLabel>
         <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(true)}>
           <Plus className="mr-1 h-4 w-4" /> Add
         </Button>
