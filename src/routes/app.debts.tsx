@@ -301,17 +301,13 @@ function DebtsPage() {
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <div className="rounded-[12px] bg-muted/50 p-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      Remaining
-                    </p>
+                    <SectionLabel size="sub">Remaining</SectionLabel>
                     <p className="text-xl font-extrabold tabular-nums">
                       {formatMoney(Number(d.remaining_balance))}
                     </p>
                   </div>
                   <div className="rounded-[12px] bg-muted/50 p-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      Min payment
-                    </p>
+                    <SectionLabel size="sub">Min payment</SectionLabel>
                     <p className="text-xl font-extrabold tabular-nums">
                       {formatMoney(Number(d.minimum_payment))}
                     </p>
