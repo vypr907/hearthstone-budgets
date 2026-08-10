@@ -493,6 +493,7 @@ function DebtDetailDialog({
 
           <DetailText label="Notes" value={debt.notes} />
           <PayActions payable={toPayable("debt", debt)} />
+          <PastDueEditor debt={debt} />
 
           <RecentDebtTransactions debtId={debt.id} />
 
