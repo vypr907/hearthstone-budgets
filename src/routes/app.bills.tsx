@@ -45,7 +45,9 @@ import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { PastDueBadge } from "@/components/PastDueBadge";
 
-import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+import { ItemBar, itemColor } from "@/components/viz";
+import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
+
 import { formatTypeLabel } from "@/lib/visual-meta";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 
