@@ -588,16 +588,31 @@ function DebtDialog({
     setPlanFinal(debt?.plan_final_payment != null ? String(debt.plan_final_payment) : "");
     setOpeningArrears(debt?.opening_arrears != null ? String(debt.opening_arrears) : "");
     setArrearsAsOf(debt?.arrears_as_of ? debt.arrears_as_of.slice(0, 10) : "");
+    setInvoiceNumber(debt?.invoice_number ?? "");
+    setNameTouched(!!debt?.name);
     const derived = deriveCustomInterval(debt?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
   }
   if (!open && lastKey !== "") setLastKey("");
 
+  /**
+   * ADR-052: an invoice names itself "Institution - INV-1234" while the name
+   * is untouched. Typing a name (or opening an existing debt) stops it.
+   */
+  function autoName(nextInstitutionId: string, nextInvoice: string, type = debtType) {
+    if (nameTouched || type !== "invoice") return;
+    const inst = institutions.find((i) => i.id === nextInstitutionId)?.name?.trim();
+    const num = nextInvoice.trim();
+    const composed = [inst, num].filter(Boolean).join(" - ");
+    setName(composed);
+  }
+
   /** Invoices default to a single dated charge unless put on a payment plan. */
   function chooseType(v: string) {
     const next = v === "none" ? "" : v;
     setDebtType(next);
+    autoName(institutionId, invoiceNumber, next);
     if (next === "invoice" && !isEdit && cycle === "monthly") setCycle("one_time");
   }
 
