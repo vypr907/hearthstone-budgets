@@ -727,6 +727,7 @@ function DebtDialog({
                   return;
                 }
                 setInstitutionId(v);
+                autoName(v, invoiceNumber);
               }}
             >
               <SelectTrigger className="h-11">
@@ -743,6 +744,21 @@ function DebtDialog({
               </SelectContent>
             </Select>
           </div>
+          {/* ADR-052: invoice reference number drives the auto-composed name. */}
+          {isInvoice ? (
+            <div>
+              <Label>Invoice number</Label>
+              <Input
+                value={invoiceNumber}
+                placeholder="e.g. INV-10428"
+                onChange={(e) => {
+                  setInvoiceNumber(e.target.value);
+                  autoName(institutionId, e.target.value);
+                }}
+                className="h-11"
+              />
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>{isInvoice ? "Amount still owed" : "Remaining balance"}</Label>
