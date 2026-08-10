@@ -56,6 +56,7 @@ import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 import { PastDueBadge } from "@/components/PastDueBadge";
+import { PastDueEditor } from "@/components/PastDueEditor";
 
 
 /** ADR-045: invoice joins the existing debt_type values. */
@@ -416,6 +417,9 @@ function DebtDetailDialog({
             {debt.plan_final_payment != null ? (
               <DetailMoney label="Final payment" value={debt.plan_final_payment} />
             ) : null}
+            {debt.invoice_number ? (
+              <DetailItem label="Invoice number" value={debt.invoice_number} />
+            ) : null}
             {Number(debt.opening_arrears ?? 0) > 0 ? (
               <DetailMoney label="Opening arrears" value={debt.opening_arrears} />
             ) : null}
@@ -492,6 +496,7 @@ function DebtDetailDialog({
 
           <DetailText label="Notes" value={debt.notes} />
           <PayActions payable={toPayable("debt", debt)} />
+          <PastDueEditor debt={debt} />
 
           <RecentDebtTransactions debtId={debt.id} />
 
@@ -556,6 +561,10 @@ function DebtDialog({
   // ADR-049: past-due amount carried in from before tracking started.
   const [openingArrears, setOpeningArrears] = useState("");
   const [arrearsAsOf, setArrearsAsOf] = useState("");
+  // ADR-052: invoice reference number, which also composes the debt name.
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  /** Auto-naming stops the moment the name is typed by hand. */
+  const [nameTouched, setNameTouched] = useState(false);
 
   const isInvoice = debtType === "invoice";
 
@@ -582,16 +591,31 @@ function DebtDialog({
     setPlanFinal(debt?.plan_final_payment != null ? String(debt.plan_final_payment) : "");
     setOpeningArrears(debt?.opening_arrears != null ? String(debt.opening_arrears) : "");
     setArrearsAsOf(debt?.arrears_as_of ? debt.arrears_as_of.slice(0, 10) : "");
+    setInvoiceNumber(debt?.invoice_number ?? "");
+    setNameTouched(!!debt?.name);
     const derived = deriveCustomInterval(debt?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
   }
   if (!open && lastKey !== "") setLastKey("");
 
+  /**
+   * ADR-052: an invoice names itself "Institution - INV-1234" while the name
+   * is untouched. Typing a name (or opening an existing debt) stops it.
+   */
+  function autoName(nextInstitutionId: string, nextInvoice: string, type = debtType) {
+    if (nameTouched || type !== "invoice") return;
+    const inst = institutions.find((i) => i.id === nextInstitutionId)?.name?.trim();
+    const num = nextInvoice.trim();
+    const composed = [inst, num].filter(Boolean).join(" - ");
+    setName(composed);
+  }
+
   /** Invoices default to a single dated charge unless put on a payment plan. */
   function chooseType(v: string) {
     const next = v === "none" ? "" : v;
     setDebtType(next);
+    autoName(institutionId, invoiceNumber, next);
     if (next === "invoice" && !isEdit && cycle === "monthly") setCycle("one_time");
   }
 
@@ -634,6 +658,7 @@ function DebtDialog({
         plan_final_payment: onPlan && planFinal ? Number(planFinal) : null,
         opening_arrears: openingArrears ? Number(openingArrears) : 0,
         arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
+        invoice_number: isInvoice ? invoiceNumber.trim() || null : null,
       });
       toast.success(isEdit ? "Debt updated" : "Debt added");
       onClose();
@@ -664,7 +689,20 @@ function DebtDialog({
         <div className="space-y-3">
           <div>
             <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
+            <Input
+              value={name}
+              onChange={(e) => {
+                setNameTouched(true);
+                setName(e.target.value);
+              }}
+              className="h-11"
+            />
+            {isInvoice && !nameTouched ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Named automatically from the institution and invoice number — type
+                here to override.
+              </p>
+            ) : null}
           </div>
           <div>
             <Label>Type</Label>
@@ -692,6 +730,7 @@ function DebtDialog({
                   return;
                 }
                 setInstitutionId(v);
+                autoName(v, invoiceNumber);
               }}
             >
               <SelectTrigger className="h-11">
@@ -708,6 +747,21 @@ function DebtDialog({
               </SelectContent>
             </Select>
           </div>
+          {/* ADR-052: invoice reference number drives the auto-composed name. */}
+          {isInvoice ? (
+            <div>
+              <Label>Invoice number</Label>
+              <Input
+                value={invoiceNumber}
+                placeholder="e.g. INV-10428"
+                onChange={(e) => {
+                  setInvoiceNumber(e.target.value);
+                  autoName(institutionId, e.target.value);
+                }}
+                className="h-11"
+              />
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>{isInvoice ? "Amount still owed" : "Remaining balance"}</Label>

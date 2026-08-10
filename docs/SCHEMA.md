@@ -548,3 +548,14 @@ notify pgrst, 'reload schema';
 
 `billing_cycle` gains the value `one_time` (ADR-048). It is stored as text, so no
 enum change is required.
+
+## Phase 10 migration (ADR-052, ADR-053) — run in Supabase
+
+```sql
+alter table public.debts add column if not exists invoice_number text;
+alter table public.transactions
+  add column if not exists institution_id uuid references public.institutions(id) on delete set null;
+create index if not exists transactions_institution_id_idx
+  on public.transactions (institution_id);
+notify pgrst, 'reload schema';
+```

@@ -455,14 +455,13 @@ export function useUpsertTransaction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (t: Partial<Transaction> & { amount: number }) => {
-      const payload = { ...t, household_id: householdId };
-      if (t.id) {
-        const { error } = await supabase.from("transactions").update(payload).eq("id", t.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("transactions").insert(payload);
-        if (error) throw error;
-      }
+      const payload = { ...t, household_id: householdId } as Record<string, unknown>;
+      // ADR-053: institution_id is a newer column — tolerate its absence.
+      await saveWithOptionalColumns<Transaction>(payload, async (p) =>
+        t.id
+          ? await supabase.from("transactions").update(p).eq("id", t.id!).select("*").single()
+          : await supabase.from("transactions").insert(p).select("*").single(),
+      );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions"] }),
   });

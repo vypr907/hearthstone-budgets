@@ -44,6 +44,7 @@ import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { PastDueBadge } from "@/components/PastDueBadge";
+import { PastDueEditor } from "@/components/PastDueEditor";
 
 import { ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
@@ -323,6 +324,7 @@ function BillDetailDialog({
           </DetailGrid>
           <DetailText label="Notes" value={bill.notes} />
           <PayActions payable={toPayable("bill", bill)} />
+          <PastDueEditor bill={bill} />
           <SetAsideAction bill={bill} />
           <RecentBillTransactions billId={bill.id} />
         </div>

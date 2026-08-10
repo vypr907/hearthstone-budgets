@@ -87,26 +87,38 @@ export function AddTransactionFab() {
 
   const { data: institutions = [] } = useInstitutions();
   const saveInstitution = useUpsertInstitution();
+  /** ADR-053: the place this money was spent at. */
+  const [merchantId, setMerchantId] = useState<string | null>(null);
+
+  /** Places whose name matches what's being typed, best few first. */
+  const merchantMatches = useMemo(() => {
+    const d = description.trim().toLowerCase();
+    if (d.length < 2 || merchantId) return [];
+    return institutions
+      .filter((i) => i.name.toLowerCase().includes(d))
+      .slice(0, 4);
+  }, [description, institutions, merchantId]);
 
   /** Trimmed description that doesn't match any known institution yet. */
   const newMerchant = useMemo(() => {
     const d = description.trim();
-    if (d.length < 3) return null;
+    if (d.length < 3 || merchantId) return null;
     const known = institutions.some(
       (i) => i.name.trim().toLowerCase() === d.toLowerCase(),
     );
     return known ? null : d;
-  }, [description, institutions]);
+  }, [description, institutions, merchantId]);
 
   async function addMerchant() {
     if (!newMerchant) return;
     const domain = guessMerchantDomain(newMerchant);
     try {
-      await saveInstitution.mutateAsync({
+      const id = await saveInstitution.mutateAsync({
         name: newMerchant,
         institution_type: "retailer",
         logo_url: domain ? suggestedLogoUrl(domain) : null,
       });
+      if (typeof id === "string") setMerchantId(id);
       toast.success(`Added ${newMerchant}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not add place");
@@ -124,6 +136,7 @@ export function AddTransactionFab() {
     setAmount("");
     setCategoryId(NO_CATEGORY);
     setDescription("");
+    setMerchantId(null);
     setLink(NO_LINK);
     setIsSplit(false);
     setSplitRows([emptySplitRow()]);
@@ -181,6 +194,7 @@ export function AddTransactionFab() {
         description: description.trim() || null,
         status: "cleared",
         transaction_date: todayISO(),
+        ...(merchantId ? { institution_id: merchantId } : {}),
         ...(bill ? { linked_bill_id: bill.id } : {}),
         ...(debt ? { linked_debt_id: debt.id } : {}),
       });
@@ -338,10 +352,60 @@ export function AddTransactionFab() {
                 className="h-12"
                 placeholder="e.g. Groceries"
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  // Editing the text breaks the link to the picked place.
+                  if (merchantId) setMerchantId(null);
+                }}
               />
-              {/* Inline merchant capture: typed places that aren't tracked yet
-                  can become an institution without leaving the form. */}
+              {/* ADR-053: tie the entry to a place, either an existing one… */}
+              {merchantId ? (
+                <div className="flex items-center gap-2 rounded-[12px] bg-muted/50 p-2 text-xs">
+                  <span aria-hidden className="text-base">
+                    🏪
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    Tracked at{" "}
+                    <span className="font-semibold">
+                      {institutions.find((i) => i.id === merchantId)?.name}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="text-muted-foreground underline"
+                    onClick={() => setMerchantId(null)}
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : null}
+              {merchantMatches.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {merchantMatches.map((i) => (
+                    <button
+                      key={i.id}
+                      type="button"
+                      className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5 text-xs active:bg-muted"
+                      onClick={() => {
+                        setMerchantId(i.id);
+                        setDescription(i.name);
+                      }}
+                    >
+                      {i.logo_url ? (
+                        <img
+                          src={i.logo_url}
+                          alt=""
+                          className="h-4 w-4 rounded-full object-contain"
+                        />
+                      ) : (
+                        <span aria-hidden>🏪</span>
+                      )}
+                      {i.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {/* …or a brand-new one captured without leaving the form. */}
               {newMerchant ? (
                 <button
                   type="button"
