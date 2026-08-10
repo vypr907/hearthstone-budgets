@@ -342,11 +342,9 @@ function RecentBillTransactions({ billId }: { billId: string }) {
 
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Recent transactions
-      </p>
+      <SectionLabel>Recent transactions</SectionLabel>
       {rows.length === 0 ? (
-        <p className="mt-1 text-sm text-muted-foreground">No payments logged yet.</p>
+        <EmptyState className="mt-1 py-2 text-left">No payments logged yet.</EmptyState>
       ) : (
         <div className="mt-1 divide-y divide-border/50">
           {rows.map((t) => (
