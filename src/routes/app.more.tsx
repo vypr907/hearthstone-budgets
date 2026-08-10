@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { itemColor } from "@/components/viz";
+
 import {
   Building2,
   CalendarDays,
