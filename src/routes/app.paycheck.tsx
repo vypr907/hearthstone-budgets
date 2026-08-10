@@ -767,6 +767,11 @@ function IncomeAdmin({
   const deleteEvent = useDeleteIncomeEvent();
   const markReceived = useMarkIncomeReceived();
   const { data: accounts = [] } = useAccounts();
+  const { data: ledger = [] } = useTransactions();
+  /** ADR-047 backfill: paychecks marked received before deposits were written. */
+  const hasDeposits = (eventId: string) =>
+    ledger.some((t) => t.split_group_id === eventId);
+
 
   const [sourceOpen, setSourceOpen] = useState(false);
   const [name, setName] = useState("");
