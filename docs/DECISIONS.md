@@ -999,3 +999,196 @@ at month rollover, losing the check-off record; past per-debt amounts cannot be
 re-simulated from today's balances, so history shows month + paid state only.
 
 Status: Decided 2026-08-06. Implemented.
+
+## ADR-044: Split Transactions via split_group_id
+
+Decision:
+Add `transactions.split_group_id uuid` (nullable, no FK — self-referencing group tag,
+not a parent row). Splitting a purchase writes N transaction rows sharing the same
+split_group_id, account_id, transaction_date, and status, each with its own
+category_id and amount, summing to the entered total. Editing a split re-deletes and
+re-inserts all rows in the group rather than patching individual lines, avoiding
+partial-state bugs.
+
+Split transactions are manual entries only (no linked_bill_id/linked_debt_id) — bill/
+debt payments stay single-row, since they're tied to one payable and one cycle.
+
+Reason:
+balances.ts, spending-actuals.ts, and every other consumer already aggregate
+transactions by summing amounts per account/category/month (ADR-012, ADR-013) — they
+need zero changes to handle more rows. A parent/child line-item table would require
+every consumer to special-case aggregation for no benefit, violating "reuse before
+create."
+
+Schema change:
+```sql
+alter table transactions add column split_group_id uuid;
+```
+
+Status: Decided 2026-08-10. Not yet implemented.
+
+
+## ADR-045: Invoices Reuse debts; New debt_adjustments Table for Non-Payment Balance Changes
+
+Decision:
+Invoices are debts with `debt_type = 'invoice'` (added to the existing debt_type
+values) — no new table for the entity itself. `interest_rate`, `minimum_payment`,
+`priority_order`, and the payoff-strategy calculator are simply left at their
+defaults/unused for invoice-type debts; nothing about the schema forces those fields.
+
+Add `debt_adjustments`: a signed, non-payment change to a debt's remaining_balance —
+insurance coverage, an insurance discount, a late fee, an NSF fee, or similar. Unlike
+a payment (a `transactions` row reducing remaining_balance by real money leaving an
+account), an adjustment reduces or increases what's owed with no corresponding
+account outflow/inflow. Creating an adjustment writes remaining_balance += amount
+immediately (negative amount = reduces balance, e.g. insurance covered; positive =
+increases it, e.g. late fee).
+
+Reason:
+A medical invoice's real owed amount moves for reasons other than a payment — insurer
+adjustments and fees are common and need to be reflected in remaining_balance without
+being misrepresented as money paid from an account (which would corrupt account
+balances) or silently edited into starting_balance/remaining_balance by hand (which
+loses the "why did this change" history). A separate ledger for non-payment balance
+changes, parallel to transactions for payments, keeps both histories honest and
+auditable — consistent with ADR-003's "transactions are the source of truth for money
+movement" by NOT overloading transactions with non-movement events.
+
+known_finance_charge (ADR-016) is unaffected — adjustments change remaining_balance
+directly and don't interact with interest/finance-charge calculation.
+
+Schema change:
+```sql
+create table debt_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  debt_id uuid not null references debts(id) on delete cascade,
+  amount numeric(12,2) not null, -- signed: negative reduces remaining_balance
+                                  -- (insurance covered, discount), positive increases
+                                  -- it (late fee, NSF fee)
+  adjustment_type text, -- free text: 'insurance_covered' | 'insurance_discount' |
+                         -- 'late_fee' | 'nsf_fee' | 'other'
+  description text,
+  adjustment_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+alter table debt_adjustments enable row level security;
+create policy "household access" on debt_adjustments for all
+  using (is_household_member(household_id))
+  with check (is_household_member(household_id));
+```
+
+Migration steps:
+1. Run the SQL above.
+2. Debt detail view gains an "Adjustments" section (list + add form), same visual
+   pattern as the existing "Recent transactions" section.
+3. Adding an adjustment updates debts.remaining_balance by the signed amount
+   immediately, same immediacy as a cleared payment (ADR-035).
+4. Deleting an adjustment reverses it: remaining_balance -= amount (mirrors the
+   existing repair-delete pattern from ADR-037, not a full undo dialog).
+5. debt_type gains "invoice" as a valid free-text value alongside Medical/Credit
+   Card/Loan/Other/Advance — no constraint enforced (debt_type is already
+   unconstrained free text per current schema).
+
+Status: Decided 2026-08-10. Not yet implemented.
+
+## ADR-046: Transaction Fees on Bill/Debt Payments (Fee Excluded from Cycle Credit)
+
+Decision:
+The bill/debt payment flow (pay-flow.tsx, ADR-035/036/037) gains an optional "fee"
+field alongside the payment amount. Confirming a payment with a fee set writes TWO
+transactions on the same account/date, not one:
+
+1. The payment transaction: amount = the entered payment amount, linked_bill_id or
+   linked_debt_id set as normal — this is the only row that credits
+   cycle_paid_to_date / reduces remaining_balance, unchanged from ADR-035.
+2. A fee transaction: amount = the fee, no linked_bill_id/linked_debt_id,
+   category_id defaulting to the household's "Fees" category if one exists,
+   description "Fee: <bill/debt name>".
+
+Both rows debit the paying account, so the account's balance correctly reflects the
+full amount that left it (e.g. $31.20), while only $30 counts toward the bill/debt's
+payoff/cycle math. This applies to both fixed and partial payments (ADR-035) — the
+fee is not part of "amount paid this cycle" in any case.
+
+Reason:
+A processing/late/NSF fee is real money leaving the account but isn't progress
+against what's owed — crediting it to cycle_paid_to_date or remaining_balance would
+make a bill or debt look more paid-off than it is, while omitting it from the account
+debit would make the account balance wrong. Two unlinked-vs-linked rows on the same
+account already solves an analogous problem in ADR-038 (Set Aside); reusing that
+shape here avoids a third payment-fee mechanism and needs no schema change.
+
+Scope note: distinct from ADR-045's debt_adjustments — that table changes
+remaining_balance with NO account movement (insurance coverage, a late fee added to
+what's owed). This ADR is the mirror case: real account movement that does NOT
+change remaining_balance/cycle_paid_to_date. A late fee could be modeled either way
+depending on whether it was actually paid out-of-pocket (this ADR) or just added to
+the balance owed (ADR-045) — the household decides per fee, the mechanisms aren't
+mutually exclusive.
+
+Status: Decided 2026-08-10. Not yet implemented.
+
+## ADR-047: Marking an Income Event as Received Auto-Creates Split Transactions
+(Extends ADR-024)
+
+Decision:
+income_events gains an explicit "mark as received" action (sets a real actual_date/
+actual_amount if not already present — these columns already exist per ADR-024).
+When a PRIMARY income_event with an income_source that has income_source_splits
+rows is marked received, the app auto-creates one cleared transactions row per split:
+
+- Fixed-amount splits: amount = the split's stored amount, account_id = the split's
+  account_id, transaction_date = income_event's actual_date + that split's
+  day_offset, description "Paycheck: <source name> → <account name>", no
+  category_id, no linked_bill_id/debt/goal.
+- The one remainder split: amount = actual_amount minus the sum of all fixed split
+  amounts (not the typical/expected amount — so a paycheck that came in higher or
+  lower than usual is absorbed entirely by the remainder account, matching how the
+  real deposit actually splits).
+
+If the income_event's source has NO income_source_splits rows (secondary income, or
+a primary source never configured with splits), marking received creates exactly one
+transaction for the full actual_amount, prompting the user to pick an account —
+same as today's unsplit behavior, unchanged.
+
+This is additive only: it does not require the income_source_splits editing UI
+(still open per ADR-024) — it consumes whatever split rows already exist, however
+they got there (direct SQL entry today, a future edit UI later, no different).
+
+Reason:
+ADR-024 built the split *template* (income_source_splits) and consumed it read-only
+for display ("Read-only deposit splits shown when income_source_splits rows exist"),
+but never wired splits into any actual money movement — receiving a paycheck still
+required manually entering N transactions by hand, which is exactly the tedium the
+splits table was meant to eliminate. Remainder-absorbs-variance keeps the model
+consistent with how a real paycheck deposit works: fixed transfers are fixed, and
+whatever's left (more or less than typical) lands in the primary account.
+
+No new obligation/allocation logic changes: pay_period_allocations, obligationsInRange(),
+and the Paycheck Budget period math (ADR-024/039) are unaffected — this only affects
+what happens the moment an event is marked received, not how the resulting period is
+budgeted.
+
+Schema change:
+None. Reuses income_events.actual_date/actual_amount and income_source_splits
+(account_id, amount, day_offset) as already defined in ADR-024.
+
+Migration steps:
+1. Add a "Mark as received" action on income_events (Income tab / event list),
+   prompting for actual_date (default today) and actual_amount (default the
+   source's typical amount) if not already set on that event.
+2. On confirm, look up income_source_splits for that event's income_source_id.
+   If none exist, prompt for one account and create a single transaction for the
+   full actual_amount (today's behavior, unchanged).
+3. If splits exist, create one transaction per fixed split (day_offset applied to
+   actual_date) plus one transaction for the remainder split, computed as
+   actual_amount − sum(fixed split amounts). Guard: if the remainder would be
+   negative (actual_amount came in lower than the fixed splits alone require),
+   surface it as a warning and let the user adjust the remainder amount manually
+   before confirming — don't silently write a negative-looking deposit.
+4. All created transactions are status='cleared', no category_id, no linked_bill_id/
+   linked_debt_id/linked_goal_id.
+
+Status: Decided 2026-08-10. Not yet implemented.
