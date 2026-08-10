@@ -354,13 +354,7 @@ function SpendingPage() {
           New budget item
         </Button>
 
-        <div className="grid grid-cols-[3rem_1fr_auto_auto_auto] gap-x-3 px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          <span />
-          <span>Item</span>
-          <span className="w-20 text-right">Budget</span>
-          <span className="w-20 text-right">Actual</span>
-          <span className="w-20 text-right">3-mo avg</span>
-        </div>
+        {groups.length > 0 ? <SpendingSummary totals={totals} /> : null}
 
 
         {isLoading ? (
@@ -387,146 +381,36 @@ function SpendingPage() {
                   <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                     {g.name}
                   </p>
-                  {g.rows.map((r, i) => {
-                    const totalBudget = r.budgeted + r.billsBudgeted;
-                    const pct =
-                      totalBudget > 0
-                        ? Math.min(100, (r.actual / totalBudget) * 100)
-                        : r.actual > 0
-                          ? 100
-                          : 0;
-                    const over = totalBudget > 0 && r.actual > totalBudget;
-                    return (
-                    <div
+                  {g.rows.map((r, i) => (
+                    <SpendingRow
                       key={r.categoryId}
-                      className="grid grid-cols-[3rem_1fr_auto_auto_auto] items-center gap-x-3 border-l-4 px-2 py-2 text-sm"
-                      style={{ borderColor: r.color }}
-                    >
-                      <ProgressRing
-                        value={pct}
-                        color={
-                          over
-                            ? "var(--destructive)"
-                            : (r.color ?? itemColor(i))
-                        }
-                      />
-                      <span className="flex min-w-0 flex-col">
-                        <span className="flex min-w-0 items-center gap-1">
-                          <span aria-hidden>{r.icon}</span>
-                          <span className="truncate">{r.name}</span>
-                          {r.description ? (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <button
-                                  aria-label={`About ${r.name}`}
-                                  className="shrink-0 text-muted-foreground"
-                                >
-                                  <HelpCircle className="h-4 w-4" />
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-64 text-sm">
-                                {r.description}
-                              </PopoverContent>
-                            </Popover>
-                          ) : null}
-                        </span>
-                        <span
-                          className={
-                            over
-                              ? "text-[10px] uppercase tracking-widest text-destructive"
-                              : "text-[10px] uppercase tracking-widest text-muted-foreground"
-                          }
-                        >
-                          {over
-                            ? `${formatMoney(r.actual - totalBudget)} over`
-                            : `${formatMoney(totalBudget - r.actual)} left`}
-                        </span>
-                        {/* ADR-034: never merge spending and bill load. */}
-                        <span className="text-[10px] tabular-nums text-muted-foreground">
-                          Budget {formatMoney(r.budgeted)} spending +{" "}
-                          {formatMoney(r.billsBudgeted)} bills ={" "}
-                          {formatMoney(totalBudget)}
-                        </span>
-                        <span className="text-[10px] tabular-nums text-muted-foreground">
-                          Spent {formatMoney(r.spendingSpent)} spending +{" "}
-                          {formatMoney(r.billsSpent)} bills ={" "}
-                          {formatMoney(r.actual)}
-                        </span>
-                      </span>
-                      <button
-                        className="h-10 w-20 rounded-md text-right text-base font-bold tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
-                        onClick={() =>
-                          setEditing({
-                            row: r,
-                            field: "budgeted",
-                            value: String(r.budgeted),
-                          })
-                        }
-                      >
-                        {formatMoney(r.budgeted)}
-                      </button>
-                      <span className="flex items-center justify-end gap-1">
-                        {r.actualSource === "override" ? (
-                          <button
-                            aria-label={`Use transaction total for ${r.name}`}
-                            title="Manual override — tap to revert to the transaction total"
-                            className="shrink-0 text-muted-foreground"
-                            onClick={() =>
-                              r.actualId &&
-                              clearOverride
-                                .mutateAsync({ id: r.actualId })
-                                .then(() => toast.success(`${r.name} back on transactions`))
-                                .catch((e: unknown) => toast.error((e as Error).message))
-                            }
-                          >
-                            <PencilLine className="h-3.5 w-3.5" />
-                          </button>
-                        ) : null}
-                        <button
-                          className="h-10 w-20 rounded-md text-right text-base font-bold tabular-nums underline decoration-dotted underline-offset-4 active:bg-accent/50"
-                          title={
-                            r.actualSource === "ledger"
-                              ? "From logged transactions this month"
-                              : undefined
-                          }
-                          onClick={() =>
-                            setEditing({
-                              row: r,
-                              field: "actual",
-                              value: String(r.actual),
-                            })
-                          }
-                        >
-                          {formatMoney(r.actual)}
-                        </button>
-                      </span>
-
-
-                      <span className="w-20 text-right tabular-nums text-muted-foreground">
-                        {formatMoney(r.avg3)}
-                      </span>
-                    </div>
-                    );
-                  })}
-                  <div className="grid grid-cols-[3rem_1fr_auto_auto_auto] items-center gap-x-3 border-t border-border/60 px-2 py-2 text-sm font-medium">
-                    <span />
+                      row={r}
+                      index={i}
+                      onEdit={(field) =>
+                        setEditing({
+                          row: r,
+                          field,
+                          value: String(field === "budgeted" ? r.budgeted : r.actual),
+                        })
+                      }
+                      onClearOverride={() =>
+                        r.actualId &&
+                        clearOverride
+                          .mutateAsync({ id: r.actualId })
+                          .then(() => toast.success(`${r.name} back on transactions`))
+                          .catch((e: unknown) => toast.error((e as Error).message))
+                      }
+                    />
+                  ))}
+                  <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-2 text-xs">
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                       Subtotal
                     </span>
-                    <span className="flex w-20 flex-col items-end font-bold tabular-nums">
-                      {formatMoney(sub.budgeted)}
-                      <span className="text-[10px] font-normal text-muted-foreground">
-                        {formatMoney(sub.spendingBudgeted)} + {formatMoney(sub.billsBudgeted)}
+                    <span className="tabular-nums">
+                      <span className="font-bold">{formatMoney(sub.actual)}</span>
+                      <span className="text-muted-foreground">
+                        {" "}of {formatMoney(sub.budgeted)}
                       </span>
-                    </span>
-                    <span className="flex w-20 flex-col items-end font-bold tabular-nums">
-                      {formatMoney(sub.actual)}
-                      <span className="text-[10px] font-normal text-muted-foreground">
-                        {formatMoney(sub.spendingSpent)} + {formatMoney(sub.billsSpent)}
-                      </span>
-                    </span>
-                    <span className="w-20 text-right font-bold tabular-nums">
-                      {formatMoney(sub.avg3)}
                     </span>
                   </div>
                 </CardContent>
@@ -536,28 +420,7 @@ function SpendingPage() {
           })
         )}
 
-        {groups.length > 0 ? (
-          <Card>
-            <CardContent className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 p-4 text-sm font-semibold">
-              <span>Grand total</span>
-              <span className="flex w-20 flex-col items-end tabular-nums">
-                {formatMoney(totals.budgeted)}
-                <span className="text-[10px] font-normal text-muted-foreground">
-                  {formatMoney(totals.spendingBudgeted)} + {formatMoney(totals.billsBudgeted)}
-                </span>
-              </span>
-              <span className="flex w-20 flex-col items-end tabular-nums">
-                {formatMoney(totals.actual)}
-                <span className="text-[10px] font-normal text-muted-foreground">
-                  {formatMoney(totals.spendingSpent)} + {formatMoney(totals.billsSpent)}
-                </span>
-              </span>
-              <span className="w-20 text-right tabular-nums">
-                {formatMoney(totals.avg3)}
-              </span>
-            </CardContent>
-          </Card>
-        ) : null}
+        {null}
       </div>
 
       <Dialog open={adding} onOpenChange={setAdding}>
