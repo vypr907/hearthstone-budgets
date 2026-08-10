@@ -140,36 +140,83 @@ function TransactionsPage() {
         )}
 
         <div className="space-y-2">
-          {rows.map((t) => (
-            <Card key={t.id} className="cursor-pointer" onClick={() => setDetail(t)}>
-              <CardContent className="flex items-start gap-3 p-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{t.description || "Transaction"}</p>
-                  <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                    <span>{t.transaction_date}</span>
-                    {t.account_id && accountName[t.account_id] ? (
-                      <span>· {accountName[t.account_id]}</span>
+          {entries.map((entry) => {
+            const t = entry.head;
+            return (
+              <Card
+                key={entry.key}
+                className="cursor-pointer"
+                onClick={() => setDetail(t)}
+              >
+                <CardContent className="flex items-start gap-3 p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {t.description || "Transaction"}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      <span>{t.transaction_date}</span>
+                      {t.account_id && accountName[t.account_id] ? (
+                        <span>· {accountName[t.account_id]}</span>
+                      ) : null}
+                      {!entry.isSplit && t.category_id && categoryName[t.category_id] ? (
+                        <span>· {categoryName[t.category_id]}</span>
+                      ) : null}
+                      {entry.isSplit ? (
+                        <Badge variant="secondary">
+                          Split · {entry.rows.length} categories
+                        </Badge>
+                      ) : null}
+                      <Badge
+                        variant={t.status === "cleared" ? "outline" : "secondary"}
+                        className="capitalize"
+                      >
+                        {t.status || "pending"}
+                      </Badge>
+                    </div>
+                    {entry.isSplit ? (
+                      <button
+                        className="mt-1 text-xs text-muted-foreground underline decoration-dotted"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpanded((prev) => ({
+                            ...prev,
+                            [entry.key]: !prev[entry.key],
+                          }));
+                        }}
+                      >
+                        {expanded[entry.key] ? "Hide breakdown" : "Show breakdown"}
+                      </button>
                     ) : null}
-                    {t.category_id && categoryName[t.category_id] ? (
-                      <span>· {categoryName[t.category_id]}</span>
+                    {entry.isSplit && expanded[entry.key] ? (
+                      <div className="mt-1 divide-y divide-border/50 rounded-md border">
+                        {entry.rows.map((line) => (
+                          <div
+                            key={line.id}
+                            className="flex items-center justify-between px-2 py-1 text-xs"
+                          >
+                            <span className="truncate">
+                              {(line.category_id && categoryName[line.category_id]) ||
+                                "No category"}
+                            </span>
+                            <span className="tabular-nums">
+                              {formatMoney(Number(line.amount))}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
-                    <Badge
-                      variant={t.status === "cleared" ? "outline" : "secondary"}
-                      className="capitalize"
-                    >
-                      {t.status || "pending"}
-                    </Badge>
                   </div>
-                </div>
-                <p
-                  className={`shrink-0 font-semibold ${Number(t.amount) < 0 ? "" : "text-primary"}`}
-                >
-                  {formatMoney(Number(t.amount))}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+                  <p
+                    className={`shrink-0 font-semibold ${entry.total < 0 ? "" : "text-primary"}`}
+                  >
+                    {formatMoney(entry.total)}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
+
       </div>
 
       <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />
