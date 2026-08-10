@@ -34,7 +34,18 @@ import {
   useUpsertIncomeSourceSplit,
 } from "@/lib/income-hooks";
 import { eventAmount, eventDate, isReceived } from "@/lib/paycheck-budget";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
+
+/** Short, local-safe date label: 2026-08-12 → Aug 12, 2026. */
+function formatDate(d: string | null | undefined): string {
+  if (!d) return "—";
+  const [y, m, day] = d.slice(0, 10).split("-").map(Number);
+  return new Date(y!, (m ?? 1) - 1, day ?? 1).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 import type { IncomeSourceSplit } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/income-source/$id")({
@@ -118,11 +129,7 @@ function IncomeSourceDetailPage() {
       <>
         <AppHeader title="Income source" />
         <main className="mx-auto max-w-lg space-y-4 p-4">
-          <EmptyState
-            icon="💸"
-            title="Income source not found"
-            description="It may have been deleted."
-          />
+          <EmptyState>Income source not found — it may have been deleted.</EmptyState>
           <Link to="/app/paycheck">
             <Button variant="outline" className="h-11 w-full">
               Back to Paycheck Budget
