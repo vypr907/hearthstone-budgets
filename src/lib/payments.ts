@@ -48,8 +48,7 @@ export function toPayable(kind: PayableKind, item: Bill | Debt): Payable {
   };
 }
 
-const linkColumn = (kind: PayableKind) =>
-  kind === "bill" ? "linked_bill_id" : "linked_debt_id";
+const linkColumn = (kind: PayableKind) => (kind === "bill" ? "linked_bill_id" : "linked_debt_id");
 /**
  * Payment mutations need a resolved account: transactions.account_id is NOT NULL.
  * `amount` is the amount being paid right now (ADR-035: every submit/clear can be
@@ -61,6 +60,8 @@ export type PayInput = {
   accountId: string;
   amount?: number;
   cycleAmount?: number;
+  /** ADR-046: optional processing/convenience fee charged with the payment. */
+  fee?: number;
 };
 
 const table = (kind: PayableKind) => (kind === "bill" ? "bills" : "debts");
@@ -104,11 +105,7 @@ async function updateRow(
   id: string,
   update: Record<string, unknown>,
 ) {
-  const { data, error } = await supabase
-    .from(tableName)
-    .update(update)
-    .eq("id", id)
-    .select("id");
+  const { data, error } = await supabase.from(tableName).update(update).eq("id", id).select("id");
   if (error) throw error;
   if (!data || data.length === 0) {
     throw new Error(
@@ -187,9 +184,6 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
   return { next_due_date: nextDue };
 }
 
-
-
-
 async function findLinkedTransaction(p: Payable, status?: string) {
   let q = supabase
     .from("transactions")
@@ -201,6 +195,38 @@ async function findLinkedTransaction(p: Payable, status?: string) {
   const { data, error } = await q;
   if (error) throw error;
   return ((data ?? [])[0] as Transaction | undefined) ?? null;
+}
+
+/**
+ * ADR-046: fees ride alongside a payment as their own ledger row so they hit the
+ * account balance without ever counting toward the bill/debt cycle.
+ */
+async function insertFeeTransaction(
+  householdId: string | null | undefined,
+  p: Payable,
+  accountId: string,
+  fee: number | undefined,
+  status: "pending" | "cleared",
+) {
+  const amt = Math.abs(Number(fee) || 0);
+  if (amt < 0.005) return;
+  // ADR-046: fees land in the household's "Fees" category when one exists.
+  const { data: feeCat } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("household_id", householdId!)
+    .ilike("name", "fees")
+    .limit(1);
+  const { error } = await supabase.from("transactions").insert({
+    household_id: householdId,
+    account_id: accountId,
+    category_id: (feeCat?.[0] as { id: string } | undefined)?.id ?? null,
+    amount: -amt,
+    status,
+    description: `Fee: ${p.name}`,
+    transaction_date: todayISO(),
+  });
+  if (error) throw error;
 }
 
 function useAfterPayment() {
@@ -223,10 +249,7 @@ async function ensureCycleAmount(p: Payable, cycleAmount?: number): Promise<Paya
   const value = p.bill.is_variable_amount
     ? Math.abs(Number(cycleAmount ?? p.bill.amount ?? p.amount) || 0)
     : Number(p.bill.amount || 0);
-  const { error } = await supabase
-    .from("bills")
-    .update({ cycle_amount_due: value })
-    .eq("id", p.id);
+  const { error } = await supabase.from("bills").update({ cycle_amount_due: value }).eq("id", p.id);
   if (error) throw error;
   return { ...p, bill: { ...p.bill, cycle_amount_due: value } };
 }
@@ -240,7 +263,7 @@ export function useMarkSubmitted() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable, accountId, amount, cycleAmount }: PayInput) => {
+    mutationFn: async ({ payable, accountId, amount, cycleAmount, fee }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const amt = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       // Mark the payable pending first so a failed status write never leaves an
@@ -258,13 +281,14 @@ export function useMarkSubmitted() {
       });
       if (error) throw error;
 
+      await insertFeeTransaction(householdId, p, accountId, fee, "pending");
+
       const owed = payableRemainingOwed(p) - amt;
       return owed > 0.005 ? { remaining_owed: owed } : {};
     },
     onSuccess: done,
   });
 }
-
 
 /**
  * Mark cleared: clear the linked pending transaction (creating one if the
@@ -275,13 +299,11 @@ export function useMarkCleared() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable, accountId, amount, cycleAmount }: PayInput) => {
+    mutationFn: async ({ payable, accountId, amount, cycleAmount, fee }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const requested = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       const existing = await findLinkedTransaction(p, "pending");
-      const clearedAmount = existing
-        ? Math.abs(Number(existing.amount ?? requested))
-        : requested;
+      const clearedAmount = existing ? Math.abs(Number(existing.amount ?? requested)) : requested;
 
       // Update the bill/debt FIRST: if that fails we bail out before touching the
       // ledger, instead of stranding a cleared transaction with no effect.
@@ -307,14 +329,14 @@ export function useMarkCleared() {
         if (error) throw error;
       }
 
+      await insertFeeTransaction(householdId, p, accountId, fee, "cleared");
+
       return result;
     },
 
     onSuccess: done,
   });
 }
-
-
 
 /**
  * Undo = full reversal: delete the linked ledger transaction, revert a bill's
@@ -360,8 +382,6 @@ export function useMarkUnpaid() {
         return;
       }
 
-
-
       const bill = p.bill;
       const update: Record<string, unknown> = { payment_status: "unpaid" };
       if (wasCleared) {
@@ -390,7 +410,6 @@ export function useMarkUnpaid() {
   });
 }
 
-
 /**
  * ADR-036 full reset: undo an entire cycle, not just its latest transaction.
  * Deletes every transaction tied to the cycle, zeroes cycle_paid_to_date and
@@ -411,10 +430,7 @@ export function useResetCycle() {
   return useMutation({
     mutationFn: async ({ payable, transactionIds, clearedTotal, resolved }: ResetCycleInput) => {
       if (transactionIds.length > 0) {
-        const { error } = await supabase
-          .from("transactions")
-          .delete()
-          .in("id", transactionIds);
+        const { error } = await supabase.from("transactions").delete().in("id", transactionIds);
         if (error) throw error;
       }
 
@@ -447,10 +463,10 @@ export function useResetCycle() {
       };
       if (resolved && bill.next_due_date) {
         update.next_due_date = reverseDate(
-            bill.next_due_date,
-            bill.billing_cycle,
-            bill.cycle_interval_days,
-          );
+          bill.next_due_date,
+          bill.billing_cycle,
+          bill.cycle_interval_days,
+        );
       }
       const { error } = await supabase.from("bills").update(update).eq("id", payable.id);
       if (error) throw error;

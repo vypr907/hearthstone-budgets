@@ -1,14 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { AccountDialog } from "@/components/AccountDialog";
 import { AppHeader } from "@/components/AppHeader";
 import {
   useAccounts,
   useCategories,
-  useDeleteAccount,
   useInstitutions,
   useLatestBalances,
   useLogBalance,
   useTransactions,
-  useUpsertAccount,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import { computeBalances } from "@/lib/balances";
@@ -25,7 +24,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -33,14 +31,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Plus, Search, Trash2, TrendingUp } from "lucide-react";
+import { Pencil, Plus, Search, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Account, Transaction } from "@/lib/supabase";
 import { format } from "date-fns";
 import { EmojiIcon } from "@/components/viz";
-
 
 export const Route = createFileRoute("/app/accounts")({
   head: () => ({
@@ -84,8 +80,7 @@ function AccountsPage() {
   }, [institutions]);
 
   const accountTypes = useMemo(
-    () =>
-      [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[],
+    () => [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[],
     [accounts],
   );
 
@@ -106,7 +101,6 @@ function AccountsPage() {
     }
     return out;
   }, [transactions]);
-
 
   const rows = useMemo(() => {
     let out = accounts;
@@ -130,8 +124,9 @@ function AccountsPage() {
       if (sort === "current")
         return (balances[b.id]?.current ?? 0) - (balances[a.id]?.current ?? 0);
       if (sort === "type")
-        return (a.account_type ?? "").localeCompare(b.account_type ?? "") ||
-          a.name.localeCompare(b.name);
+        return (
+          (a.account_type ?? "").localeCompare(b.account_type ?? "") || a.name.localeCompare(b.name)
+        );
       return a.name.localeCompare(b.name);
     });
   }, [accounts, typeFilter, instFilter, q, sort, balances]);
@@ -212,10 +207,7 @@ function AccountsPage() {
               <Card key={a.id}>
                 <CardContent className="p-3">
                   <div className="flex items-start gap-3">
-                    <EmojiIcon
-                      name={`${a.name} ${a.account_type ?? ""}`}
-                      fallback="🏛️"
-                    />
+                    <EmojiIcon name={`${a.name} ${a.account_type ?? ""}`} fallback="🏛️" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{a.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
@@ -264,7 +256,6 @@ function AccountsPage() {
                   >
                     <TrendingUp className="mr-2 h-4 w-4" /> Log new balance
                   </Button>
-
                 </CardContent>
               </Card>
             );
@@ -337,12 +328,9 @@ function RecentActivity({ rows }: { rows: Transaction[] }) {
                         className="flex items-center justify-between px-2 py-1 text-xs"
                       >
                         <span className="truncate">
-                          {categories.find((c) => c.id === line.category_id)?.name ??
-                            "No category"}
+                          {categories.find((c) => c.id === line.category_id)?.name ?? "No category"}
                         </span>
-                        <span className="tabular-nums">
-                          {formatMoney(Number(line.amount))}
-                        </span>
+                        <span className="tabular-nums">{formatMoney(Number(line.amount))}</span>
                       </div>
                     ))}
                   </div>
@@ -364,155 +352,7 @@ function RecentActivity({ rows }: { rows: Transaction[] }) {
   );
 }
 
-
-
-function AccountDialog({
-  account,
-  onClose,
-}: {
-  account: Partial<Account> | null;
-  onClose: () => void;
-}) {
-  const upsert = useUpsertAccount();
-  const del = useDeleteAccount();
-  const [name, setName] = useState("");
-  const [type, setType] = useState("");
-  const [starting, setStarting] = useState("");
-  const [notes, setNotes] = useState("");
-  const [isSpendable, setIsSpendable] = useState(false);
-  const [creditLimit, setCreditLimit] = useState("");
-
-  const open = account !== null;
-  const isEdit = !!account?.id;
-  const key = account?.id ?? "new";
-  const [lastKey, setLastKey] = useState("");
-  const isCredit = type.trim().toLowerCase() === "credit";
-  if (open && key !== lastKey) {
-    setLastKey(key);
-    setName(account?.name ?? "");
-    setType(account?.account_type ?? "");
-    setStarting(account?.starting_balance != null ? String(account.starting_balance) : "");
-    setNotes(account?.notes ?? "");
-    setIsSpendable(account?.is_spendable ?? false);
-    setCreditLimit(account?.credit_limit != null ? String(account.credit_limit) : "");
-  }
-  if (!open && lastKey !== "") setLastKey("");
-
-  async function save() {
-    if (!name.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-    try {
-      await upsert.mutateAsync({
-        id: account?.id,
-        name: name.trim(),
-        account_type: type.trim() ? type.trim().toLowerCase() : null,
-        starting_balance: starting ? Number(starting) : null,
-        notes: notes || null,
-        is_spendable: isSpendable,
-        credit_limit: isCredit && creditLimit ? Number(creditLimit) : null,
-      });
-      toast.success(isEdit ? "Account updated" : "Account added");
-      onClose();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
-  async function handleDelete() {
-    if (!account?.id) return;
-    if (!confirm("Delete this account?")) return;
-    try {
-      await del.mutateAsync(account.id);
-      toast.success("Account deleted");
-      onClose();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit account" : "Add account"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
-          </div>
-          <div>
-            <Label>Type</Label>
-            <Input
-              placeholder="Checking, savings, credit…"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="h-11"
-            />
-          </div>
-          <div>
-            <Label>Starting balance</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={starting}
-              onChange={(e) => setStarting(e.target.value)}
-              className="h-11"
-            />
-          </div>
-          {isCredit && (
-            <div>
-              <Label>Credit limit</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={creditLimit}
-                onChange={(e) => setCreditLimit(e.target.value)}
-                className="h-11"
-              />
-            </div>
-          )}
-          <div className="flex items-center gap-2 py-1">
-            <Checkbox
-              id="isSpendable"
-              checked={isSpendable}
-              onCheckedChange={(v) => setIsSpendable(v === true)}
-            />
-            <Label htmlFor="isSpendable" className="font-normal">
-              Spendable
-            </Label>
-          </div>
-          <div>
-            <Label>Notes</Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-        </div>
-        <DialogFooter className="gap-2 sm:justify-between">
-          {isEdit ? (
-            <Button variant="destructive" onClick={handleDelete} className="h-11">
-              <Trash2 className="mr-2 h-4 w-4" /> Delete
-            </Button>
-          ) : (
-            <span />
-          )}
-          <Button onClick={save} disabled={upsert.isPending} className="h-11">
-            {isEdit ? "Save" : "Add"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function LogBalanceDialog({
-  account,
-  onClose,
-}: {
-  account: Account | null;
-  onClose: () => void;
-}) {
+function LogBalanceDialog({ account, onClose }: { account: Account | null; onClose: () => void }) {
   const log = useLogBalance();
   const [balance, setBalance] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));

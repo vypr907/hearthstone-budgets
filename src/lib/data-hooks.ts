@@ -310,11 +310,17 @@ export function useUpsertAccount() {
       if (a.id) {
         const { error } = await supabase.from("accounts").update(payload).eq("id", a.id);
         if (error) throw error;
-      } else {
-        const { error } = await supabase.from("accounts").insert(payload);
-        if (error) throw error;
+        return a.id;
       }
+      const { data, error } = await supabase
+        .from("accounts")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error) throw error;
+      return (data as { id: string }).id;
     },
+
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["accounts"] });
       qc.invalidateQueries({ queryKey: ["latest_balances"] });

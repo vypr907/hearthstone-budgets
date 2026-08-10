@@ -141,6 +141,110 @@ export function useDeleteIncomeEvent() {
 }
 
 /**
+ * ADR-047: marking a paycheck received also writes the deposit ledger rows
+ * defined by its source's splits — 'fixed' rows take their amount, a
+ * 'remainder' row takes whatever is left of the received amount. The rows share
+ * `split_group_id = income_event.id`, which both groups them in the ledger UI
+ * and makes the write idempotent.
+ */
+export function useMarkIncomeReceived() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      event: IncomeEvent;
+      actualAmount?: number;
+      actualDate?: string;
+      sourceName?: string;
+    }) => {
+      const { event } = args;
+      const amount = Number(args.actualAmount ?? event.actual_amount ?? event.expected_amount ?? 0);
+      const date = args.actualDate ?? event.actual_date ?? event.expected_date ?? null;
+      if (!amount) throw new Error("Enter the amount received");
+      if (!date) throw new Error("This paycheck has no date");
+
+      const { error: evtError } = await supabase
+        .from("income_events")
+        .update({
+          status: "received",
+          actual_amount: amount,
+          actual_date: date,
+        })
+        .eq("id", event.id);
+      if (evtError) throw evtError;
+
+      // Already deposited? Never double-write the ledger.
+      const { data: existing, error: exError } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("split_group_id", event.id)
+        .limit(1);
+      if (exError) throw exError;
+      if (existing && existing.length > 0) return { deposits: 0 };
+
+      if (!event.income_source_id) return { deposits: 0 };
+      const { data: splitRows, error: splitError } = await supabase
+        .from("income_source_splits")
+        .select("*")
+        .eq("income_source_id", event.income_source_id)
+        .order("sort_order", { ascending: true, nullsFirst: false });
+      if (splitError) throw splitError;
+      const splits = (splitRows ?? []) as IncomeSourceSplit[];
+      if (splits.length === 0) return { deposits: 0 };
+
+      const fixed = splits.filter((s) => (s.split_type ?? "fixed").toLowerCase() !== "remainder");
+      const fixedTotal = fixed.reduce((sum, s) => sum + Number(s.amount ?? 0), 0);
+      const remainder = splits.find((s) => (s.split_type ?? "").toLowerCase() === "remainder");
+
+      const label = `Paycheck: ${args.sourceName ?? "Income"}`;
+      // ADR-047: a split may land a day or two after the pay date.
+      const shift = (days: number | null | undefined) => {
+        if (!days) return date;
+        const d = new Date(`${date}T00:00:00`);
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+      };
+      const rows = [
+        ...fixed
+          .filter((s) => s.account_id && Number(s.amount ?? 0) > 0)
+          .map((s) => ({
+            household_id: householdId!,
+            account_id: s.account_id,
+            amount: Number(s.amount ?? 0),
+            status: "cleared",
+            description: label,
+            transaction_date: shift(s.day_offset),
+            split_group_id: event.id,
+          })),
+      ];
+      if (remainder?.account_id) {
+        const left = Math.round((amount - fixedTotal) * 100) / 100;
+        if (left > 0) {
+          rows.push({
+            household_id: householdId!,
+            account_id: remainder.account_id,
+            amount: left,
+            status: "cleared",
+            description: label,
+            transaction_date: shift(remainder.day_offset),
+            split_group_id: event.id,
+          });
+        }
+      }
+      if (rows.length === 0) return { deposits: 0 };
+      const { error } = await supabase.from("transactions").insert(rows);
+      if (error) throw error;
+      return { deposits: rows.length };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["income_events", householdId] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
+/**
  * Set (or clear) one allocation for one paycheck. ADR-039: a row targets either
  * a category OR a savings goal, never both (DB check constraint).
  */
@@ -156,9 +260,7 @@ export function useSetAllocation() {
       amount: number;
     }) => {
       if (args.categoryId && args.goalId) {
-        throw new Error(
-          "An allocation can target a category or a savings goal, not both.",
-        );
+        throw new Error("An allocation can target a category or a savings goal, not both.");
       }
       if (!args.categoryId && !args.goalId) {
         throw new Error("An allocation needs either a category or a savings goal.");

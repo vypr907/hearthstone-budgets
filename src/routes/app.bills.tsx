@@ -43,7 +43,9 @@ import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
 import { formatTypeLabel } from "@/lib/visual-meta";
+import { InstitutionDialog } from "@/components/InstitutionDialog";
 
+const ADD_INSTITUTION = "__add_institution__";
 
 import {
   CustomCycleFields,
@@ -166,9 +168,7 @@ function BillsPage() {
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && rows.length === 0 && (
           <Card>
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              No bills match.
-            </CardContent>
+            <CardContent className="p-4 text-sm text-muted-foreground">No bills match.</CardContent>
           </Card>
         )}
 
@@ -187,66 +187,60 @@ function BillsPage() {
                 const paid = Number(b.cycle_paid_to_date ?? 0);
                 const pct = due > 0 ? Math.min(100, (paid / due) * 100) : 0;
                 return (
-                <Card key={b.id} className="cursor-pointer" onClick={() => setDetail(b)}>
-                  <CardContent className="p-3">
-                    <div className="flex items-start gap-3">
-                      <EmojiIcon
-                        name={`${b.name} ${
-                          (b.category_id && categoryName[b.category_id]) || ""
-                        }`}
-                        fallback="🧾"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{b.name}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                          <span>
-                            {b.next_due_date ? `Due ${b.next_due_date}` : "No due date"}
-                          </span>
-                          {b.billing_cycle ? <span>· {b.billing_cycle}</span> : null}
-                          {b.category_id && categoryName[b.category_id] ? (
-                            <span>· {categoryName[b.category_id]}</span>
-                          ) : null}
-                          {b.is_variable_amount ? <span>· variable</span> : null}
-                          <StatusBadge status={info.state} />
-                          {info.clearedSum > 0 && info.remaining > 0 ? (
-                            <span className="font-medium text-destructive">
-                              {formatMoney(info.remaining)} still owed this cycle
+                  <Card key={b.id} className="cursor-pointer" onClick={() => setDetail(b)}>
+                    <CardContent className="p-3">
+                      <div className="flex items-start gap-3">
+                        <EmojiIcon
+                          name={`${b.name} ${(b.category_id && categoryName[b.category_id]) || ""}`}
+                          fallback="🧾"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{b.name}</p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                            <span>
+                              {b.next_due_date ? `Due ${b.next_due_date}` : "No due date"}
                             </span>
-                          ) : null}
-                          <span className="sr-only">{stateLabel}</span>
+                            {b.billing_cycle ? <span>· {b.billing_cycle}</span> : null}
+                            {b.category_id && categoryName[b.category_id] ? (
+                              <span>· {categoryName[b.category_id]}</span>
+                            ) : null}
+                            {b.is_variable_amount ? <span>· variable</span> : null}
+                            <StatusBadge status={info.state} />
+                            {info.clearedSum > 0 && info.remaining > 0 ? (
+                              <span className="font-medium text-destructive">
+                                {formatMoney(info.remaining)} still owed this cycle
+                              </span>
+                            ) : null}
+                            <span className="sr-only">{stateLabel}</span>
+                          </div>
                         </div>
-                      </div>
-                      <p className="shrink-0 text-lg font-extrabold tabular-nums">
-                        {formatMoney(Number(b.amount))}
-                      </p>
+                        <p className="shrink-0 text-lg font-extrabold tabular-nums">
+                          {formatMoney(Number(b.amount))}
+                        </p>
 
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditing(b);
-                        }}
-                        aria-label="Edit"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {paid > 0 ? (
-                      <ItemBar className="mt-2" value={pct} color={itemColor(i)} />
-                    ) : null}
-                    <PayActions
-                      payable={toPayable("bill", b)}
-                      className="mt-2"
-                    />
-                    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                      <SetAsideAction bill={b} compact />
-                    </div>
-                  </CardContent>
-                </Card>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditing(b);
+                          }}
+                          aria-label="Edit"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {paid > 0 ? (
+                        <ItemBar className="mt-2" value={pct} color={itemColor(i)} />
+                      ) : null}
+                      <PayActions payable={toPayable("bill", b)} className="mt-2" />
+                      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                        <SetAsideAction bill={b} compact />
+                      </div>
+                    </CardContent>
+                  </Card>
                 );
               })}
-
             </div>
           ))}
         </div>
@@ -280,9 +274,7 @@ function BillDetailDialog({
   const category = categories.find((c) => c.id === bill.category_id);
   const institution = institutions.find((i) => i.id === bill.institution_id);
   // Only surface cycle figures when they add information beyond bills.amount.
-  const showCycle =
-    Number(bill.cycle_paid_to_date ?? 0) > 0 || bill.cycle_amount_due != null;
-
+  const showCycle = Number(bill.cycle_paid_to_date ?? 0) > 0 || bill.cycle_amount_due != null;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -302,10 +294,7 @@ function BillDetailDialog({
               value={<StatusBadge status={bill.payment_status} />}
             />
             <DetailItem label="Manual or auto" value={bill.manual_or_auto ?? "—"} />
-            <DetailItem
-              label="Variable amount"
-              value={bill.is_variable_amount ? "Yes" : "No"}
-            />
+            <DetailItem label="Variable amount" value={bill.is_variable_amount ? "Yes" : "No"} />
             <DetailItem
               label="Active"
               value={bill.is_active === null ? "—" : bill.is_active ? "Yes" : "No"}
@@ -322,8 +311,6 @@ function BillDetailDialog({
           <PayActions payable={toPayable("bill", bill)} />
           <SetAsideAction bill={bill} />
           <RecentBillTransactions billId={bill.id} />
-
-
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onEdit(bill)} className="h-11">
@@ -379,7 +366,8 @@ function RecentBillTransactions({ billId }: { billId: string }) {
                 aria-label="Delete transaction"
                 disabled={del.isPending}
                 onClick={() => {
-                  if (!confirm("Delete this ledger transaction? The bill row is left as-is.")) return;
+                  if (!confirm("Delete this ledger transaction? The bill row is left as-is."))
+                    return;
                   del.mutate(t, {
                     onSuccess: () => toast.success("Transaction deleted"),
                     onError: (e: unknown) => toast.error((e as Error).message),
@@ -412,6 +400,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   const [variable, setVariable] = useState(false);
   const [cycleCount, setCycleCount] = useState("");
   const [cycleUnit, setCycleUnit] = useState<CycleUnit>("days");
+  const [institutionDialogOpen, setInstitutionDialogOpen] = useState(false);
 
   const open = bill !== null;
   const isEdit = !!bill?.id;
@@ -487,7 +476,12 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         <div className="space-y-3">
           <div>
             <Label htmlFor="b-name">Name</Label>
-            <Input id="b-name" value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
+            <Input
+              id="b-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-11"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -563,7 +557,16 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
           </div>
           <div>
             <Label>Institution</Label>
-            <Select value={institutionId} onValueChange={setInstitutionId}>
+            <Select
+              value={institutionId}
+              onValueChange={(v) => {
+                if (v === ADD_INSTITUTION) {
+                  setInstitutionDialogOpen(true);
+                  return;
+                }
+                setInstitutionId(v);
+              }}
+            >
               <SelectTrigger className="h-11">
                 <SelectValue />
               </SelectTrigger>
@@ -574,9 +577,11 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
                     {i.name}
                   </SelectItem>
                 ))}
+                <SelectItem value={ADD_INSTITUTION}>+ Add new institution</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
           <div>
             <Label>Manual or auto</Label>
             <Select value={manual} onValueChange={setManual}>
@@ -607,6 +612,12 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
             {isEdit ? "Save" : "Add"}
           </Button>
         </DialogFooter>
+        {/* Inline institution creation keeps the in-progress bill form intact. */}
+        <InstitutionDialog
+          institution={institutionDialogOpen ? {} : null}
+          onClose={() => setInstitutionDialogOpen(false)}
+          onSaved={(id) => setInstitutionId(id)}
+        />
       </DialogContent>
     </Dialog>
   );

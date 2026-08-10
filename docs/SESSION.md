@@ -11,12 +11,19 @@
       linked-accounts list) reused inline by the Debt form's
       "+ Add new institution" option.
 
-### Remaining from this batch
-- [ ] ADR-046 payment fees (optional Fee field in pay-flow.tsx → second unlinked
-      transaction row using the household "Fees" category).
-- [ ] ADR-047 mark income received → auto-create split transactions from
-      income_source_splits.
-- [ ] Institution form: "+ Add account" action inline (list is shown; add action
-      still points users at the Accounts screen).
-- [ ] Bill form: "+ Add new institution" option (done for Debts only so far).
-- [ ] Migrate app.institutions.tsx to use the shared InstitutionDialog.
+- [x] ADR-046 payment fees: optional Fee field in the pay prompt; writes a second,
+      unlinked transaction ("Fee: <name>") on the same account using the household
+      "Fees" category when one exists. Never credits the cycle.
+- [x] ADR-047 mark income received: "Mark received" button on each pay date writes
+      the source's deposit splits (fixed rows + remainder absorbing variance,
+      day_offset applied) as cleared transactions grouped by `split_group_id`.
+- [x] Shared `AccountDialog` component (now with an Institution picker); the
+      Institution form gained an inline "+ Add account" action.
+- [x] Bill form: "+ Add new institution" option, matching the Debt form.
+- [x] app.institutions.tsx now uses the shared `InstitutionDialog`.
+
+### Known issues
+- ADR-047: when an income source has no split rows, marking received updates the
+  event but writes no deposit transaction (no account prompt yet).
+- Institutions and Accounts screens still define their own detail dialogs; only the
+  add/edit forms are shared.

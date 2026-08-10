@@ -30,7 +30,6 @@ import { Label } from "@/components/ui/label";
 type Action = "submitted" | "cleared";
 type Stage = "cycle" | "pay";
 
-
 /**
  * Shared mark-paid flow. transactions.account_id is NOT NULL, but bills/debts
  * carry no account, so the payer is picked from ALL household accounts at pay
@@ -46,12 +45,16 @@ export function usePayFlow() {
   const clear = useMarkCleared();
   const undo = useMarkUnpaid();
   const reset = useResetCycle();
-  const [confirmReset, setConfirmReset] = useState<
-    { payable: Payable; info: CycleInfo } | null
-  >(null);
-  const [choice, setChoice] = useState<
-    { payable: Payable; action: Action; amount?: number; cycleAmount?: number } | null
-  >(null);
+  const [confirmReset, setConfirmReset] = useState<{ payable: Payable; info: CycleInfo } | null>(
+    null,
+  );
+  const [choice, setChoice] = useState<{
+    payable: Payable;
+    action: Action;
+    amount?: number;
+    cycleAmount?: number;
+    fee?: number;
+  } | null>(null);
   const [ask, setAsk] = useState<{
     payable: Payable;
     action: Action;
@@ -59,9 +62,10 @@ export function usePayFlow() {
     cycleAmount?: number;
   } | null>(null);
   const [askValue, setAskValue] = useState("");
+  // ADR-046: optional fee charged alongside this payment.
+  const [feeValue, setFeeValue] = useState("");
 
-  const busy =
-    submit.isPending || clear.isPending || undo.isPending || reset.isPending;
+  const busy = submit.isPending || clear.isPending || undo.isPending || reset.isPending;
 
   async function perform(
     payable: Payable,
@@ -69,6 +73,7 @@ export function usePayFlow() {
     accountId: string,
     amount?: number,
     cycleAmount?: number,
+    fee?: number,
   ) {
     try {
       const res = (await (action === "submitted" ? submit : clear).mutateAsync({
@@ -76,9 +81,8 @@ export function usePayFlow() {
         accountId,
         amount,
         cycleAmount,
-      })) as
-        | { next_due_date?: string | null; remaining_owed?: number }
-        | undefined;
+        fee,
+      })) as { next_due_date?: string | null; remaining_owed?: number } | undefined;
       const msg = `${payable.name} ${action}`;
       if (res?.remaining_owed) {
         toast.success(`${msg} · ${formatMoney(res.remaining_owed)} still owed this cycle`);
@@ -95,9 +99,7 @@ export function usePayFlow() {
   /** Account that most recently paid this specific bill/debt, if any. */
   function lastPaidAccountId(payable: Payable): string | null {
     const match = transactions.find((t) =>
-      payable.kind === "bill"
-        ? t.linked_bill_id === payable.id
-        : t.linked_debt_id === payable.id,
+      payable.kind === "bill" ? t.linked_bill_id === payable.id : t.linked_debt_id === payable.id,
     );
     return match?.account_id ?? null;
   }
@@ -107,9 +109,10 @@ export function usePayFlow() {
     action: Action,
     amount?: number,
     cycleAmount?: number,
+    fee?: number,
   ) {
     // Any household account can pay any bill/debt (ADR-007 correction 2026-08-03).
-    setChoice({ payable, action, amount, cycleAmount });
+    setChoice({ payable, action, amount, cycleAmount, fee });
   }
 
   /** Amount to pre-fill for the "paying now" prompt: whatever is still owed. */
@@ -129,6 +132,7 @@ export function usePayFlow() {
       payable.kind === "bill" &&
       !!payable.bill?.is_variable_amount &&
       payable.bill?.cycle_amount_due == null;
+    setFeeValue("");
     if (needsCycle) {
       setAskValue(String(billCycleDue(payable.bill!) || ""));
       setAsk({ payable, action, stage: "cycle" });
@@ -137,7 +141,6 @@ export function usePayFlow() {
     setAskValue(String(defaultPayAmount(payable) || ""));
     setAsk({ payable, action, stage: "pay" });
   }
-
 
   /**
    * ADR-036 tap handler, driven by the ledger-derived state:
@@ -152,13 +155,18 @@ export function usePayFlow() {
     if (info.state === "pending") {
       const accountId = info.pending?.account_id;
       if (!accountId) {
-        resolveAccount(payable, "cleared", Math.abs(Number(info.pending?.amount ?? 0)) || undefined);
+        resolveAccount(
+          payable,
+          "cleared",
+          Math.abs(Number(info.pending?.amount ?? 0)) || undefined,
+        );
         return;
       }
       void perform(payable, "cleared", accountId);
       return;
     }
     // unpaid or partial: submit a new (possibly partial) payment.
+    setFeeValue("");
     setAskValue(String(info.remaining || defaultPayAmount(payable) || ""));
     setAsk({ payable, action: "submitted", stage: needsCycleAmount(payable) ? "cycle" : "pay" });
   }
@@ -180,7 +188,6 @@ export function usePayFlow() {
     }
   }
 
-
   const options = choice ? accounts : [];
   const defaultAccountId = choice ? lastPaidAccountId(choice.payable) : null;
 
@@ -192,9 +199,7 @@ export function usePayFlow() {
         </DialogHeader>
         <div className="max-h-[60vh] space-y-2 overflow-y-auto">
           {options.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No accounts yet — add an account first.
-            </p>
+            <p className="text-sm text-muted-foreground">No accounts yet — add an account first.</p>
           ) : null}
           {options.map((a) => {
             const visual = accountTypeVisual(a.account_type);
@@ -208,7 +213,7 @@ export function usePayFlow() {
                 onClick={() => {
                   const c = choice!;
                   setChoice(null);
-                  void perform(c.payable, c.action, a.id, c.amount, c.cycleAmount);
+                  void perform(c.payable, c.action, a.id, c.amount, c.cycleAmount, c.fee);
                 }}
               >
                 <span aria-hidden className="text-lg" title={a.account_type ?? undefined}>
@@ -231,7 +236,6 @@ export function usePayFlow() {
               </Button>
             );
           })}
-
         </div>
       </DialogContent>
     </Dialog>
@@ -277,6 +281,25 @@ export function usePayFlow() {
               Pay less than the full amount to record a partial payment.
             </p>
           ) : null}
+          {ask?.stage === "pay" ? (
+            <div className="pt-2">
+              <Label htmlFor="pay-fee">Fee (optional)</Label>
+              <Input
+                id="pay-fee"
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="0.00"
+                className="h-11"
+                value={feeValue}
+                onChange={(e) => setFeeValue(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Charged to the same account as its own transaction — it does not count toward this
+                cycle.
+              </p>
+            </div>
+          ) : null}
         </div>
         <DialogFooter>
           <Button
@@ -295,7 +318,8 @@ export function usePayFlow() {
                 return;
               }
               setAsk(null);
-              resolveAccount(a.payable, a.action, value, a.cycleAmount);
+              const fee = Number(feeValue) > 0 ? Number(feeValue) : undefined;
+              resolveAccount(a.payable, a.action, value, a.cycleAmount, fee);
             }}
           >
             Continue
@@ -305,15 +329,13 @@ export function usePayFlow() {
     </Dialog>
   );
 
-
-
   const resetConfirm = (
     <Dialog open={!!confirmReset} onOpenChange={(o) => !o && setConfirmReset(null)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            This will reset this {confirmReset?.payable.kind ?? "bill"} — undo all payments
-            this cycle?
+            This will reset this {confirmReset?.payable.kind ?? "bill"} — undo all payments this
+            cycle?
           </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
