@@ -90,6 +90,11 @@ function TransactionsPage() {
     });
   }, [transactions, account, status, sort]);
 
+  /** ADR-044: collapse split lines into one entry per real transaction. */
+  const entries = useMemo(() => groupLedgerRows(rows), [rows]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+
   return (
     <>
       <AppHeader title="Transactions" />
