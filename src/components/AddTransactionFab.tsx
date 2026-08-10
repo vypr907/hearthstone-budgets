@@ -136,6 +136,7 @@ export function AddTransactionFab() {
     setAmount("");
     setCategoryId(NO_CATEGORY);
     setDescription("");
+    setMerchantId(null);
     setLink(NO_LINK);
     setIsSplit(false);
     setSplitRows([emptySplitRow()]);
