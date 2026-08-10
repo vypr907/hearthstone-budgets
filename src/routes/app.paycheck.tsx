@@ -965,18 +965,42 @@ function IncomeAdmin({
           {sources.length === 0 ? (
             <p className="text-sm text-muted-foreground">No income sources yet.</p>
           ) : (
-            sources.map((s) => (
-              <div key={s.id} className="flex items-center justify-between text-sm">
-                <span>
-                  {s.name}
-                  <span className="ml-2 text-xs text-muted-foreground">{s.cadence}</span>
-                </span>
-                <span className="flex items-center gap-2">
-                  {s.is_primary ? <Badge>Primary</Badge> : null}
-                  <span className="font-medium">{formatMoney(Number(s.typical_amount ?? 0))}</span>
-                </span>
-              </div>
-            ))
+            sources.map((s) => {
+              // ADR-054: each source is a card that opens its own detail view.
+              const mine = events.filter((e) => e.income_source_id === s.id);
+              const received = mine.filter((e) => isReceived(e));
+              const ytd = received
+                .filter((e) => (eventDate(e) ?? "").startsWith(String(new Date().getFullYear())))
+                .reduce((sum, e) => sum + eventAmount(e), 0);
+              return (
+                <Link
+                  key={s.id}
+                  to="/app/income-source/$id"
+                  params={{ id: s.id }}
+                  className="block rounded-[14px] border border-border bg-card p-3 active:bg-muted"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{s.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.cadence ?? "cadence unset"} · {received.length} received
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">
+                        {formatMoney(Number(s.typical_amount ?? 0))}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {formatMoney(ytd)} this year
+                      </p>
+                    </div>
+                  </div>
+                  {s.is_primary ? (
+                    <Badge className="mt-2">Primary</Badge>
+                  ) : null}
+                </Link>
+              );
+            })
           )}
         </CardContent>
       </Card>
