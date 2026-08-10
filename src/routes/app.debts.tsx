@@ -417,6 +417,9 @@ function DebtDetailDialog({
             {debt.plan_final_payment != null ? (
               <DetailMoney label="Final payment" value={debt.plan_final_payment} />
             ) : null}
+            {debt.invoice_number ? (
+              <DetailItem label="Invoice number" value={debt.invoice_number} />
+            ) : null}
             {Number(debt.opening_arrears ?? 0) > 0 ? (
               <DetailMoney label="Opening arrears" value={debt.opening_arrears} />
             ) : null}
