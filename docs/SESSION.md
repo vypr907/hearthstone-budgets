@@ -35,3 +35,28 @@
 ### Known issues
 - Institutions and Accounts screens still define their own detail dialogs; only the
   add/edit forms are shared.
+
+## 2026-08-11 — Phase 9 part 1 (correctness)
+
+- ADR-048 invoices: `one_time` billing cycle (never rolls, real due date),
+  invoice type defaults to it, explicit "Original invoice amount" field feeding
+  `starting_balance` (fixes the `null value in column "starting_balance"` crash),
+  and an "On a payment plan" block with number of payments / final payment.
+- ADR-049 arrears: new `src/lib/arrears.ts` (+ unit tests) sums missed cycles and
+  manual carry-in; "Past due carried in" fields on Bill and Debt forms; new
+  `PastDueBadge` on Bills/Debts rows; Dashboard "Overdue" is now "Past due" with
+  a total and per-item cycles-behind count.
+- Stranded debt repair no longer flags a debt that was fixed by hand (it now also
+  requires the debt to be untouched since the ledger rows were written), and
+  "Hide for now" is remembered per debt across reloads.
+- Paycheck: received pay dates with no deposit rows get a "Post deposits" action
+  that backfills the ledger through the same idempotent flow.
+- Institution form: Categories is now a dropdown multi-select instead of a row of
+  icon buttons.
+- Bill/Debt saves drop columns the database doesn't have yet instead of failing,
+  so the app works before and after the ADR-048/049 migration is applied.
+
+### Known issues
+- The ADR-048/049 migration in docs/SCHEMA.md must be run in Supabase; until then
+  payment-plan and arrears fields silently don't persist.
+- Institutions and Accounts screens still define their own detail dialogs.
