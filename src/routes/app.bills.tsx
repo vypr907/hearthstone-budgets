@@ -180,9 +180,7 @@ function BillsPage() {
           {groups.map(([label, items]) => (
             <div key={label || "all"} className="space-y-2">
               {label && (
-                <h2 className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {label}
-                </h2>
+                <SectionLabel className="px-1 pt-2">{label}</SectionLabel>
               )}
               {items.map((b, i) => {
                 const info = infoOf(toPayable("bill", b));
