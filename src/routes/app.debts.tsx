@@ -69,7 +69,9 @@ const ADJUSTMENT_TYPES = [
   "other",
 ];
 import { format } from "date-fns";
-import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
+import { ItemBar, itemColor } from "@/components/viz";
+import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
+
 import { Switch } from "@/components/ui/switch";
 import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel } from "@/lib/visual-meta";
 
