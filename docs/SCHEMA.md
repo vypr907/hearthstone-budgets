@@ -284,6 +284,9 @@ bills (
     cycle_amount_due numeric,                 -- actual amount owed for the current cycle
     cycle_paid_to_date numeric default 0,     -- cleared payments applied to the current cycle
     cycle_interval_days integer,              -- ADR-040: interval in days when billing_cycle = 'custom'
+    opening_arrears numeric default 0,        -- ADR-049: past due carried in from before tracking
+    arrears_as_of date,                       -- ADR-049: date the opening_arrears figure was accurate
+
     notes text,
     is_active boolean default true,
     created_at timestamptz default now(),
@@ -334,6 +337,11 @@ debts (
     is_paycheck_deduction boolean default false, -- ADR-032: serviced by payroll/HSA deduction
     cycle_paid_to_date numeric default 0,        -- ADR-035: cleared payments applied to the current cycle
     cycle_interval_days integer,                 -- ADR-040: interval in days when billing_cycle = 'custom'
+    plan_payment_count integer,                  -- ADR-048: instalments in the payment plan, when known
+    plan_final_payment numeric,                  -- ADR-048: final instalment when it differs
+    opening_arrears numeric default 0,           -- ADR-049: past due carried in from before tracking
+    arrears_as_of date,                          -- ADR-049: date the opening_arrears figure was accurate
+
     created_at timestamptz default now(),
     updated_at timestamptz default now()
 )
