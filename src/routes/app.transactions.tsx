@@ -34,6 +34,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Transaction } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
+import { groupLedgerRows } from "@/lib/split-groups";
 
 export const Route = createFileRoute("/app/transactions")({
   head: () => ({
