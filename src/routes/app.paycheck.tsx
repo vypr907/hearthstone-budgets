@@ -744,6 +744,7 @@ function IncomeAdmin({
   const upsertEvent = useUpsertIncomeEvent();
   const deleteEvent = useDeleteIncomeEvent();
   const markReceived = useMarkIncomeReceived();
+  const { data: accounts = [] } = useAccounts();
 
   const [sourceOpen, setSourceOpen] = useState(false);
   const [name, setName] = useState("");
@@ -759,6 +760,15 @@ function IncomeAdmin({
   const [received, setReceived] = useState(false);
   const [actualDate, setActualDate] = useState("");
   const [actualAmount, setActualAmount] = useState("");
+
+  // ADR-047 follow-up: account prompt when an income source has no usable
+  // deposit splits. Holds the event awaiting an account + amount choice.
+  const [depositPrompt, setDepositPrompt] = useState<{
+    event: import("@/lib/supabase").IncomeEvent;
+    sourceName: string;
+  } | null>(null);
+  const [depositAccountId, setDepositAccountId] = useState("");
+  const [depositAmount, setDepositAmount] = useState("");
 
   const openEvent = (e: import("@/lib/supabase").IncomeEvent | null) => {
     setEditing(e);
