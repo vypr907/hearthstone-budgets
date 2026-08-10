@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppTransactionsRouteImport } from './routes/app.transactions'
+import { Route as AppSpendingByPlaceRouteImport } from './routes/app.spending-by-place'
 import { Route as AppSpendingRouteImport } from './routes/app.spending'
 import { Route as AppSnapshotRouteImport } from './routes/app.snapshot'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
@@ -53,6 +54,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppTransactionsRoute = AppTransactionsRouteImport.update({
   id: '/transactions',
   path: '/transactions',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSpendingByPlaceRoute = AppSpendingByPlaceRouteImport.update({
+  id: '/spending-by-place',
+  path: '/spending-by-place',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSpendingRoute = AppSpendingRouteImport.update({
@@ -149,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/app/settings': typeof AppSettingsRoute
   '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
+  '/app/spending-by-place': typeof AppSpendingByPlaceRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
   '/app/income-source/$id': typeof AppIncomeSourceIdRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByTo {
   '/app/settings': typeof AppSettingsRoute
   '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
+  '/app/spending-by-place': typeof AppSpendingByPlaceRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app': typeof AppIndexRoute
   '/app/income-source/$id': typeof AppIncomeSourceIdRoute
@@ -193,6 +201,7 @@ export interface FileRoutesById {
   '/app/settings': typeof AppSettingsRoute
   '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
+  '/app/spending-by-place': typeof AppSpendingByPlaceRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
   '/app/income-source/$id': typeof AppIncomeSourceIdRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/app/snapshot'
     | '/app/spending'
+    | '/app/spending-by-place'
     | '/app/transactions'
     | '/app/'
     | '/app/income-source/$id'
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/app/snapshot'
     | '/app/spending'
+    | '/app/spending-by-place'
     | '/app/transactions'
     | '/app'
     | '/app/income-source/$id'
@@ -260,6 +271,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/app/snapshot'
     | '/app/spending'
+    | '/app/spending-by-place'
     | '/app/transactions'
     | '/app/'
     | '/app/income-source/$id'
@@ -306,6 +318,13 @@ declare module '@tanstack/react-router' {
       path: '/transactions'
       fullPath: '/app/transactions'
       preLoaderRoute: typeof AppTransactionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/spending-by-place': {
+      id: '/app/spending-by-place'
+      path: '/spending-by-place'
+      fullPath: '/app/spending-by-place'
+      preLoaderRoute: typeof AppSpendingByPlaceRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/spending': {
@@ -431,6 +450,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppSnapshotRoute: typeof AppSnapshotRoute
   AppSpendingRoute: typeof AppSpendingRoute
+  AppSpendingByPlaceRoute: typeof AppSpendingByPlaceRoute
   AppTransactionsRoute: typeof AppTransactionsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppIncomeSourceIdRoute: typeof AppIncomeSourceIdRoute
@@ -451,6 +471,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppSnapshotRoute: AppSnapshotRoute,
   AppSpendingRoute: AppSpendingRoute,
+  AppSpendingByPlaceRoute: AppSpendingByPlaceRoute,
   AppTransactionsRoute: AppTransactionsRoute,
   AppIndexRoute: AppIndexRoute,
   AppIncomeSourceIdRoute: AppIncomeSourceIdRoute,

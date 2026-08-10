@@ -153,7 +153,7 @@ function SpendingByPlacePage() {
             ) : (
               rows.map((r, index) => {
                 const share = total > 0 ? (r.amount / total) * 100 : 0;
-                const color = itemColor(r.id || String(index));
+                const color = itemColor(index);
                 return (
                   <div key={r.id} className="space-y-1">
                     <div className="flex items-center gap-2">
