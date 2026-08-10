@@ -267,6 +267,10 @@ function TransactionDetail({
   if (!transaction && lastKey !== "") setLastKey("");
 
   if (!transaction) return null;
+  // ADR-044: a split entry is edited as a whole group, never line by line.
+  if (transaction.split_group_id)
+    return <SplitTransactionDetail transaction={transaction} onClose={onClose} />;
+
   const linkedBill = bills.find((b) => b.id === transaction.linked_bill_id);
   const linkedDebt = debts.find((d) => d.id === transaction.linked_debt_id);
   const isLinked = !!(transaction.linked_bill_id || transaction.linked_debt_id);
