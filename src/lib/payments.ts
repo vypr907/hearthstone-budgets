@@ -210,17 +210,27 @@ async function insertFeeTransaction(
 ) {
   const amt = Math.abs(Number(fee) || 0);
   if (amt < 0.005) return;
-  // ADR-046: fees land in the household's "Fees" category when one exists.
-  const { data: feeCat } = await supabase
+  // ADR-046: fees land in the household's "Fees" category. Auto-create it if it
+  // doesn't exist so fee rows are always categorised.
+  let feeCatId = (await supabase
     .from("categories")
     .select("id")
     .eq("household_id", householdId!)
     .ilike("name", "fees")
-    .limit(1);
+    .limit(1)).data?.[0]?.id;
+  if (!feeCatId && householdId) {
+    const { data: created, error: catErr } = await supabase
+      .from("categories")
+      .insert({ household_id: householdId, name: "Fees" })
+      .select("id")
+      .single();
+    if (catErr) throw catErr;
+    feeCatId = created?.id ?? null;
+  }
   const { error } = await supabase.from("transactions").insert({
     household_id: householdId,
     account_id: accountId,
-    category_id: (feeCat?.[0] as { id: string } | undefined)?.id ?? null,
+    category_id: feeCatId ?? null,
     amount: -amt,
     status,
     description: `Fee: ${p.name}`,
