@@ -194,6 +194,7 @@ export function AddTransactionFab() {
         description: description.trim() || null,
         status: "cleared",
         transaction_date: todayISO(),
+        ...(merchantId ? { institution_id: merchantId } : {}),
         ...(bill ? { linked_bill_id: bill.id } : {}),
         ...(debt ? { linked_debt_id: debt.id } : {}),
       });
