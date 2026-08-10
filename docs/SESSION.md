@@ -1,11 +1,22 @@
 ## Session Notes
-- [ ] ADR-044: Split transactions across categories (transactions.split_group_id)
-- [ ] ADR-045: Invoices as debts (debt_type='invoice') + debt_adjustments table
-      (insurance coverage/discount, late fees/NSF added to balance owed)
-- [ ] ADR-046: Payment fees on bill/debt payments (transaction fee, NSF fee paid
-      out-of-pocket) — excluded from cycle credit, included in account debit
-- [ ] ADR-024 extension: marking an income_event as received auto-creates
-      transactions per that source's income_source_splits
-- [ ] Institution form: Category as icon dropdown, Type as dropdown, inline
-      linked-accounts add
-- [ ] Bill form: Institution dropdown gains "+ Add Institution" inline option
+- [x] ADR-044 split transactions: `split_group_id` on Transaction type, save/delete
+      split hooks, `SplitLinesEditor`, split toggle in Add Transaction, grouped
+      display (Transactions screen + Accounts recent activity), whole-group edit
+      dialog (delete + re-insert on save).
+- [x] ADR-045 invoices + adjustments: `debt_type` is now a dropdown including
+      Invoice, Institution dropdown added to the Debt form, and an Adjustments
+      section on debt detail (add dialog + per-row delete, payable-first balance
+      write ordering).
+- [x] Shared `InstitutionDialog` component (type dropdown, category multi-select,
+      linked-accounts list) reused inline by the Debt form's
+      "+ Add new institution" option.
+
+### Remaining from this batch
+- [ ] ADR-046 payment fees (optional Fee field in pay-flow.tsx → second unlinked
+      transaction row using the household "Fees" category).
+- [ ] ADR-047 mark income received → auto-create split transactions from
+      income_source_splits.
+- [ ] Institution form: "+ Add account" action inline (list is shown; add action
+      still points users at the Accounts screen).
+- [ ] Bill form: "+ Add new institution" option (done for Debts only so far).
+- [ ] Migrate app.institutions.tsx to use the shared InstitutionDialog.
