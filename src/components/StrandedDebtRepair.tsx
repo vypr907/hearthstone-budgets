@@ -31,6 +31,8 @@ export function findStrandedDebtPayments(
 ): StrandedGroup[] {
   const out: StrandedGroup[] = [];
   for (const debt of debts) {
+    // A settled debt can never be stranded.
+    if (debt.date_paid_off || Number(debt.remaining_balance ?? 0) <= 0.005) continue;
     const info = deriveCycleInfo(toPayable("debt", debt), transactions, today);
     if (info.resolved) continue; // the cycle really did roll forward — healthy
     const cleared = info.transactions.filter((t) => t.status === "cleared");
@@ -48,6 +50,16 @@ export function findStrandedDebtPayments(
       "",
     );
     if (debt.updated_at && newestRow && debt.updated_at >= newestRow) continue;
+    // ADR-051: the balance itself is the strongest signal. If the debt has
+    // already come down by at least everything ever cleared against it, the
+    // money landed — a repaired-by-hand payment must stop being flagged even
+    // when the cycle bookkeeping columns were never written.
+    const paidEver = transactions
+      .filter((t) => t.linked_debt_id === debt.id && t.status === "cleared")
+      .reduce((s, t) => s + Math.abs(Number(t.amount ?? 0)), 0);
+    const start = Number(debt.starting_balance ?? 0);
+    const remaining = Number(debt.remaining_balance ?? 0);
+    if (start > 0 && start - remaining >= paidEver - 0.005) continue;
     out.push({ debt, rows: cleared, clearedSum });
   }
   return out;
