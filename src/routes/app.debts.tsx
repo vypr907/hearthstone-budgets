@@ -187,8 +187,8 @@ function DebtsPage() {
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && debts.length === 0 && (
           <Card>
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              No debts yet.
+            <CardContent className="p-0">
+              <EmptyState>No debts yet.</EmptyState>
             </CardContent>
           </Card>
         )}
