@@ -122,6 +122,8 @@ export type Debt = {
   plan_payment_count?: number | null;
   /** ADR-048: final payment amount when it differs from the regular payment. */
   plan_final_payment?: number | null;
+  /** ADR-052: invoice reference number; drives the auto-composed name. */
+  invoice_number?: string | null;
   /** ADR-049: past-due amount carried in from before tracking started. */
   opening_arrears?: number | null;
   /** ADR-049: date the opening arrears figure was accurate as of. */
