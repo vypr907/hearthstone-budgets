@@ -521,3 +521,30 @@ All three are display-only; no logic depends on them being non-null.
 
 Check constraint: exactly one of `category_id` / `goal_id` is non-null — a row allocates
 to a spending category OR a savings goal, never both.
+
+---
+
+# Migration: ADR-048 / ADR-049 (2026-08-11)
+
+Run in the Supabase SQL Editor. Until it is applied the app degrades gracefully:
+the new fields are dropped from the save payload and everything else still saves.
+
+```sql
+-- ADR-048: invoice payment plans
+alter table public.debts add column if not exists plan_payment_count integer;
+alter table public.debts add column if not exists plan_final_payment numeric;
+
+-- ADR-048: a one-time charge must be storable without a starting balance
+alter table public.debts alter column starting_balance drop not null;
+
+-- ADR-049: past due carried in from before Hearthstone tracked the item
+alter table public.debts add column if not exists opening_arrears numeric default 0;
+alter table public.debts add column if not exists arrears_as_of date;
+alter table public.bills add column if not exists opening_arrears numeric default 0;
+alter table public.bills add column if not exists arrears_as_of date;
+
+notify pgrst, 'reload schema';
+```
+
+`billing_cycle` gains the value `one_time` (ADR-048). It is stored as text, so no
+enum change is required.
