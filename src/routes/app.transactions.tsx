@@ -578,9 +578,7 @@ function SplitTransactionDetail({
               />
             </DetailGrid>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Category lines
-              </p>
+              <SectionLabel>Category lines</SectionLabel>
               <div className="mt-1 divide-y divide-border/50 rounded-md border">
                 {lines.map((l) => (
                   <div
