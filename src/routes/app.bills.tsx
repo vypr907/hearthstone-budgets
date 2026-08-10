@@ -170,7 +170,9 @@ function BillsPage() {
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && rows.length === 0 && (
           <Card>
-            <CardContent className="p-4 text-sm text-muted-foreground">No bills match.</CardContent>
+            <CardContent className="p-0">
+              <EmptyState>No bills match.</EmptyState>
+            </CardContent>
           </Card>
         )}
 
