@@ -235,17 +235,13 @@ function AccountsPage() {
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <div className="rounded-[12px] bg-muted/50 p-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        Current
-                      </p>
+                      <SectionLabel size="sub">Current</SectionLabel>
                       <p className="text-xl font-extrabold tabular-nums">
                         {formatMoney(b?.current ?? 0)}
                       </p>
                     </div>
                     <div className="rounded-[12px] bg-muted/50 p-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        Spendable
-                      </p>
+                      <SectionLabel size="sub">Spendable</SectionLabel>
                       <p className="text-xl font-extrabold tabular-nums">
                         {formatMoney(b?.spendable ?? 0)}
                       </p>
