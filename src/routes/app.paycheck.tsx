@@ -81,6 +81,28 @@ import { cn } from "@/lib/utils";
 import { PAYCHECK_DEDUCTION_ICON, categoryVisual } from "@/lib/visual-meta";
 import { Plus } from "lucide-react";
 
+/**
+ * ADR-047 follow-up: returns true when the income source has at least one
+ * split row that resolves to a deposit (a fixed row with an account + amount,
+ * or a remainder row with an account). Used to decide whether "Mark received"
+ * can stay one-tap or needs an account prompt.
+ */
+async function hasUsableSplits(incomeSourceId: string | null | undefined) {
+  if (!incomeSourceId) return false;
+  const { data, error } = await supabase
+    .from("income_source_splits")
+    .select("split_type,amount,account_id")
+    .eq("income_source_id", incomeSourceId);
+  if (error) return false;
+  for (const s of data ?? []) {
+    const isRemainder = (s.split_type ?? "fixed").toLowerCase() === "remainder";
+    const hasAccount = !!s.account_id;
+    const hasAmount = isRemainder ? true : Number(s.amount ?? 0) > 0;
+    if (hasAccount && hasAmount) return true;
+  }
+  return false;
+}
+
 export const Route = createFileRoute("/app/paycheck")({
   head: () => ({
     meta: [
