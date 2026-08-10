@@ -119,6 +119,9 @@ export const Route = createFileRoute("/app/debts")({
 
 function DebtsPage() {
   const { data: debts = [], isLoading } = useDebts();
+  const { data: allInstitutions = [] } = useInstitutions();
+  const institutionById = useInstitutionIndex(allInstitutions);
+
   const [editing, setEditing] = useState<Partial<Debt> | null>(null);
   const [detail, setDetail] = useState<Debt | null>(null);
   const infoOf = useCycleState();
