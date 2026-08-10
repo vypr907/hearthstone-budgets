@@ -244,9 +244,7 @@ function DebtsPage() {
             return (
             <div key={d.id} className="space-y-2">
             {header ? (
-              <h2 className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                {header}
-              </h2>
+              <SectionLabel className="px-1 pt-2">{header}</SectionLabel>
             ) : null}
             <Card
               className="cursor-pointer"
