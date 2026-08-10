@@ -62,6 +62,7 @@ import {
   usePayPeriodAllocations,
   useSetAllocation,
   useUpsertIncomeEvent,
+  useMarkIncomeReceived,
   useUpsertIncomeSource,
 } from "@/lib/income-hooks";
 import {
@@ -71,7 +72,6 @@ import {
   isReceived,
   obligationsInRange,
   deductedObligationsInRange,
-
   periodRange,
   sum,
 } from "@/lib/paycheck-budget";
@@ -156,8 +156,7 @@ function PaycheckPage() {
             {!primarySource ? (
               <Card>
                 <CardContent className="p-4 text-sm text-muted-foreground">
-                  Mark one income source as primary on the Income tab to start budgeting
-                  paychecks.
+                  Mark one income source as primary on the Income tab to start budgeting paychecks.
                 </CardContent>
               </Card>
             ) : primaryEvents.length === 0 ? (
@@ -178,8 +177,7 @@ function PaycheckPage() {
                       <SelectContent>
                         {primaryEvents.map((e) => (
                           <SelectItem key={e.id} value={e.id}>
-                            {eventDate(e) ?? "no date"} ·{" "}
-                            {formatMoney(eventAmount(e))} ·{" "}
+                            {eventDate(e) ?? "no date"} · {formatMoney(eventAmount(e))} ·{" "}
                             {isReceived(e) ? "received" : "expected"}
                           </SelectItem>
                         ))}
@@ -212,11 +210,7 @@ function PaycheckPage() {
           </TabsContent>
 
           <TabsContent value="trends" className="mt-4">
-            <TrendsView
-              events={primaryEvents}
-              allocations={allocations}
-              categories={categories}
-            />
+            <TrendsView events={primaryEvents} allocations={allocations} categories={categories} />
           </TabsContent>
 
           <TabsContent value="income" className="mt-4">
@@ -231,9 +225,7 @@ function PaycheckPage() {
 type Cat = { id: string; name: string; domain?: string | null };
 
 function spendingCategories(categories: Cat[]) {
-  const spending = categories.filter(
-    (c) => (c.domain ?? "").toLowerCase() === "spending",
-  );
+  const spending = categories.filter((c) => (c.domain ?? "").toLowerCase() === "spending");
   return spending.length > 0 ? spending : categories;
 }
 
@@ -276,9 +268,7 @@ function PeriodBudget({
     for (const c of categories) {
       const seen = window.filter((m) => resolver.has(c.id, m));
       out.set(c.id, {
-        last: resolver.has(c.id, lastMonth)
-          ? resolver.resolve(c.id, lastMonth).amount
-          : null,
+        last: resolver.has(c.id, lastMonth) ? resolver.resolve(c.id, lastMonth).amount : null,
         avg: seen.length
           ? seen.reduce((s, m) => s + resolver.resolve(c.id, m).amount, 0) / seen.length
           : null,
@@ -286,8 +276,6 @@ function PeriodBudget({
     }
     return out;
   }, [spendActuals, allTransactions, bills, categories]);
-
-
 
   const obligations = useMemo(
     () => obligationsInRange(bills, debts, start, end),
@@ -300,12 +288,10 @@ function PeriodBudget({
     [debts, start, end],
   );
 
-
   const secondary = useMemo(
     () =>
       events.filter(
-        (e) =>
-          e.income_source_id !== primarySourceId && inRange(eventDate(e), start, end),
+        (e) => e.income_source_id !== primarySourceId && inRange(eventDate(e), start, end),
       ),
     [events, primarySourceId, start, end],
   );
@@ -321,7 +307,10 @@ function PeriodBudget({
     }
     return [...map.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([parent, rows]) => [parent, rows.slice().sort((a, b) => a.name.localeCompare(b.name))] as const);
+      .map(
+        ([parent, rows]) =>
+          [parent, rows.slice().sort((a, b) => a.name.localeCompare(b.name))] as const,
+      );
   }, [cats]);
   const mine = useMemo(
     () => allocations.filter((a) => a.income_event_id === event.id),
@@ -368,10 +357,7 @@ function PeriodBudget({
     }
   };
 
-  const sliderMax = Math.max(
-    100,
-    Math.ceil((income - obligationsTotal) / 50) * 50 || 100,
-  );
+  const sliderMax = Math.max(100, Math.ceil((income - obligationsTotal) / 50) * 50 || 100);
 
   return (
     <div className="space-y-4">
@@ -385,9 +371,7 @@ function PeriodBudget({
           </div>
           {secondary.map((e) => (
             <div key={e.id} className="flex items-center justify-between">
-              <span className="text-muted-foreground">
-                Extra income · {eventDate(e)}
-              </span>
+              <span className="text-muted-foreground">Extra income · {eventDate(e)}</span>
               <span className="font-medium">{formatMoney(eventAmount(e))}</span>
             </div>
           ))}
@@ -442,7 +426,6 @@ function PeriodBudget({
               ))}
             </div>
           ) : null}
-
         </CardContent>
       </Card>
 
@@ -498,8 +481,7 @@ function PeriodBudget({
                       return (
                         <p className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                           <span>
-                            Last month{" "}
-                            {hist.last == null ? "—" : formatMoney(hist.last)} · 3-mo avg{" "}
+                            Last month {hist.last == null ? "—" : formatMoney(hist.last)} · 3-mo avg{" "}
                             {hist.avg == null ? "—" : formatMoney(hist.avg)}
                           </span>
                           {avg != null && avg > 0 ? (
@@ -530,10 +512,7 @@ function PeriodBudget({
               {goals.map((g) => {
                 const v = goalValueFor(g.id);
                 return (
-                  <div
-                    key={g.id}
-                    className="space-y-2 border-l-4 border-primary/60 pl-3"
-                  >
+                  <div key={g.id} className="space-y-2 border-l-4 border-primary/60 pl-3">
                     <div className="flex items-center justify-between gap-2">
                       <span
                         aria-hidden
@@ -561,9 +540,7 @@ function PeriodBudget({
                       value={[Math.min(v, sliderMax)]}
                       max={sliderMax}
                       step={5}
-                      onValueChange={([n]) =>
-                        setDraft((d) => ({ ...d, [`goal:${g.id}`]: n }))
-                      }
+                      onValueChange={([n]) => setDraft((d) => ({ ...d, [`goal:${g.id}`]: n }))}
                       onValueCommit={([n]) => commitGoal(g.id, n)}
                     />
                   </div>
@@ -610,9 +587,7 @@ function PeriodBudget({
                 <span>
                   {accounts.find((a) => a.id === s.account_id)?.name ?? "Unassigned"}
                   {s.day_offset ? (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      day +{s.day_offset}
-                    </span>
+                    <span className="ml-2 text-xs text-muted-foreground">day +{s.day_offset}</span>
                   ) : null}
                 </span>
                 <span className="font-medium">
@@ -715,12 +690,7 @@ function TrendsView({
                 <RTooltip formatter={(v: number) => formatMoney(v)} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {used.map((c, i) => (
-                  <Bar
-                    key={c.id}
-                    dataKey={c.name}
-                    stackId="a"
-                    fill={palette[i % palette.length]}
-                  />
+                  <Bar key={c.id} dataKey={c.name} stackId="a" fill={palette[i % palette.length]} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -772,6 +742,7 @@ function IncomeAdmin({
   const upsertSource = useUpsertIncomeSource();
   const upsertEvent = useUpsertIncomeEvent();
   const deleteEvent = useDeleteIncomeEvent();
+  const markReceived = useMarkIncomeReceived();
 
   const [sourceOpen, setSourceOpen] = useState(false);
   const [name, setName] = useState("");
@@ -780,9 +751,7 @@ function IncomeAdmin({
   const [typical, setTypical] = useState("");
 
   const [eventOpen, setEventOpen] = useState(false);
-  const [editing, setEditing] = useState<
-    import("@/lib/supabase").IncomeEvent | null
-  >(null);
+  const [editing, setEditing] = useState<import("@/lib/supabase").IncomeEvent | null>(null);
   const [sourceId, setSourceId] = useState("");
   const [expectedDate, setExpectedDate] = useState(todayISO());
   const [expectedAmount, setExpectedAmount] = useState("");
@@ -843,6 +812,22 @@ function IncomeAdmin({
   const sourceName = (id: string | null) =>
     sources.find((s) => s.id === id)?.name ?? "Unknown source";
 
+  async function receive(e: import("@/lib/supabase").IncomeEvent) {
+    try {
+      const res = await markReceived.mutateAsync({
+        event: e,
+        sourceName: sourceName(e.income_source_id),
+      });
+      toast.success(
+        res.deposits > 0
+          ? `Paycheck received · ${res.deposits} deposit${res.deposits === 1 ? "" : "s"} recorded`
+          : "Paycheck received",
+      );
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -875,13 +860,11 @@ function IncomeAdmin({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {["weekly", "biweekly", "semimonthly", "monthly", "irregular"].map(
-                          (c) => (
-                            <SelectItem key={c} value={c}>
-                              {c}
-                            </SelectItem>
-                          ),
-                        )}
+                        {["weekly", "biweekly", "semimonthly", "monthly", "irregular"].map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -922,9 +905,7 @@ function IncomeAdmin({
                 </span>
                 <span className="flex items-center gap-2">
                   {s.is_primary ? <Badge>Primary</Badge> : null}
-                  <span className="font-medium">
-                    {formatMoney(Number(s.typical_amount ?? 0))}
-                  </span>
+                  <span className="font-medium">{formatMoney(Number(s.typical_amount ?? 0))}</span>
                 </span>
               </div>
             ))
@@ -946,24 +927,37 @@ function IncomeAdmin({
             [...events]
               .sort((a, b) => (eventDate(b) ?? "").localeCompare(eventDate(a) ?? ""))
               .map((e) => (
-                <button
-                  key={e.id}
-                  className="flex w-full items-center justify-between rounded-md py-2 text-left text-sm hover:bg-muted"
-                  onClick={() => openEvent(e)}
-                >
-                  <span>
-                    {eventDate(e) ?? "—"}
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {sourceName(e.income_source_id)}
+                <div key={e.id} className="flex items-center gap-2">
+                  <button
+                    className="flex flex-1 items-center justify-between rounded-md py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => openEvent(e)}
+                  >
+                    <span>
+                      {eventDate(e) ?? "—"}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {sourceName(e.income_source_id)}
+                      </span>
                     </span>
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <Badge variant={isReceived(e) ? "default" : "secondary"}>
-                      {isReceived(e) ? "received" : "expected"}
-                    </Badge>
-                    <span className="font-medium">{formatMoney(eventAmount(e))}</span>
-                  </span>
-                </button>
+                    <span className="flex items-center gap-2">
+                      <Badge variant={isReceived(e) ? "default" : "secondary"}>
+                        {isReceived(e) ? "received" : "expected"}
+                      </Badge>
+                      <span className="font-medium">{formatMoney(eventAmount(e))}</span>
+                    </span>
+                  </button>
+                  {/* ADR-047: marking received also writes the source's split deposits. */}
+                  {!isReceived(e) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 shrink-0"
+                      disabled={markReceived.isPending}
+                      onClick={() => void receive(e)}
+                    >
+                      Mark received
+                    </Button>
+                  ) : null}
+                </div>
               ))
           )}
         </CardContent>
@@ -1011,10 +1005,7 @@ function IncomeAdmin({
               />
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={received}
-                onCheckedChange={(v) => setReceived(v === true)}
-              />
+              <Checkbox checked={received} onCheckedChange={(v) => setReceived(v === true)} />
               Received
             </label>
             {received ? (

@@ -27,7 +27,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2 } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
+import { AccountDialog } from "@/components/AccountDialog";
+
 import type { Institution } from "@/lib/supabase";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { categoryVisual, formatTypeLabel, suggestedLogoUrl } from "@/lib/visual-meta";
@@ -74,6 +76,7 @@ export function InstitutionDialog({
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [addingAccount, setAddingAccount] = useState(false);
 
   const open = institution !== null;
   const isEdit = !!institution?.id;
@@ -163,9 +166,7 @@ export function InstitutionDialog({
                     variant={on ? "default" : "outline"}
                     className="h-9 gap-1"
                     onClick={() =>
-                      setCatIds((prev) =>
-                        on ? prev.filter((x) => x !== c.id) : [...prev, c.id],
-                      )
+                      setCatIds((prev) => (on ? prev.filter((x) => x !== c.id) : [...prev, c.id]))
                     }
                   >
                     <span aria-hidden>{visual.icon}</span>
@@ -178,10 +179,7 @@ export function InstitutionDialog({
           </div>
           <div>
             <Label>Type</Label>
-            <Select
-              value={type || "none"}
-              onValueChange={(v) => setType(v === "none" ? "" : v)}
-            >
+            <Select value={type || "none"} onValueChange={(v) => setType(v === "none" ? "" : v)}>
               <SelectTrigger className="h-11">
                 <SelectValue placeholder="Pick a type" />
               </SelectTrigger>
@@ -257,18 +255,14 @@ export function InstitutionDialog({
             <Label>Linked accounts</Label>
             {!institution?.id ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                Save this institution first, then add its accounts from the Accounts
-                screen.
+                Save this institution first, then add its accounts here.
               </p>
             ) : linkedAccounts.length === 0 ? (
               <p className="mt-1 text-xs text-muted-foreground">No accounts linked yet.</p>
             ) : (
               <div className="mt-1 divide-y divide-border/50 rounded-md border">
                 {linkedAccounts.map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex items-center justify-between px-2 py-2 text-sm"
-                  >
+                  <div key={a.id} className="flex items-center justify-between px-2 py-2 text-sm">
                     <span className="truncate">{a.name}</span>
                     <span className="tabular-nums text-muted-foreground">
                       {formatMoney(Number(a.starting_balance ?? 0))}
@@ -277,13 +271,21 @@ export function InstitutionDialog({
                 ))}
               </div>
             )}
+            {institution?.id ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-2 h-10 w-full"
+                onClick={() => setAddingAccount(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" /> Add account
+              </Button>
+            ) : null}
           </div>
+
           <div>
             <Label>Description</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
           <div>
             <Label>Notes</Label>
@@ -305,6 +307,10 @@ export function InstitutionDialog({
             {isEdit ? "Save" : "Add"}
           </Button>
         </DialogFooter>
+        <AccountDialog
+          account={addingAccount ? { institution_id: institution?.id } : null}
+          onClose={() => setAddingAccount(false)}
+        />
       </DialogContent>
     </Dialog>
   );
