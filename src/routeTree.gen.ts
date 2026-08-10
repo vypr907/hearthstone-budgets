@@ -28,6 +28,7 @@ import { Route as AppDebtStrategyRouteImport } from './routes/app.debt-strategy'
 import { Route as AppCategoriesRouteImport } from './routes/app.categories'
 import { Route as AppBillsRouteImport } from './routes/app.bills'
 import { Route as AppAccountsRouteImport } from './routes/app.accounts'
+import { Route as AppIncomeSourceIdRouteImport } from './routes/app.income-source.$id'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -124,6 +125,11 @@ const AppAccountsRoute = AppAccountsRouteImport.update({
   path: '/accounts',
   getParentRoute: () => AppRoute,
 } as any)
+const AppIncomeSourceIdRoute = AppIncomeSourceIdRouteImport.update({
+  id: '/income-source/$id',
+  path: '/income-source/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
+  '/app/income-source/$id': typeof AppIncomeSourceIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app': typeof AppIndexRoute
+  '/app/income-source/$id': typeof AppIncomeSourceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -187,6 +195,7 @@ export interface FileRoutesById {
   '/app/spending': typeof AppSpendingRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
+  '/app/income-source/$id': typeof AppIncomeSourceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -210,6 +219,7 @@ export interface FileRouteTypes {
     | '/app/spending'
     | '/app/transactions'
     | '/app/'
+    | '/app/income-source/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -230,6 +240,7 @@ export interface FileRouteTypes {
     | '/app/spending'
     | '/app/transactions'
     | '/app'
+    | '/app/income-source/$id'
   id:
     | '__root__'
     | '/'
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/app/spending'
     | '/app/transactions'
     | '/app/'
+    | '/app/income-source/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -394,6 +406,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAccountsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/income-source/$id': {
+      id: '/app/income-source/$id'
+      path: '/income-source/$id'
+      fullPath: '/app/income-source/$id'
+      preLoaderRoute: typeof AppIncomeSourceIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -414,6 +433,7 @@ interface AppRouteChildren {
   AppSpendingRoute: typeof AppSpendingRoute
   AppTransactionsRoute: typeof AppTransactionsRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppIncomeSourceIdRoute: typeof AppIncomeSourceIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -433,6 +453,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSpendingRoute: AppSpendingRoute,
   AppTransactionsRoute: AppTransactionsRoute,
   AppIndexRoute: AppIndexRoute,
+  AppIncomeSourceIdRoute: AppIncomeSourceIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
