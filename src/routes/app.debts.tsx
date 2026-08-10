@@ -56,6 +56,7 @@ import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 import { PastDueBadge } from "@/components/PastDueBadge";
+import { PastDueEditor } from "@/components/PastDueEditor";
 
 
 /** ADR-045: invoice joins the existing debt_type values. */
