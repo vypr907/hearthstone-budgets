@@ -322,9 +322,9 @@ function DebtsPage() {
                   ) : null;
                 })()}
                 <ItemBar className="mt-2" value={pctPaid} color={itemColor(i)} />
-                <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <SectionLabel size="sub" className="mt-1">
                   {Math.round(pctPaid)}% paid off
-                </p>
+                </SectionLabel>
                 <PayActions
                   payable={toPayable("debt", d)}
                   className="mt-2"
