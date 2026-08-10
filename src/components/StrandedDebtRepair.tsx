@@ -40,23 +40,58 @@ export function findStrandedDebtPayments(
     // The tell-tale: money cleared against this cycle, but the debt row shows
     // nothing credited to the cycle.
     if (Number(debt.cycle_paid_to_date ?? 0) > 0.005) continue;
+    // …and the debt hasn't been touched since those rows were written. Once the
+    // balance has been repaired by hand the debt's updated_at moves past the
+    // ledger rows, so the payment did land and this is no longer stranded.
+    const newestRow = cleared.reduce(
+      (max, t) => (String(t.created_at ?? "") > max ? String(t.created_at ?? "") : max),
+      "",
+    );
+    if (debt.updated_at && newestRow && debt.updated_at >= newestRow) continue;
     out.push({ debt, rows: cleared, clearedSum });
   }
   return out;
+}
+
+/** Per-debt dismissals survive reloads — "not a problem" should stay answered. */
+const DISMISS_KEY = "hearthstone.stranded.dismissed";
+
+function readDismissed(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(DISMISS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Repair panel: lists stranded debt payments and deletes the stray ledger rows. */
 export function StrandedDebtRepair({ debts }: { debts: Debt[] }) {
   const { data: transactions = [] } = useTransactions();
   const del = useDeleteLinkedTransaction();
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState<string[]>(readDismissed);
 
   const groups = useMemo(
-    () => findStrandedDebtPayments(debts, transactions),
-    [debts, transactions],
+    () =>
+      findStrandedDebtPayments(debts, transactions).filter(
+        (g) => !dismissed.includes(g.debt.id),
+      ),
+    [debts, transactions, dismissed],
   );
 
-  if (dismissed || groups.length === 0) return null;
+  const dismissAll = () => {
+    const next = [...new Set([...dismissed, ...groups.map((g) => g.debt.id)])];
+    setDismissed(next);
+    try {
+      window.localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
+    } catch {
+      /* storage unavailable — the in-memory dismissal still applies */
+    }
+  };
+
+  if (groups.length === 0) return null;
+
 
   const clearGroup = async (g: StrandedGroup) => {
     if (
@@ -114,7 +149,7 @@ export function StrandedDebtRepair({ debts }: { debts: Debt[] }) {
           variant="ghost"
           size="sm"
           className="h-9 w-full"
-          onClick={() => setDismissed(true)}
+          onClick={dismissAll}
         >
           Hide for now
         </Button>
