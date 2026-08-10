@@ -655,6 +655,7 @@ function DebtDialog({
         plan_final_payment: onPlan && planFinal ? Number(planFinal) : null,
         opening_arrears: openingArrears ? Number(openingArrears) : 0,
         arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
+        invoice_number: isInvoice ? invoiceNumber.trim() || null : null,
       });
       toast.success(isEdit ? "Debt updated" : "Debt added");
       onClose();
