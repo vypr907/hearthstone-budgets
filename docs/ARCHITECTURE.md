@@ -54,3 +54,12 @@ Budget screen consumes it; it is independent of spending_budgets/spending_actual
   goal totals are derived from the ledger exactly like account balances.
 - `src/lib/data-hooks.ts` — `useSavingsGoals`, `useUpsertSavingsGoal`, `useDeleteSavingsGoal`.
 - Add/Withdraw reuse `useUpsertTransaction` with `linked_goal_id` and `status='cleared'`.
+
+## Shared form dialogs (2026-08-11)
+
+`src/components/InstitutionDialog.tsx` and `src/components/AccountDialog.tsx` own the
+institution and account add/edit forms. The Institutions and Accounts screens render
+them, and the Bill/Debt forms embed `InstitutionDialog` behind a "+ Add new
+institution" option (the `onSaved` callback selects the new row in the caller's
+picker). `InstitutionDialog` likewise embeds `AccountDialog` for its inline
+"+ Add account" action, pre-filling `institution_id`.

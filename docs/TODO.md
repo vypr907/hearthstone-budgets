@@ -62,3 +62,10 @@ with check (exists (select 1 from public.household_members m
 - [x] ADR-037 payable-first payment writes, verified updates, linked-transaction repair delete
 - [x] Spending: month navigator (prev/next) — done 2026-08-06.
 - [x] ADR-042 paycheck allocation spend hints + payment schedule previous months — done 2026-08-06.
+- [x] ADR-044 split transactions, ADR-045 invoices + debt adjustments — done 2026-08-11.
+- [x] ADR-046 payment fees (optional Fee field, unlinked "Fee: <name>" row) — done 2026-08-11.
+- [x] ADR-047 mark income received → split deposit transactions — done 2026-08-11.
+- [x] Shared InstitutionDialog/AccountDialog, inline "+ Add institution" (Bills + Debts),
+      inline "+ Add account" on the Institution form — done 2026-08-11.
+- [ ] ADR-047 follow-up: prompt for an account when the income source has no split rows.
+- [ ] Create a "Fees" category by default so ADR-046 fee rows are categorised.
