@@ -823,7 +823,11 @@ function RecentDebtTransactions({ debtId }: { debtId: string }) {
  * never touch transactions or account balances.
  */
 function DebtAdjustments({ debt }: { debt: Debt }) {
-  const { data: adjustments = [] } = useDebtAdjustments(debt.id);
+  const { data: allAdjustments = [] } = useDebtAdjustments();
+  const adjustments = useMemo(
+    () => allAdjustments.filter((a) => a.debt_id === debt.id),
+    [allAdjustments, debt.id],
+  );
   const add = useAddDebtAdjustment();
   const remove = useDeleteDebtAdjustment();
   const [open, setOpen] = useState(false);
@@ -840,7 +844,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
     }
     try {
       await add.mutateAsync({
-        debtId: debt.id,
+        debt,
         amount: value,
         adjustmentType: type,
         description: description || null,
@@ -890,7 +894,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                 className="h-8 w-8 shrink-0"
                 onClick={async () => {
                   try {
-                    await remove.mutateAsync({ id: a.id, debtId: debt.id, amount: Number(a.amount) });
+                    await remove.mutateAsync({ adjustment: a, debt });
                     toast.success("Adjustment removed");
                   } catch (e) {
                     toast.error((e as Error).message);
