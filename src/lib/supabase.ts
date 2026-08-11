@@ -206,6 +206,8 @@ export type Transaction = {
   linked_goal_id?: string | null;
   /** ADR-044: shared by every line of one split transaction. */
   split_group_id?: string | null;
+  /** ADR-056: shared by both sides of a transfer or advance deposit. */
+  transfer_group_id?: string | null;
   /** ADR-053: the place this money was spent at (merchant/store). */
   institution_id?: string | null;
   created_at: string;

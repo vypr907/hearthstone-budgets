@@ -25,6 +25,7 @@ import {
   useDebts,
   useInstitutions,
   useSaveSplitTransaction,
+  useSaveTransfer,
   useUpsertInstitution,
   useUpsertTransaction,
 } from "@/lib/data-hooks";
@@ -45,7 +46,6 @@ import { accountLabel } from "@/lib/format";
 import { applyClearedPayment, toPayable } from "@/lib/payments";
 import { useQueryClient } from "@tanstack/react-query";
 
-
 function todayISO() {
   const n = new Date();
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(
@@ -55,6 +55,9 @@ function todayISO() {
 
 const NO_CATEGORY = "__none__";
 const NO_LINK = "__none__";
+
+/** Entry mode for the Add Transaction dialog. */
+type TxMode = "expense" | "split" | "transfer";
 
 /**
  * One-tap manual entry. Date defaults to today and status to 'cleared' —
@@ -66,19 +69,28 @@ export function AddTransactionFab() {
   const { data: categories = [] } = useCategories();
   const save = useUpsertTransaction();
   const saveSplit = useSaveSplitTransaction();
+  const saveTransfer = useSaveTransfer();
   const qc = useQueryClient();
 
+  /** Current entry mode. */
+  const [mode, setMode] = useState<TxMode>("expense");
+
+  // --- Expense / split state ---
   const [accountId, setAccountId] = useState("");
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState(NO_CATEGORY);
   const [description, setDescription] = useState("");
-  /** "bill:<id>" or "debt:<id>" — mutually exclusive, optional (ADR-035). */
   const [link, setLink] = useState(NO_LINK);
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
   /** ADR-044: split entries carry per-category lines instead of one category. */
-  const [isSplit, setIsSplit] = useState(false);
   const [splitRows, setSplitRows] = useState<SplitRow[]>([emptySplitRow()]);
+
+  // --- Transfer state (ADR-056) ---
+  const [fromAccountId, setFromAccountId] = useState("");
+  const [toAccountId, setToAccountId] = useState("");
+  const [transferAmount, setTransferAmount] = useState("");
+  const [transferDescription, setTransferDescription] = useState("");
 
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
@@ -128,25 +140,63 @@ export function AddTransactionFab() {
       toast.error(msg);
     }
   }
+
   const institutionName = useMemo(() => {
     const m: Record<string, string> = {};
     for (const i of institutions) m[i.id] = i.name;
     return m;
   }, [institutions]);
 
-
   function reset() {
+    setMode("expense");
     setAccountId("");
     setAmount("");
     setCategoryId(NO_CATEGORY);
     setDescription("");
     setMerchantId(null);
     setLink(NO_LINK);
-    setIsSplit(false);
     setSplitRows([emptySplitRow()]);
+    setFromAccountId("");
+    setToAccountId("");
+    setTransferAmount("");
+    setTransferDescription("");
   }
 
-  async function submit() {
+  async function submitTransfer() {
+    const n = Number(transferAmount);
+    if (!transferAmount || !Number.isFinite(n) || n <= 0) {
+      toast.error("Enter a positive amount");
+      return;
+    }
+    if (!fromAccountId) {
+      toast.error("Pick a from-account");
+      return;
+    }
+    if (!toAccountId) {
+      toast.error("Pick a to-account");
+      return;
+    }
+    if (fromAccountId === toAccountId) {
+      toast.error("From and to accounts must be different");
+      return;
+    }
+    try {
+      await saveTransfer.mutateAsync({
+        fromAccountId,
+        toAccountId,
+        amount: n,
+        description: transferDescription.trim() || null,
+        transferDate: todayISO(),
+      });
+      toast.success("Transfer recorded");
+      reset();
+      setOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function submitExpense() {
     if (!accountId) {
       toast.error("Pick an account");
       return;
@@ -156,7 +206,7 @@ export function AddTransactionFab() {
       toast.error("Enter an amount");
       return;
     }
-    if (isSplit) {
+    if (mode === "split") {
       const lines = splitRows.filter((r) => Number(r.amount));
       if (lines.length < 2) {
         toast.error("Add at least two split lines");
@@ -174,7 +224,6 @@ export function AddTransactionFab() {
           status: "cleared",
           lines: lines.map((r) => ({
             categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
-            // Positive input means money out, same as the single-row flow.
             amount: n > 0 ? -Number(r.amount) : Number(r.amount),
           })),
         });
@@ -192,7 +241,6 @@ export function AddTransactionFab() {
     try {
       await save.mutateAsync({
         account_id: accountId,
-        // Positive input means money out; type a negative amount for money in.
         amount: n > 0 ? -n : n,
         category_id: categoryId === NO_CATEGORY ? null : categoryId,
         description: description.trim() || null,
@@ -202,7 +250,6 @@ export function AddTransactionFab() {
         ...(bill ? { linked_bill_id: bill.id } : {}),
         ...(debt ? { linked_debt_id: debt.id } : {}),
       });
-      // A linked entry is a real payment: run the same cycle update as Submit/Clear.
       if (bill || debt) {
         const payable = bill ? toPayable("bill", bill) : toPayable("debt", debt!);
         await applyClearedPayment(payable, Math.abs(n));
@@ -218,6 +265,8 @@ export function AddTransactionFab() {
       toast.error((e as Error).message);
     }
   }
+
+  const isBusy = save.isPending || saveSplit.isPending || saveTransfer.isPending;
 
   return (
     <>
@@ -235,207 +284,302 @@ export function AddTransactionFab() {
             <DialogTitle>Add transaction</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-2">
-              <Label>Account</Label>
-              <Select value={accountId} onValueChange={setAccountId}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Pick an account" />
-                </SelectTrigger>
-                <SelectContent>
-                  {accounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {accountLabel(a, institutionName[a.institution_id ?? ""])}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
 
-              </Select>
+            {/* Mode tabs: Expense | Transfer */}
+            <div className="flex rounded-lg border p-1 gap-1">
+              <button
+                type="button"
+                onClick={() => setMode("expense")}
+                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+                  mode === "expense"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Expense
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("transfer")}
+                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+                  mode === "transfer"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Transfer
+              </button>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tx-amount">Amount spent</Label>
-              <Input
-                id="tx-amount"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                className="h-12"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Money out. Enter a negative amount for money in.
-              </p>
-            </div>
+            {mode === "transfer" ? (
+              /* ---- Transfer fields ---- */
+              <>
+                <div className="space-y-2">
+                  <Label>From account</Label>
+                  <Select value={fromAccountId} onValueChange={setFromAccountId}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Pick an account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {accountLabel(a, institutionName[a.institution_id ?? ""])}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div className="pr-3">
-                <Label htmlFor="tx-split">Split into multiple categories</Label>
-                <p className="text-xs text-muted-foreground">
-                  One entry, several category lines that must add up to the total.
-                </p>
-              </div>
-              <Switch id="tx-split" checked={isSplit} onCheckedChange={setIsSplit} />
-            </div>
+                <div className="space-y-2">
+                  <Label>To account</Label>
+                  <Select value={toAccountId} onValueChange={setToAccountId}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Pick an account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {accountLabel(a, institutionName[a.institution_id ?? ""])}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {isSplit ? (
-              <SplitLinesEditor
-                rows={splitRows}
-                categories={sortedCategories}
-                total={Number(amount) || 0}
-                onChange={setSplitRows}
-              />
+                <div className="space-y-2">
+                  <Label htmlFor="xfer-amount">Amount</Label>
+                  <Input
+                    id="xfer-amount"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    className="h-12"
+                    placeholder="0.00"
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="xfer-desc">Description (optional)</Label>
+                  <Input
+                    id="xfer-desc"
+                    className="h-12"
+                    placeholder="e.g. Move to savings"
+                    value={transferDescription}
+                    onChange={(e) => setTransferDescription(e.target.value)}
+                  />
+                </div>
+              </>
             ) : (
-            <div className="space-y-2">
-              <Label>Category (optional)</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger className="h-12 text-base">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_CATEGORY} className="py-3 text-base">
-                    No category
-                  </SelectItem>
-                  {sortedCategories.map((c) => {
-                    const v = categoryVisual(c);
-                    return (
-                      <SelectItem key={c.id} value={c.id} className="py-3 text-base">
-                        <span className="flex items-center gap-2">
-                          <span
-                            aria-hidden
-                            className="grid h-7 w-7 shrink-0 place-items-center rounded-[10px] text-base"
-                            style={{ background: `${v.color}22` }}
-                          >
-                            {v.icon}
-                          </span>
-                          <span className="font-medium" style={{ color: v.color }}>
-                            {c.name}
-                          </span>
+              /* ---- Expense / Split fields ---- */
+              <>
+                <div className="space-y-2">
+                  <Label>Account</Label>
+                  <Select value={accountId} onValueChange={setAccountId}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Pick an account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {accountLabel(a, institutionName[a.institution_id ?? ""])}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="tx-amount">Amount spent</Label>
+                  <Input
+                    id="tx-amount"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    className="h-12"
+                    placeholder="0.00"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Money out. Enter a negative amount for money in.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div className="pr-3">
+                    <Label htmlFor="tx-split">Split into multiple categories</Label>
+                    <p className="text-xs text-muted-foreground">
+                      One entry, several category lines that must add up to the total.
+                    </p>
+                  </div>
+                  <Switch
+                    id="tx-split"
+                    checked={mode === "split"}
+                    onCheckedChange={(v) => setMode(v ? "split" : "expense")}
+                  />
+                </div>
+
+                {mode === "split" ? (
+                  <SplitLinesEditor
+                    rows={splitRows}
+                    categories={sortedCategories}
+                    total={Number(amount) || 0}
+                    onChange={setSplitRows}
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Category (optional)</Label>
+                    <Select value={categoryId} onValueChange={setCategoryId}>
+                      <SelectTrigger className="h-12 text-base">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_CATEGORY} className="py-3 text-base">
+                          No category
+                        </SelectItem>
+                        {sortedCategories.map((c) => {
+                          const v = categoryVisual(c);
+                          return (
+                            <SelectItem key={c.id} value={c.id} className="py-3 text-base">
+                              <span className="flex items-center gap-2">
+                                <span
+                                  aria-hidden
+                                  className="grid h-7 w-7 shrink-0 place-items-center rounded-[10px] text-base"
+                                  style={{ background: `${v.color}22` }}
+                                >
+                                  {v.icon}
+                                </span>
+                                <span className="font-medium" style={{ color: v.color }}>
+                                  {c.name}
+                                </span>
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {mode !== "split" ? (
+                  <div className="space-y-2">
+                    <Label>Link to bill/debt (optional)</Label>
+                    <Select value={link} onValueChange={setLink}>
+                      <SelectTrigger className="h-12">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_LINK}>Not linked</SelectItem>
+                        {bills.map((b) => (
+                          <SelectItem key={`bill-${b.id}`} value={`bill:${b.id}`}>
+                            🧾 {b.name}
+                          </SelectItem>
+                        ))}
+                        {debts.map((d) => (
+                          <SelectItem key={`debt-${d.id}`} value={`debt:${d.id}`}>
+                            💳 {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Linked entries count toward that bill or debt's current cycle.
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="space-y-2">
+                  <Label htmlFor="tx-desc">Description</Label>
+                  <Input
+                    id="tx-desc"
+                    className="h-12"
+                    placeholder="e.g. Groceries"
+                    value={description}
+                    onChange={(e) => {
+                      setDescription(e.target.value);
+                      if (merchantId) setMerchantId(null);
+                    }}
+                  />
+                  {/* ADR-053: tie the entry to a place, either an existing one… */}
+                  {merchantId ? (
+                    <div className="flex items-center gap-2 rounded-[12px] bg-muted/50 p-2 text-xs">
+                      <span aria-hidden className="text-base">🏪</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        Tracked at{" "}
+                        <span className="font-semibold">
+                          {institutions.find((i) => i.id === merchantId)?.name}
                         </span>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            )}
-
-            {!isSplit ? (
-            <div className="space-y-2">
-              <Label>Link to bill/debt (optional)</Label>
-              <Select value={link} onValueChange={setLink}>
-                <SelectTrigger className="h-12">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_LINK}>Not linked</SelectItem>
-                  {bills.map((b) => (
-                    <SelectItem key={`bill-${b.id}`} value={`bill:${b.id}`}>
-                      🧾 {b.name}
-                    </SelectItem>
-                  ))}
-                  {debts.map((d) => (
-                    <SelectItem key={`debt-${d.id}`} value={`debt:${d.id}`}>
-                      💳 {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Linked entries count toward that bill or debt's current cycle.
-              </p>
-            </div>
-            ) : null}
-
-            <div className="space-y-2">
-              <Label htmlFor="tx-desc">Description</Label>
-              <Input
-                id="tx-desc"
-                className="h-12"
-                placeholder="e.g. Groceries"
-                value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value);
-                  // Editing the text breaks the link to the picked place.
-                  if (merchantId) setMerchantId(null);
-                }}
-              />
-              {/* ADR-053: tie the entry to a place, either an existing one… */}
-              {merchantId ? (
-                <div className="flex items-center gap-2 rounded-[12px] bg-muted/50 p-2 text-xs">
-                  <span aria-hidden className="text-base">
-                    🏪
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">
-                    Tracked at{" "}
-                    <span className="font-semibold">
-                      {institutions.find((i) => i.id === merchantId)?.name}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    className="text-muted-foreground underline"
-                    onClick={() => setMerchantId(null)}
-                  >
-                    Clear
-                  </button>
-                </div>
-              ) : null}
-              {merchantMatches.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {merchantMatches.map((i) => (
+                      </span>
+                      <button
+                        type="button"
+                        className="text-muted-foreground underline"
+                        onClick={() => setMerchantId(null)}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  ) : null}
+                  {merchantMatches.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {merchantMatches.map((i) => (
+                        <button
+                          key={i.id}
+                          type="button"
+                          className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5 text-xs active:bg-muted"
+                          onClick={() => {
+                            setMerchantId(i.id);
+                            setDescription(i.name);
+                          }}
+                        >
+                          {i.logo_url ? (
+                            <img
+                              src={i.logo_url}
+                              alt=""
+                              className="h-4 w-4 rounded-full object-contain"
+                            />
+                          ) : (
+                            <span aria-hidden>🏪</span>
+                          )}
+                          {i.name}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {/* …or a brand-new one captured without leaving the form. */}
+                  {newMerchant ? (
                     <button
-                      key={i.id}
                       type="button"
-                      className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5 text-xs active:bg-muted"
-                      onClick={() => {
-                        setMerchantId(i.id);
-                        setDescription(i.name);
-                      }}
+                      className="flex w-full items-center gap-2 rounded-[12px] bg-muted/50 p-2 text-left text-xs active:bg-muted"
+                      disabled={saveInstitution.isPending}
+                      onClick={() => void addMerchant()}
                     >
-                      {i.logo_url ? (
-                        <img
-                          src={i.logo_url}
-                          alt=""
-                          className="h-4 w-4 rounded-full object-contain"
-                        />
-                      ) : (
-                        <span aria-hidden>🏪</span>
-                      )}
-                      {i.name}
+                      <span aria-hidden className="text-base">🏪</span>
+                      <span className="min-w-0 flex-1">
+                        New place? Save{" "}
+                        <span className="font-semibold">{newMerchant}</span> as an
+                        institution
+                      </span>
                     </button>
-                  ))}
+                  ) : null}
                 </div>
-              ) : null}
-              {/* …or a brand-new one captured without leaving the form. */}
-              {newMerchant ? (
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-[12px] bg-muted/50 p-2 text-left text-xs active:bg-muted"
-                  disabled={saveInstitution.isPending}
-                  onClick={() => void addMerchant()}
-                >
-                  <span aria-hidden className="text-base">
-                    🏪
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    New place? Save{" "}
-                    <span className="font-semibold">{newMerchant}</span> as an
-                    institution
-                  </span>
-                </button>
-              ) : null}
-            </div>
+              </>
+            )}
           </div>
+
           <DialogFooter>
             <Button
               className="h-12 w-full"
-              disabled={save.isPending || saveSplit.isPending}
-              onClick={submit}
+              disabled={isBusy}
+              onClick={mode === "transfer" ? submitTransfer : submitExpense}
             >
-              {isSplit ? "Save split transaction" : "Save transaction"}
+              {mode === "transfer"
+                ? "Save transfer"
+                : mode === "split"
+                  ? "Save split transaction"
+                  : "Save transaction"}
             </Button>
           </DialogFooter>
         </DialogContent>

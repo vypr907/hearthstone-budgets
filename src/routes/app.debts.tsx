@@ -14,6 +14,8 @@ import {
   useDebtAdjustments,
   useAddDebtAdjustment,
   useDeleteDebtAdjustment,
+  useCreateAdvance,
+  useDeleteAdvance,
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
@@ -1027,20 +1029,37 @@ function RecentDebtTransactions({ debtId }: { debtId: string }) {
  * ADR-045: non-payment changes to what a debt owes (insurance coverage,
  * discounts, late/NSF fees). Adjustments only move remaining_balance — they
  * never touch transactions or account balances.
+ * ADR-056: 'advance' adjustment_type rows are written by useCreateAdvance and
+ * deleted by useDeleteAdvance (which also reverses the paired deposit tx).
  */
 function DebtAdjustments({ debt }: { debt: Debt }) {
   const { data: allAdjustments = [] } = useDebtAdjustments();
+  const { data: accounts = [] } = useAccounts();
   const adjustments = useMemo(
-    () => allAdjustments.filter((a) => a.debt_id === debt.id),
+    () => allAdjustments.filter((a) => a.debt_id === debt.id && a.adjustment_type !== "advance"),
+    [allAdjustments, debt.id],
+  );
+  const advances = useMemo(
+    () => allAdjustments.filter((a) => a.debt_id === debt.id && a.adjustment_type === "advance"),
     [allAdjustments, debt.id],
   );
   const add = useAddDebtAdjustment();
   const remove = useDeleteDebtAdjustment();
+  const createAdvance = useCreateAdvance();
+  const deleteAdvance = useDeleteAdvance();
+
+  // --- Adjustment dialog state ---
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [type, setType] = useState("insurance_covered");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  // --- Advance dialog state ---
+  const [advanceOpen, setAdvanceOpen] = useState(false);
+  const [advanceAccountId, setAdvanceAccountId] = useState("none");
+  const [advanceAmount, setAdvanceAmount] = useState("");
+  const [advanceDate, setAdvanceDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   async function save() {
     const value = Number(amount);
@@ -1065,53 +1084,128 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
     }
   }
 
-  return (
-    <div className="mt-4">
-      <div className="flex items-center justify-between">
-        <SectionLabel>Adjustments</SectionLabel>
-        <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" /> Add
-        </Button>
-      </div>
-      {adjustments.length === 0 ? (
-        <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
-          No adjustments yet.
-        </p>
-      ) : (
-        <div className="mt-1 divide-y divide-border/50 rounded-md border">
-          {adjustments.map((a) => (
-            <div key={a.id} className="flex items-center gap-2 px-2 py-2 text-sm">
-              <div className="min-w-0 flex-1">
-                <p className="truncate">
-                  {formatTypeLabel(a.adjustment_type ?? "other")}
-                  {a.description ? ` · ${a.description}` : ""}
-                </p>
-                <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
-              </div>
-              <span className="shrink-0 tabular-nums font-medium">
-                {Number(a.amount) > 0 ? "+" : ""}
-                {formatMoney(Number(a.amount))}
-              </span>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0"
-                onClick={async () => {
-                  try {
-                    await remove.mutateAsync({ adjustment: a, debt });
-                    toast.success("Adjustment removed");
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  }
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
+  async function saveAdvance() {
+    const value = Number(advanceAmount);
+    if (!value || value <= 0) {
+      toast.error("Enter a positive amount");
+      return;
+    }
+    if (!advanceAccountId || advanceAccountId === "none") {
+      toast.error("Pick a destination account");
+      return;
+    }
+    try {
+      await createAdvance.mutateAsync({
+        debt,
+        destinationAccountId: advanceAccountId,
+        amount: value,
+        advanceDate,
+      });
+      toast.success("Advance recorded");
+      setAdvanceOpen(false);
+      setAdvanceAmount("");
+      setAdvanceAccountId("none");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
+  return (
+    <div className="mt-4 space-y-4">
+      {/* ---- Adjustments section ---- */}
+      <div>
+        <div className="flex items-center justify-between">
+          <SectionLabel>Adjustments</SectionLabel>
+          <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> Add
+          </Button>
+        </div>
+        {adjustments.length === 0 ? (
+          <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+            No adjustments yet.
+          </p>
+        ) : (
+          <div className="mt-1 divide-y divide-border/50 rounded-md border">
+            {adjustments.map((a) => (
+              <div key={a.id} className="flex items-center gap-2 px-2 py-2 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate">
+                    {formatTypeLabel(a.adjustment_type ?? "other")}
+                    {a.description ? ` · ${a.description}` : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
+                </div>
+                <span className="shrink-0 tabular-nums font-medium">
+                  {Number(a.amount) > 0 ? "+" : ""}
+                  {formatMoney(Number(a.amount))}
+                </span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  onClick={async () => {
+                    try {
+                      await remove.mutateAsync({ adjustment: a, debt });
+                      toast.success("Adjustment removed");
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ---- Advances section (ADR-056) ---- */}
+      <div>
+        <div className="flex items-center justify-between">
+          <SectionLabel>Advances</SectionLabel>
+          <Button size="sm" variant="outline" className="h-8" onClick={() => setAdvanceOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> Add
+          </Button>
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Money borrowed against this debt — deposits into an account and increases balance owed.
+        </p>
+        {advances.length === 0 ? (
+          <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+            No advances recorded.
+          </p>
+        ) : (
+          <div className="mt-1 divide-y divide-border/50 rounded-md border">
+            {advances.map((a) => (
+              <div key={a.id} className="flex items-center gap-2 px-2 py-2 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{formatMoney(Number(a.amount))}</p>
+                  <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  onClick={async () => {
+                    if (!confirm("Delete this advance? This will also reverse the deposit transaction.")) return;
+                    try {
+                      await deleteAdvance.mutateAsync({ adjustment: a, debt });
+                      toast.success("Advance deleted");
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ---- Add Adjustment dialog ---- */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1169,6 +1263,62 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
           <DialogFooter>
             <Button className="h-11 w-full" onClick={save} disabled={add.isPending}>
               Save adjustment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---- Add Advance dialog (ADR-056) ---- */}
+      <Dialog open={advanceOpen} onOpenChange={setAdvanceOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record advance</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Destination account</Label>
+              <Select value={advanceAccountId} onValueChange={setAdvanceAccountId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Pick an account" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Pick an account</SelectItem>
+                  {accounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The account receiving the advance funds.
+              </p>
+            </div>
+            <div>
+              <Label>Amount</Label>
+              <Input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                min="0"
+                value={advanceAmount}
+                onChange={(e) => setAdvanceAmount(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={advanceDate}
+                onChange={(e) => setAdvanceDate(e.target.value)}
+                className="h-11"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="h-11 w-full" onClick={saveAdvance} disabled={createAdvance.isPending}>
+              Record advance
             </Button>
           </DialogFooter>
         </DialogContent>

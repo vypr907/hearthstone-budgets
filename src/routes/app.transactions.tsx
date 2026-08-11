@@ -5,6 +5,7 @@ import {
   useTransactions,
   useUpsertTransaction,
   useDeleteTransaction,
+  useDeleteTransferPair,
   useAccounts,
   useCategories,
   useBills,
@@ -253,6 +254,7 @@ function TransactionDetail({
   const { data: debts = [] } = useDebts();
   const upsert = useUpsertTransaction();
   const del = useDeleteTransaction();
+  const delTransferPair = useDeleteTransferPair();
 
   const [edit, setEdit] = useState(false);
   const [amount, setAmount] = useState("");
@@ -304,6 +306,18 @@ function TransactionDetail({
   }
 
   async function handleDelete() {
+    // ADR-056: if this row is one side of a transfer, delete both sides.
+    if (transaction!.transfer_group_id) {
+      if (!confirm("Delete this transfer? Both the from and to transactions will be removed.")) return;
+      try {
+        await delTransferPair.mutateAsync(transaction!.transfer_group_id);
+        toast.success("Transfer deleted");
+        onClose();
+      } catch (e) {
+        toast.error((e as Error).message);
+      }
+      return;
+    }
     if (!confirm("Delete this transaction?")) return;
     try {
       await del.mutateAsync(transaction!);

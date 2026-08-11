@@ -684,6 +684,196 @@ export function useDeleteDebtAdjustment() {
 }
 
 
+/* ---------------- Transfers and advances (ADR-056) ---------------- */
+
+/**
+ * ADR-056: write two cleared transactions sharing one transfer_group_id —
+ * negative on the from-account, positive on the to-account.
+ * Uses saveWithOptionalColumns so transfer_group_id is dropped gracefully
+ * pre-migration (same pattern as institution_id on regular transactions).
+ */
+export function useSaveTransfer() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      fromAccountId: string;
+      toAccountId: string;
+      amount: number;
+      description: string | null;
+      transferDate: string;
+    }) => {
+      if (args.fromAccountId === args.toAccountId) {
+        throw new Error("From and to accounts must be different");
+      }
+      if (!args.amount || args.amount <= 0) {
+        throw new Error("Enter a positive amount");
+      }
+      const groupId = crypto.randomUUID();
+      const base = {
+        household_id: householdId!,
+        status: "cleared" as const,
+        description: args.description,
+        transaction_date: args.transferDate,
+        transfer_group_id: groupId,
+      };
+      // Write from-side first; if it fails nothing is written.
+      await saveWithOptionalColumns<Transaction>(
+        { ...base, account_id: args.fromAccountId, amount: -args.amount } as Record<string, unknown>,
+        async (p) => supabase.from("transactions").insert(p).select("*").single(),
+      );
+      // Write to-side; if this fails the from-side is orphaned (same risk as
+      // SetAsideAction — no RPC available in this codebase).
+      await saveWithOptionalColumns<Transaction>(
+        { ...base, account_id: args.toAccountId, amount: args.amount } as Record<string, unknown>,
+        async (p) => supabase.from("transactions").insert(p).select("*").single(),
+      );
+      return groupId;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
+/** ADR-056: delete both sides of a transfer by transfer_group_id. */
+export function useDeleteTransferPair() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (transferGroupId: string) => {
+      const { error } = await supabase
+        .from("transactions")
+        .delete()
+        .eq("transfer_group_id", transferGroupId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
+/**
+ * ADR-056: an advance deposits money into an account and records a
+ * debt_adjustments row (adjustment_type='advance', positive amount) so the
+ * debt's remaining_balance increases by the same amount.
+ * ADR-037 ordering: debt balance updated before the adjustment row is written.
+ * The deposit transaction is written first; if the adjustment write then fails,
+ * the deposit is orphaned (same caveat as other multi-step writes here — no RPC).
+ */
+export function useCreateAdvance() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      debt: Debt;
+      destinationAccountId: string;
+      amount: number;
+      advanceDate: string;
+    }) => {
+      if (!args.amount || args.amount <= 0) {
+        throw new Error("Enter a positive amount");
+      }
+      const groupId = crypto.randomUUID();
+      // Step 1: deposit transaction into the destination account.
+      await saveWithOptionalColumns<Transaction>(
+        {
+          household_id: householdId!,
+          account_id: args.destinationAccountId,
+          amount: args.amount,
+          status: "cleared",
+          description: `Advance: ${args.debt.name}`,
+          transaction_date: args.advanceDate,
+          transfer_group_id: groupId,
+        } as Record<string, unknown>,
+        async (p) => supabase.from("transactions").insert(p).select("*").single(),
+      );
+      // Step 2: update debt remaining_balance (ADR-037: payable row first).
+      const next = Math.max(0, Number(args.debt.remaining_balance ?? 0) + args.amount);
+      const { error: debtError } = await supabase
+        .from("debts")
+        .update({ remaining_balance: next })
+        .eq("id", args.debt.id);
+      if (debtError) throw debtError;
+      // Step 3: insert debt_adjustments row.
+      const { error: adjError } = await supabase.from("debt_adjustments").insert({
+        household_id: householdId!,
+        debt_id: args.debt.id,
+        amount: args.amount,
+        adjustment_type: "advance",
+        description: `Advance: ${args.debt.name}`,
+        adjustment_date: args.advanceDate,
+      });
+      if (adjError) throw adjError;
+      return groupId;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+      qc.invalidateQueries({ queryKey: ["debt_adjustments"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+    },
+  });
+}
+
+/**
+ * ADR-056: delete an advance — reverses the debt balance, deletes the
+ * adjustment row (reusing ADR-045's balance-reversal ordering), then deletes
+ * the paired deposit transaction by transfer_group_id.
+ * The transfer_group_id is found by querying transactions matching the
+ * advance description + date, so the UI doesn't need to pass it.
+ */
+export function useDeleteAdvance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { adjustment: DebtAdjustment; debt: Debt }) => {
+      // Step 1: reverse debt balance (ADR-037 ordering — payable first).
+      const next = Math.max(
+        0,
+        Number(args.debt.remaining_balance ?? 0) - Number(args.adjustment.amount ?? 0),
+      );
+      const { error: debtError } = await supabase
+        .from("debts")
+        .update({ remaining_balance: next })
+        .eq("id", args.debt.id);
+      if (debtError) throw debtError;
+      // Step 2: delete the adjustment row.
+      const { error: adjError } = await supabase
+        .from("debt_adjustments")
+        .delete()
+        .eq("id", args.adjustment.id);
+      if (adjError) throw adjError;
+      // Step 3: find the paired deposit transaction by description + date,
+      // then delete the whole transfer_group_id pair.
+      const expectedDesc = `Advance: ${args.debt.name}`;
+      const { data: txRows, error: findError } = await supabase
+        .from("transactions")
+        .select("transfer_group_id")
+        .eq("description", expectedDesc)
+        .eq("transaction_date", args.adjustment.adjustment_date)
+        .not("transfer_group_id", "is", null)
+        .limit(1);
+      if (findError) throw findError;
+      const groupId = (txRows as { transfer_group_id: string }[] | null)?.[0]?.transfer_group_id;
+      if (groupId) {
+        const { error: txError } = await supabase
+          .from("transactions")
+          .delete()
+          .eq("transfer_group_id", groupId);
+        if (txError) throw txError;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["debt_adjustments"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
 /* ---------------- Institution categories (join table) ---------------- */
 
 /** Map of institution_id -> category_id[] from the institution_categories join table. */
