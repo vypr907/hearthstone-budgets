@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   supabase,
   type IncomeSource,
+  type IncomeSourceDeduction,
   type IncomeSourceSplit,
   type IncomeEvent,
   type PayPeriodAllocation,
@@ -115,10 +116,13 @@ export function useUpsertIncomeEvent() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (row: Partial<IncomeEvent> & { id?: string }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("income_events")
-        .upsert({ ...row, household_id: householdId! });
+        .upsert({ ...row, household_id: householdId! })
+        .select("id")
+        .single();
       if (error) throw error;
+      return data as { id: string };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["income_events", householdId] });
@@ -267,6 +271,35 @@ export function useMarkIncomeReceived() {
         });
       }
 
+      // ADR-055: append one deposit row per deduction that has a destination
+      // account. Percent deductions compute against the event's net amount.
+      // Deductions with no destination_account_id are reporting-only — skip.
+      if (event.income_source_id) {
+        const { data: deductionRows, error: dedError } = await supabase
+          .from("income_source_deductions")
+          .select("*")
+          .eq("income_source_id", event.income_source_id);
+        if (dedError) throw dedError;
+        const deductions = (deductionRows ?? []) as IncomeSourceDeduction[];
+        for (const d of deductions) {
+          if (!d.destination_account_id) continue;
+          const dedAmount =
+            d.amount != null
+              ? Number(d.amount)
+              : Math.round(((Number(d.percent ?? 0) / 100) * amount) * 100) / 100;
+          if (dedAmount <= 0) continue;
+          rows.push({
+            household_id: householdId!,
+            account_id: d.destination_account_id,
+            amount: dedAmount,
+            status: "cleared",
+            description: `Deduction: ${d.name}`,
+            transaction_date: date,
+            split_group_id: event.id,
+          });
+        }
+      }
+
       const { error } = await supabase.from("transactions").insert(rows);
       if (error) throw error;
       return { deposits: rows.length };
@@ -350,6 +383,57 @@ export function useDeleteIncomeSourceSplit(sourceId?: string | null) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["income_source_splits", sourceId] });
+    },
+  });
+}
+
+/* -------- ADR-055: Income source deductions -------- */
+
+export function useIncomeSourceDeductions(sourceId?: string | null) {
+  return useQuery({
+    queryKey: ["income_source_deductions", sourceId],
+    enabled: !!sourceId,
+    queryFn: async (): Promise<IncomeSourceDeduction[]> => {
+      const { data, error } = await supabase
+        .from("income_source_deductions")
+        .select("*")
+        .eq("income_source_id", sourceId!)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as IncomeSourceDeduction[];
+    },
+  });
+}
+
+export function useUpsertIncomeSourceDeduction(sourceId?: string | null) {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      row: Partial<IncomeSourceDeduction> & { income_source_id: string; name: string },
+    ) => {
+      const payload = { ...row, household_id: householdId! };
+      const { error } = await supabase.from("income_source_deductions").upsert(payload);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["income_source_deductions", sourceId] });
+    },
+  });
+}
+
+export function useDeleteIncomeSourceDeduction(sourceId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("income_source_deductions")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["income_source_deductions", sourceId] });
     },
   });
 }

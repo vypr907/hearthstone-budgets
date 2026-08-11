@@ -831,7 +831,7 @@ function IncomeAdmin({
   const saveEvent = async () => {
     if (!sourceId) return toast.error("Pick an income source");
     try {
-      await upsertEvent.mutateAsync({
+      const saved = await upsertEvent.mutateAsync({
         ...(editing ? { id: editing.id } : {}),
         income_source_id: sourceId,
         expected_date: expectedDate || null,
@@ -840,6 +840,42 @@ function IncomeAdmin({
         actual_amount: received && actualAmount ? Number(actualAmount) : null,
         status: received ? "received" : "expected",
       });
+      // ADR-055: auto-post deposits for new received pay dates on save.
+      // Editing an existing event skips this — the manual "Post deposits"
+      // button handles backfilling already-passed dates.
+      if (received && !editing && saved?.id) {
+        const fakeEvent: import("@/lib/supabase").IncomeEvent = {
+          id: saved.id,
+          household_id: "",
+          income_source_id: sourceId,
+          expected_date: expectedDate || null,
+          expected_amount: expectedAmount ? Number(expectedAmount) : null,
+          actual_date: actualDate || expectedDate || null,
+          actual_amount: actualAmount ? Number(actualAmount) : null,
+          status: "received",
+        };
+        const usable = await hasUsableSplits(sourceId);
+        if (usable) {
+          try {
+            const res = await markReceived.mutateAsync({
+              event: fakeEvent,
+              sourceName: sourceName(sourceId),
+            });
+            setEventOpen(false);
+            toast.success(
+              res.deposits > 0
+                ? `Pay date saved · ${res.deposits} deposit${res.deposits === 1 ? "" : "s"} recorded`
+                : "Pay date saved",
+            );
+            return;
+          } catch (depositErr) {
+            // Deposit failed — event is already saved, just warn.
+            toast.error(`Pay date saved, but deposits failed: ${(depositErr as Error).message}`);
+            setEventOpen(false);
+            return;
+          }
+        }
+      }
       setEventOpen(false);
       toast.success("Pay date saved");
     } catch (e) {

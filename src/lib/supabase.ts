@@ -255,6 +255,22 @@ export type IncomeSourceSplit = {
   sort_order: number | null;
 };
 
+/** ADR-055: a pre-tax or post-tax deduction from a paycheck (HSA, 401k, etc.). */
+export type IncomeSourceDeduction = {
+  id: string;
+  household_id: string;
+  income_source_id: string;
+  name: string;
+  /** Flat dollar amount — exactly one of amount / percent is set. */
+  amount: number | null;
+  /** Percentage of the net pay event amount — exactly one of amount / percent is set. */
+  percent: number | null;
+  /** Optional account the deduction deposits into. If null, row is reporting-only. */
+  destination_account_id: string | null;
+  is_pre_tax: boolean | null;
+  created_at?: string | null;
+};
+
 /** A single expected or received paycheck. */
 export type IncomeEvent = {
   id: string;

@@ -26,15 +26,19 @@ import {
 } from "@/components/ui/select";
 import { useAccounts } from "@/lib/data-hooks";
 import {
+  useDeleteIncomeSourceDeduction,
   useDeleteIncomeSourceSplit,
   useIncomeEvents,
+  useIncomeSourceDeductions,
   useIncomeSources,
   useIncomeSourceSplits,
   useUpsertIncomeSource,
+  useUpsertIncomeSourceDeduction,
   useUpsertIncomeSourceSplit,
 } from "@/lib/income-hooks";
 import { eventAmount, eventDate, isReceived } from "@/lib/paycheck-budget";
 import { formatMoney } from "@/lib/format";
+import type { IncomeSourceDeduction, IncomeSourceSplit } from "@/lib/supabase";
 
 /** Short, local-safe date label: 2026-08-12 → Aug 12, 2026. */
 function formatDate(d: string | null | undefined): string {
@@ -46,7 +50,6 @@ function formatDate(d: string | null | undefined): string {
     year: "numeric",
   });
 }
-import type { IncomeSourceSplit } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/income-source/$id")({
   head: () => ({
@@ -85,10 +88,23 @@ function monthsSpanned(dates: string[]): number {
   return Math.max(1, months);
 }
 
+/**
+ * ADR-055: gross = net + Σ deductions. Percent deductions compute against
+ * the net amount, not a derived gross — per ADR-055 resolution 2026-08-12.
+ */
+function computeGross(net: number, deductions: IncomeSourceDeduction[]): number {
+  const sum = deductions.reduce((acc, d) => {
+    if (d.amount != null) return acc + Number(d.amount);
+    return acc + (Number(d.percent ?? 0) / 100) * net;
+  }, 0);
+  return Math.round((net + sum) * 100) / 100;
+}
+
 function IncomeSourceDetailPage() {
   const { id } = useParams({ from: "/app/income-source/$id" });
   const { data: sources = [], isLoading } = useIncomeSources();
   const { data: events = [] } = useIncomeEvents();
+  const { data: deductions = [] } = useIncomeSourceDeductions(id);
   const source = sources.find((s) => s.id === id) ?? null;
 
   const stats = useMemo(() => {
@@ -112,6 +128,12 @@ function IncomeSourceDetailPage() {
       upcoming,
     };
   }, [events, id]);
+
+  // ADR-055: gross stats use the source's typical_amount as the net baseline
+  // for projected/unreceived periods; received events use their actual_amount.
+  const typicalNet = Number(source?.typical_amount ?? 0);
+  const grossTypical = computeGross(typicalNet, deductions);
+  const hasDeductions = deductions.length > 0;
 
   if (isLoading) {
     return (
@@ -158,7 +180,8 @@ function IncomeSourceDetailPage() {
                 <h1 className="truncate text-lg font-semibold">{source.name}</h1>
                 <p className="text-xs text-muted-foreground">
                   {source.cadence ?? "cadence unset"} ·{" "}
-                  {formatMoney(Number(source.typical_amount ?? 0))} typical
+                  {formatMoney(typicalNet)} net
+                  {hasDeductions ? ` · ${formatMoney(grossTypical)} gross` : " typical"}
                 </p>
               </div>
               {source.is_primary ? <Badge>Primary</Badge> : null}
@@ -179,6 +202,9 @@ function IncomeSourceDetailPage() {
         </Card>
 
         <SplitsCard sourceId={source.id} />
+
+        {/* ADR-055: deductions sit alongside the splits card */}
+        <DeductionsCard sourceId={source.id} />
 
         <Card>
           <CardContent className="space-y-2 p-4">
@@ -505,6 +531,217 @@ function SplitDialog({
               className="h-11"
             />
           </div>
+        </div>
+        <DialogFooter>
+          <Button className="h-11 w-full" onClick={submit}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** ADR-055: deductions (HSA, 401k, etc.) that come off the paycheck. */
+function DeductionsCard({ sourceId }: { sourceId: string }) {
+  const { data: deductions = [] } = useIncomeSourceDeductions(sourceId);
+  const { data: accounts = [] } = useAccounts();
+  const save = useUpsertIncomeSourceDeduction(sourceId);
+  const del = useDeleteIncomeSourceDeduction(sourceId);
+  const [editing, setEditing] = useState<Partial<IncomeSourceDeduction> | null>(null);
+
+  const accountName = (aid: string | null | undefined) =>
+    accounts.find((a) => a.id === aid)?.name ?? null;
+
+  return (
+    <Card>
+      <CardContent className="space-y-2 p-4">
+        <div className="flex items-center justify-between">
+          <SectionLabel>Deductions</SectionLabel>
+          <Button
+            size="sm"
+            className="h-9"
+            onClick={() => setEditing({ income_source_id: sourceId })}
+          >
+            <Plus className="mr-1 h-4 w-4" /> Add
+          </Button>
+        </div>
+        {deductions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No deductions yet — add pre-tax or post-tax items like HSA or 401k contributions.
+          </p>
+        ) : (
+          deductions.map((d) => (
+            <div key={d.id} className="flex items-center gap-2 py-1 text-sm">
+              <button
+                className="min-w-0 flex-1 text-left"
+                onClick={() => setEditing(d)}
+                type="button"
+              >
+                <span className="block truncate font-medium">{d.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {d.amount != null
+                    ? formatMoney(Number(d.amount))
+                    : `${Number(d.percent ?? 0)}%`}
+                  {d.is_pre_tax ? " · pre-tax" : ""}
+                  {accountName(d.destination_account_id)
+                    ? ` → ${accountName(d.destination_account_id)}`
+                    : " · reporting only"}
+                </span>
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                aria-label="Delete deduction"
+                onClick={() => void del.mutateAsync(d.id).catch((e) => toast.error(e.message))}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))
+        )}
+      </CardContent>
+
+      <DeductionDialog
+        sourceId={sourceId}
+        deduction={editing}
+        onClose={() => setEditing(null)}
+        onSave={async (row) => {
+          try {
+            await save.mutateAsync(row);
+            toast.success("Deduction saved");
+            setEditing(null);
+          } catch (e) {
+            toast.error((e as Error).message);
+          }
+        }}
+      />
+    </Card>
+  );
+}
+
+function DeductionDialog({
+  sourceId,
+  deduction,
+  onClose,
+  onSave,
+}: {
+  sourceId: string;
+  deduction: Partial<IncomeSourceDeduction> | null;
+  onClose: () => void;
+  onSave: (
+    row: Partial<IncomeSourceDeduction> & { income_source_id: string; name: string },
+  ) => void;
+}) {
+  const { data: accounts = [] } = useAccounts();
+  const [name, setName] = useState("");
+  const [valueType, setValueType] = useState<"amount" | "percent">("amount");
+  const [value, setValue] = useState("");
+  const [destAccountId, setDestAccountId] = useState("");
+  const [preTax, setPreTax] = useState(false);
+
+  const key = deduction?.id ?? (deduction ? "new" : "");
+  const [lastKey, setLastKey] = useState("");
+  if (deduction && key !== lastKey) {
+    setLastKey(key);
+    setName(deduction.name ?? "");
+    setValueType(deduction.percent != null ? "percent" : "amount");
+    setValue(
+      deduction.percent != null
+        ? String(deduction.percent)
+        : deduction.amount != null
+          ? String(deduction.amount)
+          : "",
+    );
+    setDestAccountId(deduction.destination_account_id ?? "");
+    setPreTax(deduction.is_pre_tax === true);
+  }
+  if (!deduction && lastKey !== "") setLastKey("");
+
+  function submit() {
+    if (!name.trim()) return toast.error("Name is required");
+    const num = Number(value);
+    if (!value || !Number.isFinite(num) || num <= 0)
+      return toast.error("Enter a positive amount or percentage");
+    onSave({
+      ...(deduction?.id ? { id: deduction.id } : {}),
+      income_source_id: sourceId,
+      name: name.trim(),
+      amount: valueType === "amount" ? num : null,
+      percent: valueType === "percent" ? num : null,
+      destination_account_id: destAccountId || null,
+      is_pre_tax: preTax,
+    });
+  }
+
+  return (
+    <Dialog open={deduction !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{deduction?.id ? "Edit deduction" : "Add deduction"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Name</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. 401k, HSA"
+              className="h-11"
+            />
+          </div>
+          <div>
+            <Label>Type</Label>
+            <Select
+              value={valueType}
+              onValueChange={(v) => setValueType(v as "amount" | "percent")}
+            >
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="amount">Flat amount ($)</SelectItem>
+                <SelectItem value="percent">Percent of net (%)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>{valueType === "amount" ? "Amount" : "Percent"}</Label>
+            <Input
+              type="number"
+              step={valueType === "amount" ? "0.01" : "0.001"}
+              min="0"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={valueType === "amount" ? "0.00" : "0.000"}
+              className="h-11"
+            />
+          </div>
+          <div>
+            <Label>Destination account (optional)</Label>
+            <Select value={destAccountId} onValueChange={setDestAccountId}>
+              <SelectTrigger className="h-11">
+                <SelectValue placeholder="None — reporting only" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None — reporting only</SelectItem>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={preTax}
+              onChange={(e) => setPreTax(e.target.checked)}
+            />
+            Pre-tax deduction
+          </label>
         </div>
         <DialogFooter>
           <Button className="h-11 w-full" onClick={submit}>
