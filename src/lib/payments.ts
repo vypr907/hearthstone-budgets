@@ -204,6 +204,11 @@ async function findLinkedTransaction(p: Payable, status?: string) {
 /**
  * ADR-046: fees ride alongside a payment as their own ledger row so they hit the
  * account balance without ever counting toward the bill/debt cycle.
+ *
+ * ADR-046 fix: the fee is PAIRED to its payment via `split_group_id` (never via
+ * linked_bill_id/linked_debt_id) so cycle math — clearedSum, state derivation,
+ * debt balance reversal — never sees it. That keeps clearing, reversing and
+ * deleting atomic: any operation on the payment propagates to its fee.
  */
 async function insertFeeTransaction(
   householdId: string | null | undefined,
@@ -211,6 +216,8 @@ async function insertFeeTransaction(
   accountId: string,
   fee: number | undefined,
   status: "pending" | "cleared",
+  /** Shared with the payment row so the pair stays atomic (ADR-046). */
+  splitGroupId?: string | null,
 ) {
   const amt = Math.abs(Number(fee) || 0);
   if (amt < 0.005) return;
@@ -239,8 +246,55 @@ async function insertFeeTransaction(
     status,
     description: `Fee: ${p.name}`,
     transaction_date: todayISO(),
+    // Paired to the payment, NOT linked to the payable — see ADR-046 note above.
+    split_group_id: splitGroupId ?? null,
   });
   if (error) throw error;
+}
+
+/**
+ * Clear every pending fee row paired with a payment (same split_group_id).
+ * Called when a submitted payment is marked cleared so the fee clears too.
+ */
+async function clearPairedFees(splitGroupId: string | null | undefined) {
+  if (!splitGroupId) return;
+  const { error } = await supabase
+    .from("transactions")
+    .update({ status: "cleared" })
+    .eq("status", "pending")
+    .eq("split_group_id", splitGroupId)
+    .ilike("description", "Fee:%");
+  if (error) throw error;
+}
+
+/**
+ * Delete every fee row paired with a payment (same split_group_id). Called on
+ * undo/reset so a reversed payment takes its fee with it.
+ */
+async function deletePairedFees(splitGroupId: string | null | undefined) {
+  if (!splitGroupId) return;
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("split_group_id", splitGroupId)
+    .ilike("description", "Fee:%");
+  if (error) throw error;
+}
+
+/**
+ * Resolve the split_group_id values for a set of transaction ids, so a cycle
+ * reset can delete the fee rows paired with each payment it removes.
+ */
+async function groupIdsFor(transactionIds: string[]): Promise<string[]> {
+  if (transactionIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("split_group_id")
+    .in("id", transactionIds);
+  if (error) throw error;
+  return (data as { split_group_id: string | null }[] | null ?? [])
+    .map((r) => r.split_group_id)
+    .filter((g): g is string => !!g);
 }
 
 function useAfterPayment() {
@@ -285,6 +339,9 @@ export function useMarkSubmitted() {
       // Mark the payable pending first so a failed status write never leaves an
       // orphan ledger row behind.
       await updateRow(table(p.kind), p.id, { payment_status: "pending" });
+      // ADR-046: pair the payment with its fee via a shared split_group_id so a
+      // later clear/undo/reset touches both atomically.
+      const groupId = crypto.randomUUID();
       const { error } = await supabase.from("transactions").insert({
         household_id: householdId,
         account_id: accountId,
@@ -294,10 +351,11 @@ export function useMarkSubmitted() {
         description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
         transaction_date: todayISO(),
         [linkColumn(p.kind)]: p.id,
+        split_group_id: groupId,
       });
       if (error) throw error;
 
-      await insertFeeTransaction(householdId, p, accountId, fee, "pending");
+      await insertFeeTransaction(householdId, p, accountId, fee, "pending", groupId);
 
       const owed = payableRemainingOwed(p) - amt;
       return owed > 0.005 ? { remaining_owed: owed } : {};
@@ -331,7 +389,13 @@ export function useMarkCleared() {
           .update({ status: "cleared" })
           .eq("id", existing.id);
         if (error) throw error;
+        // ADR-046: a fee submitted alongside this payment is still pending —
+        // clear it too so it doesn't strand when the payment clears.
+        await clearPairedFees(existing.split_group_id);
       } else {
+        // Direct clear (no prior submit): insert a cleared payment, paired with
+        // any fee entered on this clear via split_group_id.
+        const groupId = crypto.randomUUID();
         const { error } = await supabase.from("transactions").insert({
           household_id: householdId,
           account_id: accountId,
@@ -341,11 +405,11 @@ export function useMarkCleared() {
           description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
           transaction_date: todayISO(),
           [linkColumn(p.kind)]: p.id,
+          split_group_id: groupId,
         });
         if (error) throw error;
+        await insertFeeTransaction(householdId, p, accountId, fee, "cleared", groupId);
       }
-
-      await insertFeeTransaction(householdId, p, accountId, fee, "cleared");
 
       return result;
     },
@@ -369,6 +433,8 @@ export function useMarkUnpaid() {
       if (tx) {
         const { error } = await supabase.from("transactions").delete().eq("id", tx.id);
         if (error) throw error;
+        // ADR-046: take the paired fee with the reversed payment.
+        await deletePairedFees(tx.split_group_id);
       }
 
       if (p.kind === "debt") {
@@ -448,6 +514,9 @@ export function useResetCycle() {
       if (transactionIds.length > 0) {
         const { error } = await supabase.from("transactions").delete().in("id", transactionIds);
         if (error) throw error;
+        // ADR-046: remove the fee rows paired with each cleared payment. Fees
+        // were never linked to the payable, so they aren't in transactionIds.
+        for (const g of await groupIdsFor(transactionIds)) await deletePairedFees(g);
       }
 
       if (payable.kind === "debt") {

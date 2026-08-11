@@ -398,19 +398,37 @@ export function useUpsertInstitution() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (i: Partial<Institution> & { name: string }) => {
+      if (!householdId) throw new Error("No household loaded — try again in a moment.");
       const payload = { ...i, household_id: householdId };
       if (i.id) {
         const { error } = await supabase.from("institutions").update(payload).eq("id", i.id);
         if (error) throw error;
         return i.id;
       }
+      // Insert + read the id without `.single()`: a freshly inserted row can be
+      // momentarily invisible to the SELECT policy (or filtered by RLS), which
+      // makes `.single()` throw "no rows" even though the insert succeeded.
+      // Reading the array avoids that false failure.
       const { data, error } = await supabase
         .from("institutions")
         .insert(payload)
-        .select("id")
-        .single();
+        .select("id");
       if (error) throw error;
-      return (data as { id: string }).id;
+      const id = (data as { id: string }[] | null)?.[0]?.id;
+      if (!id) {
+        // Row inserted but not returned (RLS SELECT). Re-fetch by name+household.
+        const { data: found } = await supabase
+          .from("institutions")
+          .select("id")
+          .eq("household_id", householdId)
+          .eq("name", i.name)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        const fallback = (found as { id: string }[] | null)?.[0]?.id;
+        if (!fallback) throw new Error("Saved but could not confirm — refresh and try again.");
+        return fallback;
+      }
+      return id;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["institutions"] }),
   });

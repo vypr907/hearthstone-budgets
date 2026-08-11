@@ -51,15 +51,18 @@ export function findStrandedDebtPayments(
     );
     if (debt.updated_at && newestRow && debt.updated_at >= newestRow) continue;
     // ADR-051: the balance itself is the strongest signal. If the debt has
-    // already come down by at least everything ever cleared against it, the
-    // money landed — a repaired-by-hand payment must stop being flagged even
-    // when the cycle bookkeeping columns were never written.
-    const paidEver = transactions
-      .filter((t) => t.linked_debt_id === debt.id && t.status === "cleared")
-      .reduce((s, t) => s + Math.abs(Number(t.amount ?? 0)), 0);
+    // already come down from its starting balance, at least one payment landed
+    // — a repaired-by-hand or redone payment must stop being flagged even when
+    // the cycle bookkeeping columns were never written. (Previously this
+    // required start - remaining >= paidEver, which double-counted old stranded
+    // rows alongside a redone payment and kept flagging a fixed debt.)
     const start = Number(debt.starting_balance ?? 0);
     const remaining = Number(debt.remaining_balance ?? 0);
-    if (start > 0 && start - remaining >= paidEver - 0.005) continue;
+    if (start > 0 && remaining < start - 0.005) continue;
+    // Without a starting balance we can't tell whether the money landed; default
+    // to not flagging (the user can always re-run a payment) to avoid persistent
+    // false positives after a manual balance correction.
+    if (start <= 0.005) continue;
     out.push({ debt, rows: cleared, clearedSum });
   }
   return out;
