@@ -121,7 +121,12 @@ export function AddTransactionFab() {
       if (typeof id === "string") setMerchantId(id);
       toast.success(`Added ${newMerchant}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not add place");
+      console.error("[addMerchant]", e);
+      const msg =
+        e instanceof Error ? e.message
+        : (e as { message?: string })?.message
+        ?? "Could not add place";
+      toast.error(msg);
     }
   }
   const institutionName = useMemo(() => {

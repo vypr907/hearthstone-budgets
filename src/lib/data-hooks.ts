@@ -154,7 +154,7 @@ async function saveWithOptionalColumns<T>(
     const { data, error } = await run(body);
     if (!error) return data as T;
     const missing = MISSING_COLUMN.exec(error.message ?? "")?.[1];
-    if (!missing || !(missing in body)) throw error;
+    if (!missing || !(missing in body)) throw new Error(error.message ?? "Supabase error");
     delete body[missing];
   }
   throw new Error("Could not save this record.");
