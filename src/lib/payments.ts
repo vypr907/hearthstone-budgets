@@ -389,7 +389,13 @@ export function useMarkCleared() {
           .update({ status: "cleared" })
           .eq("id", existing.id);
         if (error) throw error;
+        // ADR-046: a fee submitted alongside this payment is still pending —
+        // clear it too so it doesn't strand when the payment clears.
+        await clearPairedFees(existing.split_group_id);
       } else {
+        // Direct clear (no prior submit): insert a cleared payment, paired with
+        // any fee entered on this clear via split_group_id.
+        const groupId = crypto.randomUUID();
         const { error } = await supabase.from("transactions").insert({
           household_id: householdId,
           account_id: accountId,
@@ -399,11 +405,11 @@ export function useMarkCleared() {
           description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
           transaction_date: todayISO(),
           [linkColumn(p.kind)]: p.id,
+          split_group_id: groupId,
         });
         if (error) throw error;
+        await insertFeeTransaction(householdId, p, accountId, fee, "cleared", groupId);
       }
-
-      await insertFeeTransaction(householdId, p, accountId, fee, "cleared");
 
       return result;
     },
