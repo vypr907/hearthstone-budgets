@@ -481,3 +481,44 @@
 ### Notes
 
 * Future and past months show no status badge — ledger state is only meaningful for the debt's current cycle.
+
+## 2026-08-11 – Phase 7/8: Splits, Invoices, Fees, Income Deposits & Shared Dialogs
+
+### Completed
+
+* ADR-044 split transactions: `split_group_id` on the Transaction type, save/delete split hooks, `SplitLinesEditor`, a split toggle in Add Transaction, grouped display on the Transactions screen and in Accounts recent activity, and a whole-group edit dialog (delete + re-insert on save).
+* ADR-045 invoices + adjustments: `debt_type` became a dropdown including Invoice, an Institution dropdown was added to the Debt form, and debt detail gained an Adjustments section (add dialog + per-row delete, payable-first balance write ordering).
+* ADR-046 payment fees: optional Fee field in the pay prompt writes a second, unlinked transaction ("Fee: <name>") on the same account using the household "Fees" category, auto-creating that category when missing. Fees never credit the cycle.
+* ADR-047 mark income received: each pay date gained a "Mark received" button that writes the source's deposit splits (fixed rows plus a remainder row absorbing variance, `day_offset` applied) as cleared transactions grouped by `split_group_id`. Sources with no usable splits open an account + amount picker instead of silently marking received.
+* Shared `InstitutionDialog` and `AccountDialog` components (type dropdown, category multi-select, linked accounts/institution pickers) reused by the Bill, Debt and Institutions screens, with inline "+ Add new institution" / "+ Add account" actions.
+* Visual consistency pass: shared `SectionLabel` and `EmptyState` across Bills, Debts, Accounts, Goals, Everything and Transactions; Dashboard hero `bg-white/*` overlays replaced with `bg-brand-foreground/*` opacity tokens for dark-mode legibility.
+
+## 2026-08-11 – Phase 9: Invoices, Arrears & Visual Overhaul
+
+### Completed
+
+* ADR-048 invoices: new `one_time` billing cycle (never rolls, real due date), invoice type defaults to it, an explicit "Original invoice amount" field feeding `starting_balance` (fixing the not-null crash on save), and an "On a payment plan" block with number of payments / final payment.
+* ADR-049 arrears: new `src/lib/arrears.ts` (+ unit tests) sums missed cycles and manual carry-in; "Past due carried in" fields on Bill and Debt forms; `PastDueBadge` on Bills/Debts rows; the Dashboard "Overdue" card became "Past due" with a total and per-item cycles-behind count.
+* Stranded debt repair no longer flags a debt that was fixed by hand (it also requires the debt to be untouched since the ledger rows were written), and "Hide for now" persists per debt across reloads.
+* Paycheck: received pay dates with no deposit rows get a "Post deposits" action that backfills the ledger through the same idempotent flow.
+* Institution form: Categories became a dropdown multi-select.
+* Bill/Debt saves drop columns the database doesn't have yet instead of failing, so the app works before and after the ADR-048/049 migration.
+* Visual pass: new `ObligationIcon` (+ `useInstitutionIndex`) shows the linked institution's logo on Bills, Debts and Accounts rows, falling back to institution type then a name-derived emoji; Dashboard "Budget vs actual" became a headline bar plus ring tiles; the Spending screen gained a chart-led month summary card and condensed expandable ring rows; the More screen became a 3-up icon gallery; Add Transaction's category dropdown shows coloured icon rows and offers inline "save as an institution" with a guessed favicon (`guessMerchantDomain`).
+
+## 2026-08-12 – Phase 10: Arrears Editing, Invoice Numbers, Places & Income Sources
+
+### Completed
+
+* Past due editor (ADR-049) is reachable from both Bill and Debt detail views, so arrears can be added or corrected on existing items.
+* ADR-052: new Invoice number field on debts; invoice names auto-compose as "<Institution> - <Invoice number>" until the name is typed by hand, and the invoice number shows on debt detail.
+* ADR-051: stranded debt repair no longer re-flags debts whose balance already reflects every cleared payment.
+* ADR-053: Add Transaction suggests known places as one-tap chips and links `transactions.institution_id`; unknown places are saved inline with a guessed favicon and linked immediately.
+* New "Spending by place" screen (`/app/spending-by-place`): monthly merchant ranking with logo, bar, dollar amount and share of total, plus an untagged-spending footnote, linked from Spending and the More grid.
+* ADR-054: new income source detail route (`/app/income-source/$id`) with YTD / all-time / monthly-average stats, next expected paycheck, pay-date history, an Edit source form, and a full deposit-splits editor (add/edit/delete, fixed or remainder, per account, optional day offset). `useUpsertIncomeSourceSplit` / `useDeleteIncomeSourceSplit` added to `src/lib/income-hooks.ts`.
+* Paycheck Budget renders income sources as tappable cards with cadence, received count, typical amount and this-year total.
+* Phase 10 migration confirmed run in Supabase: `debts.invoice_number` and `transactions.institution_id` persist.
+
+### Notes
+
+* Spending by place only counts transactions that have a place attached; older entries need re-tagging by hand.
+* Institutions and Accounts screens still define their own detail dialogs; only the add/edit forms are shared.

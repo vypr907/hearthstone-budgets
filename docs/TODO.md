@@ -77,7 +77,7 @@ with check (exists (select 1 from public.household_members m
 - [x] Stranded debt repair: stop re-flagging repaired debts; persistent dismissal
 - [x] Backfill deposits for older received paychecks
 - [x] Institution form: Categories as a dropdown multi-select
-- [ ] Run the ADR-048/049 migration in Supabase (docs/SCHEMA.md)
+- [x] Run the ADR-048/049 migration in Supabase (docs/SCHEMA.md) — done 2026-08-12
 - [x] Phase 9 part 2 (visual): institution logos on Bills/Debts/Accounts,
       graphical Budget vs Actual + Spending, More as an icon grid, visual
       category rows and inline merchant creation on Add Transaction — done 2026-08-11.
@@ -93,3 +93,9 @@ with check (exists (select 1 from public.household_members m
 - [x] Income source cards + detail route (pay history, YTD/average, split editor) — done 2026-08-12 (ADR-054).
 - [x] Run the Phase 10 migration in Supabase — done 2026-08-12.
 - [ ] Let existing transactions be re-tagged with a place from the Transactions screen
+
+## Discovered 2026-08-12
+- [x] ADR-054 income source detail route (stats, pay history, deposit-splits editor)
+- [x] Link "Spending by place" from the Spending screen and the More grid
+- [ ] Re-tag older transactions with a place so Spending by place is complete
+- [ ] Share the Institutions and Accounts detail dialogs (only add/edit forms are shared today)
