@@ -38,7 +38,7 @@ Read docs/SESSION.md, docs/CONTEXT.md, and docs/CHANGELOG.md.
    docs/CHANGELOG.md, following its existing format (## <date> – <short title>, then
    ### Completed / relevant subsections). Don't rewrite or reformat CHANGELOG's existing
    entries — only append new ones for what's in SESSION.md. If there are any entries left in ## Backlog section, be sure to add/update them in docs/TODO.md
-2. Update docs/TODO.md entries with work done since last update.
+2. Update docs/TODO.md entries with work done since last update. If TODO item is checked off/completed, remove it. Document should only be current open items, not a history
 3. Update docs/CONTEXT.md's "Current Status" phase list and any "Locked Decisions" /
    "Important Rules" sections that changed based on SESSION.md's content (e.g. new fields,
    new tables, new behavior). Keep CONTEXT.md's existing structure and brevity — it's meant
