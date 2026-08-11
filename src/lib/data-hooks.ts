@@ -409,21 +409,24 @@ export function useUpsertInstitution() {
       // momentarily invisible to the SELECT policy (or filtered by RLS), which
       // makes `.single()` throw "no rows" even though the insert succeeded.
       // Reading the array avoids that false failure.
-      const { data, error } = await supabase
-        .from("institutions")
-        .insert(payload)
-        .select("id");
-      if (error) throw error;
+      // Use saveWithOptionalColumns so newer optional columns (e.g. logo_url)
+      // degrade gracefully if the migration hasn't run yet (same pattern as
+      // useUpsertBill / useUpsertTransaction).
+      const data = await saveWithOptionalColumns<{ id: string }[]>(
+        payload as Record<string, unknown>,
+        async (p) => supabase.from("institutions").insert(p).select("id"),
+      );
       const id = (data as { id: string }[] | null)?.[0]?.id;
       if (!id) {
         // Row inserted but not returned (RLS SELECT). Re-fetch by name+household.
-        const { data: found } = await supabase
+        const { data: found, error: fetchError } = await supabase
           .from("institutions")
           .select("id")
           .eq("household_id", householdId)
           .eq("name", i.name)
           .order("created_at", { ascending: false })
           .limit(1);
+        if (fetchError) throw fetchError;
         const fallback = (found as { id: string }[] | null)?.[0]?.id;
         if (!fallback) throw new Error("Saved but could not confirm — refresh and try again.");
         return fallback;
