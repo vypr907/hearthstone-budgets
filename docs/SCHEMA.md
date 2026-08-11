@@ -559,3 +559,144 @@ create index if not exists transactions_institution_id_idx
   on public.transactions (institution_id);
 notify pgrst, 'reload schema';
 ```
+## income_source_deductions (ADR-055)
+
+Deductions taken from a paycheck before it reaches spendable accounts (HSA,
+LPFSA, retirement, etc.). `income_sources`' amount field keeps its existing
+meaning (net); gross is computed as net + Σ(deductions), never stored.
+
+```sql
+income_source_deductions (
+    id uuid primary key default gen_random_uuid(),
+    household_id uuid references households(id) on delete cascade,
+    income_source_id uuid references income_sources(id) on delete cascade,
+    name text not null,
+    amount numeric(12,2),      -- exactly one of amount / percent is set
+    percent numeric(6,3),
+    destination_account_id uuid references accounts(id),
+    is_pre_tax boolean default false,
+    created_at timestamptz default now()
+)
+```
+
+Percent-type deductions compute against the income event's `actual_amount`
+(net), not a derived gross figure — resolved 2026-08-12, see ADR-055.
+
+Deductions with `destination_account_id` set get a real deposit transaction
+when the pay event is marked received (ADR-047), sharing that event's
+`split_group_id`. Deductions with no destination account are reporting-only.
+
+---
+
+## transactions.transfer_group_id (ADR-056)
+
+```sql
+transactions (
+    ...
+    transfer_group_id uuid  -- ADR-056: tags the 2 rows of one transfer/advance,
+                             -- same pattern as split_group_id
+)
+```
+
+No FK — self-tagging group id, not a parent row. A transfer writes two rows
+sharing one `transfer_group_id` (negative on the from-account, positive on
+the to-account). A debt advance writes one deposit transaction (tagged with
+`transfer_group_id`) paired with a `debt_adjustments` row — see below —
+rather than a second linked transaction.
+
+---
+
+## bill_adjustments (ADR-058)
+
+Bills' counterpart to `debt_adjustments` — a signed, non-payment change to
+what's owed on a bill (insurance coverage, a late fee, etc.), separate from
+real account movement.
+
+```sql
+bill_adjustments (
+    id uuid primary key default gen_random_uuid(),
+    household_id uuid references households(id) on delete cascade,
+    bill_id uuid references bills(id) on delete cascade,
+    amount numeric(12,2) not null,       -- signed: negative reduces what's owed,
+                                          -- positive increases it
+    affects_balance boolean default true, -- false = record-only, doesn't touch
+                                           -- cycle_amount_due / arrears
+    adjustment_type text,
+    description text,
+    adjustment_date date default current_date,
+    created_at timestamptz default now()
+)
+```
+
+## debt_adjustments — new column (ADR-058)
+
+```sql
+debt_adjustments (
+    ...
+    affects_balance boolean default true  -- false = record-only, doesn't
+                                           -- touch remaining_balance
+)
+```
+
+Existing rows default to `true`, preserving ADR-045's original behavior.
+This is unrelated to ADR-046's payment-fee transactions, which already never
+touch the cycle — that mechanism is unchanged.
+
+---
+
+# Migration: ADR-055 / ADR-056 / ADR-058 (2026-08-11)
+
+Run in the Supabase SQL Editor — already applied and verified for this
+project; kept here for reference / re-application on a fresh environment.
+
+```sql
+create table if not exists income_source_deductions (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  income_source_id uuid not null references income_sources(id) on delete cascade,
+  name text not null,
+  amount numeric(12,2),
+  percent numeric(6,3),
+  destination_account_id uuid references accounts(id),
+  is_pre_tax boolean not null default false,
+  created_at timestamptz not null default now(),
+  check ((amount is not null and percent is null) or (amount is null and percent is not null))
+);
+
+alter table income_source_deductions enable row level security;
+create policy "household access" on income_source_deductions for all
+  using (is_household_member(household_id))
+  with check (is_household_member(household_id));
+
+grant select, insert, update, delete on income_source_deductions to authenticated;
+grant all on income_source_deductions to service_role;
+
+alter table transactions add column if not exists transfer_group_id uuid;
+
+create table if not exists bill_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  bill_id uuid not null references bills(id) on delete cascade,
+  amount numeric(12,2) not null,
+  affects_balance boolean not null default true,
+  adjustment_type text,
+  description text,
+  adjustment_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+alter table bill_adjustments enable row level security;
+create policy "household access" on bill_adjustments for all
+  using (is_household_member(household_id))
+  with check (is_household_member(household_id));
+
+grant select, insert, update, delete on bill_adjustments to authenticated;
+grant all on bill_adjustments to service_role;
+
+alter table debt_adjustments add column if not exists affects_balance boolean not null default true;
+
+notify pgrst, 'reload schema';
+```
+
+Note: ADR-057 (overdue-aware payment allocation) introduces no schema —
+it reuses `bills`/`debts`.`opening_arrears` and `arrears_as_of` (ADR-049).

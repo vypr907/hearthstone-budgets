@@ -1290,7 +1290,7 @@ Reason: The old check only looked at `cycle_paid_to_date`, so a payment repaired
 by hand (balance corrected, cycle columns untouched) kept showing the repair
 card forever.
 
-Status: Decided 2026-08-12. Implemented.
+Status: Decided 2026-08-11. Implemented.
 
 ## ADR-052: Invoice number field and auto-composed invoice names
 Decision: Debts gain `invoice_number`. When the type is Invoice and the name has
@@ -1301,7 +1301,7 @@ editing an existing debt) stops auto-naming permanently.
 Reason: Invoices are identified by issuer + number; typing that twice is busywork,
 but the name must still be freely editable.
 
-Status: Decided 2026-08-12. Implemented.
+Status: Decided 2026-08-11. Implemented.
 
 ## ADR-053: Transactions carry an institution (place)
 Decision: `transactions.institution_id` records where money was spent. Add
@@ -1312,7 +1312,7 @@ linked immediately. Writes tolerate the column being absent.
 Reason: Groundwork for a "spending by place" view, captured at entry time without
 slowing the quick-add flow.
 
-Status: Decided 2026-08-12. Implemented (view pending).
+Status: Decided 2026-08-11. Implemented (view pending).
 
 ## ADR-054: Income sources are cards with their own detail route
 Decision: Each income source on the Paycheck Budget screen is a card linking to
@@ -1325,4 +1325,157 @@ Reason: A paycheck that lands across checking, savings, HSA, and retirement
 needs its splits described somewhere; the old read-only list gave no place to do
 it and no view of what a source has actually paid.
 
-Status: Decided 2026-08-12. Implemented.
+Status: Decided 2026-08-11. Implemented.
+
+## ADR-055: Income Source Deductions (Net/Gross Split)
+
+Decision:
+Add `income_source_deductions` (name, amount OR percent — exactly one — optional
+`destination_account_id`, `is_pre_tax`). `income_sources`' existing amount field keeps
+its current meaning (net); gross is computed as net + sum(deductions), never stored.
+Marking a pay date received (ADR-047) posts the existing net splits AND one deposit
+transaction per deduction that has a `destination_account_id` (cleared, same
+`split_group_id` as the pay event, description "Deduction: <name>"). Deductions with no
+destination account are reporting-only — no transaction.
+
+Reason:
+Matches the existing splits pattern (ADR-024/047) instead of inventing a second
+mechanism. Reuses `split_group_id` so a deduction deposit groups with the rest of that
+pay event in the ledger UI.
+
+Schema:
+```sql
+create table income_source_deductions (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  income_source_id uuid not null references income_sources(id) on delete cascade,
+  name text not null,
+  amount numeric(12,2),
+  percent numeric(6,3),
+  destination_account_id uuid references accounts(id),
+  is_pre_tax boolean not null default false,
+  created_at timestamptz not null default now(),
+  check ((amount is not null and percent is null) or (amount is null and percent is not null))
+);
+
+alter table income_source_deductions enable row level security;
+create policy "household access" on income_source_deductions for all
+  using (is_household_member(household_id))
+  with check (is_household_member(household_id));
+
+grant select, insert, update, delete on income_source_deductions to authenticated;
+grant all on income_source_deductions to service_role;
+```
+
+**Resolved 2026-08-11:** percent-type deductions compute against the income event's
+`actual_amount` (net), not a derived gross figure. So: gross = net + Σ(flat amounts) +
+Σ(percent × net). No gross figure is stored anywhere — it's computed for display only.
+
+Status: Decided 2026-08-11. SQL run and verified. Ready to implement.
+
+---
+
+## ADR-056: Transfers and Debt Advances
+
+Decision:
+Add `transactions.transfer_group_id uuid` (nullable, no FK — self-tagging group,
+same pattern as `split_group_id`). A transfer writes two cleared transactions sharing
+one `transfer_group_id`: negative amount on the from-account, positive amount on the
+to-account, no category, no linked_bill/debt/goal.
+
+An advance reuses ADR-045's `debt_adjustments` table rather than a new mechanism:
+choosing a debt + destination account writes (a) one deposit transaction into the
+destination account (cleared, `transfer_group_id` set, description "Advance: <debt
+name>"), and (b) one `debt_adjustments` row with a positive `amount` (increases
+`remaining_balance`) and `adjustment_type = 'advance'`. Deleting either side of a
+transfer or advance deletes both rows sharing the group id (transfer) or the
+transaction + its paired adjustment (advance).
+
+Reason:
+`split_group_id` already solved "tag several rows as one event" for splits — a
+transfer is the same shape (two rows, one event), so reusing the pattern with its own
+column avoids ambiguity between splits and transfers on the same transaction. The
+advance is exactly what `debt_adjustments` (ADR-045) already models: a non-payment
+balance change; no new table needed.
+
+Schema:
+```sql
+alter table transactions add column if not exists transfer_group_id uuid;
+```
+
+Status: Decided 2026-08-11. SQL run — pending your individual verification of income_source_deductions/bill_adjustments table existence (see prior message's split-out checks).
+
+---
+
+## ADR-057: Overdue-Aware Payment Allocation (Extends ADR-035, ADR-049)
+
+Decision:
+The pay dialog gains three amount presets: **Owed this cycle** (current
+`cycle_amount_due − cycle_paid_to_date` behavior, unchanged), **Total due** (cycle +
+live arrears total per `computeArrears`), and **Other amount**.
+
+Allocation on a cleared payment, in order:
+1. Credit the current cycle first (existing ADR-035 behavior, unchanged).
+2. Any overflow beyond the current cycle reduces `opening_arrears` directly and
+   advances `arrears_as_of` to the payment's date.
+
+Reason:
+ADR-049 already skips any cycle on/before `arrears_as_of` when walking missed cycles,
+so reducing `opening_arrears` and bumping `arrears_as_of` on overflow is sufficient to
+make `computeArrears` reflect the payment on the next render — no new columns, no
+separate "arrears paid" ledger. For debts, an overflow payment already reduces
+`remaining_balance` via existing cleared-payment logic (ADR-035); this ADR only adds
+the `opening_arrears`/`arrears_as_of` update so the missed-cycle count also shrinks,
+not just the balance.
+
+**Flag for careful testing** (per project convention: this is the "worth debugging
+carefully" category, like ADR-015's payoff math): verify a bill 3 cycles behind, paid
+"Total due," correctly zeroes both `cycle_paid_to_date` state and the arrears walk —
+i.e. `PastDueBadge` drops to 0 cycles, not just the dollar figure.
+
+Status: Decided 2026-08-11. SQL run — no new columns to verify (reuses opening_arrears/arrears_as_of).
+
+---
+
+## ADR-058: Balance-Affecting Toggle on Adjustments; Bills Gain Their Own Adjustments Table
+
+Decision:
+Add `debt_adjustments.affects_balance boolean not null default true` (existing rows
+keep today's behavior). Add a new `bill_adjustments` table mirroring
+`debt_adjustments`' shape (bills and debts are already separate tables per the
+existing schema, so this mirrors that split rather than unifying them). When
+`affects_balance = false`, an adjustment is recorded for history but does NOT change
+`remaining_balance` (debts) or `cycle_amount_due`/arrears (bills) — informational only
+(e.g. "processing fee, paid in cash, doesn't change what's owed").
+
+This is distinct from ADR-046's payment-fee transaction, which already never touches
+the cycle — that mechanism is unchanged. This toggle only affects the
+adjustments-table entries (insurance coverage, late fees, etc. added to what's owed).
+
+Schema:
+```sql
+create table bill_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  bill_id uuid not null references bills(id) on delete cascade,
+  amount numeric(12,2) not null,
+  affects_balance boolean not null default true,
+  adjustment_type text,
+  description text,
+  adjustment_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+alter table bill_adjustments enable row level security;
+create policy "household access" on bill_adjustments for all
+  using (is_household_member(household_id))
+  with check (is_household_member(household_id));
+
+grant select, insert, update, delete on bill_adjustments to authenticated;
+grant all on bill_adjustments to service_role;
+
+alter table debt_adjustments add column if not exists affects_balance boolean not null default true;
+```
+
+Status: Decided 2026-08-11. SQL run and verified (affects_balance confirmed present).
+

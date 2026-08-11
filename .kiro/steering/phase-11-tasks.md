@@ -3,10 +3,11 @@
 Work groups below can land independently. Do them roughly in this order —
 later groups depend on schema/logic earlier groups touch.
 
-## 0. Prerequisite (blocks groups 2, 3, 4, 5)
-ADR-055..058 must be approved and `SCHEMA_MIGRATION_PHASE11.sql` actually run
-in Supabase before implementing those groups. Group 1, 6, 7, 8 don't need new
-schema and can start immediately.
+## 0. Prerequisite — DONE
+ADR-055..058 approved, `SCHEMA_MIGRATION_PHASE11.sql` run in Supabase.
+Groups 2–5 are unblocked. If you hit a missing-table/column error in any of
+those groups, stop and flag it — don't silently guard around it, since that
+usually means a step above didn't fully land.
 
 ## 1. Bug fixes (start here — no schema needed)
 - **New-institution insert fails on Add Transaction (ADR-053).** Picking an

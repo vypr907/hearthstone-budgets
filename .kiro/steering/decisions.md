@@ -30,10 +30,11 @@ work directly touches or must not break.
   or before `arrears_as_of`. ADR-057 extends this — read `computeArrears`
   before touching allocation logic.
 
-## New this phase (drafted, pending your approval — see
-`DECISIONS_ADDENDUM_PHASE11.md`)
-ADR-055 (income deductions), ADR-056 (transfers/advances), ADR-057
-(overdue-aware allocation), ADR-058 (balance-affecting adjustments toggle +
-bill_adjustments table). **Do not implement any of these until they're
-confirmed approved and the SQL has actually been run** — check with Steven if
-unclear.
+## New this phase — APPROVED, SQL run (see `DECISIONS_ADDENDUM_PHASE11.md`)
+ADR-055 (income deductions — percent-type deductions compute against the
+income event's `actual_amount`/net, not a derived gross), ADR-056
+(transfers/advances), ADR-057 (overdue-aware allocation, no new schema),
+ADR-058 (balance-affecting adjustments toggle + `bill_adjustments` table).
+Groups 2–5 are unblocked. If a table/column expected by these ADRs doesn't
+actually exist when you go to use it, stop and flag it rather than assuming
+the migration partially failed silently.
