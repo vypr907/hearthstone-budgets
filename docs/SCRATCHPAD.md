@@ -63,3 +63,6 @@ Show me the diffs for all three files before finalizing.
 - when submitting a payment, any click on the "how much are you paying now?" screen opens the bill detail view. Have to use tab in order to enter values.
 - also, when paying an overdue bill, it doesn't seem to count against the overdue amount.
 - need more sort/group/filter options for Transactions, also on Dashboard and Spending, should be a way to view all transactions for that Category/Budget Item
+
+---
+- unable to edit transaction to add institution

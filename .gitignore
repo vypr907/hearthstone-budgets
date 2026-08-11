@@ -31,8 +31,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# Other random files
+# Other random files and folders
 nextquestion.md
+planning/
 
 # Local backups
 *.local.backup.md
