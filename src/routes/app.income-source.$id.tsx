@@ -638,7 +638,7 @@ function DeductionDialog({
   const [name, setName] = useState("");
   const [valueType, setValueType] = useState<"amount" | "percent">("amount");
   const [value, setValue] = useState("");
-  const [destAccountId, setDestAccountId] = useState("");
+  const [destAccountId, setDestAccountId] = useState("none");
   const [preTax, setPreTax] = useState(false);
 
   const key = deduction?.id ?? (deduction ? "new" : "");
@@ -654,7 +654,8 @@ function DeductionDialog({
           ? String(deduction.amount)
           : "",
     );
-    setDestAccountId(deduction.destination_account_id ?? "");
+    // Radix Select forbids empty string — use "none" as the sentinel for null.
+    setDestAccountId(deduction.destination_account_id ?? "none");
     setPreTax(deduction.is_pre_tax === true);
   }
   if (!deduction && lastKey !== "") setLastKey("");
@@ -670,7 +671,8 @@ function DeductionDialog({
       name: name.trim(),
       amount: valueType === "amount" ? num : null,
       percent: valueType === "percent" ? num : null,
-      destination_account_id: destAccountId || null,
+      // Map sentinel "none" back to null — Radix forbids empty string values.
+      destination_account_id: destAccountId === "none" || !destAccountId ? null : destAccountId,
       is_pre_tax: preTax,
     });
   }
@@ -725,7 +727,7 @@ function DeductionDialog({
                 <SelectValue placeholder="None — reporting only" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None — reporting only</SelectItem>
+                <SelectItem value="none">None — reporting only</SelectItem>
                 {accounts.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
                     {a.name}
