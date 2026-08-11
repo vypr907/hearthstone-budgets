@@ -339,6 +339,9 @@ export function useMarkSubmitted() {
       // Mark the payable pending first so a failed status write never leaves an
       // orphan ledger row behind.
       await updateRow(table(p.kind), p.id, { payment_status: "pending" });
+      // ADR-046: pair the payment with its fee via a shared split_group_id so a
+      // later clear/undo/reset touches both atomically.
+      const groupId = crypto.randomUUID();
       const { error } = await supabase.from("transactions").insert({
         household_id: householdId,
         account_id: accountId,
@@ -348,10 +351,11 @@ export function useMarkSubmitted() {
         description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
         transaction_date: todayISO(),
         [linkColumn(p.kind)]: p.id,
+        split_group_id: groupId,
       });
       if (error) throw error;
 
-      await insertFeeTransaction(householdId, p, accountId, fee, "pending");
+      await insertFeeTransaction(householdId, p, accountId, fee, "pending", groupId);
 
       const owed = payableRemainingOwed(p) - amt;
       return owed > 0.005 ? { remaining_owed: owed } : {};
