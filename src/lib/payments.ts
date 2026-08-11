@@ -514,6 +514,9 @@ export function useResetCycle() {
       if (transactionIds.length > 0) {
         const { error } = await supabase.from("transactions").delete().in("id", transactionIds);
         if (error) throw error;
+        // ADR-046: remove the fee rows paired with each cleared payment. Fees
+        // were never linked to the payable, so they aren't in transactionIds.
+        for (const g of await groupIdsFor(transactionIds)) await deletePairedFees(g);
       }
 
       if (payable.kind === "debt") {
