@@ -433,6 +433,8 @@ export function useMarkUnpaid() {
       if (tx) {
         const { error } = await supabase.from("transactions").delete().eq("id", tx.id);
         if (error) throw error;
+        // ADR-046: take the paired fee with the reversed payment.
+        await deletePairedFees(tx.split_group_id);
       }
 
       if (p.kind === "debt") {
