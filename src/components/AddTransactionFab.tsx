@@ -115,13 +115,12 @@ export function AddTransactionFab() {
     try {
       const id = await saveInstitution.mutateAsync({
         name: newMerchant,
-        institution_type: "retailer",
+        institution_type: "other",
         logo_url: domain ? suggestedLogoUrl(domain) : null,
       });
       if (typeof id === "string") setMerchantId(id);
       toast.success(`Added ${newMerchant}`);
     } catch (e) {
-      console.error("[addMerchant]", e);
       const msg =
         e instanceof Error ? e.message
         : (e as { message?: string })?.message

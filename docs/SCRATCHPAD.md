@@ -66,3 +66,13 @@ Show me the diffs for all three files before finalizing.
 
 ---
 - unable to edit transaction to add institution
+
+---
+
+## Idea: smarter institution_type for inline-created merchants (Add Transaction)
+
+Currently addMerchant() hardcodes institution_type: "other" for any place created inline from Add Transaction. Works, but vague — no icon/type distinction from any other "other" institution.
+
+Possible future enhancement: infer or prompt for a real type (subscription/utility/medical/etc.) at inline-creation time, so merchants captured this way get sensible icons/grouping like deliberately-added institutions do.
+
+Not scoped. Not decided. If pursued, likely needs its own small ADR (touches UX + how institution_type/icon gets assigned) before a TODO line or Kiro prompt — see 2026-08-12 discussion on why this stays out of TODO.md for now.
