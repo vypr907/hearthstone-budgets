@@ -204,6 +204,11 @@ async function findLinkedTransaction(p: Payable, status?: string) {
 /**
  * ADR-046: fees ride alongside a payment as their own ledger row so they hit the
  * account balance without ever counting toward the bill/debt cycle.
+ *
+ * ADR-046 fix: the fee is PAIRED to its payment via `split_group_id` (never via
+ * linked_bill_id/linked_debt_id) so cycle math — clearedSum, state derivation,
+ * debt balance reversal — never sees it. That keeps clearing, reversing and
+ * deleting atomic: any operation on the payment propagates to its fee.
  */
 async function insertFeeTransaction(
   householdId: string | null | undefined,
@@ -211,6 +216,8 @@ async function insertFeeTransaction(
   accountId: string,
   fee: number | undefined,
   status: "pending" | "cleared",
+  /** Shared with the payment row so the pair stays atomic (ADR-046). */
+  splitGroupId?: string | null,
 ) {
   const amt = Math.abs(Number(fee) || 0);
   if (amt < 0.005) return;
@@ -239,8 +246,55 @@ async function insertFeeTransaction(
     status,
     description: `Fee: ${p.name}`,
     transaction_date: todayISO(),
+    // Paired to the payment, NOT linked to the payable — see ADR-046 note above.
+    split_group_id: splitGroupId ?? null,
   });
   if (error) throw error;
+}
+
+/**
+ * Clear every pending fee row paired with a payment (same split_group_id).
+ * Called when a submitted payment is marked cleared so the fee clears too.
+ */
+async function clearPairedFees(splitGroupId: string | null | undefined) {
+  if (!splitGroupId) return;
+  const { error } = await supabase
+    .from("transactions")
+    .update({ status: "cleared" })
+    .eq("status", "pending")
+    .eq("split_group_id", splitGroupId)
+    .ilike("description", "Fee:%");
+  if (error) throw error;
+}
+
+/**
+ * Delete every fee row paired with a payment (same split_group_id). Called on
+ * undo/reset so a reversed payment takes its fee with it.
+ */
+async function deletePairedFees(splitGroupId: string | null | undefined) {
+  if (!splitGroupId) return;
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("split_group_id", splitGroupId)
+    .ilike("description", "Fee:%");
+  if (error) throw error;
+}
+
+/**
+ * Resolve the split_group_id values for a set of transaction ids, so a cycle
+ * reset can delete the fee rows paired with each payment it removes.
+ */
+async function groupIdsFor(transactionIds: string[]): Promise<string[]> {
+  if (transactionIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("split_group_id")
+    .in("id", transactionIds);
+  if (error) throw error;
+  return (data as { split_group_id: string | null }[] | null ?? [])
+    .map((r) => r.split_group_id)
+    .filter((g): g is string => !!g);
 }
 
 function useAfterPayment() {
