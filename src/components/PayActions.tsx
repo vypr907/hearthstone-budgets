@@ -45,7 +45,16 @@ export function PayActions({
           {info.remaining > 0 ? ` · ${formatMoney(info.remaining)} left` : ""}
         </span>
       </Button>
-      {picker}
+      {/*
+        The pay-flow dialogs portal their DOM to <body>, but React synthetic
+        events still bubble through the React tree — so a click inside the
+        portaled amount/fee dialog reaches the clickable bill/debt card above
+        and opens its detail view. Stop propagation here so the dialogs are
+        isolated from the card's onClick.
+      */}
+      <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+        {picker}
+      </div>
     </>
   );
 }
