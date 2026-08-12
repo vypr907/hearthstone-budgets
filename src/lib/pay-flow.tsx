@@ -15,6 +15,7 @@ import { useAccounts, useInstitutions, useTransactions } from "@/lib/data-hooks"
 import { accountLast4, formatMoney } from "@/lib/format";
 import { accountTypeVisual } from "@/lib/visual-meta";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
+import { computeArrears } from "@/lib/arrears";
 
 import {
   Dialog,
@@ -264,6 +265,45 @@ export function usePayFlow() {
         </DialogHeader>
         <div className="space-y-2">
           <Label htmlFor="pay-amount">{ask?.payable.name}</Label>
+
+          {/* ADR-057: three presets shown on the pay stage only. */}
+          {ask?.stage === "pay" ? (() => {
+            const arrears = computeArrears(ask.payable);
+            const owedThisCycle = Math.max(0,
+              (ask.cycleAmount ?? (ask.payable.kind === "bill"
+                ? billCycleDue(ask.payable.bill!)
+                : Number(ask.payable.debt?.minimum_payment ?? 0)))
+              - paidSoFar
+            );
+            const totalDue = Math.round((owedThisCycle + arrears.amountOverdue) * 100) / 100;
+            const presets = [
+              { label: "Owed this cycle", value: owedThisCycle },
+              ...(totalDue > owedThisCycle + 0.005
+                ? [{ label: `Total due (+ ${formatMoney(arrears.amountOverdue)} arrears)`, value: totalDue }]
+                : []),
+              { label: "Other amount", value: null },
+            ];
+            return (
+              <div className="flex flex-wrap gap-2 pb-1">
+                {presets.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => setAskValue(p.value != null ? String(p.value) : "")}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      p.value != null && askValue === String(p.value)
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-muted/50 text-muted-foreground hover:border-primary hover:text-foreground"
+                    }`}
+                  >
+                    {p.label}
+                    {p.value != null ? ` · ${formatMoney(p.value)}` : ""}
+                  </button>
+                ))}
+              </div>
+            );
+          })() : null}
+
           <Input
             id="pay-amount"
             type="number"

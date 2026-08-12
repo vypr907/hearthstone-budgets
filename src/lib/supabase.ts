@@ -223,6 +223,22 @@ export type DebtAdjustment = {
   adjustment_type: string | null;
   description: string | null;
   adjustment_date: string;
+  /** ADR-058: when false the row is record-only and does not modify remaining_balance. Default true. */
+  affects_balance?: boolean | null;
+  created_at?: string | null;
+};
+
+/** ADR-058: a non-payment change to a bill's cycle_amount_due. Mirrors debt_adjustments. */
+export type BillAdjustment = {
+  id: string;
+  household_id: string;
+  bill_id: string;
+  amount: number;
+  adjustment_type: string | null;
+  description: string | null;
+  adjustment_date: string;
+  /** ADR-058: when false the row is record-only and does not modify cycle_amount_due. Default true. */
+  affects_balance?: boolean | null;
   created_at?: string | null;
 };
 

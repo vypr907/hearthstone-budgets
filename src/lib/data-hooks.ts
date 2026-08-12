@@ -4,6 +4,7 @@ import {
   type Bill,
   type Debt,
   type DebtAdjustment,
+  type BillAdjustment,
   type Account,
   type AccountBalance,
   type Category,
@@ -618,6 +619,7 @@ export function useDebtAdjustments() {
 /**
  * ADR-045 + ADR-037 ordering: move the debt's remaining_balance first, then
  * write the adjustment row, so a failed write never leaves a phantom balance.
+ * ADR-058: when affects_balance is false, skip the balance update entirely.
  */
 export function useAddDebtAdjustment() {
   const { householdId } = useAuth();
@@ -629,16 +631,20 @@ export function useAddDebtAdjustment() {
       adjustmentType: string;
       description: string | null;
       adjustmentDate: string;
+      affectsBalance?: boolean;
     }) => {
-      const next = Math.max(
-        0,
-        Number(args.debt.remaining_balance ?? 0) + args.amount,
-      );
-      const { error: debtError } = await supabase
-        .from("debts")
-        .update({ remaining_balance: next })
-        .eq("id", args.debt.id);
-      if (debtError) throw debtError;
+      const affectsBalance = args.affectsBalance !== false; // default true
+      if (affectsBalance) {
+        const next = Math.max(
+          0,
+          Number(args.debt.remaining_balance ?? 0) + args.amount,
+        );
+        const { error: debtError } = await supabase
+          .from("debts")
+          .update({ remaining_balance: next })
+          .eq("id", args.debt.id);
+        if (debtError) throw debtError;
+      }
       const { error } = await supabase.from("debt_adjustments").insert({
         household_id: householdId,
         debt_id: args.debt.id,
@@ -646,6 +652,7 @@ export function useAddDebtAdjustment() {
         adjustment_type: args.adjustmentType,
         description: args.description,
         adjustment_date: args.adjustmentDate,
+        affects_balance: affectsBalance,
       });
       if (error) throw error;
     },
@@ -656,20 +663,23 @@ export function useAddDebtAdjustment() {
   });
 }
 
-/** Repair-delete: reverse the balance change, then drop the adjustment row. */
+/** Repair-delete: reverse the balance change (if affects_balance), then drop the adjustment row. */
 export function useDeleteDebtAdjustment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (args: { adjustment: DebtAdjustment; debt: Debt }) => {
-      const next = Math.max(
-        0,
-        Number(args.debt.remaining_balance ?? 0) - Number(args.adjustment.amount ?? 0),
-      );
-      const { error: debtError } = await supabase
-        .from("debts")
-        .update({ remaining_balance: next })
-        .eq("id", args.debt.id);
-      if (debtError) throw debtError;
+      // ADR-058: record-only adjustments never touched the balance — don't reverse.
+      if (args.adjustment.affects_balance !== false) {
+        const next = Math.max(
+          0,
+          Number(args.debt.remaining_balance ?? 0) - Number(args.adjustment.amount ?? 0),
+        );
+        const { error: debtError } = await supabase
+          .from("debts")
+          .update({ remaining_balance: next })
+          .eq("id", args.debt.id);
+        if (debtError) throw debtError;
+      }
       const { error } = await supabase
         .from("debt_adjustments")
         .delete()
@@ -683,6 +693,101 @@ export function useDeleteDebtAdjustment() {
   });
 }
 
+
+/* ---------------- Bill adjustments (ADR-058) ---------------- */
+
+export function useBillAdjustments() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["bill_adjustments", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<BillAdjustment[]> => {
+      const { data, error } = await supabase
+        .from("bill_adjustments")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("adjustment_date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as BillAdjustment[];
+    },
+  });
+}
+
+/**
+ * ADR-058: write a bill adjustment. When affects_balance is true, also
+ * modifies cycle_amount_due for the current cycle (Option 1: per-cycle only).
+ * ADR-037 ordering: update the bill row before inserting the adjustment row.
+ */
+export function useAddBillAdjustment() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      bill: Bill;
+      amount: number;
+      adjustmentType: string;
+      description: string | null;
+      adjustmentDate: string;
+      affectsBalance?: boolean;
+    }) => {
+      const affectsBalance = args.affectsBalance !== false; // default true
+      if (affectsBalance) {
+        // cycle_amount_due captures the current cycle's total owed. If not yet
+        // set, seed it from the bill's standing amount before adjusting.
+        const { billCycleDue } = await import("@/lib/payments");
+        const currentDue = billCycleDue(args.bill);
+        const nextDue = Math.max(0, currentDue + args.amount);
+        const { error: billError } = await supabase
+          .from("bills")
+          .update({ cycle_amount_due: nextDue })
+          .eq("id", args.bill.id);
+        if (billError) throw billError;
+      }
+      const { error } = await supabase.from("bill_adjustments").insert({
+        household_id: householdId,
+        bill_id: args.bill.id,
+        amount: args.amount,
+        adjustment_type: args.adjustmentType,
+        description: args.description,
+        adjustment_date: args.adjustmentDate,
+        affects_balance: affectsBalance,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bill_adjustments"] });
+      qc.invalidateQueries({ queryKey: ["bills"] });
+    },
+  });
+}
+
+/** Delete a bill adjustment; reverse cycle_amount_due only if affects_balance is true. */
+export function useDeleteBillAdjustment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { adjustment: BillAdjustment; bill: Bill }) => {
+      if (args.adjustment.affects_balance !== false) {
+        const { billCycleDue } = await import("@/lib/payments");
+        const currentDue = billCycleDue(args.bill);
+        const nextDue = Math.max(0, currentDue - Number(args.adjustment.amount ?? 0));
+        const { error: billError } = await supabase
+          .from("bills")
+          .update({ cycle_amount_due: nextDue })
+          .eq("id", args.bill.id);
+        if (billError) throw billError;
+      }
+      const { error } = await supabase
+        .from("bill_adjustments")
+        .delete()
+        .eq("id", args.adjustment.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bill_adjustments"] });
+      qc.invalidateQueries({ queryKey: ["bills"] });
+    },
+  });
+}
 
 /* ---------------- Transfers and advances (ADR-056) ---------------- */
 

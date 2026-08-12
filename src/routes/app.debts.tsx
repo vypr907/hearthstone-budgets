@@ -1054,6 +1054,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   const [type, setType] = useState("insurance_covered");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [affectsBalance, setAffectsBalance] = useState(true);
 
   // --- Advance dialog state ---
   const [advanceOpen, setAdvanceOpen] = useState(false);

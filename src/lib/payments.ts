@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Bill, type Debt, type Transaction } from "./supabase";
-import { advanceDate, reverseDate } from "./format";
+import { advanceDate, reverseDate, formatMoney } from "./format";
 import { useAuth } from "./auth-context";
 
 function todayISO() {
@@ -119,15 +119,19 @@ async function updateRow(
  * cycle, and only resolve the cycle (advance the due date, reset the counters)
  * once the cycle target is met. Shared by the Submit/Clear flow and by manual
  * transactions linked to a bill/debt (ADR-035).
+ *
+ * ADR-057: any amount paid beyond the current cycle reduces opening_arrears and
+ * advances arrears_as_of to today. Bills cap at cycle_due + opening_arrears —
+ * excess is rejected so money isn't silently left unaccounted.
  */
-
 export async function applyClearedPayment(p: Payable, clearedAmount: number) {
   if (p.kind === "debt") {
     const debt = p.debt!;
     const remaining = Number(debt.remaining_balance ?? 0);
     const nextBalance = Math.max(0, remaining - clearedAmount);
     const target = debtCycleDue(debt);
-    const paid = Number(debt.cycle_paid_to_date ?? 0) + clearedAmount;
+    const previouslyPaid = Number(debt.cycle_paid_to_date ?? 0);
+    const paid = previouslyPaid + clearedAmount;
     const cycle = (debt.billing_cycle ?? "monthly").toLowerCase();
 
     const update: Record<string, unknown> = { remaining_balance: nextBalance };
@@ -160,13 +164,35 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
       update.payment_status = "cleared";
     }
 
+    // ADR-057: overflow beyond the cycle minimum reduces opening_arrears.
+    const cycleCredit = target > 0 ? Math.max(0, target - previouslyPaid) : clearedAmount;
+    const overflow = Math.max(0, clearedAmount - cycleCredit);
+    if (overflow > 0.005 && Number(debt.opening_arrears ?? 0) > 0) {
+      const newArrears = Math.max(0, Number(debt.opening_arrears) - overflow);
+      update.opening_arrears = newArrears;
+      update.arrears_as_of = todayISO();
+    }
+
     await updateRow("debts", p.id, update);
     return { next_due_date: nextDue };
   }
 
   const bill = p.bill!;
   const dueThisCycle = billCycleDue(bill);
-  const paid = Number(bill.cycle_paid_to_date ?? 0) + clearedAmount;
+  const openingArrears = Math.max(0, Number(bill.opening_arrears ?? 0));
+
+  // ADR-057: bills have no prepayment-credit field — cap the payment at what's
+  // actually owed (current cycle remainder + arrears carry-in).
+  const previouslyPaid = Number(bill.cycle_paid_to_date ?? 0);
+  const remainingThisCycle = Math.max(0, dueThisCycle - previouslyPaid);
+  const maxAllowed = remainingThisCycle + openingArrears;
+  if (maxAllowed > 0.005 && clearedAmount > maxAllowed + 0.005) {
+    throw new Error(
+      `This exceeds what the bill and its arrears currently owe (${formatMoney(maxAllowed)}) — reduce the amount, or log the extra as a separate manual transaction.`,
+    );
+  }
+
+  const paid = previouslyPaid + clearedAmount;
 
   if (paid + 0.005 < dueThisCycle) {
     await updateRow("bills", bill.id, {
@@ -177,15 +203,24 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
     return { remaining_owed: dueThisCycle - paid };
   }
 
-  const base = bill.next_due_date ?? todayISO();
-  const nextDue = advanceDate(base, bill.billing_cycle, bill.cycle_interval_days);
-  await updateRow("bills", bill.id, {
+  // Cycle satisfied — compute arrears overflow before resetting.
+  const cycleCredit = remainingThisCycle;
+  const overflow = Math.max(0, clearedAmount - cycleCredit);
+  const billUpdate: Record<string, unknown> = {
     payment_status: "unpaid",
-    next_due_date: nextDue,
+    next_due_date: advanceDate(bill.next_due_date ?? todayISO(), bill.billing_cycle, bill.cycle_interval_days),
     cycle_paid_to_date: 0,
     cycle_amount_due: null,
-  });
-  return { next_due_date: nextDue };
+  };
+
+  // ADR-057: reduce opening_arrears by the overflow, advance arrears_as_of.
+  if (overflow > 0.005 && openingArrears > 0) {
+    billUpdate.opening_arrears = Math.max(0, openingArrears - overflow);
+    billUpdate.arrears_as_of = todayISO();
+  }
+
+  await updateRow("bills", bill.id, billUpdate);
+  return { next_due_date: billUpdate.next_due_date as string };
 }
 
 async function findLinkedTransaction(p: Payable, status?: string) {
