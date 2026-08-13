@@ -313,8 +313,8 @@ export function useMarkIncomeReceived() {
 }
 
 /**
- * Set (or clear) one allocation for one paycheck. ADR-039: a row targets either
- * a category OR a savings goal, never both (DB check constraint).
+ * Set (or clear) one allocation for one paycheck. ADR-039/ADR-059: a row targets
+ * exactly one of category, savings goal, bill, or debt (DB check constraint).
  */
 export function useSetAllocation() {
   const { householdId } = useAuth();
@@ -325,13 +325,18 @@ export function useSetAllocation() {
       incomeEventId: string;
       categoryId?: string | null;
       goalId?: string | null;
+      billId?: string | null;
+      debtId?: string | null;
       amount: number;
     }) => {
-      if (args.categoryId && args.goalId) {
-        throw new Error("An allocation can target a category or a savings goal, not both.");
+      const targets = [args.categoryId, args.goalId, args.billId, args.debtId].filter(Boolean);
+      if (targets.length > 1) {
+        throw new Error(
+          "An allocation can target a category, savings goal, bill, or debt — only one.",
+        );
       }
-      if (!args.categoryId && !args.goalId) {
-        throw new Error("An allocation needs either a category or a savings goal.");
+      if (targets.length === 0) {
+        throw new Error("An allocation needs a category, savings goal, bill, or debt.");
       }
       if (!args.amount) {
         if (args.id) {
@@ -349,11 +354,14 @@ export function useSetAllocation() {
         income_event_id: args.incomeEventId,
         category_id: args.categoryId ?? null,
         goal_id: args.goalId ?? null,
+        bill_id: args.billId ?? null,
+        debt_id: args.debtId ?? null,
         allocated_amount: args.amount,
       };
       const { error } = await supabase.from("pay_period_allocations").upsert(payload);
       if (error) throw error;
     },
+
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pay_period_allocations", householdId] });
     },
