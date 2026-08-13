@@ -301,7 +301,9 @@ function PeriodBudget({
   }, [spendActuals, allTransactions, bills, categories]);
 
   const obligations = useMemo(
-    () => obligationsInRange(bills, debts, start, end),
+    // ADR-060: project recurrences forward through the end of this period so
+    // future pay periods show what will come due, marked as projected.
+    () => obligationsInRange(bills, debts, start, end, end),
     [bills, debts, start, end],
   );
   const obligationsTotal = sum(obligations.map((o) => o.amount));
@@ -471,7 +473,7 @@ function PeriodBudget({
           ) : (
             obligations.map((o) => (
               <div
-                key={`${o.kind}-${o.id}`}
+                key={`${o.kind}-${o.id}-${o.dueDate}${o.projected ? "-p" : ""}`}
                 className="flex items-center justify-between py-1 text-sm"
               >
                 <span className="flex-1">
@@ -479,8 +481,15 @@ function PeriodBudget({
                   <span className="ml-2 text-xs text-muted-foreground">
                     {o.kind} · {o.dueDate}
                   </span>
+                  {o.projected ? (
+                    <span className="ml-2 rounded border border-dashed px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Projected
+                    </span>
+                  ) : null}
                 </span>
-                <span className="font-medium">{formatMoney(o.amount)}</span>
+                <span className={o.projected ? "font-medium text-muted-foreground" : "font-medium"}>
+                  {formatMoney(o.amount)}
+                </span>
               </div>
             ))
           )}
