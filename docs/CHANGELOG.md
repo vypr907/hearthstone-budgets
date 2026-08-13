@@ -614,3 +614,27 @@
 
 * Investigated. `InstitutionDetail` and the account detail view share very little content at the detail level (institution shows linked accounts/bills/debts; accounts show recent transactions). No shared component warranted. TODO item closed as investigated.
 
+
+## 2026-08-13 – Manual pay-period planning & recurrence projection
+
+### Completed
+
+* **ADR-059 — Manual bill/debt allocations in pay periods**
+
+  * Extended `useSetAllocation()` to accept `billId`/`debtId` alongside `categoryId`/`goalId`, with an exactly-one-target guard across all four; `PayPeriodAllocation` gained `bill_id`/`debt_id`.
+  * Added a "Plan a payment" dialog to the Paycheck Budget period view that writes a `pay_period_allocations` row for a chosen bill or debt.
+  * New "Planned" card renders planned bill/debt rows (with Remove), visually distinct from "Due this period" and never deduplicated against it.
+  * Planned amounts now feed the `allocated` total, so "Left to allocate" (ADR-039) includes them.
+  * `obligationsInRange()` and due-date bucketing untouched.
+
+* **ADR-060 — Recurrence projection for forward-looking pay periods**
+
+  * Reused the existing interval math (`shiftDate`/`advanceDate`/`shiftDateSafe` in `src/lib/format.ts`); no new billing-cycle logic.
+  * New pure `projectOccurrences(item, fromDate, throughDate)` in `src/lib/paycheck-budget.ts` walks a bill/debt forward one cycle at a time, skips `one_time`, and never returns the stored due date.
+  * `obligationsInRange()` gained an optional `projectThrough` argument; projected dates bucket with the same half-open `start <= d < end` check and carry `projected: true`. Dashboard and Snapshot callers unchanged.
+  * Paycheck Budget "Due this period" rows show a dashed "Projected" badge with a muted amount; projected amounts still count toward obligations total and left-to-allocate.
+  * `computeArrears`, stored due dates, and ADR-059 planning untouched.
+
+### Notes
+
+* Both features are display/derivation-layer only for ADR-060; ADR-059 is the only one that writes rows (to the already-migrated `pay_period_allocations.bill_id/debt_id`).

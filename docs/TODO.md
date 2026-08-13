@@ -10,8 +10,14 @@
 - [ ] **Group 4**: Verify overdue-aware payment allocation (ADR-057) against a real multi-cycle-behind bill in the live app — pay via "Total due", confirm PastDueBadge disappears.
 - [ ] **Group 5**: Verify `debt_adjustments.affects_balance` column exists in live Supabase (column default `true` should have backfilled existing rows). Run `SCHEMA_MIGRATION_PHASE11.sql` if not already done for `bill_adjustments`.
 - [ ] **Group 5**: Confirm `bill_adjustments` table exists live; if not, run the relevant section of `SCHEMA_MIGRATION_PHASE11.sql`.
-- [ ] Update `docs/SESSION.md`, `docs/SCHEMA.md`, `docs/ARCHITECTURE.md`, and `docs/DECISIONS.md` (mark ADR-055..058 Implemented).
+- [ ] Update `docs/SCHEMA.md` and `docs/ARCHITECTURE.md`, and mark ADR-055..058 Implemented in `docs/DECISIONS.md`.
 - [ ] Commit and push all Phase 11 Group 2–7 changes.
+
+## Phase 11 — Verification (2026-08-13)
+
+- [ ] Verify ADR-059: plan a payment on a future pay period, confirm the Planned card and "Left to allocate" reflect it.
+- [ ] Verify ADR-060: on the pay period ending 9/24, confirm recurring bills appear marked "Projected" one cycle after their current `next_due_date`.
+- [ ] Add unit tests for `projectOccurrences()` (monthly + biweekly items) alongside the existing arrears tests.
 
 ## Standing open items
 

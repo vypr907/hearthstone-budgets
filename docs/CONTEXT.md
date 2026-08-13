@@ -36,6 +36,8 @@ Private shared household budget and debt-payoff Android application migrated fro
   - Group 6 complete: DonutChart in SpendingSummary, spending-by-place dedicated card
   - Group 7 complete: full transaction filtering/grouping/sorting, institution re-tag in edit mode, spending drill-down to transactions
   - Group 8 closed: investigated, no shared detail component warranted
+  - ADR-059 complete: manual bill/debt allocations per pay period ("Plan a payment" + Planned card)
+  - ADR-060 complete: recurrence projection surfaces future occurrences in forward pay periods
 - Phase 12 not started: Wrap as a Real Android App (Capacitor)
 - Phase 12 not started: Publish to Google Play (Internal Testing)
 - Phase 13 not started: Cutover: Retire the Sheet
@@ -60,7 +62,7 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Payment cycle state is derived from the ledger (unpaid / pending / partial / cleared), never stored; ADR-036 supersedes ADR-010
 - Payable rows are updated before the ledger row is written, and updates that change 0 rows throw (ADR-037)
 - Envelope Set Aside writes two cleared transactions, debit + goal-tagged credit; there is no transfer table (ADR-038)
-- pay_period_allocations rows target either a category_id or a goal_id, never both (ADR-039)
+- pay_period_allocations rows target exactly one of category_id, goal_id, bill_id or debt_id (ADR-039, ADR-059)
 - Custom billing cycles store an interval in days on bills/debts (`cycle_interval_days`); weeks are converted on save (ADR-040)
 - A spending_actuals row with is_manual_override wins over the ledger sum; overrides never touch transactions (ADR-041)
 - Budgeted and spent are always split into ordinary spending vs. bill-linked amounts (ADR-034)
@@ -76,6 +78,8 @@ Private shared household budget and debt-payoff Android application migrated fro
 - `applyClearedPayment` reduces `opening_arrears` on overflow; bills cap payments at `cycle_due + opening_arrears` and reject excess (ADR-057)
 - `debt_adjustments` and `bill_adjustments` rows with `affects_balance=false` are record-only and never modify balances; delete skips reversal for them (ADR-058)
 - Bill adjustments modify `cycle_amount_due` for the current cycle only; they do not touch `bills.amount` (ADR-058)
+- Manually planned bill/debt payments are separate from due-date bucketing; the Planned card is never deduplicated against "Due this period" (ADR-059)
+- Future occurrences are projected at render time from the stored due date; projections are marked "Projected", count toward totals, and never write back to next_due_date/due_day (ADR-060)
 
 ## Important Rules
 - Never store passwords.
@@ -92,4 +96,4 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Institution logo_url is only ever suggested from login_url for the user to confirm — never written silently.
 - A custom cycle with no cycle_interval_days throws on date math; render-only paths use shiftDateSafe().
 - Payment Schedule past months are history, not a simulation: no per-debt breakdown, check-off only. Ledger status badges appear on the current month only.
-- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, debts.cycle_paid_to_date, savings_goals.account_id/linked_bill_id, pay_period_allocations.goal_id, bills/debts.cycle_interval_days, spending_actuals.is_manual_override, transactions.split_group_id, bills/debts.opening_arrears, debts.invoice_number, transactions.institution_id, income_source_splits, income_source_deductions, transactions.transfer_group_id, bill_adjustments, debt_adjustments.affects_balance) must exist before those screens work.
+- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, debts.cycle_paid_to_date, savings_goals.account_id/linked_bill_id, pay_period_allocations.goal_id, bills/debts.cycle_interval_days, spending_actuals.is_manual_override, transactions.split_group_id, bills/debts.opening_arrears, debts.invoice_number, transactions.institution_id, income_source_splits, income_source_deductions, transactions.transfer_group_id, bill_adjustments, debt_adjustments.affects_balance, pay_period_allocations.bill_id/debt_id) must exist before those screens work.
