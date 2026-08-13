@@ -349,10 +349,68 @@ function PeriodBudget({
   const goalValueFor = (goalId: string) =>
     draft[`goal:${goalId}`] ?? Number(goalRowFor(goalId)?.allocated_amount ?? 0);
 
+  // ADR-059: manually planned bill/debt payments for this pay period. These are
+  // independent of the due-date bucketing in "Due this period" — an item can be
+  // in both, and we deliberately do not deduplicate.
+  const planned = useMemo(() => {
+    const rows: {
+      allocationId: string;
+      kind: "bill" | "debt";
+      targetId: string;
+      name: string;
+      amount: number;
+    }[] = [];
+    for (const a of mine) {
+      if (a.bill_id) {
+        const b = bills.find((x) => x.id === a.bill_id);
+        rows.push({
+          allocationId: a.id,
+          kind: "bill",
+          targetId: a.bill_id,
+          name: b?.name ?? "Bill",
+          amount: Number(a.allocated_amount ?? 0),
+        });
+      } else if (a.debt_id) {
+        const d = debts.find((x) => x.id === a.debt_id);
+        rows.push({
+          allocationId: a.id,
+          kind: "debt",
+          targetId: a.debt_id,
+          name: d?.name ?? "Debt",
+          amount: Number(a.allocated_amount ?? 0),
+        });
+      }
+    }
+    return rows.sort((x, y) => x.name.localeCompare(y.name));
+  }, [mine, bills, debts]);
+  const plannedTotal = sum(planned.map((p) => p.amount));
+
   const allocated =
-    sum(cats.map((c) => valueFor(c.id))) + sum(goals.map((g) => goalValueFor(g.id)));
+    sum(cats.map((c) => valueFor(c.id))) +
+    sum(goals.map((g) => goalValueFor(g.id))) +
+    plannedTotal;
   const income = eventAmount(event) + secondaryTotal;
   const left = income - obligationsTotal - allocated;
+
+  const commitPlanned = async (args: {
+    id?: string;
+    kind: "bill" | "debt";
+    targetId: string;
+    amount: number;
+  }) => {
+    try {
+      await setAllocation.mutateAsync({
+        id: args.id,
+        incomeEventId: event.id,
+        billId: args.kind === "bill" ? args.targetId : null,
+        debtId: args.kind === "debt" ? args.targetId : null,
+        amount: Math.max(0, Math.round(args.amount * 100) / 100),
+      });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
 
   const commit = async (categoryId: string, amount: number) => {
     try {
@@ -451,6 +509,57 @@ function PeriodBudget({
           ) : null}
         </CardContent>
       </Card>
+
+      {/* ADR-059: manually planned payments, deliberately separate from "Due this period". */}
+      <Card className="border-primary/40 bg-primary/5">
+        <CardContent className="space-y-2 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Planned</h2>
+            <PlanPaymentDialog bills={bills} debts={debts} onSave={commitPlanned} />
+          </div>
+          {planned.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nothing planned yet. Use “Plan a payment” to set money aside for a bill or debt in
+              this period.
+            </p>
+          ) : (
+            <>
+              {planned.map((p) => (
+                <div
+                  key={p.allocationId}
+                  className="flex items-center justify-between gap-2 py-1 text-sm"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {p.name}
+                    <span className="ml-2 text-xs text-muted-foreground">{p.kind} · planned</span>
+                  </span>
+                  <span className="font-medium">{formatMoney(p.amount)}</span>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    onClick={() =>
+                      void commitPlanned({
+                        id: p.allocationId,
+                        kind: p.kind,
+                        targetId: p.targetId,
+                        amount: 0,
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t pt-2 text-sm font-semibold">
+                <span>Planned total</span>
+                <span>{formatMoney(plannedTotal)}</span>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+
 
       <Card>
         <CardContent className="space-y-4 p-4">
@@ -627,7 +736,107 @@ function PeriodBudget({
   );
 }
 
+/** ADR-059: pick a bill or debt and plan an amount against this pay period. */
+function PlanPaymentDialog({
+  bills,
+  debts,
+  onSave,
+}: {
+  bills: import("@/lib/supabase").Bill[];
+  debts: import("@/lib/supabase").Debt[];
+  onSave: (args: { kind: "bill" | "debt"; targetId: string; amount: number }) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState("");
+  const [amount, setAmount] = useState("");
+
+  const options = useMemo(
+    () => [
+      ...bills
+        .filter((b) => b.is_active !== false)
+        .map((b) => ({
+          value: `bill:${b.id}`,
+          label: b.name,
+          amount: Number(b.cycle_amount_due ?? b.amount ?? 0),
+        })),
+      ...debts
+        .filter((d) => !d.date_paid_off)
+        .map((d) => ({
+          value: `debt:${d.id}`,
+          label: d.name,
+          amount: Number(d.minimum_payment ?? 0),
+        })),
+    ],
+    [bills, debts],
+  );
+
+  const save = async () => {
+    if (!target) return;
+    const [kind, id] = target.split(":");
+    await onSave({ kind: kind as "bill" | "debt", targetId: id, amount: Number(amount || 0) });
+    setOpen(false);
+    setTarget("");
+    setAmount("");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1">
+          <Plus className="h-4 w-4" /> Plan a payment
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Plan a bill or debt payment</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>Bill or debt</Label>
+            <Select
+              value={target}
+              onValueChange={(v) => {
+                setTarget(v);
+                const opt = options.find((o) => o.value === v);
+                if (opt && !amount && opt.amount > 0) setAmount(String(opt.amount));
+              }}
+            >
+              <SelectTrigger className="h-12">
+                <SelectValue placeholder="Pick a bill or debt" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Planned amount</Label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              className="h-12"
+              value={amount}
+              placeholder="0"
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={() => void save()} disabled={!target || !Number(amount || 0)}>
+            Save plan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TrendsView({
+
   events,
   allocations,
   categories,
