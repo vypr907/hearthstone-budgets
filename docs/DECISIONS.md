@@ -1664,7 +1664,7 @@ Implementation notes:
 4. UI: projected line items get a visual marker distinguishing them from
    real due items; total/left-to-allocate math includes both.
 
-Status: Decided 2026-08-12. Not yet implemented.
+Status: Decided 2026-08-12. Implemented 2026-08-13 (`projectOccurrences()` + `obligationsInRange(..., projectThrough)` in `src/lib/paycheck-budget.ts`; "Projected" badge on the Paycheck Budget screen).
 
 ---
 
