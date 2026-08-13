@@ -310,7 +310,12 @@ export type PayPeriodAllocation = {
   category_id: string | null;
   /** ADR-039: set instead of category_id when the row allocates to a savings goal. */
   goal_id?: string | null;
+  /** ADR-059: manually planned payment toward a bill in this pay period. */
+  bill_id?: string | null;
+  /** ADR-059: manually planned payment toward a debt in this pay period. */
+  debt_id?: string | null;
   allocated_amount: number | null;
+
 };
 
 
