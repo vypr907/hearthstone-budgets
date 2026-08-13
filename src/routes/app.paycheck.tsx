@@ -736,7 +736,107 @@ function PeriodBudget({
   );
 }
 
+/** ADR-059: pick a bill or debt and plan an amount against this pay period. */
+function PlanPaymentDialog({
+  bills,
+  debts,
+  onSave,
+}: {
+  bills: import("@/lib/supabase").Bill[];
+  debts: import("@/lib/supabase").Debt[];
+  onSave: (args: { kind: "bill" | "debt"; targetId: string; amount: number }) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState("");
+  const [amount, setAmount] = useState("");
+
+  const options = useMemo(
+    () => [
+      ...bills
+        .filter((b) => b.is_active !== false)
+        .map((b) => ({
+          value: `bill:${b.id}`,
+          label: b.name,
+          amount: Number(b.cycle_amount_due ?? b.amount ?? 0),
+        })),
+      ...debts
+        .filter((d) => !d.date_paid_off)
+        .map((d) => ({
+          value: `debt:${d.id}`,
+          label: d.name,
+          amount: Number(d.minimum_payment ?? 0),
+        })),
+    ],
+    [bills, debts],
+  );
+
+  const save = async () => {
+    if (!target) return;
+    const [kind, id] = target.split(":");
+    await onSave({ kind: kind as "bill" | "debt", targetId: id, amount: Number(amount || 0) });
+    setOpen(false);
+    setTarget("");
+    setAmount("");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1">
+          <Plus className="h-4 w-4" /> Plan a payment
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Plan a bill or debt payment</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>Bill or debt</Label>
+            <Select
+              value={target}
+              onValueChange={(v) => {
+                setTarget(v);
+                const opt = options.find((o) => o.value === v);
+                if (opt && !amount && opt.amount > 0) setAmount(String(opt.amount));
+              }}
+            >
+              <SelectTrigger className="h-12">
+                <SelectValue placeholder="Pick a bill or debt" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Planned amount</Label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              className="h-12"
+              value={amount}
+              placeholder="0"
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={() => void save()} disabled={!target || !Number(amount || 0)}>
+            Save plan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TrendsView({
+
   events,
   allocations,
   categories,
