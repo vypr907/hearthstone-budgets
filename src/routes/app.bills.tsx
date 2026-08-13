@@ -10,6 +10,9 @@ import {
   useInstitutions,
   useTransactions,
   useDeleteLinkedTransaction,
+  useBillAdjustments,
+  useAddBillAdjustment,
+  useDeleteBillAdjustment,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,28 +42,23 @@ import { DetailGrid, DetailItem, DetailMoney, DetailText, StatusBadge } from "@/
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
 import { SetAsideAction } from "@/components/SetAsideAction";
-
 import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { PastDueBadge } from "@/components/PastDueBadge";
 import { PastDueEditor } from "@/components/PastDueEditor";
-
 import { ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
-
 import { formatTypeLabel } from "@/lib/visual-meta";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
-
+import { format } from "date-fns";
 const ADD_INSTITUTION = "__add_institution__";
-
 import {
   CustomCycleFields,
   deriveCustomInterval,
   toIntervalDays,
   type CycleUnit,
 } from "@/components/CustomCycleFields";
-
 const CYCLES: BillingCycle[] = [
   "monthly",
   "biweekly",
@@ -69,7 +67,14 @@ const CYCLES: BillingCycle[] = [
   "annually",
   "custom",
 ];
-
+/** ADR-058: mirrors ADJUSTMENT_TYPES from app.debts.tsx */
+const BILL_ADJUSTMENT_TYPES = [
+  "insurance_covered",
+  "insurance_discount",
+  "late_fee",
+  "nsf_fee",
+  "other",
+];
 export const Route = createFileRoute("/app/bills")({
   head: () => ({
     meta: [
@@ -91,28 +96,23 @@ export const Route = createFileRoute("/app/bills")({
   }),
   component: BillsPage,
 });
-
 function BillsPage() {
   const { data: bills = [], isLoading } = useBills();
   const { data: categories = [] } = useCategories();
   const { data: allInstitutions = [] } = useInstitutions();
   const institutionById = useInstitutionIndex(allInstitutions);
-
   const [editing, setEditing] = useState<Partial<Bill> | null>(null);
   const [detail, setDetail] = useState<Bill | null>(null);
   const infoOf = useCycleState();
-
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("due");
   const [group, setGroup] = useState("none");
   const [cats, setCats] = useState<string[]>([]);
-
   const categoryName = useMemo(() => {
     const m: Record<string, string> = {};
     for (const c of categories) m[c.id] = c.name;
     return m;
   }, [categories]);
-
   const rows = useMemo(() => {
     let out = bills;
     if (cats.length) {
@@ -134,7 +134,6 @@ function BillsPage() {
       return (a.next_due_date ?? "9999-12-31").localeCompare(b.next_due_date ?? "9999-12-31");
     });
   }, [bills, cats, q, sort, categoryName]);
-
   const groups = useMemo(() => {
     if (group === "none") return [["", rows]] as Array<[string, Bill[]]>;
     return groupRows(rows, (b) => {
@@ -143,7 +142,6 @@ function BillsPage() {
       return b.next_due_date ? b.next_due_date.slice(0, 7) : "No due date";
     });
   }, [rows, group, categoryName]);
-
   return (
     <>
       <AppHeader title="Bills" />
@@ -151,7 +149,6 @@ function BillsPage() {
         <Button className="h-12 w-full text-base" onClick={() => setEditing({})}>
           <Plus className="mr-2 h-5 w-5" /> Add bill
         </Button>
-
         <ListControls
           query={q}
           onQueryChange={setQ}
@@ -174,7 +171,6 @@ function BillsPage() {
           selectedCategories={cats}
           onSelectedCategoriesChange={setCats}
         />
-
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && rows.length === 0 && (
           <Card>
@@ -183,7 +179,6 @@ function BillsPage() {
             </CardContent>
           </Card>
         )}
-
         <div className="space-y-4">
           {groups.map(([label, items]) => (
             <div key={label || "all"} className="space-y-2">
@@ -205,7 +200,6 @@ function BillsPage() {
                           name={`${b.name} ${(b.category_id && categoryName[b.category_id]) || ""}`}
                           fallback="🧾"
                         />
-
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-medium">{b.name}</p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -220,7 +214,6 @@ function BillsPage() {
                             <StatusBadge status={info.state} />
                             {/* ADR-049: how far behind, in money. */}
                             <PastDueBadge payable={toPayable("bill", b)} />
-
                             {info.clearedSum > 0 && info.remaining > 0 ? (
                               <span className="font-medium text-destructive">
                                 {formatMoney(info.remaining)} still owed this cycle
@@ -232,7 +225,6 @@ function BillsPage() {
                         <p className="shrink-0 text-lg font-extrabold tabular-nums">
                           {formatMoney(Number(b.amount))}
                         </p>
-
                         <Button
                           size="icon"
                           variant="ghost"
@@ -260,7 +252,6 @@ function BillsPage() {
           ))}
         </div>
       </div>
-
       <BillDialog bill={editing} onClose={() => setEditing(null)} />
       <BillDetailDialog
         bill={detail}
@@ -273,7 +264,6 @@ function BillsPage() {
     </>
   );
 }
-
 function BillDetailDialog({
   bill,
   onClose,
@@ -290,7 +280,6 @@ function BillDetailDialog({
   const institution = institutions.find((i) => i.id === bill.institution_id);
   // Only surface cycle figures when they add information beyond bills.amount.
   const showCycle = Number(bill.cycle_paid_to_date ?? 0) > 0 || bill.cycle_amount_due != null;
-
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -326,6 +315,8 @@ function BillDetailDialog({
           <PayActions payable={toPayable("bill", bill)} />
           <PastDueEditor bill={bill} />
           <SetAsideAction bill={bill} />
+          {/* ADR-058: bill adjustments section */}
+          <BillAdjustments bill={bill} />
           <RecentBillTransactions billId={bill.id} />
         </div>
         <DialogFooter className="gap-2">
@@ -341,6 +332,180 @@ function BillDetailDialog({
   );
 }
 
+/**
+ * ADR-058: non-payment changes to a bill's cycle_amount_due (late fees,
+ * insurance discounts, etc.). Mirrors DebtAdjustments in app.debts.tsx.
+ */
+function BillAdjustments({ bill }: { bill: Bill }) {
+  const { data: allAdjustments = [] } = useBillAdjustments();
+  const adjustments = useMemo(
+    () => allAdjustments.filter((a) => a.bill_id === bill.id),
+    [allAdjustments, bill.id],
+  );
+  const add = useAddBillAdjustment();
+  const remove = useDeleteBillAdjustment();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [type, setType] = useState("insurance_covered");
+  const [description, setDescription] = useState("");
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [affectsBalance, setAffectsBalance] = useState(true);
+
+  async function save() {
+    const value = Number(amount);
+    if (!value) {
+      toast.error("Enter a non-zero amount");
+      return;
+    }
+    try {
+      await add.mutateAsync({
+        bill,
+        amount: value,
+        adjustmentType: type,
+        description: description || null,
+        adjustmentDate: date,
+        affectsBalance,
+      });
+      toast.success("Adjustment saved");
+      setOpen(false);
+      setAmount("");
+      setDescription("");
+      setAffectsBalance(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-center justify-between">
+        <SectionLabel>Adjustments</SectionLabel>
+        <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(true)}>
+          <Plus className="mr-1 h-4 w-4" /> Add
+        </Button>
+      </div>
+      {adjustments.length === 0 ? (
+        <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+          No adjustments yet.
+        </p>
+      ) : (
+        <div className="mt-1 divide-y divide-border/50 rounded-md border">
+          {adjustments.map((a) => (
+            <div key={a.id} className="flex items-center gap-2 px-2 py-2 text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="truncate">
+                  {formatTypeLabel(a.adjustment_type ?? "other")}
+                  {a.description ? ` · ${a.description}` : ""}
+                  {a.affects_balance === false
+                    ? <span className="ml-1 text-xs text-muted-foreground">(record only)</span>
+                    : null}
+                </p>
+                <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
+              </div>
+              <span className="shrink-0 tabular-nums font-medium">
+                {Number(a.amount) > 0 ? "+" : ""}
+                {formatMoney(Number(a.amount))}
+              </span>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0"
+                onClick={async () => {
+                  try {
+                    await remove.mutateAsync({ adjustment: a, bill });
+                    toast.success("Adjustment removed");
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add adjustment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Amount</Label>
+              <Input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="h-11"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Negative reduces what's owed (insurance, discount); positive increases it
+                (late or NSF fee).
+              </p>
+            </div>
+            <div>
+              <Label>Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BILL_ADJUSTMENT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {formatTypeLabel(t)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div className="pr-3">
+                <Label htmlFor="bill-adj-affects">Affects balance</Label>
+                <p className="text-xs text-muted-foreground">
+                  {affectsBalance
+                    ? "Updates what's owed this cycle immediately."
+                    : "Record only — doesn't change what's owed."}
+                </p>
+              </div>
+              <Switch
+                id="bill-adj-affects"
+                checked={affectsBalance}
+                onCheckedChange={setAffectsBalance}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="h-11 w-full" onClick={save} disabled={add.isPending}>
+              Save adjustment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 /** Last 10 ledger rows linked to this bill, newest first (ADR-035). */
 function RecentBillTransactions({ billId }: { billId: string }) {
   const { data: transactions = [] } = useTransactions();
@@ -353,7 +518,6 @@ function RecentBillTransactions({ billId }: { billId: string }) {
         .slice(0, 10),
     [transactions, billId],
   );
-
   return (
     <div>
       <SectionLabel>Recent transactions</SectionLabel>
@@ -397,7 +561,6 @@ function RecentBillTransactions({ billId }: { billId: string }) {
     </div>
   );
 }
-
 function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: () => void }) {
   const upsert = useUpsertBill();
   const del = useDeleteBill();
@@ -418,11 +581,8 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   // ADR-049: past-due amount carried in from before tracking started.
   const [openingArrears, setOpeningArrears] = useState("");
   const [arrearsAsOf, setArrearsAsOf] = useState("");
-
-
   const open = bill !== null;
   const isEdit = !!bill?.id;
-
   const key = bill?.id ?? "new";
   const [lastKey, setLastKey] = useState<string>("");
   if (open && key !== lastKey) {
@@ -438,13 +598,11 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setVariable(!!bill?.is_variable_amount);
     setOpeningArrears(bill?.opening_arrears != null ? String(bill.opening_arrears) : "");
     setArrearsAsOf(bill?.arrears_as_of ? bill.arrears_as_of.slice(0, 10) : "");
-
     const derived = deriveCustomInterval(bill?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
   }
   if (!open && lastKey !== "") setLastKey("");
-
   async function save() {
     if (!name.trim() || !amount) {
       toast.error("Name and amount are required");
@@ -470,7 +628,6 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         is_variable_amount: variable,
         opening_arrears: openingArrears ? Number(openingArrears) : 0,
         arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
-
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
       onClose();
@@ -478,7 +635,6 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
       toast.error((e as Error).message);
     }
   }
-
   async function handleDelete() {
     if (!bill?.id) return;
     if (!confirm("Delete this bill?")) return;
@@ -490,7 +646,6 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
       toast.error((e as Error).message);
     }
   }
-
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -539,7 +694,6 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
             </div>
             <Switch id="b-variable" checked={variable} onCheckedChange={setVariable} />
           </div>
-
           <div>
             <Label>Billing cycle</Label>
             <Select value={cycle} onValueChange={(v) => setCycle(v as BillingCycle)}>
@@ -592,7 +746,6 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               />
             </div>
           </div>
-
           <div>
             <Label>Category</Label>
             <Select value={categoryId} onValueChange={setCategoryId}>
@@ -635,7 +788,6 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               </SelectContent>
             </Select>
           </div>
-
           <div>
             <Label>Manual or auto</Label>
             <Select value={manual} onValueChange={setManual}>

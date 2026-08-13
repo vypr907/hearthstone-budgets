@@ -1075,11 +1075,13 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
         adjustmentType: type,
         description: description || null,
         adjustmentDate: date,
+        affectsBalance,
       });
       toast.success("Adjustment saved");
       setOpen(false);
       setAmount("");
       setDescription("");
+      setAffectsBalance(true);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -1133,6 +1135,9 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                   <p className="truncate">
                     {formatTypeLabel(a.adjustment_type ?? "other")}
                     {a.description ? ` · ${a.description}` : ""}
+                    {a.affects_balance === false
+                      ? <span className="ml-1 text-xs text-muted-foreground">(record only)</span>
+                      : null}
                   </p>
                   <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
                 </div>
@@ -1258,6 +1263,21 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className="h-11"
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div className="pr-3">
+                <Label htmlFor="adj-affects">Affects balance</Label>
+                <p className="text-xs text-muted-foreground">
+                  {affectsBalance
+                    ? "Updates remaining balance immediately."
+                    : "Record only — doesn't change what's owed."}
+                </p>
+              </div>
+              <Switch
+                id="adj-affects"
+                checked={affectsBalance}
+                onCheckedChange={setAffectsBalance}
               />
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
@@ -33,8 +33,9 @@ import {
 import { CalendarPlus, ChevronLeft, ChevronRight, HelpCircle, PencilLine, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { ItemBar, ProgressRing, itemColor } from "@/components/viz";
+import { ItemBar, ProgressRing, itemColor, DonutChart } from "@/components/viz";
 import { categoryVisual } from "@/lib/visual-meta";
+import { setTxPreFilter } from "@/lib/tx-filter-store";
 
 import {
   Select,
@@ -94,6 +95,7 @@ function monthLabel(key: string) {
 }
 
 function SpendingPage() {
+  const navigate = useNavigate();
   const { data: categories = [] } = useCategories();
   const { data: budgets = [], isLoading } = useSpendingBudgets();
   const { data: actuals = [] } = useSpendingActuals();
@@ -354,13 +356,27 @@ function SpendingPage() {
           New budget item
         </Button>
 
-        {groups.length > 0 ? <SpendingSummary totals={totals} /> : null}
+        {groups.length > 0 ? (
+          <SpendingSummary
+            totals={totals}
+            categorySlices={groups
+              .flatMap((g) => g.rows)
+              .filter((r) => r.actual > 0)
+              .map((r) => ({ label: r.name, value: r.actual, color: r.color }))}
+          />
+        ) : null}
 
-        {/* ADR-053: the merchant-level view of the same money. */}
+        {/* ADR-053: dedicated card for merchant-level spending view. */}
         <Link to="/app/spending-by-place" className="block">
-          <Button variant="outline" className="h-11 w-full">
-            See spending by place
-          </Button>
+          <Card className="hover:bg-muted/40 transition-colors">
+            <CardContent className="flex items-center justify-between p-4">
+              <div>
+                <p className="font-semibold text-sm">Spending by place</p>
+                <p className="text-xs text-muted-foreground">See which merchants got your money this month</p>
+              </div>
+              <span aria-hidden className="text-xl">🏪</span>
+            </CardContent>
+          </Card>
         </Link>
 
 
@@ -407,6 +423,10 @@ function SpendingPage() {
                           .then(() => toast.success(`${r.name} back on transactions`))
                           .catch((e: unknown) => toast.error((e as Error).message))
                       }
+                      onDrillDown={() => {
+                        setTxPreFilter({ categoryId: r.categoryId, label: r.name });
+                        void navigate({ to: "/app/transactions" });
+                      }}
                     />
                   ))}
                   <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-2 text-xs">
@@ -627,6 +647,7 @@ type SpendRow = {
 /** Chart-led month summary that replaces the old table header row. */
 function SpendingSummary({
   totals,
+  categorySlices,
 }: {
   totals: {
     budgeted: number;
@@ -637,6 +658,7 @@ function SpendingSummary({
     billsSpent: number;
     avg3: number;
   };
+  categorySlices?: Array<{ label: string; value: number; color: string }>;
 }) {
   const pct =
     totals.budgeted > 0
@@ -678,6 +700,14 @@ function SpendingSummary({
             </div>
           ))}
         </div>
+        {categorySlices && categorySlices.length > 0 ? (
+          <div className="mt-4 border-t border-border/60 pt-4">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              Share of spending
+            </p>
+            <DonutChart slices={categorySlices} size={120} thickness={18} />
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -689,11 +719,13 @@ function SpendingRow({
   index: i,
   onEdit,
   onClearOverride,
+  onDrillDown,
 }: {
   row: SpendRow;
   index: number;
   onEdit: (field: "budgeted" | "actual") => void;
   onClearOverride: () => void;
+  onDrillDown: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const totalBudget = r.budgeted + r.billsBudgeted;
@@ -790,6 +822,15 @@ function SpendingRow({
                 <PopoverContent className="w-64 text-sm">{r.description}</PopoverContent>
               </Popover>
             ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9"
+              onClick={onDrillDown}
+              aria-label={`See transactions for ${r.name}`}
+            >
+              Transactions →
+            </Button>
           </div>
         </div>
       ) : null}

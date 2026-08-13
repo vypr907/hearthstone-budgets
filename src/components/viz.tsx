@@ -152,3 +152,107 @@ export function EmojiIcon({
     </span>
   );
 }
+
+/**
+ * SVG donut chart showing share-of-spending by category.
+ * Each slice is proportional to its `value`; zero-spend categories are omitted.
+ * Slices under 2% are collapsed into an "Other" segment to avoid tiny slivers.
+ */
+export function DonutChart({
+  slices,
+  size = 140,
+  thickness = 22,
+  className,
+}: {
+  slices: Array<{ label: string; value: number; color: string }>;
+  size?: number;
+  thickness?: number;
+  className?: string;
+}) {
+  const visible = slices.filter((s) => s.value > 0);
+  const total = visible.reduce((sum, s) => sum + s.value, 0);
+  if (total <= 0) return null;
+
+  const r = (size - thickness) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circumference = 2 * Math.PI * r;
+
+  // Merge tiny slices (< 2%) into "Other" to prevent visual noise.
+  const MIN_PCT = 0.02;
+  const main: typeof visible = [];
+  let otherTotal = 0;
+  for (const s of visible) {
+    if (s.value / total < MIN_PCT) otherTotal += s.value;
+    else main.push(s);
+  }
+  if (otherTotal > 0)
+    main.push({ label: "Other", value: otherTotal, color: "var(--muted-foreground)" });
+
+  // Build arc segments using strokeDasharray / strokeDashoffset rotation trick.
+  let offset = 0; // offset in circumference units, starting from top (−90°)
+  const segments = main.map((s) => {
+    const pct = s.value / total;
+    const dash = pct * circumference;
+    const gap = circumference - dash;
+    const rotation = (offset / circumference) * 360 - 90;
+    offset += dash;
+    return { ...s, dash, gap, rotation };
+  });
+
+  return (
+    <div className={cn("flex items-center gap-3", className)}>
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        role="img"
+        aria-label="Spending by category"
+        className="shrink-0"
+      >
+        {/* Background ring */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke="var(--muted)"
+          strokeWidth={thickness}
+        />
+        {segments.map((seg) => (
+          <circle
+            key={seg.label}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={seg.color}
+            strokeWidth={thickness}
+            strokeDasharray={`${seg.dash} ${seg.gap}`}
+            strokeDashoffset={0}
+            style={{ transform: `rotate(${seg.rotation}deg)`, transformOrigin: `${cx}px ${cy}px` }}
+            aria-label={`${seg.label}: ${Math.round((seg.value / total) * 100)}%`}
+          />
+        ))}
+      </svg>
+      {/* Legend — top 5 slices by value */}
+      <div className="min-w-0 flex-1 space-y-1">
+        {[...main]
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 5)
+          .map((s) => (
+            <div key={s.label} className="flex items-center gap-1.5 text-xs">
+              <span
+                className="inline-block h-2 w-2 shrink-0 rounded-full"
+                style={{ background: s.color }}
+              />
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">{s.label}</span>
+              <span className="shrink-0 tabular-nums font-medium">
+                {Math.round((s.value / total) * 100)}%
+              </span>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}

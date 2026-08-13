@@ -10,6 +10,7 @@ import {
   useCategories,
   useBills,
   useDebts,
+  useInstitutions,
   useSaveSplitTransaction,
   useDeleteSplitTransaction,
 } from "@/lib/data-hooks";
@@ -33,8 +34,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Transaction } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
@@ -46,6 +47,7 @@ import {
   NO_SPLIT_CATEGORY,
   type SplitRow,
 } from "@/components/SplitLinesEditor";
+import { consumeTxPreFilter } from "@/lib/tx-filter-store";
 
 export const Route = createFileRoute("/app/transactions")({
   head: () => ({
@@ -73,10 +75,33 @@ function TransactionsPage() {
   const { data: transactions = [], isLoading } = useTransactions();
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
+  const { data: institutions = [] } = useInstitutions();
+
+  // --- Filter state ---
   const [account, setAccount] = useState("all");
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("date");
+  const [groupBy, setGroupBy] = useState("none");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [placeFilter, setPlaceFilter] = useState("all");
+  const [linkedFilter, setLinkedFilter] = useState("all"); // all | linked | unlinked
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterLabel, setFilterLabel] = useState<string | null>(null);
+
   const [detail, setDetail] = useState<Transaction | null>(null);
+
+  // Consume any pre-filter set by spending drill-down.
+  useEffect(() => {
+    const pre = consumeTxPreFilter();
+    if (!pre) return;
+    if (pre.categoryId) {
+      setCategoryFilter(pre.categoryId);
+      setFiltersOpen(true);
+    }
+    if (pre.label) setFilterLabel(pre.label);
+  }, []);
 
   const accountName = useMemo(() => {
     const m: Record<string, string> = {};
@@ -88,6 +113,11 @@ function TransactionsPage() {
     for (const c of categories) m[c.id] = c.name;
     return m;
   }, [categories]);
+  const institutionName = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const i of institutions) m[i.id] = i.name;
+    return m;
+  }, [institutions]);
 
   const rows = useMemo(() => {
     let out = transactions;
@@ -96,59 +126,232 @@ function TransactionsPage() {
         account === "none" ? !t.account_id : t.account_id === account,
       );
     if (status !== "all") out = out.filter((t) => t.status === status);
+    if (categoryFilter !== "all")
+      out = out.filter((t) =>
+        categoryFilter === "none" ? !t.category_id : t.category_id === categoryFilter,
+      );
+    if (placeFilter !== "all")
+      out = out.filter((t) =>
+        placeFilter === "none" ? !t.institution_id : t.institution_id === placeFilter,
+      );
+    if (linkedFilter === "linked")
+      out = out.filter(
+        (t) => t.linked_bill_id || t.linked_debt_id || t.linked_goal_id,
+      );
+    if (linkedFilter === "unlinked")
+      out = out.filter(
+        (t) => !t.linked_bill_id && !t.linked_debt_id && !t.linked_goal_id,
+      );
+    if (dateFrom) out = out.filter((t) => t.transaction_date >= dateFrom);
+    if (dateTo) out = out.filter((t) => t.transaction_date <= dateTo);
     return [...out].sort((a, b) => {
       if (sort === "amount") return Math.abs(Number(b.amount)) - Math.abs(Number(a.amount));
+      if (sort === "name")
+        return (a.description ?? "").localeCompare(b.description ?? "");
       return b.transaction_date.localeCompare(a.transaction_date);
     });
-  }, [transactions, account, status, sort]);
+  }, [transactions, account, status, sort, categoryFilter, placeFilter, linkedFilter, dateFrom, dateTo]);
 
   /** ADR-044: collapse split lines into one entry per real transaction. */
   const entries = useMemo(() => groupLedgerRows(rows), [rows]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
+  // Group entries for display
+  const grouped = useMemo(() => {
+    if (groupBy === "none") return [{ label: "", items: entries }];
+    const buckets = new Map<string, typeof entries>();
+    for (const entry of entries) {
+      const t = entry.head;
+      let key = "";
+      if (groupBy === "day") key = t.transaction_date.slice(0, 10);
+      else if (groupBy === "category")
+        key = (t.category_id && categoryName[t.category_id]) || "Uncategorized";
+      else if (groupBy === "account")
+        key = (t.account_id && accountName[t.account_id]) || "No account";
+      else if (groupBy === "place")
+        key = (t.institution_id && institutionName[t.institution_id]) || "No place";
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key)!.push(entry);
+    }
+    return [...buckets.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, items]) => ({ label, items }));
+  }, [entries, groupBy, categoryName, accountName, institutionName]);
+
+  const activeFilterCount = [
+    account !== "all",
+    status !== "all",
+    categoryFilter !== "all",
+    placeFilter !== "all",
+    linkedFilter !== "all",
+    !!dateFrom,
+    !!dateTo,
+  ].filter(Boolean).length;
+
+  function clearFilters() {
+    setAccount("all");
+    setStatus("all");
+    setCategoryFilter("all");
+    setPlaceFilter("all");
+    setLinkedFilter("all");
+    setDateFrom("");
+    setDateTo("");
+    setFilterLabel(null);
+  }
 
   return (
     <>
       <AppHeader title="Transactions" />
       <div className="space-y-3 p-4">
+        {/* Primary sort + group controls */}
         <div className="grid grid-cols-2 gap-2">
-          <Select value={account} onValueChange={setAccount}>
+          <Select value={sort} onValueChange={setSort}>
             <SelectTrigger className="h-11">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All accounts</SelectItem>
-              <SelectItem value="none">No account</SelectItem>
-              {accounts.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  {a.name}
-                </SelectItem>
-              ))}
+              <SelectItem value="date">Sort: Date</SelectItem>
+              <SelectItem value="amount">Sort: Amount</SelectItem>
+              <SelectItem value="name">Sort: Name</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={status} onValueChange={setStatus}>
+          <Select value={groupBy} onValueChange={setGroupBy}>
             <SelectTrigger className="h-11">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="cleared">Cleared</SelectItem>
+              <SelectItem value="none">No grouping</SelectItem>
+              <SelectItem value="day">Group: Day</SelectItem>
+              <SelectItem value="category">Group: Category</SelectItem>
+              <SelectItem value="account">Group: Account</SelectItem>
+              <SelectItem value="place">Group: Place</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger className="h-11">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="date">Sort: Date</SelectItem>
-            <SelectItem value="amount">Sort: Amount</SelectItem>
-          </SelectContent>
-        </Select>
+
+        {/* Collapsible filter panel */}
+        <div className="rounded-md border">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between p-3 text-sm font-medium"
+            onClick={() => setFiltersOpen((v) => !v)}
+          >
+            <span>
+              Filters
+              {activeFilterCount > 0 ? (
+                <Badge variant="secondary" className="ml-2">
+                  {activeFilterCount}
+                </Badge>
+              ) : null}
+              {filterLabel ? (
+                <span className="ml-2 text-xs text-muted-foreground">({filterLabel})</span>
+              ) : null}
+            </span>
+            {filtersOpen ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
+          {filtersOpen ? (
+            <div className="space-y-2 border-t p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={account} onValueChange={setAccount}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All accounts</SelectItem>
+                    <SelectItem value="none">No account</SelectItem>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="cleared">Cleared</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All categories</SelectItem>
+                    <SelectItem value="none">No category</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={placeFilter} onValueChange={setPlaceFilter}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All places</SelectItem>
+                    <SelectItem value="none">No place</SelectItem>
+                    {institutions.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Select value={linkedFilter} onValueChange={setLinkedFilter}>
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Linked + unlinked</SelectItem>
+                  <SelectItem value="linked">Linked to bill/debt/goal</SelectItem>
+                  <SelectItem value="unlinked">Unlinked only</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">From date</Label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">To date</Label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+              </div>
+              {activeFilterCount > 0 ? (
+                <Button variant="ghost" size="sm" className="h-9 w-full" onClick={clearFilters}>
+                  Clear all filters
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {!isLoading && rows.length === 0 && (
+        {!isLoading && entries.length === 0 && (
           <Card>
             <CardContent className="p-4 text-sm text-muted-foreground">
               No transactions match.
@@ -156,84 +359,94 @@ function TransactionsPage() {
           </Card>
         )}
 
-        <div className="space-y-2">
-          {entries.map((entry) => {
-            const t = entry.head;
-            return (
-              <Card
-                key={entry.key}
-                className="cursor-pointer"
-                onClick={() => setDetail(t)}
-              >
-                <CardContent className="flex items-start gap-3 p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {t.description || "Transaction"}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                      <span>{t.transaction_date}</span>
-                      {t.account_id && accountName[t.account_id] ? (
-                        <span>· {accountName[t.account_id]}</span>
-                      ) : null}
-                      {!entry.isSplit && t.category_id && categoryName[t.category_id] ? (
-                        <span>· {categoryName[t.category_id]}</span>
-                      ) : null}
-                      {entry.isSplit ? (
-                        <Badge variant="secondary">
-                          Split · {entry.rows.length} categories
+        {grouped.map(({ label, items }) => (
+          <div key={label || "all"} className="space-y-2">
+            {label ? (
+              <SectionLabel className="px-1 pt-1">{label}</SectionLabel>
+            ) : null}
+            {items.map((entry) => {
+              const t = entry.head;
+              return (
+                <Card
+                  key={entry.key}
+                  className="cursor-pointer"
+                  onClick={() => setDetail(t)}
+                >
+                  <CardContent className="flex items-start gap-3 p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">
+                        {t.description || "Transaction"}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                        <span>{t.transaction_date}</span>
+                        {t.account_id && accountName[t.account_id] ? (
+                          <span>· {accountName[t.account_id]}</span>
+                        ) : null}
+                        {!entry.isSplit && t.category_id && categoryName[t.category_id] ? (
+                          <span>· {categoryName[t.category_id]}</span>
+                        ) : null}
+                        {t.institution_id && institutionName[t.institution_id] ? (
+                          <span>· 🏪 {institutionName[t.institution_id]}</span>
+                        ) : null}
+                        {entry.isSplit ? (
+                          <Badge variant="secondary">
+                            Split · {entry.rows.length} categories
+                          </Badge>
+                        ) : null}
+                        {t.transfer_group_id ? (
+                          <Badge variant="outline">Transfer</Badge>
+                        ) : null}
+                        <Badge
+                          variant={t.status === "cleared" ? "outline" : "secondary"}
+                          className="capitalize"
+                        >
+                          {t.status || "pending"}
                         </Badge>
-                      ) : null}
-                      <Badge
-                        variant={t.status === "cleared" ? "outline" : "secondary"}
-                        className="capitalize"
-                      >
-                        {t.status || "pending"}
-                      </Badge>
-                    </div>
-                    {entry.isSplit ? (
-                      <button
-                        className="mt-1 text-xs text-muted-foreground underline decoration-dotted"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpanded((prev) => ({
-                            ...prev,
-                            [entry.key]: !prev[entry.key],
-                          }));
-                        }}
-                      >
-                        {expanded[entry.key] ? "Hide breakdown" : "Show breakdown"}
-                      </button>
-                    ) : null}
-                    {entry.isSplit && expanded[entry.key] ? (
-                      <div className="mt-1 divide-y divide-border/50 rounded-md border">
-                        {entry.rows.map((line) => (
-                          <div
-                            key={line.id}
-                            className="flex items-center justify-between px-2 py-1 text-xs"
-                          >
-                            <span className="truncate">
-                              {(line.category_id && categoryName[line.category_id]) ||
-                                "No category"}
-                            </span>
-                            <span className="tabular-nums">
-                              {formatMoney(Number(line.amount))}
-                            </span>
-                          </div>
-                        ))}
                       </div>
-                    ) : null}
-                  </div>
-                  <p
-                    className={`shrink-0 font-semibold ${entry.total < 0 ? "" : "text-primary"}`}
-                  >
-                    {formatMoney(entry.total)}
-                  </p>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
+                      {entry.isSplit ? (
+                        <button
+                          className="mt-1 text-xs text-muted-foreground underline decoration-dotted"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpanded((prev) => ({
+                              ...prev,
+                              [entry.key]: !prev[entry.key],
+                            }));
+                          }}
+                        >
+                          {expanded[entry.key] ? "Hide breakdown" : "Show breakdown"}
+                        </button>
+                      ) : null}
+                      {entry.isSplit && expanded[entry.key] ? (
+                        <div className="mt-1 divide-y divide-border/50 rounded-md border">
+                          {entry.rows.map((line) => (
+                            <div
+                              key={line.id}
+                              className="flex items-center justify-between px-2 py-1 text-xs"
+                            >
+                              <span className="truncate">
+                                {(line.category_id && categoryName[line.category_id]) ||
+                                  "No category"}
+                              </span>
+                              <span className="tabular-nums">
+                                {formatMoney(Number(line.amount))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <p
+                      className={`shrink-0 font-semibold ${entry.total < 0 ? "" : "text-primary"}`}
+                    >
+                      {formatMoney(entry.total)}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
       <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />
@@ -250,6 +463,7 @@ function TransactionDetail({
 }) {
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
+  const { data: institutions = [] } = useInstitutions();
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
   const upsert = useUpsertTransaction();
@@ -263,6 +477,8 @@ function TransactionDetail({
   const [status, setStatus] = useState("pending");
   const [accountId, setAccountId] = useState("none");
   const [categoryId, setCategoryId] = useState("none");
+  // ADR-053: place/institution re-tag (Group 7 Part 3)
+  const [institutionId, setInstitutionId] = useState("none");
 
   const key = transaction?.id ?? "";
   const [lastKey, setLastKey] = useState("");
@@ -275,6 +491,7 @@ function TransactionDetail({
     setStatus(transaction.status ?? "pending");
     setAccountId(transaction.account_id ?? "none");
     setCategoryId(transaction.category_id ?? "none");
+    setInstitutionId(transaction.institution_id ?? "none");
   }
   if (!transaction && lastKey !== "") setLastKey("");
 
@@ -297,6 +514,7 @@ function TransactionDetail({
         status: status as "pending" | "cleared",
         account_id: accountId === "none" ? null : accountId,
         category_id: categoryId === "none" ? null : categoryId,
+        institution_id: institutionId === "none" ? null : institutionId,
       });
       toast.success("Transaction updated");
       onClose();
@@ -358,6 +576,10 @@ function TransactionDetail({
               <DetailItem
                 label="Category"
                 value={categories.find((c) => c.id === transaction.category_id)?.name ?? "—"}
+              />
+              <DetailItem
+                label="Place"
+                value={institutions.find((i) => i.id === transaction.institution_id)?.name ?? "—"}
               />
               <DetailItem
                 label="Linked to"
@@ -442,6 +664,23 @@ function TransactionDetail({
                   {categories.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* ADR-053: re-tag or set the place this transaction occurred at */}
+            <div>
+              <Label>Place (institution)</Label>
+              <Select value={institutionId} onValueChange={setInstitutionId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="No place" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No place</SelectItem>
+                  {institutions.map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      {i.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
