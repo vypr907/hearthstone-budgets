@@ -349,10 +349,68 @@ function PeriodBudget({
   const goalValueFor = (goalId: string) =>
     draft[`goal:${goalId}`] ?? Number(goalRowFor(goalId)?.allocated_amount ?? 0);
 
+  // ADR-059: manually planned bill/debt payments for this pay period. These are
+  // independent of the due-date bucketing in "Due this period" — an item can be
+  // in both, and we deliberately do not deduplicate.
+  const planned = useMemo(() => {
+    const rows: {
+      allocationId: string;
+      kind: "bill" | "debt";
+      targetId: string;
+      name: string;
+      amount: number;
+    }[] = [];
+    for (const a of mine) {
+      if (a.bill_id) {
+        const b = bills.find((x) => x.id === a.bill_id);
+        rows.push({
+          allocationId: a.id,
+          kind: "bill",
+          targetId: a.bill_id,
+          name: b?.name ?? "Bill",
+          amount: Number(a.allocated_amount ?? 0),
+        });
+      } else if (a.debt_id) {
+        const d = debts.find((x) => x.id === a.debt_id);
+        rows.push({
+          allocationId: a.id,
+          kind: "debt",
+          targetId: a.debt_id,
+          name: d?.name ?? "Debt",
+          amount: Number(a.allocated_amount ?? 0),
+        });
+      }
+    }
+    return rows.sort((x, y) => x.name.localeCompare(y.name));
+  }, [mine, bills, debts]);
+  const plannedTotal = sum(planned.map((p) => p.amount));
+
   const allocated =
-    sum(cats.map((c) => valueFor(c.id))) + sum(goals.map((g) => goalValueFor(g.id)));
+    sum(cats.map((c) => valueFor(c.id))) +
+    sum(goals.map((g) => goalValueFor(g.id))) +
+    plannedTotal;
   const income = eventAmount(event) + secondaryTotal;
   const left = income - obligationsTotal - allocated;
+
+  const commitPlanned = async (args: {
+    id?: string;
+    kind: "bill" | "debt";
+    targetId: string;
+    amount: number;
+  }) => {
+    try {
+      await setAllocation.mutateAsync({
+        id: args.id,
+        incomeEventId: event.id,
+        billId: args.kind === "bill" ? args.targetId : null,
+        debtId: args.kind === "debt" ? args.targetId : null,
+        amount: Math.max(0, Math.round(args.amount * 100) / 100),
+      });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
 
   const commit = async (categoryId: string, amount: number) => {
     try {
