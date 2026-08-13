@@ -1,5 +1,5 @@
 import type { Bill, Debt, IncomeEvent } from "./supabase";
-import { debtDueDate } from "./format";
+import { debtDueDate, shiftDateSafe } from "./format";
 
 /** The date a paycheck actually lands on: actual when received, else expected. */
 export function eventDate(e: IncomeEvent): string | null {
@@ -56,7 +56,40 @@ export type Obligation = {
   name: string;
   dueDate: string;
   amount: number;
+  /** ADR-060: a forward-projected recurrence, not the item's stored due date. */
+  projected?: boolean;
 };
+
+/**
+ * ADR-060: forward recurrences of a bill/debt, starting from its current due
+ * date and advancing one billing cycle at a time (reusing advanceDate's interval
+ * math via shiftDateSafe) until the date passes `throughDate`. The stored due
+ * date itself is never returned — only future projections.
+ */
+export function projectOccurrences(
+  item: {
+    billing_cycle?: string | null;
+    cycle_interval_days?: number | null;
+    next_due_date?: string | null;
+  },
+  fromDate: string | null | undefined,
+  throughDate: string,
+): string[] {
+  const start = fromDate?.slice(0, 10);
+  if (!start) return [];
+  const cycle = (item.billing_cycle ?? "monthly").toLowerCase();
+  if (cycle === "one_time") return [];
+  const out: string[] = [];
+  let cur = start;
+  for (let i = 0; i < 240; i++) {
+    const next = shiftDateSafe(cur, item.billing_cycle, 1, item.cycle_interval_days);
+    if (next <= cur) break; // no interval math available — don't loop forever
+    cur = next;
+    if (cur > throughDate) break;
+    out.push(cur);
+  }
+  return out;
+}
 
 /** ADR-032: debts serviced by payroll/HSA deduction never touch spendable cash. */
 export function isPaycheckDeducted(debt: Debt): boolean {
@@ -73,27 +106,58 @@ export function obligationsInRange(
   debts: Debt[],
   start: string,
   end: string,
+  /** ADR-060: when set, project recurrences forward through this date. */
+  projectThrough?: string | null,
 ): Obligation[] {
   const rows: Obligation[] = [];
+  const through = projectThrough?.slice(0, 10) ?? null;
   for (const b of bills) {
     if (b.is_active === false) continue;
     const due = b.next_due_date?.slice(0, 10) ?? null;
-    if (!inRange(due, start, end)) continue;
     const amount = Number(b.cycle_amount_due ?? b.amount ?? 0);
-    rows.push({ id: b.id, kind: "bill", name: b.name, dueDate: due!, amount });
+    if (inRange(due, start, end)) {
+      rows.push({ id: b.id, kind: "bill", name: b.name, dueDate: due!, amount });
+    }
+    if (through) {
+      for (const p of projectOccurrences(b, due, through)) {
+        if (!inRange(p, start, end)) continue;
+        rows.push({
+          id: b.id,
+          kind: "bill",
+          name: b.name,
+          dueDate: p,
+          amount: Number(b.amount ?? 0),
+          projected: true,
+        });
+      }
+    }
   }
   for (const d of debts) {
     if (d.date_paid_off) continue;
     if (isPaycheckDeducted(d)) continue;
     const due = debtDueDate(d);
-    if (!inRange(due, start, end)) continue;
-    rows.push({
-      id: d.id,
-      kind: "debt",
-      name: d.name,
-      dueDate: due!,
-      amount: Number(d.minimum_payment ?? 0),
-    });
+    if (inRange(due, start, end)) {
+      rows.push({
+        id: d.id,
+        kind: "debt",
+        name: d.name,
+        dueDate: due!,
+        amount: Number(d.minimum_payment ?? 0),
+      });
+    }
+    if (through) {
+      for (const p of projectOccurrences(d, due, through)) {
+        if (!inRange(p, start, end)) continue;
+        rows.push({
+          id: d.id,
+          kind: "debt",
+          name: d.name,
+          dueDate: p,
+          amount: Number(d.minimum_payment ?? 0),
+          projected: true,
+        });
+      }
+    }
   }
   return rows.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
