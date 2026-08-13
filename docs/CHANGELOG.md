@@ -522,3 +522,95 @@
 
 * Spending by place only counts transactions that have a place attached; older entries need re-tagging by hand.
 * Institutions and Accounts screens still define their own detail dialogs; only the add/edit forms are shared.
+
+## 2026-08-11 – Phase 11 Bug Fixes: Inline Institution Creation
+
+### Fixed
+
+* Inline institution creation from Add Transaction ("Save X as a place") was silently failing with a Radix Select empty-string error and a constraint violation.
+  * `institution_type` was hardcoded to `"retailer"`, which is not in the DB check constraint. Changed to `"other"`.
+  * `useUpsertInstitution` was calling `.insert()` directly, bypassing `saveWithOptionalColumns`. `logo_url` (a newer column) was causing a hard failure pre-migration. Now routes through `saveWithOptionalColumns` for graceful column stripping.
+  * The fallback re-fetch path silently dropped its SELECT error; it now propagates via `throw fetchError`.
+  * `saveWithOptionalColumns` threw the raw Supabase error object instead of a real `Error` instance, so `catch (e) { e.message }` was always `undefined`. Now wraps with `new Error(error.message)`.
+  * `addMerchant()` catch block now extracts `.message` from plain objects as well as `Error` instances, and logs the raw error to the console during debugging.
+
+## 2026-08-11 – Phase 11 Group 2: Income Source Deductions (ADR-055)
+
+### Completed
+
+* New `income_source_deductions` table (schema confirmed live): `name`, `amount` OR `percent` (one enforced by DB check), optional `destination_account_id`, `is_pre_tax`.
+* `IncomeSourceDeduction` type added to `src/lib/supabase.ts`.
+* Three new hooks in `src/lib/income-hooks.ts`: `useIncomeSourceDeductions`, `useUpsertIncomeSourceDeduction`, `useDeleteIncomeSourceDeduction`.
+* Income source detail view (`/app/income-source/$id`) gained a **Deductions** card (below Deposit splits) with add/edit/delete matching the Splits section pattern.
+  * Deduction dialog fields: name, flat-$ vs percent-of-net toggle, value input, optional destination account picker (sentinel "none"), pre-tax checkbox.
+  * Radix Select empty-string fix applied: destination account uses `"none"` sentinel mapped to/from `null` at the save boundary.
+* Stats subtitle on the detail view now shows "X net · Y gross" when deductions exist (gross = net + Σ deductions, percent computed against net per ADR-055).
+* `useMarkIncomeReceived` extended (ADR-047/055): after writing split deposit rows, writes one additional cleared transaction per deduction with a `destination_account_id` set. Description: `"Deduction: <name>"`. Same `split_group_id` as the pay event; idempotency check covers deduction rows too.
+* New pay dates auto-post deposits on save (when the income source has usable splits) instead of requiring the manual "Post deposits" button. The manual button is retained for backfilling.
+* `useUpsertIncomeEvent` now returns `{ id }` via `.select("id").single()` so the auto-post flow can use the saved event's id.
+
+## 2026-08-11 – Phase 11 Group 3: Transfers and Advances (ADR-056)
+
+### Completed
+
+* `transactions.transfer_group_id uuid` (nullable) confirmed live in Supabase. Added to the `Transaction` TypeScript type.
+* Four new hooks in `src/lib/data-hooks.ts`:
+  * `useSaveTransfer` — writes two cleared transactions sharing one `transfer_group_id` (negative on from-account, positive on to-account). Blocks same-account transfers. Uses `saveWithOptionalColumns` so the column degrades gracefully pre-migration.
+  * `useDeleteTransferPair` — deletes all rows with a given `transfer_group_id`.
+  * `useCreateAdvance` — writes a deposit transaction + debt_adjustments row (`adjustment_type='advance'`, positive amount). ADR-037 ordering: debt balance updated before the adjustment row.
+  * `useDeleteAdvance` — reverses the debt balance, deletes the adjustment row, then finds and deletes the paired deposit transaction by querying description + date.
+* Add Transaction dialog gained a **Transfer** mode tab (alongside Expense). Transfer fields: from-account, to-account, amount, optional description. Mode state changed from `boolean isSplit` to a `TxMode` enum (`"expense" | "split" | "transfer"`).
+* Debt detail (DebtAdjustments component) gained an **Advances** section below Adjustments: list of advance rows with amount + date + delete button; Add advance dialog (destination account, amount, date).
+* Existing advance adjustments are filtered out of the Adjustments list (`adjustment_type !== 'advance'`) and shown separately.
+* `TransactionDetail` delete path: if `transfer_group_id` is set, shows a transfer-specific confirm and calls `useDeleteTransferPair` to remove both sides.
+
+### Notes
+
+* All multi-step writes are sequential Supabase calls (same pattern as SetAsideAction, useDeleteDebtAdjustment). No Postgres RPC — a mid-write crash can leave one side orphaned, same as other existing multi-step writes.
+
+## 2026-08-11 – Phase 11 Groups 4–7: Pay Presets, Adjustments, Spending Donut, Transaction Filters
+
+### Completed
+
+#### Group 4 — Overdue-aware payment allocation (ADR-057)
+
+* Pay dialog (`src/lib/pay-flow.tsx`) now shows three preset chips on the amount stage:
+  * **Owed this cycle** — remaining for the current cycle (unchanged default).
+  * **Total due (+ $X arrears)** — cycle remainder + live `computeArrears()` total; only shown when arrears > 0.
+  * **Other amount** — clears the field for free entry.
+* `applyClearedPayment` in `src/lib/payments.ts` extended (ADR-057):
+  * **Debts**: overflow beyond the cycle minimum reduces `opening_arrears` (floor 0) and sets `arrears_as_of` to today, written atomically in the same DB update.
+  * **Bills**: caps the payment at `remainingThisCycle + opening_arrears`. An "Other amount" entry exceeding this cap throws a clear user-facing error before touching anything. On cycle completion, overflow reduces `opening_arrears` and advances `arrears_as_of`.
+* Unit test added to `src/lib/arrears.test.ts`: a bill 3 cycles behind, paid via "Total due", results in `cyclesMissed = 0` and `amountOverdue = 0` after payment — confirming `PastDueBadge` clears.
+
+#### Group 5 — Bill adjustments + affects_balance toggle (ADR-058)
+
+* `DebtAdjustment` type gained `affects_balance?: boolean | null`.
+* New `BillAdjustment` type added to `src/lib/supabase.ts`.
+* `useAddDebtAdjustment` and `useDeleteDebtAdjustment` updated: when `affects_balance` is `false`, the balance update/reversal is skipped entirely.
+* Three new hooks: `useBillAdjustments`, `useAddBillAdjustment`, `useDeleteBillAdjustment`. Bill adjustments modify `cycle_amount_due` for the current cycle only (Option 1 per ADR-058 resolution).
+* Bill detail view (`BillDetailDialog`) gained a **BillAdjustments** section mirroring the DebtAdjustments pattern.
+* Both add-adjustment dialogs (bills and debts) gained an **Affects balance** toggle (default true). Helper text: "Record only — doesn't change what's owed" when false. Existing rows with `affects_balance = false` show "(record only)" next to the type label.
+
+#### Group 6 — Spending screen visual rework
+
+* New `DonutChart` SVG component added to `src/components/viz.tsx`: accepts `slices[]` (label, value, color), builds arc segments via `strokeDasharray`/`rotate`, merges slices < 2% into "Other", renders a legend of the top 5.
+* `SpendingSummary` in `src/routes/app.spending.tsx` now accepts `categorySlices` and renders the donut below the 3-stat boxes.
+* "Spending by place" link upgraded from a plain button to a dedicated `Card` with icon and description.
+
+#### Group 7 — Filtering, grouping, drill-down & institution re-tag
+
+* New `src/lib/tx-filter-store.ts`: consume-once module-level pre-filter store for cross-route drill-down.
+* `src/routes/app.transactions.tsx` fully updated:
+  * **Sort**: date / amount / name.
+  * **Group by**: none / day / category / account / place.
+  * **Filter panel** (collapsible, shows active count badge): account, status, category, place (institution), linked/unlinked, date-from / date-to. "Clear all filters" button.
+  * Transfer rows show a "Transfer" badge.
+  * Institution (place) shown in transaction row metadata when set.
+  * `TransactionDetail` edit mode now includes a **Place (institution)** `Select` for re-tagging `institution_id` (ADR-053 standing TODO closed).
+* `src/routes/app.spending.tsx`: `SpendingRow` expanded section gained a **"Transactions →"** button that sets the pre-filter and navigates to `/app/transactions` pre-filtered to that category.
+
+#### Group 8 — Shared detail dialogs
+
+* Investigated. `InstitutionDetail` and the account detail view share very little content at the detail level (institution shows linked accounts/bills/debts; accounts show recent transactions). No shared component warranted. TODO item closed as investigated.
+

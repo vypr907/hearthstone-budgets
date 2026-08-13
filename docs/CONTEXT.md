@@ -27,7 +27,16 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Phase 8 complete: Visual consistency pass (SectionLabel/EmptyState, theme-safe hero overlays)
 - Phase 9 complete: Invoice model + payment plans, arrears tracking, institution logos on obligations, graphical Dashboard/Spending, More grid, inline merchant capture (ADR-048, ADR-049, ADR-050)
 - Phase 10 complete: Arrears editing, invoice numbers, merchant/place tracking, Spending by place, income source detail + splits (ADR-051 through ADR-054)
-- Phase 11 not started: Wrap as a Real Android App (Capacitor)
+- Phase 11 in progress: Ledger correctness, money movement, overdue-aware payments, income deductions, mobile polish
+  - Group 1 (bug fixes) complete: inline institution creation fixed (institution_type constraint, saveWithOptionalColumns, error surfacing)
+  - Group 2 (ADR-055) complete: income source deductions CRUD, mark-received wire-up, auto-post on save, gross stats line
+  - Group 3 (ADR-056) complete: transfer mode in Add Transaction, advance action on debt detail, paired deletion
+  - Group 4 (ADR-057) complete: pay presets (Owed/Total due/Other), applyClearedPayment overflow reduces opening_arrears, arrears unit test
+  - Group 5 (ADR-058) complete: bill_adjustments table wired, affects_balance toggle on both bill and debt adjustment dialogs
+  - Group 6 complete: DonutChart in SpendingSummary, spending-by-place dedicated card
+  - Group 7 complete: full transaction filtering/grouping/sorting, institution re-tag in edit mode, spending drill-down to transactions
+  - Group 8 closed: investigated, no shared detail component warranted
+- Phase 12 not started: Wrap as a Real Android App (Capacitor)
 - Phase 12 not started: Publish to Google Play (Internal Testing)
 - Phase 13 not started: Cutover: Retire the Sheet
 - Migration from Google Sheets has not occurred yet
@@ -61,6 +70,12 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Payment fees write a second, unlinked "Fee: <name>" transaction and never credit the cycle (ADR-046)
 - Marking income received writes the source's deposit splits as cleared transactions; the remainder row absorbs variance (ADR-047, ADR-054)
 - Transactions carry an optional `institution_id` ("place"), which powers Spending by place (ADR-053)
+- Income source deductions (`income_source_deductions`) are written as cleared deposit transactions on mark-received; percent deductions compute against net pay, not gross (ADR-055)
+- Transfers write two transactions sharing `transfer_group_id`; deleting one side deletes both (ADR-056)
+- Advances write a deposit transaction + a `debt_adjustments` row (`adjustment_type='advance'`); delete reverses both (ADR-056)
+- `applyClearedPayment` reduces `opening_arrears` on overflow; bills cap payments at `cycle_due + opening_arrears` and reject excess (ADR-057)
+- `debt_adjustments` and `bill_adjustments` rows with `affects_balance=false` are record-only and never modify balances; delete skips reversal for them (ADR-058)
+- Bill adjustments modify `cycle_amount_due` for the current cycle only; they do not touch `bills.amount` (ADR-058)
 
 ## Important Rules
 - Never store passwords.
@@ -77,4 +92,4 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Institution logo_url is only ever suggested from login_url for the user to confirm — never written silently.
 - A custom cycle with no cycle_interval_days throws on date math; render-only paths use shiftDateSafe().
 - Payment Schedule past months are history, not a simulation: no per-debt breakdown, check-off only. Ledger status badges appear on the current month only.
-- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, debts.cycle_paid_to_date, savings_goals.account_id/linked_bill_id, pay_period_allocations.goal_id, bills/debts.cycle_interval_days, spending_actuals.is_manual_override, transactions.split_group_id, bills/debts.opening_arrears, debts.invoice_number, transactions.institution_id, income_source_splits) must exist before those screens work.
+- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, debts.cycle_paid_to_date, savings_goals.account_id/linked_bill_id, pay_period_allocations.goal_id, bills/debts.cycle_interval_days, spending_actuals.is_manual_override, transactions.split_group_id, bills/debts.opening_arrears, debts.invoice_number, transactions.institution_id, income_source_splits, income_source_deductions, transactions.transfer_group_id, bill_adjustments, debt_adjustments.affects_balance) must exist before those screens work.

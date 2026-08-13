@@ -1,101 +1,21 @@
-## Discovered 2026-08-06
-- [x] ADR-040 generalized custom billing cycle (cycle_interval_days on bills/debts).
-- [x] ADR-041 manual override for spending actuals (is_manual_override).
-- [x] ADR-042 paycheck allocation spend hints + payment schedule previous months.
-- [x] Payment Schedule: per-debt Pending/Partial/Cleared labels on the current month.
+# Open items
 
-## Discovered 2026-08-05
-- [x] ADR-035 universal partial payments (bills, debts, linked manual transactions).
-- [x] Verify `debts.cycle_paid_to_date` exists in Supabase before relying on debt partials.
-- [x] ADR-036 ledger-derived 4-state payment cycle + full-cycle reset.
-- [x] ADR-037 payable-first payment writes and repair delete.
-- [x] ADR-038 envelope Set Aside transfers.
-- [x] ADR-039 savings goals in pay_period_allocations.
-- [x] ADR-037 repair scan for stranded pre-fix debt payments.
-- [ ] Redo the cleaned-up debt payments through Submit / Mark cleared and confirm status,
-      remaining balance, paid-this-cycle and next due date all advance.
-
-## Discovered 2026-08-03
-- [x] Run the ADR-027 savings_goals SQL (table, linked_goal_id column, RLS policy) in Supabase.
-- [x] Build the Savings Goals screen (ADR-027).
-- [x] Open question: whether savings goals should appear in pay_period_allocations (ADR-024/039 cross-reference).
-
-
-## Discovered 2026-08-02
-- [x] Decide whether the combined spendable total should use available credit rather than raw balance for credit accounts.
-- [x] Expose is_spendable and credit_limit in the account edit dialog.
-
-## Discovered 2026-07-31
-- [x] Create the shared check-off table so Payment Schedule months sync between both logins:
-```sql
-create table public.payment_schedule_checkoffs (
-  household_id uuid not null references public.households(id) on delete cascade,
-  month text not null,
-  created_at timestamptz not null default now(),
-  primary key (household_id, month)
-);
-grant select, insert, update, delete on public.payment_schedule_checkoffs to authenticated;
-grant all on public.payment_schedule_checkoffs to service_role;
-alter table public.payment_schedule_checkoffs enable row level security;
-create policy "household members manage checkoffs"
-on public.payment_schedule_checkoffs for all to authenticated
-using (exists (select 1 from public.household_members m
-  where m.household_id = payment_schedule_checkoffs.household_id and m.user_id = auth.uid()))
-with check (exists (select 1 from public.household_members m
-  where m.household_id = payment_schedule_checkoffs.household_id and m.user_id = auth.uid()));
-```
+## Phase 11 — In progress (2026-08-11)
 
 - [ ] Run ADR-028 migration in Supabase: `alter table households add column export_format text not null default 'png' check (export_format in ('png','pdf'));`
-- [x] ADR-028 Status Snapshot screen + PNG/PDF export + Settings toggle.
+- [ ] Redo any cleaned-up stranded debt payments through Submit / Mark cleared and confirm status, remaining balance, paid-this-cycle and next due date all advance.
 
-- [x] ADR-029 category icon/colour metadata
-- [x] ADR-030 institution logo_url + type icons, grouping, linked bills/debts
-- [x] ADR-031 institution-level balance & due aggregation
-- [x] ADR-032 paycheck-deduction debts (form toggle, badges, paycheck exclusion)
-- [x] Debts: auto date_paid_off, "Show paid off" toggle, title-cased cycles, recent transactions
-- [x] ADR-033 monthlyEquivalent(), envelope auto-creation, goal account_id
-- [x] Account labels + pay-time picker polish (icon, logo, last 4)
-- [x] ADR-033 bill card "Add to envelope" quick-transaction action — done 2026-08-06.
-- [x] ADR-034 Dashboard hero rework, budget/actual bills split, owed-this-period card, Net Worth to bottom — done 2026-08-06
-- [x] Snapshot: balances by account type, pay-period progress bar, buildSnapshotSummary() — done 2026-08-06.
-- [x] ADR-036 ledger-derived 4-state payment cycle + full-cycle reset
-- [x] ADR-037 payable-first payment writes, verified updates, linked-transaction repair delete
-- [x] Spending: month navigator (prev/next) — done 2026-08-06.
-- [x] ADR-042 paycheck allocation spend hints + payment schedule previous months — done 2026-08-06.
-- [x] ADR-044 split transactions, ADR-045 invoices + debt adjustments — done 2026-08-11.
-- [x] ADR-046 payment fees (optional Fee field, unlinked "Fee: <name>" row) — done 2026-08-11.
-- [x] ADR-047 mark income received → split deposit transactions — done 2026-08-11.
-- [x] Shared InstitutionDialog/AccountDialog, inline "+ Add institution" (Bills + Debts),
-      inline "+ Add account" on the Institution form — done 2026-08-11.
-- [x] ADR-047 follow-up: prompt for an account when the income source has no split rows — done 2026-08-11.
-- [x] Create a "Fees" category by default so ADR-046 fee rows are categorised — auto-created on first fee, done 2026-08-11.
+## Phase 11 — Remaining groups
 
-## Phase 9 part 1 (2026-08-11)
-- [x] Fix `starting_balance` not-null crash when adding a debt/invoice
-- [x] ADR-048 invoice model: one-time cycle, real due date, payment plans
-- [x] ADR-049 arrears: missed-cycle + carry-in past-due tracking with badges
-- [x] Stranded debt repair: stop re-flagging repaired debts; persistent dismissal
-- [x] Backfill deposits for older received paychecks
-- [x] Institution form: Categories as a dropdown multi-select
-- [x] Run the ADR-048/049 migration in Supabase (docs/SCHEMA.md) — done 2026-08-12
-- [x] Phase 9 part 2 (visual): institution logos on Bills/Debts/Accounts,
-      graphical Budget vs Actual + Spending, More as an icon grid, visual
-      category rows and inline merchant creation on Add Transaction — done 2026-08-11.
-- [x] Give transactions an `institution_id` so merchant capture can power a
-      "spending by institution" view — done 2026-08-12 (ADR-053).
+- [ ] **Group 4**: Verify overdue-aware payment allocation (ADR-057) against a real multi-cycle-behind bill in the live app — pay via "Total due", confirm PastDueBadge disappears.
+- [ ] **Group 5**: Verify `debt_adjustments.affects_balance` column exists in live Supabase (column default `true` should have backfilled existing rows). Run `SCHEMA_MIGRATION_PHASE11.sql` if not already done for `bill_adjustments`.
+- [ ] **Group 5**: Confirm `bill_adjustments` table exists live; if not, run the relevant section of `SCHEMA_MIGRATION_PHASE11.sql`.
+- [ ] Update `docs/SESSION.md`, `docs/SCHEMA.md`, `docs/ARCHITECTURE.md`, and `docs/DECISIONS.md` (mark ADR-055..058 Implemented).
+- [ ] Commit and push all Phase 11 Group 2–7 changes.
 
-## Phase 10 (2026-08-12)
-- [x] Edit/correct arrears on existing bills and debts (PastDueEditor in detail views)
-- [x] ADR-052 invoice number + auto-composed invoice name
-- [x] ADR-051 smarter stranded-debt detection
-- [x] ADR-053 merchant suggestions + institution link on Add Transaction
-- [x] "Spending by place" screen (bars per institution) — done 2026-08-12.
-- [x] Income source cards + detail route (pay history, YTD/average, split editor) — done 2026-08-12 (ADR-054).
-- [x] Run the Phase 10 migration in Supabase — done 2026-08-12.
-- [ ] Let existing transactions be re-tagged with a place from the Transactions screen
+## Standing open items
 
-## Discovered 2026-08-12
-- [x] ADR-054 income source detail route (stats, pay history, deposit-splits editor)
-- [x] Link "Spending by place" from the Spending screen and the More grid
-- [ ] Re-tag older transactions with a place so Spending by place is complete
-- [ ] Share the Institutions and Accounts detail dialogs (only add/edit forms are shared today)
+- [ ] Re-tag older transactions with a place (institution_id) so Spending by place totals are complete — can now be done from TransactionDetail edit mode (Group 7 Part 3 landed).
+- [ ] No guard against two Set Aside entries for the same bill in the same month (ADR-038 known gap).
+- [ ] Accounts and Institutions detail dialogs remain screen-specific (investigated 2026-08-11, no shared component warranted — closed as designed).
+- [ ] Payment Schedule: past months show no per-debt breakdown by design; check-off only.
