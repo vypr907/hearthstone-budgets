@@ -510,6 +510,57 @@ function PeriodBudget({
         </CardContent>
       </Card>
 
+      {/* ADR-059: manually planned payments, deliberately separate from "Due this period". */}
+      <Card className="border-primary/40 bg-primary/5">
+        <CardContent className="space-y-2 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Planned</h2>
+            <PlanPaymentDialog bills={bills} debts={debts} onSave={commitPlanned} />
+          </div>
+          {planned.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nothing planned yet. Use “Plan a payment” to set money aside for a bill or debt in
+              this period.
+            </p>
+          ) : (
+            <>
+              {planned.map((p) => (
+                <div
+                  key={p.allocationId}
+                  className="flex items-center justify-between gap-2 py-1 text-sm"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {p.name}
+                    <span className="ml-2 text-xs text-muted-foreground">{p.kind} · planned</span>
+                  </span>
+                  <span className="font-medium">{formatMoney(p.amount)}</span>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    onClick={() =>
+                      void commitPlanned({
+                        id: p.allocationId,
+                        kind: p.kind,
+                        targetId: p.targetId,
+                        amount: 0,
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t pt-2 text-sm font-semibold">
+                <span>Planned total</span>
+                <span>{formatMoney(plannedTotal)}</span>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+
+
       <Card>
         <CardContent className="space-y-4 p-4">
           <h2 className="text-base font-semibold">Allocations</h2>
