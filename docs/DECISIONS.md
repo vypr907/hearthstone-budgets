@@ -267,6 +267,26 @@ need a real date. Reusing the bill cycle helpers avoids duplicating interval mat
 
 Status: Decided 2026-07-31. Implemented.
 
+
+### Correction to ADR-017: due_day Must Be Nullable
+
+Decision: debts.due_day is changed from not null to nullable.
+
+Reason: ADR-017 established that non-monthly debts (biweekly, quarterly, custom, etc.) use next_due_date instead of due_day, with only monthly debts keeping due_day. The original Phase 1 schema, however, created due_day as not null, and no migration ever relaxed it when ADR-017 shipped — so the app correctly omits due_day for a non-monthly debt, but Postgres still rejects the insert. Same category of gap as ADR-048's correction to starting_balance (invoices don't have one, so that NOT NULL had to be dropped too); due_day simply never got the equivalent fix at the time.
+
+Found 2026-08-12: creating an Advance-type debt on a biweekly cycle failed with null value in column "due_day" violates not-null constraint.
+
+Migration:
+
+```sql
+alter table public.debts alter column due_day drop not null;
+notify pgrst, 'reload schema';
+```
+
+No app code change required — the debt form already omits due_day for non-monthly cycles per ADR-017; only the database was out of sync.
+
+Status: Decided 2026-08-12. SQL ready to run.
+
 ---
 
 ## ADR-018: Variable-Amount Bills Prompt for Actual Amount at Payment Time

@@ -51,21 +51,7 @@ Show me the diffs for all three files before finalizing.
 
 
 # Things to work on
-- Stranded debt payments found card on Debts still shows an issue with a debt, even though I fixed the payment and it correctly updated the balance.
-- Spending: needs better formatting for mobile, more graphical, less text
-- suggestions for adding Institutions when adding transactions. For example, I go to a new store "Bob's Burgers" and buy lunch. I want to add the transaction, and the form is there, but I also want to track the store/restaurant, but I want to keep the quick/easiness of the transaction add. IMPLEMENTED, BUT ERROR ON ADDING NEW INSTITUTION. Existing Institution works.
-- On Paycheck Budget/Income, Sources should be more like cards, complete with detail view. Detail view should also list paydates from that source, Total income from this source (all time and current year), average income (monthly). On detail view, should be an option to Edit, and add splits. Example: my ASRC Federal paycheck actually goes to 3 different accounts as well as contributions to my retirement account, HSA, and LPFSA accounts. Upon marking recieved (or post deposits for existing pay dates), it should create transactions adding these amounts to the proper accounts. IMPLEMENTED, but I want the Deductions to be separate from splits. Example, my ASRC Federal paycheck is 3160 with splits to 3 accounts. I have HSA deductions of 140 and LPFSA of 50, but they come out before the paycheck amount. (the amount listed in app is NET, after deductions)
-- when adding a Pay date, I now have the option to Post deposit after saving, but it should be automatic for new Pay date entries
-- want to be able to add transfers between accounts, and handle Advances. Example, take an advance of 50 from MoneyLion, adds transaction of 50 to selected account, and updates the debt amount. Payments appropriately take amount from payment account to debt account
-- when adding a fee to a payment, then marking the payment as cleared, it does not update the fee transaction to cleared as well
-- when paying overdue bills/debts, include options to pay "owed this cycle", "total due", or "other amount"
-- on bills detail view, no way to add fees/adjustments. need a way to separate fees/adjustments/etc that affect the balance and those that don't. Example, a late fee on a bill, adds to the balance. But a processing fee for a rent payment doesn't affect the balance at all
-- when submitting a payment, any click on the "how much are you paying now?" screen opens the bill detail view. Have to use tab in order to enter values.
-- also, when paying an overdue bill, it doesn't seem to count against the overdue amount.
-- need more sort/group/filter options for Transactions, also on Dashboard and Spending, should be a way to view all transactions for that Category/Budget Item
-
----
-- unable to edit transaction to add institution
+- unable to edit transaction to add institution if transaction has a category split
 
 ---
 
