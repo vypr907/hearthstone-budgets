@@ -1717,3 +1717,72 @@ column + check constraint written but not yet run in Supabase — see
 docs/TODO.md; src/lib/theme.tsx ThemeProvider/useTheme/useSetTheme; six
 [data-theme="..."] override blocks in src/styles.css; Settings screen Theme
 section with a swatch button per theme).
+
+## ADR-062: Manual Transactions Default to Pending, Not Cleared
+
+Decision:
+The Add Transaction dialog's default `status` changes from `'cleared'` to
+`'pending'`. The status toggle remains user-editable at entry time. This
+applies only to the plain Add Transaction flow — bill/debt payment
+submission (ADR-035/036/046), income deposits (ADR-047/055), transfers and
+advances (ADR-056) keep their existing statuses (pending-then-clear or
+cleared-on-write, per their own ADRs), unchanged.
+
+Reason:
+Phase 3.5 established pending/cleared as a real state (spendable vs. current
+balance), but the Add Transaction dialog still defaulted new rows to
+cleared, silently skipping the pending step for manually-entered spending —
+the most common entry path. Defaulting to pending makes the manual flow
+match the behavior every other write path in the app already has, and keeps
+spendable balance accurate the moment a transaction is logged rather than
+whenever it's later confirmed against the bank.
+
+Status: Decided 2026-08-14. Not yet implemented.
+
+---
+
+## ADR-063: Place and Description Are Separate Fields (Amends ADR-053)
+
+Decision:
+Add Transaction gains two distinct fields where ADR-053 used one:
+- **Place**: the existing institution search/inline-create picker
+  (autocomplete-as-you-type, one-tap link, inline "+ Add new institution"),
+  unchanged in behavior — only moved off the Description field.
+- **Description**: a plain free-text field for an optional note, independent
+  of place matching.
+
+`transactions.institution_id` and `transactions.description` keep their
+current meaning and storage — this is a UI field-mapping change only, no
+schema change, no change to how institution matching/creation works.
+
+Reason:
+ADR-053 tied place-matching to the Description field to avoid slowing quick
+entry, but in practice it prevents adding any actual note when a place is
+also being set, and conflates two different kinds of information. Splitting
+them costs one extra field, not new matching logic.
+
+Status: Decided 2026-08-14. Not yet implemented.
+
+---
+
+## ADR-064: Transfers Gain a Category Picker (Amends ADR-056)
+
+Decision:
+Add Transaction, Transfer mode, gains a category picker on the transfer as a
+whole (one category applies to both the from- and to-account rows of the
+pair — a transfer is one event, not two categorizable movements). Uses the
+same visual style as other dropdowns in the app (larger, icon-based,
+matching the Bill/Debt Type and Institution pickers per the ADR-054
+shared-dialog visual pass) — not a plain `<select>`. `category_id` is
+optional on transfers, consistent with how it's optional elsewhere.
+
+Reason:
+ADR-056 omitted categories from transfers on the assumption a transfer is
+just money moving between the household's own accounts, not spending. In
+practice households still want to tag transfers (e.g. "Savings goal," "Debt
+payoff") for reporting alongside categorized spending, and every other
+transaction type already has a categorized, icon-styled picker — leaving
+transfers as the one uncategorized, unstyled exception was inconsistent
+rather than intentional.
+
+Status: Decided 2026-08-14. Not yet implemented.
