@@ -24,7 +24,58 @@
 
 
 # Next Lovable prompt
+Implement ADR-060 (recurrence projection for forward-looking pay periods)
+exactly as decided — do not create a new ADR, do not touch computeArrears
+or any stored due-date field. This is purely additive to the Paycheck
+Budget screen's display logic.
 
+IMPORTANT — credits are limited and this may not finish in one pass. After
+EACH numbered step below, append a short note to docs/SESSION.md stating
+exactly which step just completed and which files changed, before moving to
+the next step. If you have to stop before finishing all steps, the last
+SESSION.md note must say which step is next, so work can resume in Kiro or
+a future Lovable session without re-deriving context.
+
+Steps:
+
+1. Find the existing function that advances a bill/debt's due date forward
+   by one billing_cycle interval (used when a payment clears a cycle —
+   likely in src/lib/payments.ts or src/lib/dates.ts). Do not write new
+   interval math — reuse this function's logic directly or by calling it.
+   → Checkpoint: note in SESSION.md which function you found and where.
+
+2. Write projectOccurrences(item, throughDate): starting from the item's
+   current next_due_date (bills) or computed due date (debts, ADR-017),
+   repeatedly advance by one cycle using the function from step 1,
+   collecting each resulting date, until the date exceeds throughDate.
+   throughDate = the end of the last pay period the household has an
+   entered future pay date for.
+   → Checkpoint: note in SESSION.md that this function exists and is
+   unit-testable in isolation (don't need to wire it into the UI yet to
+   verify it produces correct dates for a monthly and a biweekly item).
+
+3. Wire this into obligationsInRange() (or wherever the Paycheck Budget
+   screen assembles its period data): for periods beyond an item's current
+   unpaid occurrence, call projectOccurrences and bucket each result into
+   whichever period's date range it falls into, using the same half-open
+   start <= d < end comparison already used for real due items.
+   → Checkpoint: note in SESSION.md that projected items now appear in the
+   period data, even if UI styling isn't done yet.
+
+4. UI: give projected line items a visual marker (e.g. a "Projected" badge
+   or muted/dashed styling) distinguishing them from real due items in the
+   "Due this period" card. Both count toward the period total/left-to-
+   allocate math (ADR-039) — do not exclude projected amounts from totals.
+   → Checkpoint: final SESSION.md note confirming all 4 steps done.
+
+Do not touch: computeArrears, next_due_date/due_day storage, ADR-059's
+manual-planning feature (separate, unrelated addition), or variable-amount
+bill forecasting (projected amount = the item's current stored amount,
+no attempt to predict drift).
+
+Test: select the pay period ending 9/24 (currently shows nothing due) and
+confirm previously-invisible recurring bills now appear there, marked as
+Projected, with correct dates one cycle after their current next_due_date.
 
 # Next Steps
 
@@ -62,3 +113,17 @@ Currently addMerchant() hardcodes institution_type: "other" for any place create
 Possible future enhancement: infer or prompt for a real type (subscription/utility/medical/etc.) at inline-creation time, so merchants captured this way get sensible icons/grouping like deliberately-added institutions do.
 
 Not scoped. Not decided. If pursued, likely needs its own small ADR (touches UX + how institution_type/icon gets assigned) before a TODO line or Kiro prompt — see 2026-08-12 discussion on why this stays out of TODO.md for now.
+
+
+# Theme notes
+## Halo
+Color PaletteBackground: Deep space black (#0B0E14) or dark slate gray.Primary Accent: Energy blue/cyan (#00F0FF) or UNSC tactical green (#39FF14).Warning/Alert: Plasma orange (#FF5500) or yellow.Text: Crisp white or muted ice blue.Typography & GeometryFont: Clean, geometric sans-serif or bold DIN/stencil fonts for headers.Shapes: Angular corner cuts, thin grid lines, and diagonal data blocks instead of standard soft rectangles.Containers: Semi-transparent frosted glass (backdrop-filter: blur) with thin glowing borders.Key UI ComponentsHUD Banners: Top and bottom status bars styled like a Spartan helmet display with system stats, battery bars, and coordinate markers.Buttons: Flat shapes with corner notches that brighten and project a subtle outer glow on hover or tap.Loading Spinners: Rotating sci-fi tech rings, radar sweeps, or data-loading percentage counters.Data Panels: Monospace numbers paired with small hazard stripes or loading segment bars.
+
+https://www.figma.com/community/file/1168619846377132193/halo-infinite-ui-rework
+
+
+## Hello Kitty
+
+## Purple
+
+## Cyber
