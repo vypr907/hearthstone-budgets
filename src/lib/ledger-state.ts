@@ -75,7 +75,21 @@ export function deriveCycleInfo(
       // screen kept showing "unpaid" after a real payment.
       const oneTime = (cycleName ?? "").toLowerCase().replace(/[\s_-]/g, "") === "onetime";
 
-      let cycleTx = oneTime ? linked : linked.filter((t) => between(t, openStart, today));
+      // A sufficient payment always rolls next_due_date forward immediately, so
+      // if next_due_date is still `dueDate` and today is past it, nothing since
+      // `dueDate` has resolved this cycle. Transactions between openStart and
+      // dueDate belong to the already-resolved previous cycle and must not be
+      // recounted — only a transaction dated on/after dueDate can be a genuine
+      // (possibly late) payment toward the still-open current cycle.
+      const pastDue = !!dueDate && today > dueDate;
+      let cycleTx = oneTime
+        ? linked
+        : pastDue
+          ? linked.filter((t) => {
+              const d = day(t.transaction_date);
+              return !!d && d >= dueDate! && d <= today;
+            })
+          : linked.filter((t) => between(t, openStart, today));
       let resolved = false;
 
 

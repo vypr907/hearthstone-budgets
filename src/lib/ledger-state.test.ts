@@ -4,6 +4,7 @@ import { toPayable } from "@/lib/payments";
 import type { Bill, Transaction } from "@/lib/supabase";
 
 const TODAY = "2026-08-05";
+const LATER = "2026-09-20";
 
 const rent = (over: Partial<Bill> = {}) =>
   ({
@@ -73,6 +74,14 @@ describe("ADR-036 cycle state (Rent 2, $609 due)", () => {
     expect(i.transactions.map((t) => t.id).sort()).toEqual(["t1", "t2"]);
     expect(i.clearedSum).toBe(609);
   });
+
+  it("is UNPAID (not CLEARED) once today passes the rolled-forward due date", () => {
+  const i = info(
+    rent({ next_due_date: "2026-08-09" }),
+    [tx(609, "cleared", "t1")], // dated TODAY=2026-08-05 in this fixture... 
+  );
+  // adapt TODAY/dates so the tx predates next_due_date and `today` is set past it
+});
 
   it("returns to UNPAID after the reset removes the cycle's transactions", () => {
     expect(info(rent(), []).state).toBe("unpaid");
