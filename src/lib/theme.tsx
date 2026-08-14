@@ -60,12 +60,20 @@ export function useSetTheme() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (theme: ThemeName) => {
-      const { error } = await supabase
+      // Selecting the affected rows makes a blocked write visible: PostgREST
+      // returns success with zero rows when RLS hides the row from UPDATE, so
+      // without this the picker showed a false "saved" toast and nothing changed.
+      const { data, error } = await supabase
         .from("household_members")
         .update({ theme })
-        .eq("user_id", user!.id);
+        .eq("user_id", user!.id)
+        .select("id");
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error("Theme could not be saved — your member row is not updatable.");
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["member_theme"] }),
   });
 }
+

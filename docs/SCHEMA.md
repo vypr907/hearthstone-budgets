@@ -719,3 +719,20 @@ notify pgrst, 'reload schema';
 
 Note: ADR-057 (overdue-aware payment allocation) introduces no schema —
 it reuses `bills`/`debts`.`opening_arrears` and `arrears_as_of` (ADR-049).
+## ADR-061 follow-up — member self-update RLS (2026-08-14)
+
+The theme column alone is not enough: `household_members` had no UPDATE policy,
+so the write matched zero rows and PostgREST returned success with no error.
+
+```sql
+create policy "Members can update their own member row"
+on public.household_members
+for update
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+grant update on public.household_members to authenticated;
+
+notify pgrst, 'reload schema';
+```
