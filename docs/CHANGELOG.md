@@ -658,3 +658,23 @@
 * Settings screen gained a Theme section: a swatch button per theme, applying
   immediately on selection with no reload.
 * v1 is colors only — fonts and icon packs are out of scope (future ADR).
+
+## 2026-08-14 – Bug fix: fee-less payments wrongly tagged as 1-line splits
+
+### Fixed
+
+* ADR-046 payment submission (`useMarkSubmitted`, `useMarkCleared` direct-clear
+  branch in `src/lib/payments.ts`) stamped every payment row with a
+  `split_group_id`, even with no fee entered. A fee-less payment became a
+  1-line "split", and editing it then failed with "A split needs at least two
+  lines" (the split editor requires >=2 lines to save).
+* Payments now only get a `split_group_id` when a fee > 0 is actually paired
+  (`hasFee()` reuses the existing 0.005 threshold) — a fee-less payment stays a
+  plain transaction, matching ADR-046 as originally decided.
+* `useSaveSplitTransaction` (`src/lib/data-hooks.ts`) now saves a group edited
+  down to one line as a plain transaction (`split_group_id = null`) instead of a
+  1-row split, and the split editor no longer blocks saving at exactly one line
+  — this also repairs any already-existing fee-less payments that were
+  incorrectly tagged before this fix, the next time they're opened and saved.
+* No schema change, no ADR change — this implements ADR-046 correctly rather
+  than revising it.

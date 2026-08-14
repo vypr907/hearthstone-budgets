@@ -764,8 +764,8 @@ function SplitTransactionDetail({
 
   async function save() {
     const kept = rows.filter((r) => Number(r.amount));
-    if (kept.length < 2) {
-      toast.error("A split needs at least two lines");
+    if (kept.length < 1) {
+      toast.error("Add at least one line");
       return;
     }
     if (!accountId) {
@@ -784,7 +784,10 @@ function SplitTransactionDetail({
           amount: sign * Math.abs(Number(r.amount)),
         })),
       });
-      toast.success("Split transaction updated");
+      // A group edited down to one line is no longer a split (bug fix: this
+      // also repairs fee-less payments that were wrongly tagged as 1-line
+      // splits before payments.ts stopped stamping split_group_id on them).
+      toast.success(kept.length === 1 ? "Transaction updated" : "Split transaction updated");
       onClose();
     } catch (e) {
       toast.error((e as Error).message);

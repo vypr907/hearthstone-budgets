@@ -236,6 +236,11 @@ async function findLinkedTransaction(p: Payable, status?: string) {
   return ((data ?? [])[0] as Transaction | undefined) ?? null;
 }
 
+/** Whether a fee amount is large enough to write its own ledger row (ADR-046). */
+function hasFee(fee: number | undefined): boolean {
+  return Math.abs(Number(fee) || 0) >= 0.005;
+}
+
 /**
  * ADR-046: fees ride alongside a payment as their own ledger row so they hit the
  * account balance without ever counting toward the bill/debt cycle.
@@ -254,8 +259,8 @@ async function insertFeeTransaction(
   /** Shared with the payment row so the pair stays atomic (ADR-046). */
   splitGroupId?: string | null,
 ) {
+  if (!hasFee(fee)) return;
   const amt = Math.abs(Number(fee) || 0);
-  if (amt < 0.005) return;
   // ADR-046: fees land in the household's "Fees" category. Auto-create it if it
   // doesn't exist so fee rows are always categorised.
   let feeCatId = (await supabase
@@ -375,8 +380,9 @@ export function useMarkSubmitted() {
       // orphan ledger row behind.
       await updateRow(table(p.kind), p.id, { payment_status: "pending" });
       // ADR-046: pair the payment with its fee via a shared split_group_id so a
-      // later clear/undo/reset touches both atomically.
-      const groupId = crypto.randomUUID();
+      // later clear/undo/reset touches both atomically. No fee → no group: a
+      // lone payment row must stay a plain transaction, not a 1-line "split".
+      const groupId = hasFee(fee) ? crypto.randomUUID() : null;
       const { error } = await supabase.from("transactions").insert({
         household_id: householdId,
         account_id: accountId,
@@ -429,8 +435,8 @@ export function useMarkCleared() {
         await clearPairedFees(existing.split_group_id);
       } else {
         // Direct clear (no prior submit): insert a cleared payment, paired with
-        // any fee entered on this clear via split_group_id.
-        const groupId = crypto.randomUUID();
+        // any fee entered on this clear via split_group_id. No fee → no group.
+        const groupId = hasFee(fee) ? crypto.randomUUID() : null;
         const { error } = await supabase.from("transactions").insert({
           household_id: householdId,
           account_id: accountId,

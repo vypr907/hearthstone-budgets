@@ -556,6 +556,10 @@ export function useSaveSplitTransaction() {
           .eq("split_group_id", args.splitGroupId);
         if (error) throw error;
       }
+      // A single line isn't a split — save it as a plain transaction instead
+      // of a 1-row group (bug fix: 1-line groups couldn't be edited again,
+      // since the split editor requires >=2 lines to save).
+      const singleLine = args.lines.length === 1;
       const rows = args.lines.map((l) => ({
         household_id: householdId,
         account_id: args.accountId,
@@ -564,11 +568,11 @@ export function useSaveSplitTransaction() {
         status: args.status,
         description: args.description,
         transaction_date: args.transactionDate,
-        split_group_id: groupId,
+        split_group_id: singleLine ? null : groupId,
       }));
       const { error } = await supabase.from("transactions").insert(rows);
       if (error) throw error;
-      return groupId;
+      return singleLine ? null : groupId;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
