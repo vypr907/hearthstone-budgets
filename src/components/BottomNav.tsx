@@ -1,12 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { Home, ListChecks, Receipt, CreditCard, Wallet, MoreHorizontal } from "lucide-react";
+import { Home, ListChecks, Receipt, CreditCard, Clock, MoreHorizontal } from "lucide-react";
 
 const items: Array<{ to: string; label: string; icon: typeof Home; exact?: boolean }> = [
   { to: "/app", label: "Home", icon: Home, exact: true },
   { to: "/app/everything", label: "All", icon: ListChecks },
   { to: "/app/bills", label: "Bills", icon: Receipt },
   { to: "/app/debts", label: "Debts", icon: CreditCard },
-  { to: "/app/accounts", label: "Accounts", icon: Wallet },
+  // Accounts moved to the More grid to make room for Pending (ADR-026 nav style).
+  { to: "/app/pending", label: "Pending", icon: Clock },
   { to: "/app/more", label: "More", icon: MoreHorizontal },
 ];
 
