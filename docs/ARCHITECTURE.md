@@ -74,3 +74,11 @@ picker). `InstitutionDialog` likewise embeds `AccountDialog` for its inline
   form, and the deposit-splits editor (ADR-054).
 - `src/lib/income-hooks.ts` — adds `useUpsertIncomeSourceSplit` and
   `useDeleteIncomeSourceSplit`; splits still drive the ADR-047 received-paycheck writes.
+
+## Place picker and Fix Places (2026-08-14)
+
+- `src/components/PlacePicker.tsx` — the shared institution search / inline-create
+  control (ADR-053/063). Used by Add Transaction's Place field and by Fix Places.
+- `src/routes/app.fix-places.tsx` — repair scan for transactions with a null
+  `institution_id`; each row assigns a place with the same picker. Follows the
+  ADR-037 StrandedDebtRepair card/empty-state pattern. Reached from the More grid.

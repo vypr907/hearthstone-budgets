@@ -1,6 +1,20 @@
 ## Session Notes
 
 ### 2026-08-14
+- Implemented ADR-062/063/064 in the Add Transaction dialog: manual entries now
+  default to `pending` with a user-editable Pending/Cleared toggle (bill/debt
+  payments, income deposits and transfers keep their own status rules); added an
+  editable Date field defaulting to today (plain `<Input type="date">`, matching
+  bill due dates); split Description into a separate Place picker plus a
+  free-text note; Transfer mode gained an optional icon-based category picker
+  applied to both rows of the pair. (`src/components/AddTransactionFab.tsx`,
+  `src/lib/data-hooks.ts` `useSaveTransfer`)
+- Extracted the institution search / inline-create logic into a reusable
+  `src/components/PlacePicker.tsx` (behavior and storage unchanged).
+- New "Fix Places" screen (`src/routes/app.fix-places.tsx`, linked from More):
+  lists every transaction with a null `institution_id` and assigns a place per
+  row via the same PlacePicker, using the ADR-037 repair-scan card pattern with
+  a clean state when nothing is unassigned.
 - Fixed invoice payments not updating status on Everything: `deriveCycleInfo()`
   windowed linked transactions to (next_due_date − 1 cycle, today]. One-time
   invoice cycles never shift, so that window was empty and every payment fell

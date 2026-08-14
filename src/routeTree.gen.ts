@@ -23,6 +23,7 @@ import { Route as AppPaycheckRouteImport } from './routes/app.paycheck'
 import { Route as AppMoreRouteImport } from './routes/app.more'
 import { Route as AppInstitutionsRouteImport } from './routes/app.institutions'
 import { Route as AppGoalsRouteImport } from './routes/app.goals'
+import { Route as AppFixPlacesRouteImport } from './routes/app.fix-places'
 import { Route as AppEverythingRouteImport } from './routes/app.everything'
 import { Route as AppDebtsRouteImport } from './routes/app.debts'
 import { Route as AppDebtStrategyRouteImport } from './routes/app.debt-strategy'
@@ -101,6 +102,11 @@ const AppGoalsRoute = AppGoalsRouteImport.update({
   path: '/goals',
   getParentRoute: () => AppRoute,
 } as any)
+const AppFixPlacesRoute = AppFixPlacesRouteImport.update({
+  id: '/fix-places',
+  path: '/fix-places',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppEverythingRoute = AppEverythingRouteImport.update({
   id: '/everything',
   path: '/everything',
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
+  '/app/fix-places': typeof AppFixPlacesRoute
   '/app/goals': typeof AppGoalsRoute
   '/app/institutions': typeof AppInstitutionsRoute
   '/app/more': typeof AppMoreRoute
@@ -169,6 +176,7 @@ export interface FileRoutesByTo {
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
+  '/app/fix-places': typeof AppFixPlacesRoute
   '/app/goals': typeof AppGoalsRoute
   '/app/institutions': typeof AppInstitutionsRoute
   '/app/more': typeof AppMoreRoute
@@ -193,6 +201,7 @@ export interface FileRoutesById {
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
+  '/app/fix-places': typeof AppFixPlacesRoute
   '/app/goals': typeof AppGoalsRoute
   '/app/institutions': typeof AppInstitutionsRoute
   '/app/more': typeof AppMoreRoute
@@ -218,6 +227,7 @@ export interface FileRouteTypes {
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
+    | '/app/fix-places'
     | '/app/goals'
     | '/app/institutions'
     | '/app/more'
@@ -240,6 +250,7 @@ export interface FileRouteTypes {
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
+    | '/app/fix-places'
     | '/app/goals'
     | '/app/institutions'
     | '/app/more'
@@ -263,6 +274,7 @@ export interface FileRouteTypes {
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
+    | '/app/fix-places'
     | '/app/goals'
     | '/app/institutions'
     | '/app/more'
@@ -383,6 +395,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppGoalsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/fix-places': {
+      id: '/app/fix-places'
+      path: '/fix-places'
+      fullPath: '/app/fix-places'
+      preLoaderRoute: typeof AppFixPlacesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/everything': {
       id: '/app/everything'
       path: '/everything'
@@ -442,6 +461,7 @@ interface AppRouteChildren {
   AppDebtStrategyRoute: typeof AppDebtStrategyRoute
   AppDebtsRoute: typeof AppDebtsRoute
   AppEverythingRoute: typeof AppEverythingRoute
+  AppFixPlacesRoute: typeof AppFixPlacesRoute
   AppGoalsRoute: typeof AppGoalsRoute
   AppInstitutionsRoute: typeof AppInstitutionsRoute
   AppMoreRoute: typeof AppMoreRoute
@@ -463,6 +483,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDebtStrategyRoute: AppDebtStrategyRoute,
   AppDebtsRoute: AppDebtsRoute,
   AppEverythingRoute: AppEverythingRoute,
+  AppFixPlacesRoute: AppFixPlacesRoute,
   AppGoalsRoute: AppGoalsRoute,
   AppInstitutionsRoute: AppInstitutionsRoute,
   AppMoreRoute: AppMoreRoute,
