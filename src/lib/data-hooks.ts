@@ -811,6 +811,8 @@ export function useSaveTransfer() {
       amount: number;
       description: string | null;
       transferDate: string;
+      /** ADR-064: optional category applied to both rows of the pair. */
+      categoryId?: string | null;
     }) => {
       if (args.fromAccountId === args.toAccountId) {
         throw new Error("From and to accounts must be different");
@@ -825,6 +827,7 @@ export function useSaveTransfer() {
         description: args.description,
         transaction_date: args.transferDate,
         transfer_group_id: groupId,
+        category_id: args.categoryId ?? null,
       };
       // Write from-side first; if it fails nothing is written.
       await saveWithOptionalColumns<Transaction>(
