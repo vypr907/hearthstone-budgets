@@ -678,3 +678,102 @@
   incorrectly tagged before this fix, the next time they're opened and saved.
 * No schema change, no ADR change — this implements ADR-046 correctly rather
   than revising it.
+
+## 2026-08-14 – ADR-061 follow-ups: theme persistence diagnosis & token reference
+
+### Fixed
+
+* Theme switching appeared to save (success toast) but never changed anything:
+  `<html data-theme>` stayed put. Live check showed the member row selects fine,
+  but `update household_members set theme=...` affected zero rows with no error —
+  there is no self-UPDATE RLS policy on `household_members`.
+* `useSetTheme()` (`src/lib/theme.tsx`) now `.select("id")`s and throws on a
+  zero-row write, so a silent failure can no longer produce a false success toast.
+  The required policy + grant SQL is recorded in `docs/SCHEMA.md`.
+* `halo` theme block in `src/styles.css` was missing all 8 `--sidebar-*` overrides
+  the other five theme blocks define; added, reusing that block's own
+  card/brand/secondary/border/ring tokens.
+
+### Completed
+
+* Recreated the ADR-061 theme token reference (both files had been lost):
+  `src/components/ThemeTokenPreview.tsx` and `docs/THEME_TOKENS.md`, plus a
+  collapsible read-only "Theme token reference" section on Settings showing each
+  token as a labeled swatch with its computed value under the active theme.
+
+### Notes
+
+* Investigated 5 VS Code problems in `src/styles.css`: PostCSS parse, `tsc --noEmit`
+  and `vite build` all pass — they are VS Code's built-in CSS language server not
+  recognizing Tailwind v4 at-rules (`@import ... source(none)`, `@source`,
+  `@custom-variant`, `@theme`). Recommended the Tailwind CSS IntelliSense extension.
+
+## 2026-08-14 – ADR-062/063/064: Add Transaction refinements & Fix Places
+
+### Completed
+
+* **ADR-062** — Manual entries in the Add Transaction dialog now default to
+  `pending` with a user-editable Pending/Cleared toggle. Bill/debt payments,
+  income deposits and transfers keep their own status rules.
+* **ADR-063** (amends ADR-053) — Description split into a separate Place picker
+  plus a free-text note. Place logic extracted into a reusable
+  `src/components/PlacePicker.tsx` (search + inline institution create; behavior
+  and storage unchanged).
+* **ADR-064** (amends ADR-056) — Transfer mode gained an optional icon-based
+  category picker, applied to both rows of the pair (`useSaveTransfer`).
+* Editable Date field on Add Transaction, defaulting to today (plain
+  `<Input type="date">`, matching bill due dates).
+* New "Fix Places" screen (`src/routes/app.fix-places.tsx`, linked from More):
+  lists every transaction with a null `institution_id` and assigns a place per row
+  through the same PlacePicker, using the ADR-037 repair-scan card pattern with a
+  clean state when nothing is unassigned.
+
+## 2026-08-14 – Pending screen & bottom nav change
+
+### Completed
+
+* New Pending screen (`src/routes/app.pending.tsx`) as a top-level bottom-nav
+  destination: all pending transactions (linked and manual), sortable by
+  date / amount / account / category, groupable by account or category with
+  per-group subtotals, plus a pending-total header card.
+* Tapping a row confirms, then clears it — bill/debt-linked rows reuse
+  `useMarkCleared` / `toPayable` (ADR-035/036/046) so cycle credit and due-date
+  rollover match Bills/Debts/Everything; unlinked rows take a plain status
+  update. No new clearing mechanism, no new ADR.
+* Bottom nav stays at 6 tabs: Accounts was demoted to the More grid to free the
+  slot (`src/components/BottomNav.tsx`, `src/routes/app.more.tsx`).
+
+## 2026-08-14 – Invoice status fix & Debt form UX
+
+### Fixed
+
+* Invoice payments didn't update status on Everything: `deriveCycleInfo()`
+  windowed linked transactions to (next_due_date − 1 cycle, today]. A one-time
+  invoice cycle never shifts, so that window was empty and every payment fell
+  outside it — state stayed "unpaid" even though the write succeeded. One-time
+  payables now treat all linked transactions as their single open cycle
+  (`src/lib/ledger-state.ts`).
+
+### Completed
+
+* Debt form (`src/routes/app.debts.tsx`): Starting balance moved before Remaining
+  balance; remaining balance and minimum payment mirror starting balance until
+  edited; interest rate is optional and stores null when blank.
+* Debt form Type and Institution dropdowns show emoji/logo icons (reusing
+  `institutionTypeVisual` / `InstitutionLogo`) with h-14 tap targets.
+
+## 2026-08-14 – ADR-065: Default place on bill/debt payment transactions
+
+### Completed
+
+* `useMarkSubmitted`, the direct-clear branch of `useMarkCleared`, and
+  `insertFeeTransaction` (all `src/lib/payments.ts`) now stamp the payment/fee
+  transaction with the linked bill's or debt's own `institution_id` at write time
+  (extends ADR-046 / ADR-053). No extra user step; the place can still be changed
+  afterward via TransactionDetail edit. Manual Add Transaction is unchanged.
+
+### Notes
+
+* A one-time backfill script (not a migration file) was written but **not applied**:
+  it sets `institution_id` on existing bill/debt payment and paired fee rows where
+  it is null. Until it runs, older payments keep appearing in Fix Places.

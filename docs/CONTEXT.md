@@ -38,6 +38,10 @@ Private shared household budget and debt-payoff Android application migrated fro
   - Group 8 closed: investigated, no shared detail component warranted
   - ADR-059 complete: manual bill/debt allocations per pay period ("Plan a payment" + Planned card)
   - ADR-060 complete: recurrence projection surfaces future occurrences in forward pay periods
+  - ADR-061 complete: per-user color themes (`household_members.theme`, six `[data-theme]` blocks, Settings picker + read-only token reference); pending the column + self-UPDATE RLS policy being run in Supabase
+  - ADR-062/063/064 complete: manual transactions default to pending with a status toggle, editable date, Place split from Description (shared `PlacePicker`), transfer category picker, plus a Fix Places repair screen
+  - ADR-065 complete: bill/debt payment and fee transactions default their place from the linked bill/debt; one-time backfill still pending
+  - Pending screen added as a bottom-nav destination (Accounts demoted to More); clearing reuses the existing payment path
 - Phase 12 not started: Wrap as a Real Android App (Capacitor)
 - Phase 12 not started: Publish to Google Play (Internal Testing)
 - Phase 13 not started: Cutover: Retire the Sheet
@@ -79,6 +83,12 @@ Private shared household budget and debt-payoff Android application migrated fro
 - `debt_adjustments` and `bill_adjustments` rows with `affects_balance=false` are record-only and never modify balances; delete skips reversal for them (ADR-058)
 - Bill adjustments modify `cycle_amount_due` for the current cycle only; they do not touch `bills.amount` (ADR-058)
 - Manually planned bill/debt payments are separate from due-date bucketing; the Planned card is never deduplicated against "Due this period" (ADR-059)
+- Themes are per household member, not per household; `data-theme` on `<html>` swaps token values only — no component changes, colors only in v1 (ADR-061)
+- Manually added transactions default to `pending`, not `cleared`; the user may toggle. Bill/debt payments, income deposits and transfers keep their own status rules (ADR-062)
+- A transaction's place (`institution_id`) is separate from its free-text description; both are captured via the shared `PlacePicker` (ADR-063)
+- A transfer's category applies to both rows of the pair (ADR-064)
+- Bill/debt payment and fee transactions inherit the payable's `institution_id` at write time (ADR-065)
+- One-time payables treat all linked transactions as a single open cycle; the rolling cycle window does not apply to them
 - Future occurrences are projected at render time from the stored due date; projections are marked "Projected", count toward totals, and never write back to next_due_date/due_day (ADR-060)
 
 ## Important Rules
