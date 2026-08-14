@@ -43,7 +43,10 @@ New route `src/routes/app.pending.tsx`:
 - Empty state via `EmptyState` ("Nothing pending").
 - Own `head()` metadata.
 
-`src/components/BottomNav.tsx`: add a 7th icon-only entry (Clock icon) → `/app/pending`.
+`src/components/BottomNav.tsx`: replace the Accounts tab with an icon-only Pending entry (Clock
+icon) → `/app/pending`; nav stays at 6 tabs.
+`src/routes/app.more.tsx`: add "Accounts" (Wallet-style icon) to the More grid so it stays
+reachable.
 
 ## Docs
 
