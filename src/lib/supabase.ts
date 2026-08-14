@@ -168,6 +168,24 @@ export type Household = {
   export_format?: ExportFormat | null;
 };
 
+/** ADR-061: selectable UI color themes. */
+export type ThemeName =
+  | "standard"
+  | "halo"
+  | "hellokitty"
+  | "purple_dark"
+  | "purple_pastel"
+  | "cyber_neon"
+  | "cyber_stealth";
+
+export type HouseholdMember = {
+  id: string;
+  household_id: string;
+  user_id: string | null;
+  /** ADR-061: per-user display preference, default 'standard'. */
+  theme: ThemeName;
+};
+
 export type InstitutionCategory = {
   institution_id: string;
   category_id: string;

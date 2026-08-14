@@ -638,3 +638,23 @@
 ### Notes
 
 * Both features are display/derivation-layer only for ADR-060; ADR-059 is the only one that writes rows (to the already-migrated `pay_period_allocations.bill_id/debt_id`).
+
+## 2026-08-14 – ADR-061: Color Theme System
+
+### Completed
+
+* Added `household_members.theme` (text, default `standard`, checked against the 7
+  selectable values); per-user, not household-shared. SQL written, pending manual run
+  in Supabase (see docs/TODO.md).
+* New `src/lib/theme.tsx`: `ThemeProvider` reads the current member's `theme` on load
+  and sets `data-theme` on `<html>`; `useTheme()` / `useSetTheme()` (the latter shaped
+  like `useSetExportFormat`, ADR-028) read/write the row.
+* Six `[data-theme="..."]` override blocks in `src/styles.css` (halo, hellokitty,
+  purple_dark, purple_pastel, cyber_neon, cyber_stealth) — each overrides exactly the
+  token set already defined in `:root` (background, brand/gradient/shadow, item-1..6,
+  card/popover/primary/secondary/muted/accent, state-pending/partial/cleared,
+  destructive, border/input/ring, chart-1..5, sidebar-*). No new variable names, no
+  component changes.
+* Settings screen gained a Theme section: a swatch button per theme, applying
+  immediately on selection with no reload.
+* v1 is colors only — fonts and icon packs are out of scope (future ADR).

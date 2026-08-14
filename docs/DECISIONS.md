@@ -1705,4 +1705,8 @@ per-household storage was chosen because this is a personal display preference,
 unlike `export_format` (ADR-028), which affects a shared, printable artifact both
 users see identically.
 
-Status: Decided 2026-08-14. Not yet implemented.
+Status: Decided 2026-08-14. Implemented 2026-08-14 (household_members.theme
+column + check constraint written but not yet run in Supabase — see
+docs/TODO.md; src/lib/theme.tsx ThemeProvider/useTheme/useSetTheme; six
+[data-theme="..."] override blocks in src/styles.css; Settings screen Theme
+section with a swatch button per theme).

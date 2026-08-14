@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useHousehold, useSetExportFormat } from "@/lib/data-hooks";
+import { THEME_OPTIONS, useTheme, useSetTheme } from "@/lib/theme";
 import type { ExportFormat } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/settings")({
@@ -32,6 +33,9 @@ function SettingsPage() {
   const setFormat = useSetExportFormat();
   const current: ExportFormat = household?.export_format === "pdf" ? "pdf" : "png";
 
+  const currentTheme = useTheme();
+  const setTheme = useSetTheme();
+
   function choose(f: ExportFormat) {
     if (f === current) return;
     setFormat.mutate(f, {
@@ -40,10 +44,55 @@ function SettingsPage() {
     });
   }
 
+  function chooseTheme(value: (typeof THEME_OPTIONS)[number]["value"]) {
+    if (value === currentTheme) return;
+    const label = THEME_OPTIONS.find((t) => t.value === value)?.label ?? value;
+    setTheme.mutate(value, {
+      onSuccess: () => toast.success(`Theme set to ${label}`),
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Could not save"),
+    });
+  }
+
   return (
     <>
       <AppHeader title="Settings" />
       <div className="space-y-3 p-4">
+        <Card>
+          <CardContent className="space-y-3 p-4">
+            <div>
+              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Theme
+              </Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Your personal display preference — applies only to your device.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {THEME_OPTIONS.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  disabled={setTheme.isPending}
+                  onClick={() => chooseTheme(t.value)}
+                  className={`flex h-16 flex-col items-center justify-center gap-1.5 rounded-lg border-2 px-2 transition-colors ${
+                    currentTheme === t.value
+                      ? "border-primary"
+                      : "border-transparent hover:border-border"
+                  }`}
+                  style={{ backgroundColor: t.background }}
+                >
+                  <span
+                    className="h-4 w-4 rounded-full ring-1 ring-black/10"
+                    style={{ backgroundColor: t.brand }}
+                  />
+                  <span className="text-[11px] font-medium" style={{ color: t.text }}>
+                    {t.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="space-y-3 p-4">
             <div>

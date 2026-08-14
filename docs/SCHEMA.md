@@ -89,6 +89,7 @@ household_members (
     user_id uuid references auth.users(id),
     display_name text,
     role text,
+    theme text not null default 'standard', -- ADR-061: per-user UI color theme
     created_at timestamptz default now()
 )
 ```
@@ -500,6 +501,24 @@ withdrawal rows to a goal, mirroring linked_bill_id / linked_debt_id.
 A goal's **current_amount is not stored** — it is the sum of `transactions.amount`
 where `linked_goal_id = goal.id and status = 'cleared'` (ADR-003).
 
+
+## ADR-061 column (2026-08-14)
+
+- `household_members.theme text not null default 'standard'` — per-user UI
+  color theme preference, checked against the 7 selectable values (`standard`,
+  `halo`, `hellokitty`, `purple_dark`, `purple_pastel`, `cyber_neon`,
+  `cyber_stealth`). Display-only; no logic depends on its value, and the
+  page-level `data-theme` attribute it drives touches CSS custom properties
+  only, never component logic.
+
+```sql
+alter table household_members
+  add column if not exists theme text not null default 'standard'
+  check (theme in ('standard', 'halo', 'hellokitty', 'purple_dark',
+                    'purple_pastel', 'cyber_neon', 'cyber_stealth'));
+
+notify pgrst, 'reload schema';
+```
 
 ## ADR-029 / ADR-030 columns (2026-08-03)
 
