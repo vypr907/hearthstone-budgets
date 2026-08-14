@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useHousehold, useSetExportFormat } from "@/lib/data-hooks";
 import { THEME_OPTIONS, useTheme, useSetTheme } from "@/lib/theme";
+import { ThemeTokenPreview } from "@/components/ThemeTokenPreview";
+
 import type { ExportFormat } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/settings")({
