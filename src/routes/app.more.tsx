@@ -50,6 +50,7 @@ const links = [
   { to: "/app/institutions", label: "Institutions", icon: Building2 },
   { to: "/app/spending-by-place", label: "Spending by Place", icon: Store },
   { to: "/app/transactions", label: "Transactions", icon: Receipt },
+  { to: "/app/fix-places", label: "Fix Places", icon: Wrench },
   { to: "/app/snapshot", label: "Status Snapshot", icon: Camera },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ];
