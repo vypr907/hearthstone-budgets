@@ -91,8 +91,19 @@ function SettingsPage() {
                 </button>
               ))}
             </div>
+            {import.meta.env.DEV ? (
+              <details className="rounded-md border p-2">
+                <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Theme token reference (dev)
+                </summary>
+                <div className="mt-2">
+                  <ThemeTokenPreview />
+                </div>
+              </details>
+            ) : null}
           </CardContent>
         </Card>
+
         <Card>
           <CardContent className="space-y-3 p-4">
             <div>
