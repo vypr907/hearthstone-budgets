@@ -242,6 +242,14 @@
 
   --gradient-brand: linear-gradient(135deg, oklch(65% 0.18 220), oklch(35% 0.1 250));
   --shadow-card: 0 1px 2px oklch(65% 0.18 220 / 0.15), 0 8px 24px -12px oklch(65% 0.18 220 / 0.35);
+  --sidebar: oklch(14% 0.02 250);                /* dark slate panel, same as card */
+  --sidebar-foreground: oklch(93% 0.02 220);
+  --sidebar-primary: oklch(65% 0.18 220);        /* HUD energy blue */
+  --sidebar-primary-foreground: oklch(10% 0.01 250);
+  --sidebar-accent: oklch(20% 0.02 250);
+  --sidebar-accent-foreground: oklch(93% 0.02 220);
+  --sidebar-border: oklch(28% 0.05 220);
+  --sidebar-ring: oklch(75% 0.15 220);
 }
 
 [data-theme="hellokitty"] {
