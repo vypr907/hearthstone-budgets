@@ -3,6 +3,7 @@
 ## Phase 11 — In progress (2026-08-11)
 
 - [ ] Run ADR-028 migration in Supabase: `alter table households add column export_format text not null default 'png' check (export_format in ('png','pdf'));`
+- [ ] Run ADR-061 RLS fix in Supabase (see docs/SCHEMA.md): add the `household_members` self-UPDATE policy + `grant update ... to authenticated` — without it theme saves silently do nothing.
 - [ ] Run ADR-061 migration in Supabase: `alter table household_members add column theme text not null default 'standard' check (theme in ('standard','halo','hellokitty','purple_dark','purple_pastel','cyber_neon','cyber_stealth'));` — until run, the Settings Theme picker will fail to save (column doesn't exist yet).
 - [ ] Redo any cleaned-up stranded debt payments through Submit / Mark cleared and confirm status, remaining balance, paid-this-cycle and next due date all advance.
 

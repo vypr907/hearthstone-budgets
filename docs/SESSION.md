@@ -13,5 +13,12 @@
 - Debt form: Type and Institution dropdowns show emoji/logo icons (reusing
   `institutionTypeVisual` / `InstitutionLogo`) with h-14 tap targets.
   (`src/routes/app.debts.tsx`)
+- Diagnosed ADR-061 theme switching doing nothing: `<html data-theme>` never
+  changed, so CSS was never involved. Live check showed the member row selects
+  fine but `update household_members set theme=...` affects zero rows with no
+  error — no self-UPDATE RLS policy. `useSetTheme()` now `.select("id")`s and
+  throws on a zero-row write so the false success toast can't recur.
+  (`src/lib/theme.tsx`, policy SQL in `docs/SCHEMA.md`)
 
-Known issue: none from this pass.
+Known issue: theme still won't persist until the `household_members` UPDATE
+policy in docs/SCHEMA.md is run in Supabase.

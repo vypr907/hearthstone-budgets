@@ -1695,6 +1695,13 @@ swatch/preview button per theme, applying immediately on selection with no reloa
 
 v1 is colors only — fonts and icon packs are explicitly deferred to a future ADR.
 
+Amendment (2026-08-14): the column migration alone leaves the picker inert.
+`household_members` also needs an UPDATE policy for the member's own row
+(`user_id = auth.uid()`) plus `grant update ... to authenticated` — see
+`docs/SCHEMA.md`. Without it PostgREST returns success with zero rows updated,
+so the save toast fires while nothing persists. `useSetTheme()` now selects the
+affected rows and throws when none come back.
+
 Reason:
 Household members wanted personalization beyond light/dark, including playful
 themes (Halo, Hello Kitty) and two variants each of Purple and Cyber. Since the
