@@ -5,6 +5,7 @@
 - [ ] Run ADR-028 migration in Supabase: `alter table households add column export_format text not null default 'png' check (export_format in ('png','pdf'));`
 - [ ] Run ADR-061 RLS fix in Supabase (see docs/SCHEMA.md): add the `household_members` self-UPDATE policy + `grant update ... to authenticated` — without it theme saves silently do nothing.
 - [ ] Run ADR-061 migration in Supabase: `alter table household_members add column theme text not null default 'standard' check (theme in ('standard','halo','hellokitty','purple_dark','purple_pastel','cyber_neon','cyber_stealth'));` — until run, the Settings Theme picker will fail to save (column doesn't exist yet).
+- [ ] Run ADR-065 backfill in Supabase (SQL script provided, not a migration file): sets institution_id on existing bill/debt payment and paired fee transactions where it is null, from the linked bill/debt. Until run, older payments keep showing up in Fix Places even though new payments now default their place correctly.
 - [ ] Redo any cleaned-up stranded debt payments through Submit / Mark cleared and confirm status, remaining balance, paid-this-cycle and next due date all advance.
 
 ## Phase 11 — Remaining groups

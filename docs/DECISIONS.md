@@ -1806,4 +1806,8 @@ transactions, not an intentional gap. It also means every bill/debt payment and
 fee transaction was showing up in the "Fix Places" repair screen, which should
 only be surfacing genuinely untagged manual spending.
 
-Status: Decided 2026-08-14. Not yet implemented.
+Status: Decided 2026-08-14. Implemented 2026-08-14 (institution_id set from
+the linked bill/debt in useMarkSubmitted, useMarkCleared's direct-clear
+branch, and insertFeeTransaction, all in src/lib/payments.ts; one-time
+backfill SQL written for existing null institution_id rows, pending manual
+run in Supabase — see docs/TODO.md).

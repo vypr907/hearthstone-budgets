@@ -82,3 +82,16 @@ policy in docs/SCHEMA.md is run in Supabase.
   src/routes/app.more.tsx, docs/ARCHITECTURE.md.
   Next: verify clearing a linked pending payment from this screen rolls the due
   date in the live app.
+- Implemented ADR-065 (bill/debt payment and fee transactions default
+  `institution_id`, extends ADR-046/ADR-053): `useMarkSubmitted`, the
+  direct-clear branch of `useMarkCleared`, and `insertFeeTransaction` (all
+  `src/lib/payments.ts`) now stamp the payment/fee transaction with the linked
+  bill's or debt's own `institution_id` at write time — no extra user step, and
+  the place can still be changed afterward via TransactionDetail edit. Manual
+  Add Transaction (ADR-053) is unchanged. Docs updated: ADR-065 status,
+  TODO.md.
+  - Known issue: a one-time backfill SQL script was written (not applied) to
+    set `institution_id` on existing bill/debt payment and paired fee rows
+    where it is null — pending manual run in Supabase (see docs/TODO.md).
+    Until then, older payments still show up in Fix Places even though new
+    payments now default their place correctly.

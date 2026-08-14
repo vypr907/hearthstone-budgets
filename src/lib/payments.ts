@@ -288,6 +288,8 @@ async function insertFeeTransaction(
     transaction_date: todayISO(),
     // Paired to the payment, NOT linked to the payable — see ADR-046 note above.
     split_group_id: splitGroupId ?? null,
+    // ADR-065: inherit the payable's own institution, same as the payment row.
+    institution_id: p.institution_id,
   });
   if (error) throw error;
 }
@@ -393,6 +395,8 @@ export function useMarkSubmitted() {
         transaction_date: todayISO(),
         [linkColumn(p.kind)]: p.id,
         split_group_id: groupId,
+        // ADR-065: default the place from the linked bill's/debt's own institution.
+        institution_id: p.institution_id,
       });
       if (error) throw error;
 
@@ -447,6 +451,8 @@ export function useMarkCleared() {
           transaction_date: todayISO(),
           [linkColumn(p.kind)]: p.id,
           split_group_id: groupId,
+          // ADR-065: default the place from the linked bill's/debt's own institution.
+          institution_id: p.institution_id,
         });
         if (error) throw error;
         await insertFeeTransaction(householdId, p, accountId, fee, "cleared", groupId);
