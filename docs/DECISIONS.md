@@ -1737,7 +1737,7 @@ match the behavior every other write path in the app already has, and keeps
 spendable balance accurate the moment a transaction is logged rather than
 whenever it's later confirmed against the bank.
 
-Status: Decided 2026-08-14. Not yet implemented.
+Status: Decided 2026-08-14. Implemented 2026-08-14.
 
 ---
 
@@ -1761,7 +1761,7 @@ entry, but in practice it prevents adding any actual note when a place is
 also being set, and conflates two different kinds of information. Splitting
 them costs one extra field, not new matching logic.
 
-Status: Decided 2026-08-14. Not yet implemented.
+Status: Decided 2026-08-14. Implemented 2026-08-14.
 
 ---
 
@@ -1785,4 +1785,4 @@ transaction type already has a categorized, icon-styled picker — leaving
 transfers as the one uncategorized, unstyled exception was inconsistent
 rather than intentional.
 
-Status: Decided 2026-08-14. Not yet implemented.
+Status: Decided 2026-08-14. Implemented 2026-08-14.
