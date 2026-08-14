@@ -22,3 +22,4 @@
 
 Known issue: theme still won't persist until the `household_members` UPDATE
 policy in docs/SCHEMA.md is run in Supabase.
+- Restored the ADR-061 theme token reference: recreated src/components/ThemeTokenPreview.tsx and docs/THEME_TOKENS.md (both had been lost) and re-added the collapsible "Theme token reference" section to Settings. Read-only swatches with computed values per active theme.
