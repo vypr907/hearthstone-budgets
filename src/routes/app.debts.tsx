@@ -76,7 +76,8 @@ import { ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 
 import { Switch } from "@/components/ui/switch";
-import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel } from "@/lib/visual-meta";
+import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel, institutionTypeVisual } from "@/lib/visual-meta";
+import { InstitutionLogo } from "@/components/InstitutionLogo";
 
 
 import {
@@ -546,6 +547,9 @@ function DebtDialog({
   const [original, setOriginal] = useState("");
   const [rate, setRate] = useState("");
   const [minPay, setMinPay] = useState("");
+  // Remaining balance and minimum payment mirror Starting balance until edited.
+  const [remainingTouched, setRemainingTouched] = useState(false);
+  const [minPayTouched, setMinPayTouched] = useState(false);
   const [dueDay, setDueDay] = useState("");
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [nextDue, setNextDue] = useState("");
@@ -595,6 +599,8 @@ function DebtDialog({
     setArrearsAsOf(debt?.arrears_as_of ? debt.arrears_as_of.slice(0, 10) : "");
     setInvoiceNumber(debt?.invoice_number ?? "");
     setNameTouched(!!debt?.name);
+    setRemainingTouched(!!debt?.id);
+    setMinPayTouched(!!debt?.id);
     const derived = deriveCustomInterval(debt?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
