@@ -106,7 +106,7 @@ function PendingPage() {
     return [...grouped].sort((a, b) => {
       const ta = a.head;
       const tb = b.head;
-      if (sort === "amount") return Math.abs(tb.total ?? 0) - Math.abs(ta.total ?? 0) || Math.abs(Number(b.total)) - Math.abs(Number(a.total));
+      if (sort === "amount") return Math.abs(b.total) - Math.abs(a.total);
       if (sort === "account")
         return ((ta.account_id && accountName[ta.account_id]) || "").localeCompare(
           (tb.account_id && accountName[tb.account_id]) || "",
