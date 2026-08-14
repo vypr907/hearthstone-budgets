@@ -26,15 +26,11 @@ import {
   useInstitutions,
   useSaveSplitTransaction,
   useSaveTransfer,
-  useUpsertInstitution,
   useUpsertTransaction,
 } from "@/lib/data-hooks";
-import {
-  categoryVisual,
-  guessMerchantDomain,
-  suggestedLogoUrl,
-} from "@/lib/visual-meta";
+import { categoryVisual } from "@/lib/visual-meta";
 import { Switch } from "@/components/ui/switch";
+import { PlacePicker } from "@/components/PlacePicker";
 import {
   SplitLinesEditor,
   emptySplitRow,
@@ -45,6 +41,7 @@ import {
 import { accountLabel } from "@/lib/format";
 import { applyClearedPayment, toPayable } from "@/lib/payments";
 import { useQueryClient } from "@tanstack/react-query";
+import type { Category } from "@/lib/supabase";
 
 function todayISO() {
   const n = new Date();
@@ -59,9 +56,53 @@ const NO_LINK = "__none__";
 /** Entry mode for the Add Transaction dialog. */
 type TxMode = "expense" | "split" | "transfer";
 
+/** Shared large, icon-based category dropdown (ADR-054 visual pass). */
+function CategorySelect({
+  value,
+  onChange,
+  categories,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  categories: Category[];
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-12 text-base">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={NO_CATEGORY} className="py-3 text-base">
+          No category
+        </SelectItem>
+        {categories.map((c) => {
+          const v = categoryVisual(c);
+          return (
+            <SelectItem key={c.id} value={c.id} className="py-3 text-base">
+              <span className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-[10px] text-base"
+                  style={{ background: `${v.color}22` }}
+                >
+                  {v.icon}
+                </span>
+                <span className="font-medium" style={{ color: v.color }}>
+                  {c.name}
+                </span>
+              </span>
+            </SelectItem>
+          );
+        })}
+      </SelectContent>
+    </Select>
+  );
+}
+
 /**
- * One-tap manual entry. Date defaults to today and status to 'cleared' —
- * only bill/debt submissions start as 'pending'.
+ * One-tap manual entry. ADR-062: manual entries default to 'pending' and the
+ * status stays user-editable; bill/debt payments, income deposits and
+ * transfers keep their own status rules.
  */
 export function AddTransactionFab() {
   const [open, setOpen] = useState(false);
@@ -81,6 +122,10 @@ export function AddTransactionFab() {
   const [categoryId, setCategoryId] = useState(NO_CATEGORY);
   const [description, setDescription] = useState("");
   const [link, setLink] = useState(NO_LINK);
+  /** ADR-062: manual entries start pending; the user can flip to cleared. */
+  const [status, setStatus] = useState<"pending" | "cleared">("pending");
+  /** Editable entry date, defaulting to today. */
+  const [txDate, setTxDate] = useState(todayISO());
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
   /** ADR-044: split entries carry per-category lines instead of one category. */
@@ -91,6 +136,8 @@ export function AddTransactionFab() {
   const [toAccountId, setToAccountId] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [transferDescription, setTransferDescription] = useState("");
+  /** ADR-064: one optional category for the transfer pair as a whole. */
+  const [transferCategoryId, setTransferCategoryId] = useState(NO_CATEGORY);
 
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
@@ -98,48 +145,8 @@ export function AddTransactionFab() {
   );
 
   const { data: institutions = [] } = useInstitutions();
-  const saveInstitution = useUpsertInstitution();
-  /** ADR-053: the place this money was spent at. */
+  /** ADR-053/063: the place this money was spent at. */
   const [merchantId, setMerchantId] = useState<string | null>(null);
-
-  /** Places whose name matches what's being typed, best few first. */
-  const merchantMatches = useMemo(() => {
-    const d = description.trim().toLowerCase();
-    if (d.length < 2 || merchantId) return [];
-    return institutions
-      .filter((i) => i.name.toLowerCase().includes(d))
-      .slice(0, 4);
-  }, [description, institutions, merchantId]);
-
-  /** Trimmed description that doesn't match any known institution yet. */
-  const newMerchant = useMemo(() => {
-    const d = description.trim();
-    if (d.length < 3 || merchantId) return null;
-    const known = institutions.some(
-      (i) => i.name.trim().toLowerCase() === d.toLowerCase(),
-    );
-    return known ? null : d;
-  }, [description, institutions, merchantId]);
-
-  async function addMerchant() {
-    if (!newMerchant) return;
-    const domain = guessMerchantDomain(newMerchant);
-    try {
-      const id = await saveInstitution.mutateAsync({
-        name: newMerchant,
-        institution_type: "other",
-        logo_url: domain ? suggestedLogoUrl(domain) : null,
-      });
-      if (typeof id === "string") setMerchantId(id);
-      toast.success(`Added ${newMerchant}`);
-    } catch (e) {
-      const msg =
-        e instanceof Error ? e.message
-        : (e as { message?: string })?.message
-        ?? "Could not add place";
-      toast.error(msg);
-    }
-  }
 
   const institutionName = useMemo(() => {
     const m: Record<string, string> = {};
@@ -155,11 +162,14 @@ export function AddTransactionFab() {
     setDescription("");
     setMerchantId(null);
     setLink(NO_LINK);
+    setStatus("pending");
+    setTxDate(todayISO());
     setSplitRows([emptySplitRow()]);
     setFromAccountId("");
     setToAccountId("");
     setTransferAmount("");
     setTransferDescription("");
+    setTransferCategoryId(NO_CATEGORY);
   }
 
   async function submitTransfer() {
@@ -186,7 +196,8 @@ export function AddTransactionFab() {
         toAccountId,
         amount: n,
         description: transferDescription.trim() || null,
-        transferDate: todayISO(),
+        transferDate: txDate,
+        categoryId: transferCategoryId === NO_CATEGORY ? null : transferCategoryId,
       });
       toast.success("Transfer recorded");
       reset();
@@ -219,9 +230,9 @@ export function AddTransactionFab() {
       try {
         await saveSplit.mutateAsync({
           accountId,
-          transactionDate: todayISO(),
+          transactionDate: txDate,
           description: description.trim() || null,
-          status: "cleared",
+          status,
           lines: lines.map((r) => ({
             categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
             amount: n > 0 ? -Number(r.amount) : Number(r.amount),
@@ -244,13 +255,13 @@ export function AddTransactionFab() {
         amount: n > 0 ? -n : n,
         category_id: categoryId === NO_CATEGORY ? null : categoryId,
         description: description.trim() || null,
-        status: "cleared",
-        transaction_date: todayISO(),
+        status,
+        transaction_date: txDate,
         ...(merchantId ? { institution_id: merchantId } : {}),
         ...(bill ? { linked_bill_id: bill.id } : {}),
         ...(debt ? { linked_debt_id: debt.id } : {}),
       });
-      if (bill || debt) {
+      if ((bill || debt) && status === "cleared") {
         const payable = bill ? toPayable("bill", bill) : toPayable("debt", debt!);
         await applyClearedPayment(payable, Math.abs(n));
         qc.invalidateQueries({ queryKey: ["bills"] });
@@ -279,19 +290,18 @@ export function AddTransactionFab() {
       </Button>
 
       <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : (setOpen(false), reset()))}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add transaction</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-
             {/* Mode tabs: Expense | Transfer */}
             <div className="flex rounded-lg border p-1 gap-1">
               <button
                 type="button"
                 onClick={() => setMode("expense")}
                 className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                  mode === "expense"
+                  mode !== "transfer"
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
@@ -309,6 +319,18 @@ export function AddTransactionFab() {
               >
                 Transfer
               </button>
+            </div>
+
+            {/* Date applies to every mode. */}
+            <div className="space-y-2">
+              <Label htmlFor="tx-date">Date</Label>
+              <Input
+                id="tx-date"
+                type="date"
+                className="h-12"
+                value={txDate}
+                onChange={(e) => setTxDate(e.target.value)}
+              />
             </div>
 
             {mode === "transfer" ? (
@@ -361,6 +383,16 @@ export function AddTransactionFab() {
                   />
                 </div>
 
+                {/* ADR-064: one category for the whole transfer. */}
+                <div className="space-y-2">
+                  <Label>Category (optional)</Label>
+                  <CategorySelect
+                    value={transferCategoryId}
+                    onChange={setTransferCategoryId}
+                    categories={sortedCategories}
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="xfer-desc">Description (optional)</Label>
                   <Input
@@ -408,6 +440,27 @@ export function AddTransactionFab() {
                   </p>
                 </div>
 
+                {/* ADR-062: default pending, editable here. */}
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <div className="flex rounded-lg border p-1 gap-1">
+                    {(["pending", "cleared"] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setStatus(s)}
+                        className={`flex-1 rounded-md py-1.5 text-sm font-medium capitalize transition-colors ${
+                          status === s
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between rounded-md border p-3">
                   <div className="pr-3">
                     <Label htmlFor="tx-split">Split into multiple categories</Label>
@@ -432,35 +485,11 @@ export function AddTransactionFab() {
                 ) : (
                   <div className="space-y-2">
                     <Label>Category (optional)</Label>
-                    <Select value={categoryId} onValueChange={setCategoryId}>
-                      <SelectTrigger className="h-12 text-base">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_CATEGORY} className="py-3 text-base">
-                          No category
-                        </SelectItem>
-                        {sortedCategories.map((c) => {
-                          const v = categoryVisual(c);
-                          return (
-                            <SelectItem key={c.id} value={c.id} className="py-3 text-base">
-                              <span className="flex items-center gap-2">
-                                <span
-                                  aria-hidden
-                                  className="grid h-7 w-7 shrink-0 place-items-center rounded-[10px] text-base"
-                                  style={{ background: `${v.color}22` }}
-                                >
-                                  {v.icon}
-                                </span>
-                                <span className="font-medium" style={{ color: v.color }}>
-                                  {c.name}
-                                </span>
-                              </span>
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
+                    <CategorySelect
+                      value={categoryId}
+                      onChange={setCategoryId}
+                      categories={sortedCategories}
+                    />
                   </div>
                 )}
 
@@ -491,79 +520,18 @@ export function AddTransactionFab() {
                   </div>
                 ) : null}
 
+                {/* ADR-063: Place is its own field now. */}
+                <PlacePicker value={merchantId} onChange={setMerchantId} />
+
                 <div className="space-y-2">
-                  <Label htmlFor="tx-desc">Description</Label>
+                  <Label htmlFor="tx-desc">Description (optional)</Label>
                   <Input
                     id="tx-desc"
                     className="h-12"
-                    placeholder="e.g. Groceries"
+                    placeholder="e.g. Lunch with the team"
                     value={description}
-                    onChange={(e) => {
-                      setDescription(e.target.value);
-                      if (merchantId) setMerchantId(null);
-                    }}
+                    onChange={(e) => setDescription(e.target.value)}
                   />
-                  {/* ADR-053: tie the entry to a place, either an existing one… */}
-                  {merchantId ? (
-                    <div className="flex items-center gap-2 rounded-[12px] bg-muted/50 p-2 text-xs">
-                      <span aria-hidden className="text-base">🏪</span>
-                      <span className="min-w-0 flex-1 truncate">
-                        Tracked at{" "}
-                        <span className="font-semibold">
-                          {institutions.find((i) => i.id === merchantId)?.name}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        className="text-muted-foreground underline"
-                        onClick={() => setMerchantId(null)}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  ) : null}
-                  {merchantMatches.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {merchantMatches.map((i) => (
-                        <button
-                          key={i.id}
-                          type="button"
-                          className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5 text-xs active:bg-muted"
-                          onClick={() => {
-                            setMerchantId(i.id);
-                            setDescription(i.name);
-                          }}
-                        >
-                          {i.logo_url ? (
-                            <img
-                              src={i.logo_url}
-                              alt=""
-                              className="h-4 w-4 rounded-full object-contain"
-                            />
-                          ) : (
-                            <span aria-hidden>🏪</span>
-                          )}
-                          {i.name}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                  {/* …or a brand-new one captured without leaving the form. */}
-                  {newMerchant ? (
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-2 rounded-[12px] bg-muted/50 p-2 text-left text-xs active:bg-muted"
-                      disabled={saveInstitution.isPending}
-                      onClick={() => void addMerchant()}
-                    >
-                      <span aria-hidden className="text-base">🏪</span>
-                      <span className="min-w-0 flex-1">
-                        New place? Save{" "}
-                        <span className="font-semibold">{newMerchant}</span> as an
-                        institution
-                      </span>
-                    </button>
-                  ) : null}
                 </div>
               </>
             )}
