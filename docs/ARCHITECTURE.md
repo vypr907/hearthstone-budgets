@@ -82,3 +82,15 @@ picker). `InstitutionDialog` likewise embeds `AccountDialog` for its inline
 - `src/routes/app.fix-places.tsx` — repair scan for transactions with a null
   `institution_id`; each row assigns a place with the same picker. Follows the
   ADR-037 StrandedDebtRepair card/empty-state pattern. Reached from the More grid.
+
+## Pending screen (2026-08-14)
+
+- `src/routes/app.pending.tsx` — lists every `transactions.status = 'pending'` row
+  (split lines collapsed via `groupLedgerRows`), with sort (date/amount/account/
+  category) and group-by (none/account/category) plus per-group subtotals. Tapping a
+  row clears it: bill/debt-linked rows go through `useMarkCleared` + `toPayable`
+  (`src/lib/payments.ts`) so cycle credit, paired fees, and due-date rollover behave
+  exactly as on Bills/Debts/Everything (ADR-035/036/046); unlinked manual rows get a
+  plain `status: 'cleared'` update via `useUpsertTransaction`.
+- `src/components/BottomNav.tsx` — Pending takes the fifth nav slot (ADR-026 icon-only
+  style); Accounts moved into the More grid (`src/routes/app.more.tsx`).
