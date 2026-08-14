@@ -76,7 +76,8 @@ import { ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 
 import { Switch } from "@/components/ui/switch";
-import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel } from "@/lib/visual-meta";
+import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel, institutionTypeVisual } from "@/lib/visual-meta";
+import { InstitutionLogo } from "@/components/InstitutionLogo";
 
 
 import {
@@ -546,6 +547,9 @@ function DebtDialog({
   const [original, setOriginal] = useState("");
   const [rate, setRate] = useState("");
   const [minPay, setMinPay] = useState("");
+  // Remaining balance and minimum payment mirror Starting balance until edited.
+  const [remainingTouched, setRemainingTouched] = useState(false);
+  const [minPayTouched, setMinPayTouched] = useState(false);
   const [dueDay, setDueDay] = useState("");
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [nextDue, setNextDue] = useState("");
@@ -595,6 +599,8 @@ function DebtDialog({
     setArrearsAsOf(debt?.arrears_as_of ? debt.arrears_as_of.slice(0, 10) : "");
     setInvoiceNumber(debt?.invoice_number ?? "");
     setNameTouched(!!debt?.name);
+    setRemainingTouched(!!debt?.id);
+    setMinPayTouched(!!debt?.id);
     const derived = deriveCustomInterval(debt?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
@@ -643,9 +649,10 @@ function DebtDialog({
       await upsert.mutateAsync({
         id: debt?.id,
         name: name.trim(),
-        remaining_balance: remainingNum,
+        remaining_balance: remainingNum ?? originalNum,
         starting_balance: startingBalance,
-        interest_rate: rate ? Number(rate) : null,
+        // Interest rate is optional: blank stores null rather than 0.
+        interest_rate: rate.trim() !== "" && Number.isFinite(Number(rate)) ? Number(rate) : null,
         minimum_payment: minPay ? Number(minPay) : null,
         due_day: dated ? null : dueDay ? Number(dueDay) : null,
         billing_cycle: cycle.trim().toLowerCase() as BillingCycle,
@@ -709,14 +716,19 @@ function DebtDialog({
           <div>
             <Label>Type</Label>
             <Select value={debtType || "none"} onValueChange={chooseType}>
-              <SelectTrigger className="h-11">
+              <SelectTrigger className="h-14 text-base">
                 <SelectValue placeholder="Pick a type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Unset</SelectItem>
+                <SelectItem value="none" className="py-3 text-base">
+                  Unset
+                </SelectItem>
                 {DEBT_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {formatTypeLabel(t)}
+                  <SelectItem key={t} value={t} className="py-3 text-base">
+                    <span className="flex items-center gap-2">
+                      <span aria-hidden>{institutionTypeVisual(t).icon}</span>
+                      {formatTypeLabel(t)}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -735,17 +747,28 @@ function DebtDialog({
                 autoName(v, invoiceNumber);
               }}
             >
-              <SelectTrigger className="h-11">
+              <SelectTrigger className="h-14 text-base">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="none" className="py-3 text-base">
+                  None
+                </SelectItem>
                 {institutions.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {i.name}
+                  <SelectItem key={i.id} value={i.id} className="py-3 text-base">
+                    <span className="flex items-center gap-2">
+                      <InstitutionLogo
+                        logoUrl={i.logo_url}
+                        type={i.institution_type}
+                        size={22}
+                      />
+                      {i.name}
+                    </span>
                   </SelectItem>
                 ))}
-                <SelectItem value={ADD_INSTITUTION}>+ Add new institution</SelectItem>
+                <SelectItem value={ADD_INSTITUTION} className="py-3 text-base">
+                  + Add new institution
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -765,24 +788,37 @@ function DebtDialog({
             </div>
           ) : null}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>{isInvoice ? "Amount still owed" : "Remaining balance"}</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={remaining}
-                onChange={(e) => setRemaining(e.target.value)}
-                className="h-11"
-              />
-            </div>
+            {/*
+              Starting balance comes first: for a new invoice it's the number the
+              user has in hand, and remaining / minimum payment mirror it until
+              they're edited by hand.
+            */}
             <div>
               <Label>{isInvoice ? "Original invoice amount" : "Starting balance"}</Label>
               <Input
                 type="number"
                 step="0.01"
-                placeholder="Same as owed"
                 value={original}
-                onChange={(e) => setOriginal(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setOriginal(v);
+                  if (!remainingTouched) setRemaining(v);
+                  if (!minPayTouched) setMinPay(v);
+                }}
+                className="h-11"
+              />
+            </div>
+            <div>
+              <Label>{isInvoice ? "Amount still owed" : "Remaining balance"}</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Same as starting"
+                value={remaining}
+                onChange={(e) => {
+                  setRemainingTouched(true);
+                  setRemaining(e.target.value);
+                }}
                 className="h-11"
               />
             </div>
@@ -791,6 +827,8 @@ function DebtDialog({
               <Input
                 type="number"
                 step="0.01"
+                inputMode="decimal"
+                placeholder="Optional"
                 value={rate}
                 onChange={(e) => setRate(e.target.value)}
                 className="h-11"
@@ -802,10 +840,14 @@ function DebtDialog({
                 type="number"
                 step="0.01"
                 value={minPay}
-                onChange={(e) => setMinPay(e.target.value)}
+                onChange={(e) => {
+                  setMinPayTouched(true);
+                  setMinPay(e.target.value);
+                }}
                 className="h-11"
               />
             </div>
+
             {cycle === "monthly" ? (
               <div>
                 <Label>Due day</Label>

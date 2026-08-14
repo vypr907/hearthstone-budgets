@@ -69,8 +69,15 @@ export function deriveCycleInfo(
         return !!d && d > start && d <= end;
       };
 
-      let cycleTx = linked.filter((t) => between(t, openStart, today));
+      // ADR-048: a one-time charge (invoice) has no rolling window — every
+      // linked payment belongs to its single, open cycle. Windowing it by
+      // due-date left invoice payments outside the range, so the Everything
+      // screen kept showing "unpaid" after a real payment.
+      const oneTime = (cycleName ?? "").toLowerCase().replace(/[\s_-]/g, "") === "onetime";
+
+      let cycleTx = oneTime ? linked : linked.filter((t) => between(t, openStart, today));
       let resolved = false;
+
 
       if (cycleTx.length === 0 && dueDate && today <= openStart) {
         // The cycle covering today may already have been resolved and rolled forward.
