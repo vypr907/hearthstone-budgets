@@ -123,7 +123,10 @@ https://www.figma.com/community/file/1168619846377132193/halo-infinite-ui-rework
 
 
 ## Hello Kitty
+🎨 Exact Hex Color CodesClassic Bow Red: #E60012Hello Kitty Pink: #FFB7D5Pastel Blush: #FFE5ECAccent Yellow: #FFF100Clean White Backgrounds: #FFFFFF
 
 ## Purple
+🎨 Purple Theme Color PalettesChoose the vibe that best matches your style:Option A: Deep Amethyst (Dark & Premium)⬛ Midnight Plum (Background): #120E16💜 Deep Amethyst (UI Containers): #2A1B3D🔮 Vibrant Violet (Accents & Toggles): #A64B2A◽ Lavender Frost (Text & Icons): #E8DFF5Option B: Soft Lavender (Pastel & Minimalist)⬜ Clean Lavender Chalk (Background): #F3EFF5🪻 Muted Lilac (UI Accents): #D8B4F8💟 Orchid Pink (Highlights): #F1C6E7⬛ Dark Charcoal (Text): #232124
 
 ## Cyber
+🎨 Cyber & Modern Color PalettesChoose between a vibrant cyberpunk look or a clean, stealthy modern-military style:Option A: Neon Cyberpunk (High Contrast)⬛ Deep Void (Background): #08090C🩵 Laser Cyan (Accents): #00F5FF💜 Electric Magenta (Highlights): #BD00FF◽ Matrix White (Text): #E2E8F0Option B: Stealth Modern (Minimalist Tech)⬛ Matte Carbon (Background): #121212🟩 Tactical Green (Accents): #00FF66🎛️ Control Gray (UI Elements): #2A2D34◽ Clean Silver (Text): #F8FAFC
