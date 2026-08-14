@@ -114,6 +114,13 @@ Possible future enhancement: infer or prompt for a real type (subscription/utili
 
 Not scoped. Not decided. If pursued, likely needs its own small ADR (touches UX + how institution_type/icon gets assigned) before a TODO line or Kiro prompt — see 2026-08-12 discussion on why this stays out of TODO.md for now.
 
+## Future: In-app theme color editor
+Per-user editable overrides on top of the base theme (color pickers per token,
+live preview, reset-to-default). Likely needs `household_members.theme_overrides
+jsonb` layered over the base theme CSS. Bigger scope than the ADR-061 preset
+themes — worth its own ADR once fonts/icons are also editable, so the editor
+covers more than just 5-6 color swatches. Not scoped or decided yet.
+
 
 # Theme notes
 ## Halo
@@ -130,3 +137,5 @@ https://www.figma.com/community/file/1168619846377132193/halo-infinite-ui-rework
 
 ## Cyber
 🎨 Cyber & Modern Color PalettesChoose between a vibrant cyberpunk look or a clean, stealthy modern-military style:Option A: Neon Cyberpunk (High Contrast)⬛ Deep Void (Background): #08090C🩵 Laser Cyan (Accents): #00F5FF💜 Electric Magenta (Highlights): #BD00FF◽ Matrix White (Text): #E2E8F0Option B: Stealth Modern (Minimalist Tech)⬛ Matte Carbon (Background): #121212🟩 Tactical Green (Accents): #00FF66🎛️ Control Gray (UI Elements): #2A2D34◽ Clean Silver (Text): #F8FAFC
+
+
