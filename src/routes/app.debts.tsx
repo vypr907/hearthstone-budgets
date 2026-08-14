@@ -649,9 +649,10 @@ function DebtDialog({
       await upsert.mutateAsync({
         id: debt?.id,
         name: name.trim(),
-        remaining_balance: remainingNum,
+        remaining_balance: remainingNum ?? originalNum,
         starting_balance: startingBalance,
-        interest_rate: rate ? Number(rate) : null,
+        // Interest rate is optional: blank stores null rather than 0.
+        interest_rate: rate.trim() !== "" && Number.isFinite(Number(rate)) ? Number(rate) : null,
         minimum_payment: minPay ? Number(minPay) : null,
         due_day: dated ? null : dueDay ? Number(dueDay) : null,
         billing_cycle: cycle.trim().toLowerCase() as BillingCycle,
