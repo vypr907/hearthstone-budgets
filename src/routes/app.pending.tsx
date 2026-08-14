@@ -313,8 +313,7 @@ function PendingPage() {
               {busy ? "Clearing…" : "Mark cleared"}
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogFooter>
-      </AlertDialogContent>
+        </AlertDialogContent>
       </AlertDialog>
     </>
   );
