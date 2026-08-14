@@ -22,3 +22,6 @@
 
 Known issue: theme still won't persist until the `household_members` UPDATE
 policy in docs/SCHEMA.md is run in Supabase.
+- ADR-061 reference: added docs/THEME_TOKENS.md (token → consumer map, from grep
+  across src/) and a dev-only `ThemeTokenPreview` swatch list in Settings under the
+  theme picker. No theme values or logic touched; read-only, editing out of scope.

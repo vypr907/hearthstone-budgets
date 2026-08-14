@@ -658,3 +658,19 @@
 * Settings screen gained a Theme section: a swatch button per theme, applying
   immediately on selection with no reload.
 * v1 is colors only — fonts and icon packs are out of scope (future ADR).
+
+## 2026-08-14 – Theme token reference (ADR-061 debug aid)
+
+### Completed
+
+* Added `docs/THEME_TOKENS.md`: grep-verified table of every CSS variable the
+  ADR-061 theme system overrides and which components/screens read each one.
+* Added `src/components/ThemeTokenPreview.tsx`, a dev-only read-only swatch list
+  rendered in a collapsible section under the Settings theme picker, showing each
+  token's computed value for the active theme.
+
+### Notes
+
+* Documentation/debugging aid only — no theme values, tokens, or switching logic
+  changed, and no new theme was added.
+* Read-only by design; per-user custom theme overrides remain a separate future feature.
