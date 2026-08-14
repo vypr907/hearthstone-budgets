@@ -119,6 +119,18 @@ function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="p-4">
+            <details>
+              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Theme token reference
+              </summary>
+              <div className="mt-3">
+                <ThemeTokenPreview />
+              </div>
+            </details>
+          </CardContent>
+        </Card>
       </div>
     </>
   );
