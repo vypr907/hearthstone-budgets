@@ -18,6 +18,7 @@ import { Route as AppSpendingByPlaceRouteImport } from './routes/app.spending-by
 import { Route as AppSpendingRouteImport } from './routes/app.spending'
 import { Route as AppSnapshotRouteImport } from './routes/app.snapshot'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
+import { Route as AppPendingRouteImport } from './routes/app.pending'
 import { Route as AppPaymentScheduleRouteImport } from './routes/app.payment-schedule'
 import { Route as AppPaycheckRouteImport } from './routes/app.paycheck'
 import { Route as AppMoreRouteImport } from './routes/app.more'
@@ -75,6 +76,11 @@ const AppSnapshotRoute = AppSnapshotRouteImport.update({
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPendingRoute = AppPendingRouteImport.update({
+  id: '/pending',
+  path: '/pending',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPaymentScheduleRoute = AppPaymentScheduleRouteImport.update({
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/app/more': typeof AppMoreRoute
   '/app/paycheck': typeof AppPaycheckRoute
   '/app/payment-schedule': typeof AppPaymentScheduleRoute
+  '/app/pending': typeof AppPendingRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
@@ -182,6 +189,7 @@ export interface FileRoutesByTo {
   '/app/more': typeof AppMoreRoute
   '/app/paycheck': typeof AppPaycheckRoute
   '/app/payment-schedule': typeof AppPaymentScheduleRoute
+  '/app/pending': typeof AppPendingRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
@@ -207,6 +215,7 @@ export interface FileRoutesById {
   '/app/more': typeof AppMoreRoute
   '/app/paycheck': typeof AppPaycheckRoute
   '/app/payment-schedule': typeof AppPaymentScheduleRoute
+  '/app/pending': typeof AppPendingRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
@@ -233,6 +242,7 @@ export interface FileRouteTypes {
     | '/app/more'
     | '/app/paycheck'
     | '/app/payment-schedule'
+    | '/app/pending'
     | '/app/settings'
     | '/app/snapshot'
     | '/app/spending'
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
     | '/app/more'
     | '/app/paycheck'
     | '/app/payment-schedule'
+    | '/app/pending'
     | '/app/settings'
     | '/app/snapshot'
     | '/app/spending'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/app/more'
     | '/app/paycheck'
     | '/app/payment-schedule'
+    | '/app/pending'
     | '/app/settings'
     | '/app/snapshot'
     | '/app/spending'
@@ -358,6 +370,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/app/settings'
       preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/pending': {
+      id: '/app/pending'
+      path: '/pending'
+      fullPath: '/app/pending'
+      preLoaderRoute: typeof AppPendingRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/payment-schedule': {
@@ -467,6 +486,7 @@ interface AppRouteChildren {
   AppMoreRoute: typeof AppMoreRoute
   AppPaycheckRoute: typeof AppPaycheckRoute
   AppPaymentScheduleRoute: typeof AppPaymentScheduleRoute
+  AppPendingRoute: typeof AppPendingRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSnapshotRoute: typeof AppSnapshotRoute
   AppSpendingRoute: typeof AppSpendingRoute
@@ -489,6 +509,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppMoreRoute: AppMoreRoute,
   AppPaycheckRoute: AppPaycheckRoute,
   AppPaymentScheduleRoute: AppPaymentScheduleRoute,
+  AppPendingRoute: AppPendingRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSnapshotRoute: AppSnapshotRoute,
   AppSpendingRoute: AppSpendingRoute,

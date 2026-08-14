@@ -69,3 +69,16 @@ policy in docs/SCHEMA.md is run in Supabase.
   now save a group edited down to one line as a plain transaction instead of
   blocking the save, which also self-heals any already-broken 1-line groups
   the next time they're opened and saved. No schema change.
+- Added a Pending screen (`src/routes/app.pending.tsx`) as a top-level bottom-nav
+  destination: all pending transactions (linked and manual), sortable by date /
+  amount / account / category, groupable by account or category with per-group
+  subtotals, plus a pending-total header card. Tapping a row confirms then clears
+  it — bill/debt-linked rows reuse `useMarkCleared`/`toPayable` (ADR-035/036/046)
+  so cycle credit and due-date rollover match Bills/Debts/Everything; unlinked
+  rows take a plain status update. No new clearing mechanism, no new ADR.
+  Bottom nav stays at 6 tabs: Accounts was demoted to the More grid to free the
+  slot (`src/components/BottomNav.tsx`, `src/routes/app.more.tsx`).
+  Files: src/routes/app.pending.tsx, src/components/BottomNav.tsx,
+  src/routes/app.more.tsx, docs/ARCHITECTURE.md.
+  Next: verify clearing a linked pending payment from this screen rolls the due
+  date in the live app.
