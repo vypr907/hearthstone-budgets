@@ -12,7 +12,8 @@ comfortably; on a 360px phone each tab is ~60px, still above the 44px tap-target
    reference screen and More already lists similar destinations.
 3. **Demote "All" (Everything)** — but that is high traffic, not recommended.
 
-Recommendation: option 1 (7 tabs). No demotion happens unless you say so.
+Chosen: option 2 — Accounts moves to the More grid, Pending takes its bottom-nav slot (nav stays
+at 6 tabs).
 
 **Reusable row layout** — `src/routes/app.transactions.tsx` is the existing "all transactions"
 list, but its row markup is inline in that route (not a component) and is tangled with split
@@ -42,7 +43,10 @@ New route `src/routes/app.pending.tsx`:
 - Empty state via `EmptyState` ("Nothing pending").
 - Own `head()` metadata.
 
-`src/components/BottomNav.tsx`: add a 7th icon-only entry (Clock icon) → `/app/pending`.
+`src/components/BottomNav.tsx`: replace the Accounts tab with an icon-only Pending entry (Clock
+icon) → `/app/pending`; nav stays at 6 tabs.
+`src/routes/app.more.tsx`: add "Accounts" (Wallet-style icon) to the More grid so it stays
+reachable.
 
 ## Docs
 
