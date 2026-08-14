@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { useHousehold, useSetExportFormat } from "@/lib/data-hooks";
 import { THEME_OPTIONS, useTheme, useSetTheme } from "@/lib/theme";
 import { ThemeTokenPreview } from "@/components/ThemeTokenPreview";
-
 import type { ExportFormat } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/settings")({
@@ -93,19 +92,8 @@ function SettingsPage() {
                 </button>
               ))}
             </div>
-            {import.meta.env.DEV ? (
-              <details className="rounded-md border p-2">
-                <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Theme token reference (dev)
-                </summary>
-                <div className="mt-2">
-                  <ThemeTokenPreview />
-                </div>
-              </details>
-            ) : null}
           </CardContent>
         </Card>
-
         <Card>
           <CardContent className="space-y-3 p-4">
             <div>
@@ -129,6 +117,18 @@ function SettingsPage() {
                 </Button>
               ))}
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <details>
+              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Theme token reference
+              </summary>
+              <div className="mt-3">
+                <ThemeTokenPreview />
+              </div>
+            </details>
           </CardContent>
         </Card>
       </div>
