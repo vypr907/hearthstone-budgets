@@ -619,7 +619,8 @@ no impact on category matching/grouping logic (ADR-011, ADR-012).
 
 Status: Decided 2026-08-03. Implemented 2026-08-03 (/app/categories icon+colour
 picker; icon + left-border colour accent on Categories and Spending rows,
-falling back to a gray tag icon when null).
+falling back to a gray tag icon when null). CATEGORY_ICONS set expanded
+2026-08-17 (30 → 54 options) — same picker component, no schema change.
 
 
 ## ADR-030: Institution Logo Field
@@ -1863,4 +1864,6 @@ in-app editing — so drift was always possible from the Categories screen
 itself. A dropdown over existing values closes that gap directly, without
 the FK/migration ADR-011 decided wasn't yet justified.
 
-Status: Decided 2026-08-17. Not yet implemented.
+Status: Decided 2026-08-17. Implemented 2026-08-17 (Categories screen Parent
+Category field: Select over distinct existing `parent_category` values, "None",
+and inline "+ Add new" text entry).

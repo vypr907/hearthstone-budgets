@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +13,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Pencil, Plus } from "lucide-react";
 import { useCategories, useCreateCategory, useUpdateCategory } from "@/lib/data-hooks";
 import type { Category } from "@/lib/supabase";
@@ -122,6 +129,9 @@ function CategoriesPage() {
   );
 }
 
+const NO_PARENT = "__none__";
+const NEW_PARENT = "__new_parent__";
+
 export function CategoryDialog({
   category,
   onClose,
@@ -131,13 +141,25 @@ export function CategoryDialog({
 }) {
   const create = useCreateCategory();
   const update = useUpdateCategory();
+  const { data: categories = [] } = useCategories();
   const open = category !== null;
   const isEdit = !!category?.id;
 
   const [name, setName] = useState("");
   const [parent, setParent] = useState("");
+  const [addingParent, setAddingParent] = useState(false);
+  const [parentBeforeAdd, setParentBeforeAdd] = useState("");
   const [icon, setIcon] = useState<string | null>(null);
   const [color, setColor] = useState<string | null>(null);
+
+  /** ADR-067: existing distinct parent_category values, for the dropdown. */
+  const parentOptions = useMemo(
+    () =>
+      [...new Set(categories.map((c) => c.parent_category?.trim()).filter((v): v is string => !!v))].sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    [categories],
+  );
 
   const key = category?.id ?? (open ? "new" : "");
   const [lastKey, setLastKey] = useState("");
@@ -145,6 +167,7 @@ export function CategoryDialog({
     setLastKey(key);
     setName(category?.name ?? "");
     setParent(category?.parent_category ?? "");
+    setAddingParent(false);
     setIcon(category?.icon ?? null);
     setColor(category?.color ?? null);
   }
@@ -192,12 +215,54 @@ export function CategoryDialog({
           </div>
           <div>
             <Label>Parent category</Label>
-            <Input
-              className="h-12"
-              placeholder="Optional grouping"
-              value={parent}
-              onChange={(e) => setParent(e.target.value)}
-            />
+            {addingParent ? (
+              <div className="flex gap-2">
+                <Input
+                  className="h-12"
+                  placeholder="New parent category"
+                  value={parent}
+                  onChange={(e) => setParent(e.target.value)}
+                  autoFocus
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12"
+                  onClick={() => {
+                    setAddingParent(false);
+                    setParent(parentBeforeAdd);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Select
+                value={parent || NO_PARENT}
+                onValueChange={(v) => {
+                  if (v === NEW_PARENT) {
+                    setParentBeforeAdd(parent);
+                    setParent("");
+                    setAddingParent(true);
+                    return;
+                  }
+                  setParent(v === NO_PARENT ? "" : v);
+                }}
+              >
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder="Optional grouping" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PARENT}>None</SelectItem>
+                  {parentOptions.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={NEW_PARENT}>+ Add new</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <IconPicker value={icon} onChange={setIcon} />
           <ColorPicker value={color} onChange={setColor} />
