@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
 import { SectionLabel } from "@/components/SectionLabel";
+import { TransactionTitle } from "@/components/TransactionTitle";
 import {
   useTransactions,
   useUpsertTransaction,
@@ -375,7 +376,10 @@ function TransactionsPage() {
                   <CardContent className="flex items-start gap-3 p-3">
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">
-                        {t.description || "Transaction"}
+                        <TransactionTitle
+                          transaction={t}
+                          placeName={t.institution_id ? institutionName[t.institution_id] : null}
+                        />
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                         <span>{t.transaction_date}</span>
@@ -503,6 +507,7 @@ function TransactionDetail({
   const linkedBill = bills.find((b) => b.id === transaction.linked_bill_id);
   const linkedDebt = debts.find((d) => d.id === transaction.linked_debt_id);
   const isLinked = !!(transaction.linked_bill_id || transaction.linked_debt_id);
+  const placeName = institutions.find((i) => i.id === transaction.institution_id)?.name ?? null;
 
   async function save() {
     try {
@@ -550,7 +555,9 @@ function TransactionDetail({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{transaction.description || "Transaction"}</DialogTitle>
+          <DialogTitle>
+            <TransactionTitle transaction={transaction} placeName={placeName} />
+          </DialogTitle>
         </DialogHeader>
 
         {!edit ? (

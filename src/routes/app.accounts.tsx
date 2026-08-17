@@ -3,6 +3,7 @@ import { AccountDialog } from "@/components/AccountDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { SectionLabel } from "@/components/SectionLabel";
 import { AppHeader } from "@/components/AppHeader";
+import { TransactionTitle } from "@/components/TransactionTitle";
 import {
   useAccounts,
   useCategories,
@@ -36,7 +37,7 @@ import {
 import { Pencil, Plus, Search, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Account, Transaction } from "@/lib/supabase";
+import type { Account, Institution, Transaction } from "@/lib/supabase";
 import { format } from "date-fns";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 
@@ -247,7 +248,10 @@ function AccountsPage() {
                     </div>
                   </div>
 
-                  <RecentActivity rows={recentByAccount[a.id] ?? []} />
+                  <RecentActivity
+                    rows={recentByAccount[a.id] ?? []}
+                    institutionById={institutionById}
+                  />
                   <Button
                     variant="outline"
                     className="mt-2 h-10 w-full"
@@ -269,7 +273,13 @@ function AccountsPage() {
 }
 
 /** Bank-statement style list of the most recent ledger rows for an account. */
-function RecentActivity({ rows }: { rows: Transaction[] }) {
+function RecentActivity({
+  rows,
+  institutionById,
+}: {
+  rows: Transaction[];
+  institutionById: Record<string, Institution>;
+}) {
   const [expanded, setExpanded] = useState(false);
   const { data: categories = [] } = useCategories();
   // ADR-044: split lines collapse into one entry with an expandable breakdown.
@@ -294,7 +304,12 @@ function RecentActivity({ rows }: { rows: Transaction[] }) {
           <div key={entry.key} className="border-b px-2 py-2 text-sm last:border-b-0">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="truncate">{t.description || "Transaction"}</p>
+                <p className="truncate">
+                  <TransactionTitle
+                    transaction={t}
+                    placeName={t.institution_id ? institutionById[t.institution_id]?.name : null}
+                  />
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {format(new Date(t.transaction_date), "MMM d")}
                   {t.status === "pending" ? " · pending" : ""}

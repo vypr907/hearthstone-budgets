@@ -26,3 +26,16 @@
   emoji, de-duplicated against the existing set. Same `IconPicker` grid, no
   UI/schema change. Files touched: `src/lib/visual-meta.ts`. Next: none
   outstanding for this task.
+
+- ADR-053/063 addendum: manual/generic transactions (no linked_bill_id,
+  no linked_debt_id, no "Fee: " description) now title themselves from place
+  instead of falling back to "Transaction" — place alone when description is
+  empty, "<Place> · <Description>" (description subdued/italic/muted) when
+  both are set, unchanged `description || "Transaction"` when no place is
+  set. New `src/components/TransactionTitle.tsx` shared by the Transactions
+  list row, its detail dialog title, and Accounts' Recent Activity row.
+  Fee/Bill payment/Debt payment descriptions are gated out and render exactly
+  as before (they're written by `src/lib/payments.ts` and always non-empty).
+  No schema change. Files touched: `src/components/TransactionTitle.tsx`
+  (new), `src/routes/app.transactions.tsx`, `src/routes/app.accounts.tsx`.
+  Next: none outstanding for this task.

@@ -1334,7 +1334,10 @@ linked immediately. Writes tolerate the column being absent.
 Reason: Groundwork for a "spending by place" view, captured at entry time without
 slowing the quick-add flow.
 
-Status: Decided 2026-08-11. Implemented (view pending).
+Status: Decided 2026-08-11. Implemented (view pending). 2026-08-17: manual/
+generic transactions (no linked_bill_id/linked_debt_id, no "Fee: " description)
+title themselves from place instead of a generic "Transaction" fallback —
+see ADR-063 addendum.
 
 ## ADR-054: Income sources are cards with their own detail route
 Decision: Each income source on the Paycheck Budget screen is a card linking to
@@ -1763,7 +1766,19 @@ entry, but in practice it prevents adding any actual note when a place is
 also being set, and conflates two different kinds of information. Splitting
 them costs one extra field, not new matching logic.
 
-Status: Decided 2026-08-14. Implemented 2026-08-14.
+Status: Decided 2026-08-14. Implemented 2026-08-14. 2026-08-17 addendum: the
+Transactions list row, its detail dialog title, and Accounts' Recent Activity
+row now title a manual/generic transaction (no linked_bill_id/linked_debt_id,
+no "Fee: " description) from its place — institution_id set + empty
+description → place alone; institution_id set + non-empty description →
+"<Place> · <Description>" with the description rendered subdued
+(`text-muted-foreground`, italic, smaller); institution_id null → unchanged
+(`description || "Transaction"`). Fee/Bill payment/Debt payment titles are
+untouched — those descriptions already never fall back and are excluded by
+the linked-id/"Fee: " gate. New shared `TransactionTitle` component in
+`src/components/TransactionTitle.tsx`, used by
+`src/routes/app.transactions.tsx` and `src/routes/app.accounts.tsx`. UI-only,
+no schema change.
 
 ---
 
