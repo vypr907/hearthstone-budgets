@@ -21,3 +21,8 @@
   text-input toggle for a genuinely new label — `parent_category` stays a plain
   text column, no schema change. Files touched: `src/lib/visual-meta.ts`,
   `src/routes/app.categories.tsx`. Next: none outstanding for this task.
+
+- ADR-029: expanded `CATEGORY_ICONS` again (`src/lib/visual-meta.ts`), 54 → 77
+  emoji, de-duplicated against the existing set. Same `IconPicker` grid, no
+  UI/schema change. Files touched: `src/lib/visual-meta.ts`. Next: none
+  outstanding for this task.

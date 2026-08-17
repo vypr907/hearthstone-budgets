@@ -620,7 +620,8 @@ no impact on category matching/grouping logic (ADR-011, ADR-012).
 Status: Decided 2026-08-03. Implemented 2026-08-03 (/app/categories icon+colour
 picker; icon + left-border colour accent on Categories and Spending rows,
 falling back to a gray tag icon when null). CATEGORY_ICONS set expanded
-2026-08-17 (30 → 54 options) — same picker component, no schema change.
+2026-08-17 (30 → 54 options), then expanded again 2026-08-17 (54 → 77
+options) — same picker component both times, no schema change.
 
 
 ## ADR-030: Institution Logo Field
