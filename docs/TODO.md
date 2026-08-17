@@ -28,6 +28,10 @@
 - [ ] Verify ADR-062/063/064 in the live app: manual transactions save as pending, the date field persists, Place and Description store separately, and a transfer's category lands on both rows.
 - [ ] Work through Fix Places once the ADR-065 backfill has run, to confirm only genuinely place-less transactions remain.
 
+## Phase 11 — Verification (2026-08-17)
+
+- [ ] Verify ADR-066 in the live app: re-advance a paid-off advance-type debt (e.g. MoneyLion Instacash) and confirm it drops `date_paid_off`, reactivates, and un-hides from the debt list — same debt id, no duplicate row. Also confirm the debt Type picker saves "credit card" (not "credit_card") without tripping the DB check constraint.
+
 ## Standing open items
 
 - [ ] Re-tag older transactions with a place (institution_id) so Spending by place totals are complete — can now be done from TransactionDetail edit mode (Group 7 Part 3 landed).
