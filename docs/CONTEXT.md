@@ -42,6 +42,9 @@ Private shared household budget and debt-payoff Android application migrated fro
   - ADR-062/063/064 complete: manual transactions default to pending with a status toggle, editable date, Place split from Description (shared `PlacePicker`), transfer category picker, plus a Fix Places repair screen
   - ADR-065 complete: bill/debt payment and fee transactions default their place from the linked bill/debt; one-time backfill still pending
   - Pending screen added as a bottom-nav destination (Accounts demoted to More); clearing reuses the existing payment path
+  - ADR-066 complete (app-side): `debt_type` enforced as a lowercase DB check constraint; advance-type debts reactivate (clear `date_paid_off`) on re-advance instead of staying hidden as paid off
+  - ADR-067 complete: Categories screen Parent Category field is a dropdown over existing values with inline "+ Add new"; category icon picker expanded to 77 options
+  - ADR-053/063 addendum complete: manual transactions title themselves from place instead of a generic "Transaction" fallback, once a place is set
 - Phase 12 not started: Wrap as a Real Android App (Capacitor)
 - Phase 12 not started: Publish to Google Play (Internal Testing)
 - Phase 13 not started: Cutover: Retire the Sheet
@@ -79,13 +82,15 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Income source deductions (`income_source_deductions`) are written as cleared deposit transactions on mark-received; percent deductions compute against net pay, not gross (ADR-055)
 - Transfers write two transactions sharing `transfer_group_id`; deleting one side deletes both (ADR-056)
 - Advances write a deposit transaction + a `debt_adjustments` row (`adjustment_type='advance'`); delete reverses both (ADR-056)
+- Recording a new advance against a paid-off `debt_type = 'advance'` debt clears `date_paid_off` in the same write, reactivating it in place; every other debt_type keeps the permanent paid-off behavior (ADR-066)
+- `debts.debt_type` is a DB-enforced lowercase check constraint (advance, credit card, invoice, loan, medical, other); the Categories Parent Category field is a dropdown over existing `parent_category` values with inline add-new, while `parent_category` itself stays free text (ADR-066, ADR-067)
 - `applyClearedPayment` reduces `opening_arrears` on overflow; bills cap payments at `cycle_due + opening_arrears` and reject excess (ADR-057)
 - `debt_adjustments` and `bill_adjustments` rows with `affects_balance=false` are record-only and never modify balances; delete skips reversal for them (ADR-058)
 - Bill adjustments modify `cycle_amount_due` for the current cycle only; they do not touch `bills.amount` (ADR-058)
 - Manually planned bill/debt payments are separate from due-date bucketing; the Planned card is never deduplicated against "Due this period" (ADR-059)
 - Themes are per household member, not per household; `data-theme` on `<html>` swaps token values only — no component changes, colors only in v1 (ADR-061)
 - Manually added transactions default to `pending`, not `cleared`; the user may toggle. Bill/debt payments, income deposits and transfers keep their own status rules (ADR-062)
-- A transaction's place (`institution_id`) is separate from its free-text description; both are captured via the shared `PlacePicker` (ADR-063)
+- A transaction's place (`institution_id`) is separate from its free-text description; both are captured via the shared `PlacePicker` (ADR-063); a manual transaction titles itself from place when one is set, instead of falling back to generic "Transaction" text
 - A transfer's category applies to both rows of the pair (ADR-064)
 - Bill/debt payment and fee transactions inherit the payable's `institution_id` at write time (ADR-065)
 - One-time payables treat all linked transactions as a single open cycle; the rolling cycle window does not apply to them
@@ -97,6 +102,7 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Account balances use snapshots plus transactions after snapshot.
 - Bills and debts remain synchronized with transaction records.
 - account_type is always stored lowercase.
+- debt_type is always stored lowercase and DB-enforced to one of: advance, credit card, invoice, loan, medical, other (ADR-066).
 - All bills track cycle_amount_due / cycle_paid_to_date and debts track cycle_paid_to_date; a cycle only rolls forward when fully paid (ADR-035).
 - Every submit/clear prompts for the amount being paid now and may be a partial payment (ADR-035).
 - Debts with known_finance_charge do not accrue interest_rate in payoff simulations.

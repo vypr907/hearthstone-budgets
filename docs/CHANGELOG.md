@@ -777,3 +777,56 @@
 * A one-time backfill script (not a migration file) was written but **not applied**:
   it sets `institution_id` on existing bill/debt payment and paired fee rows where
   it is null. Until it runs, older payments keep appearing in Fix Places.
+
+## 2026-08-17 – ADR-066: Advance-Type Debts Reactivate on Re-Advance
+
+### Completed
+
+* `useCreateAdvance` (`src/lib/data-hooks.ts`) now clears `date_paid_off` in the
+  same debts-table update when the advance's target debt has
+  `debt_type = 'advance'` and was previously paid off — reactivates the debt in
+  place (same id, same history) instead of leaving it hidden as "paid off".
+* Fixed `DEBT_TYPES` in `src/routes/app.debts.tsx` (was `"credit_card"`, but the
+  DB check constraint enforces `"credit card"` with a space) — the Type picker
+  was already an icon-styled `Select` per ADR-054, just had a stale value.
+* Debt list and detail now render `debt_type` via the existing
+  `formatTypeLabel()` helper (already reused for institution_type/billing_cycle/
+  adjustment_type) instead of the raw lowercase string.
+
+### Notes
+
+* No schema change this session — the `debt_type` check constraint migration
+  had already been run in Supabase before this work started.
+* Live verification still pending — see docs/TODO.md.
+
+## 2026-08-17 – ADR-029/067: Category Icon Expansion & Parent Category Dropdown
+
+### Completed
+
+* `CATEGORY_ICONS` (`src/lib/visual-meta.ts`) expanded twice the same day:
+  30 → 54, then 54 → 77 emoji, de-duplicated against what was already offered.
+  Same `IconPicker` grid component both times — no UI restructuring, no
+  schema change.
+* Implemented ADR-067: `CategoryDialog`'s Parent Category field is now a
+  `Select` sourced from the household's distinct existing
+  `categories.parent_category` values (plus "None"), with an inline
+  "+ Add new" text-input toggle for a genuinely new label.
+  `categories.parent_category` remains a plain text column — UI-only change.
+
+## 2026-08-17 – ADR-053/063 addendum: Manual Transactions Title from Place
+
+### Completed
+
+* New shared `TransactionTitle` component
+  (`src/components/TransactionTitle.tsx`): a manual/generic transaction (no
+  `linked_bill_id`/`linked_debt_id`, no `"Fee: "` description) now titles
+  itself from its place instead of falling back to generic "Transaction"
+  text — place alone when description is empty, `"<Place> · <Description>"`
+  (description rendered subdued: smaller, italic, muted) when both are set,
+  unchanged `description || "Transaction"` when no place is set.
+* Wired into the Transactions list row, its detail dialog title, and
+  Accounts' Recent Activity row.
+* Fee/Bill payment/Debt payment titles are explicitly gated out (by linked
+  id and by a `"Fee: "` description check) and render exactly as they did
+  before — those descriptions are written verbatim by `src/lib/payments.ts`
+  and are never empty, so they never hit the old fallback either.

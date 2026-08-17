@@ -31,6 +31,8 @@
 ## Phase 11 — Verification (2026-08-17)
 
 - [ ] Verify ADR-066 in the live app: re-advance a paid-off advance-type debt (e.g. MoneyLion Instacash) and confirm it drops `date_paid_off`, reactivates, and un-hides from the debt list — same debt id, no duplicate row. Also confirm the debt Type picker saves "credit card" (not "credit_card") without tripping the DB check constraint.
+- [ ] Verify ADR-067 in the live app: the Categories screen Parent Category field lists existing values as a dropdown, "+ Add new" lets you type and save a genuinely new one, and editing an existing category preselects its current parent.
+- [ ] Verify the ADR-053/063 manual-transaction-title change in the live app: a manual transaction with a place and no description shows the place alone as its title; with both set, shows "<Place> · <Description>" with the description visibly subdued; Fee/Bill payment/Debt payment titles are unchanged.
 
 ## Standing open items
 
