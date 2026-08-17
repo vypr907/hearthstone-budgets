@@ -1811,3 +1811,36 @@ the linked bill/debt in useMarkSubmitted, useMarkCleared's direct-clear
 branch, and insertFeeTransaction, all in src/lib/payments.ts; one-time
 backfill SQL written for existing null institution_id rows, pending manual
 run in Supabase — see docs/TODO.md).
+
+## ADR-066: Advance-Type Debts Reactivate on Re-Advance Instead of Staying "Paid Off"
+
+Decision:
+For debts where debt_type = 'advance', recording a new advance
+(debt_adjustments row, adjustment_type='advance', affects_balance=true) via
+the existing advance write path checks the target debt's date_paid_off. If
+set, the same write clears date_paid_off and un-hides the debt — same debt
+id, same history, continuing forward. No new debt record is created per
+advance cycle. This check lives in the write path itself (not a display-time
+inference), since it's a real state change worth persisting.
+
+Other debt types keep today's behavior unchanged: reaching
+remaining_balance = 0 stamps date_paid_off permanently, debt stays hidden.
+
+debt_type becomes an enforced (checked) column instead of free text, stored
+lowercase in the database — consistent with the existing account_type
+convention (`account_type is always stored lowercase`). The app displays it
+capitalized (title case) at render time, same pattern already used
+elsewhere for lowercase-stored/display-formatted fields.
+
+Reason:
+Revolving advance products (MoneyLion Instacash and similar) routinely hit
+$0 and get re-advanced days later as normal use, not as a new debt.
+Enforcing debt_type gives the reactivation check something reliable to key
+off — free text risked a casing/spelling mismatch (e.g. "Advance" vs
+"advance") silently skipping reactivation.
+
+Scope note: doesn't change ADR-056's advance-write mechanism itself or
+ADR-035/036's payment/cycle logic — only adds the reactivation branch to the
+existing advance write, plus the debt_type constraint.
+
+Status: Decided 2026-08-14. Not yet implemented.
