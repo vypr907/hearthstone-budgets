@@ -904,9 +904,15 @@ export function useCreateAdvance() {
       );
       // Step 2: update debt remaining_balance (ADR-037: payable row first).
       const next = Math.max(0, Number(args.debt.remaining_balance ?? 0) + args.amount);
+      // ADR-066: an advance against a paid-off advance-type debt reactivates
+      // it in the same write, rather than staying "paid off" and hidden.
+      const reactivate = args.debt.debt_type === "advance" && !!args.debt.date_paid_off;
       const { error: debtError } = await supabase
         .from("debts")
-        .update({ remaining_balance: next })
+        .update({
+          remaining_balance: next,
+          ...(reactivate ? { date_paid_off: null } : {}),
+        })
         .eq("id", args.debt.id);
       if (debtError) throw debtError;
       // Step 3: insert debt_adjustments row.

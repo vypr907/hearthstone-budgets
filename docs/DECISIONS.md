@@ -1843,4 +1843,4 @@ Scope note: doesn't change ADR-056's advance-write mechanism itself or
 ADR-035/036's payment/cycle logic — only adds the reactivation branch to the
 existing advance write, plus the debt_type constraint.
 
-Status: Decided 2026-08-14. Not yet implemented.
+Status: Decided 2026-08-14. Implemented 2026-08-17.

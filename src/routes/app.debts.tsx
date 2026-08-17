@@ -62,7 +62,7 @@ import { PastDueEditor } from "@/components/PastDueEditor";
 
 
 /** ADR-045: invoice joins the existing debt_type values. */
-const DEBT_TYPES = ["medical", "credit_card", "loan", "advance", "invoice", "other"];
+const DEBT_TYPES = ["advance", "credit card", "invoice", "loan", "medical", "other"];
 const ADD_INSTITUTION = "__add_institution__";
 const ADJUSTMENT_TYPES = [
   "insurance_covered",
@@ -275,7 +275,7 @@ function DebtsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{d.name}</p>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                      <span>{d.debt_type || "Debt"}</span>
+                      <span>{d.debt_type ? formatTypeLabel(d.debt_type) : "Debt"}</span>
                       {isPaidOff(d) ? (
                         <span>
                           · paid off{d.date_paid_off ? ` ${d.date_paid_off.slice(0, 10)}` : ""}
@@ -397,7 +397,7 @@ function DebtDetailDialog({
         <div className="space-y-4">
           <DetailGrid>
             <DetailItem label="Category" value={category?.name ?? "—"} />
-            <DetailItem label="Debt type" value={debt.debt_type ?? "—"} />
+            <DetailItem label="Debt type" value={debt.debt_type ? formatTypeLabel(debt.debt_type) : "—"} />
             <DetailItem label="Account" value={account?.name ?? "—"} />
             <DetailMoney label="Starting balance" value={debt.starting_balance} />
             <DetailMoney
