@@ -274,6 +274,13 @@ export function useMarkIncomeReceived() {
       // ADR-055: append one deposit row per deduction that has a destination
       // account. Percent deductions compute against the event's net amount.
       // Deductions with no destination_account_id are reporting-only — skip.
+      // ADR-068: remember which row belongs to which deduction so a funded
+      // bill/debt can be linked to that exact deposit after the insert.
+      const postedDeductions: Array<{
+        deduction: IncomeSourceDeduction;
+        amount: number;
+        rowIndex: number;
+      }> = [];
       if (event.income_source_id) {
         const { data: deductionRows, error: dedError } = await supabase
           .from("income_source_deductions")
