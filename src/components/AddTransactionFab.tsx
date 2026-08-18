@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  categoryDomain,
   useAccounts,
   useBills,
   useCategories,
