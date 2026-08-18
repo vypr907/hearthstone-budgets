@@ -138,3 +138,20 @@
   - Typecheck clean. Known issue: the pre-existing `arrears.test.ts` failure
     (opening-arrears expectation) is unrelated and still failing.
 
+
+- **ADR-069 — Ad-hoc income category (code side, pre-migration).**
+  - `data-hooks.ts`: `categoryDomain()` helper + optional `domain` argument on
+    `useCategories()` (no-arg behavior unchanged); `useUpsertSpendingBudget()`
+    now refuses to write a budget row against an `income`-domain category.
+  - `spending-actuals.ts`: `buildActualResolver()` and
+    `billsBudgetedByCategory()` take an optional `categories[]` and explicitly
+    exclude income-domain categories rather than relying on the amount sign.
+  - `app.index.tsx` / `app.spending.tsx`: budget grids and the budget category
+    picker now include `domain='spending'` rows only.
+  - `AddTransactionFab.tsx`: new explicit **Income** mode (Expense | Income |
+    Transfer). Income mode offers `domain='income'` categories only, stores a
+    positive amount, and hides split + bill/debt linking. Expense/split modes
+    now offer `domain='spending'` categories only.
+  - Typecheck clean. Known issue: until the manual SQL migration adding
+    `domain='income'` and the 4 income categories runs, Income mode shows an
+    empty category list (inline hint shown).

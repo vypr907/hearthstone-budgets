@@ -524,19 +524,21 @@ export function AddTransactionFab() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between rounded-md border p-3">
-                  <div className="pr-3">
-                    <Label htmlFor="tx-split">Split into multiple categories</Label>
-                    <p className="text-xs text-muted-foreground">
-                      One entry, several category lines that must add up to the total.
-                    </p>
+                {mode !== "income" ? (
+                  <div className="flex items-center justify-between rounded-md border p-3">
+                    <div className="pr-3">
+                      <Label htmlFor="tx-split">Split into multiple categories</Label>
+                      <p className="text-xs text-muted-foreground">
+                        One entry, several category lines that must add up to the total.
+                      </p>
+                    </div>
+                    <Switch
+                      id="tx-split"
+                      checked={mode === "split"}
+                      onCheckedChange={(v) => setMode(v ? "split" : "expense")}
+                    />
                   </div>
-                  <Switch
-                    id="tx-split"
-                    checked={mode === "split"}
-                    onCheckedChange={(v) => setMode(v ? "split" : "expense")}
-                  />
-                </div>
+                ) : null}
 
                 {mode === "split" ? (
                   <SplitLinesEditor
@@ -551,12 +553,17 @@ export function AddTransactionFab() {
                     <CategorySelect
                       value={categoryId}
                       onChange={setCategoryId}
-                      categories={sortedCategories}
+                      categories={mode === "income" ? incomeCategories : sortedCategories}
                     />
+                    {mode === "income" && incomeCategories.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No income categories yet — add one on the Categories screen.
+                      </p>
+                    ) : null}
                   </div>
                 )}
 
-                {mode !== "split" ? (
+                {mode !== "split" && mode !== "income" ? (
                   <div className="space-y-2">
                     <Label>Link to bill/debt (optional)</Label>
                     <Select value={link} onValueChange={setLink}>
@@ -604,13 +611,21 @@ export function AddTransactionFab() {
             <Button
               className="h-12 w-full"
               disabled={isBusy}
-              onClick={mode === "transfer" ? submitTransfer : submitExpense}
+              onClick={
+                mode === "transfer"
+                  ? submitTransfer
+                  : mode === "income"
+                    ? submitIncome
+                    : submitExpense
+              }
             >
               {mode === "transfer"
                 ? "Save transfer"
-                : mode === "split"
-                  ? "Save split transaction"
-                  : "Save transaction"}
+                : mode === "income"
+                  ? "Save income"
+                  : mode === "split"
+                    ? "Save split transaction"
+                    : "Save transaction"}
             </Button>
           </DialogFooter>
         </DialogContent>
