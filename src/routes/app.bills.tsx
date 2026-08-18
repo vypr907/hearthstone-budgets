@@ -604,6 +604,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setVariable(!!bill?.is_variable_amount);
     setOpeningArrears(bill?.opening_arrears != null ? String(bill.opening_arrears) : "");
     setArrearsAsOf(bill?.arrears_as_of ? bill.arrears_as_of.slice(0, 10) : "");
+    setFundingDeductionId(bill?.funding_deduction_id ?? "none");
     const derived = deriveCustomInterval(bill?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
@@ -618,6 +619,17 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     if (cycle === "custom" && !intervalDays) {
       toast.error("Enter how often this custom bill repeats");
       return;
+    }
+    // ADR-068: a reporting-only deduction posts no transaction, so it can't
+    // fund a bill — block the save rather than writing a dead link.
+    if (fundingDeductionId !== "none") {
+      const funder = deductions.find((d) => d.id === fundingDeductionId);
+      if (!funder?.destination_account_id) {
+        toast.error(
+          "That deduction is reporting-only — pick one with a destination account to fund this bill.",
+        );
+        return;
+      }
     }
     try {
       await upsert.mutateAsync({
