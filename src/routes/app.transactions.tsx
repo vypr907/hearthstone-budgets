@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Transaction } from "@/lib/supabase";
@@ -88,6 +88,10 @@ function TransactionsPage() {
   const [linkedFilter, setLinkedFilter] = useState("all"); // all | linked | unlinked
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  /** ADR-053/063: search matches free-text description or the resolved place. */
+  const [searchQuery, setSearchQuery] = useState("");
+  const [amountMin, setAmountMin] = useState("");
+  const [amountMax, setAmountMax] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterLabel, setFilterLabel] = useState<string | null>(null);
 
@@ -145,13 +149,40 @@ function TransactionsPage() {
       );
     if (dateFrom) out = out.filter((t) => t.transaction_date >= dateFrom);
     if (dateTo) out = out.filter((t) => t.transaction_date <= dateTo);
+    const q = searchQuery.trim().toLowerCase();
+    if (q)
+      out = out.filter((t) => {
+        const place = (t.institution_id && institutionName[t.institution_id]) || "";
+        return (
+          (t.description ?? "").toLowerCase().includes(q) ||
+          place.toLowerCase().includes(q)
+        );
+      });
+    if (amountMin.trim())
+      out = out.filter((t) => Math.abs(Number(t.amount)) >= Number(amountMin));
+    if (amountMax.trim())
+      out = out.filter((t) => Math.abs(Number(t.amount)) <= Number(amountMax));
     return [...out].sort((a, b) => {
       if (sort === "amount") return Math.abs(Number(b.amount)) - Math.abs(Number(a.amount));
       if (sort === "name")
         return (a.description ?? "").localeCompare(b.description ?? "");
       return b.transaction_date.localeCompare(a.transaction_date);
     });
-  }, [transactions, account, status, sort, categoryFilter, placeFilter, linkedFilter, dateFrom, dateTo]);
+  }, [
+    transactions,
+    account,
+    status,
+    sort,
+    categoryFilter,
+    placeFilter,
+    linkedFilter,
+    dateFrom,
+    dateTo,
+    searchQuery,
+    amountMin,
+    amountMax,
+    institutionName,
+  ]);
 
   /** ADR-044: collapse split lines into one entry per real transaction. */
   const entries = useMemo(() => groupLedgerRows(rows), [rows]);
@@ -187,6 +218,9 @@ function TransactionsPage() {
     linkedFilter !== "all",
     !!dateFrom,
     !!dateTo,
+    !!searchQuery.trim(),
+    !!amountMin.trim(),
+    !!amountMax.trim(),
   ].filter(Boolean).length;
 
   function clearFilters() {
@@ -197,6 +231,9 @@ function TransactionsPage() {
     setLinkedFilter("all");
     setDateFrom("");
     setDateTo("");
+    setSearchQuery("");
+    setAmountMin("");
+    setAmountMax("");
     setFilterLabel(null);
   }
 
@@ -204,6 +241,17 @@ function TransactionsPage() {
     <>
       <AppHeader title="Transactions" />
       <div className="space-y-3 p-4">
+        {/* Free-text search over description and place */}
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="h-11 pl-9"
+            placeholder="Search description or place…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
         {/* Primary sort + group controls */}
         <div className="grid grid-cols-2 gap-2">
           <Select value={sort} onValueChange={setSort}>
@@ -342,6 +390,32 @@ function TransactionsPage() {
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Amount from</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={amountMin}
+                    onChange={(e) => setAmountMin(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Amount to</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={amountMax}
+                    onChange={(e) => setAmountMax(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+              </div>
               {activeFilterCount > 0 ? (
                 <Button variant="ghost" size="sm" className="h-9 w-full" onClick={clearFilters}>
                   Clear all filters
@@ -458,7 +532,7 @@ function TransactionsPage() {
   );
 }
 
-function TransactionDetail({
+export function TransactionDetail({
   transaction,
   onClose,
 }: {
