@@ -497,7 +497,7 @@ function SpendingPage() {
                     <SelectValue placeholder="Pick a category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((c) => (
+                    {spendingCategories.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name}
                         {c.parent_category ? ` · ${c.parent_category}` : ""}
