@@ -97,6 +97,10 @@ Private shared household budget and debt-payoff Android application migrated fro
 - A transaction's place (`institution_id`) is separate from its free-text description; both are captured via the shared `PlacePicker` (ADR-063); a manual transaction titles itself from place when one is set, instead of falling back to generic "Transaction" text
 - A transfer's category applies to both rows of the pair (ADR-064)
 - Bill/debt payment and fee transactions inherit the payable's `institution_id` at write time (ADR-065)
+- Reversing a payment rolls the payable back first (ADR-037 guard), then writes an offsetting cleared transaction; a failed payable write never leaves an orphan reversal (ADR-070)
+- A deduction is authoritative: a funded bill/debt's CURRENT cycle is marked paid on mark-received even when amounts differ, with the discrepancy logged to `deduction_payment_events`; already-cleared cycles are never touched and no future cycle is pre-paid (ADR-068)
+- A bill/debt may only be funded by a deduction that has a `destination_account_id`; enforced at save time in the app, not by a DB constraint (ADR-068)
+- `categories.domain` is the single source of truth for where a category may appear: only `spending` categories get budgets or land in budget grids; `income` categories are ad-hoc income only and are chosen via an explicit Income mode, never inferred from the amount sign (ADR-069)
 - One-time payables treat all linked transactions as a single open cycle; the rolling cycle window does not apply to them
 - Future occurrences are projected at render time from the stored due date; projections are marked "Projected", count toward totals, and never write back to next_due_date/due_day (ADR-060)
 
