@@ -7,75 +7,24 @@
 - [x] [med] bill/debt that is pending should not show 'Submitted' button
 - [ ] [low] simple AI chatbot to help answer questions, generate summaries, guide user around the app, etc
 - [ ] [low] sync with banks like Rocket or Tilt
-- [ ] [high] ability to add fees/extras
+- [x] [high] ability to add fees/extras
 - [x] [high] generate 1 page reports
-- [ ] [low] colour themes customization
+- [x] [low] colour themes customization
 - [ ] [med] ability to add PDF/image receipts
-- [ ] [med] ability to split transactions
-- [ ] [med] ability to add invoices (treat as debts?)
-- [ ] [high] ability to split paycheck to accounts | marking income as received adds transaction to appropriate account
+- [x] [med] ability to split transactions
+- [x] [med] ability to add invoices (treat as debts?)
+- [x] [high] ability to split paycheck to accounts | marking income as received adds transaction to appropriate account
 
 # Views
 - [x] bill detail
 - [x] institutions - category icons / capitalization / group by / linked bills/debts
-- [ ] account detail
+- [x] account detail
 - [ ] 
 
 
 
 # Next Lovable prompt
-Implement ADR-060 (recurrence projection for forward-looking pay periods)
-exactly as decided — do not create a new ADR, do not touch computeArrears
-or any stored due-date field. This is purely additive to the Paycheck
-Budget screen's display logic.
 
-IMPORTANT — credits are limited and this may not finish in one pass. After
-EACH numbered step below, append a short note to docs/SESSION.md stating
-exactly which step just completed and which files changed, before moving to
-the next step. If you have to stop before finishing all steps, the last
-SESSION.md note must say which step is next, so work can resume in Kiro or
-a future Lovable session without re-deriving context.
-
-Steps:
-
-1. Find the existing function that advances a bill/debt's due date forward
-   by one billing_cycle interval (used when a payment clears a cycle —
-   likely in src/lib/payments.ts or src/lib/dates.ts). Do not write new
-   interval math — reuse this function's logic directly or by calling it.
-   → Checkpoint: note in SESSION.md which function you found and where.
-
-2. Write projectOccurrences(item, throughDate): starting from the item's
-   current next_due_date (bills) or computed due date (debts, ADR-017),
-   repeatedly advance by one cycle using the function from step 1,
-   collecting each resulting date, until the date exceeds throughDate.
-   throughDate = the end of the last pay period the household has an
-   entered future pay date for.
-   → Checkpoint: note in SESSION.md that this function exists and is
-   unit-testable in isolation (don't need to wire it into the UI yet to
-   verify it produces correct dates for a monthly and a biweekly item).
-
-3. Wire this into obligationsInRange() (or wherever the Paycheck Budget
-   screen assembles its period data): for periods beyond an item's current
-   unpaid occurrence, call projectOccurrences and bucket each result into
-   whichever period's date range it falls into, using the same half-open
-   start <= d < end comparison already used for real due items.
-   → Checkpoint: note in SESSION.md that projected items now appear in the
-   period data, even if UI styling isn't done yet.
-
-4. UI: give projected line items a visual marker (e.g. a "Projected" badge
-   or muted/dashed styling) distinguishing them from real due items in the
-   "Due this period" card. Both count toward the period total/left-to-
-   allocate math (ADR-039) — do not exclude projected amounts from totals.
-   → Checkpoint: final SESSION.md note confirming all 4 steps done.
-
-Do not touch: computeArrears, next_due_date/due_day storage, ADR-059's
-manual-planning feature (separate, unrelated addition), or variable-amount
-bill forecasting (projected amount = the item's current stored amount,
-no attempt to predict drift).
-
-Test: select the pay period ending 9/24 (currently shows nothing due) and
-confirm previously-invisible recurring bills now appear there, marked as
-Projected, with correct dates one cycle after their current next_due_date.
 
 # Next Steps
 
@@ -103,6 +52,14 @@ Show me the diffs for all three files before finalizing.
 
 # Things to work on
 - unable to edit transaction to add institution if transaction has a category split
+- on Paycheck Budget screen, amount left to allocate should be floating window or something so that you can see as you edit
+- after transaction naming edits yesterday, how to go back through past transactions to rename
+- I need to make an "Income" category, but then need a way to go back and populate previous transactions
+- Transactions, need a general "Search" field, ability to search by amounts
+- for transfers, what place do I use? If I'm transferring money from my One account to my wife's One account, or from my USAA to her One account, how does that work?
+- on Dashboard, top hero it has "$1409.21 set aside this pay period". what does this number mean? I want to add tooltips/help buttons all over the app.
+- Dashboard, "Payoff Progress" should be below "Still Owed This Pay Period", and should be collapsible/toggleable. "Past Due" should separate bills/debts that are paid by Deduction/HSA
+- Marking paycheck recieved (primary only) should also mark those bills/debts paid that are set to Paycheck deduction. Meaning we need to separate HSA and Paycheck Deduction. Not sure how that will work with transactions though, because on the bill/debt, I want the record, but because they are deductions, it comes from gross, not net.
 
 ---
 
