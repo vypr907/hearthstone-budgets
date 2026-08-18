@@ -1059,6 +1059,8 @@ function RecentDebtTransactions({ debt }: { debt: Debt }) {
               >
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
+              <ReversePaymentButton transaction={t} payable={toPayable("debt", debt)} />
+
             </div>
           ))}
         </div>
