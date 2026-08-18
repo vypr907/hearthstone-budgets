@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import {
   monthKey,
+  categoryDomain,
   useAccounts,
   useAllAccountBalances,
   useBills,
@@ -194,8 +195,8 @@ function Dashboard() {
   /** Budget vs actual for the current month, grouped by parent_category. */
   const budgetChart = useMemo(() => {
     const month = monthKey(new Date());
-    const resolver = buildActualResolver(actuals, transactions, bills);
-    const billsBudget = billsBudgetedByCategory(bills);
+    const resolver = buildActualResolver(actuals, transactions, bills, categories);
+    const billsBudget = billsBudgetedByCategory(bills, categories);
     const byId: Record<string, (typeof categories)[number]> = {};
     for (const c of categories) byId[c.id] = c;
     const groups = new Map<
@@ -212,7 +213,10 @@ function Dashboard() {
     >();
     for (const b of budgets) {
       if (!b.category_id) continue;
-      const parent = byId[b.category_id]?.parent_category?.trim() || "";
+      const cat = byId[b.category_id];
+      // ADR-069: only spending-domain categories belong in the budget grid.
+      if (!cat || categoryDomain(cat) !== "spending") continue;
+      const parent = cat.parent_category?.trim() || "";
       const key = parent || "__none__";
       const g = groups.get(key) ?? {
         name: parent || "Ungrouped",
