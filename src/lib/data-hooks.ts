@@ -21,10 +21,20 @@ import {
 import { advanceDate, needsEnvelope } from "./format";
 import { useAuth } from "./auth-context";
 
-export function useCategories() {
+/** Normalized domain comparison — stored values vary in case/whitespace. */
+export function categoryDomain(c: { domain?: string | null } | undefined | null) {
+  return (c?.domain ?? "").trim().toLowerCase();
+}
+
+/**
+ * ADR-069: callers may narrow to one domain ('spending' | 'income' | 'bill' |
+ * 'debt'). Calling with no argument keeps the original unfiltered behavior.
+ */
+export function useCategories(domain?: string) {
   const { householdId } = useAuth();
+  const wanted = domain?.trim().toLowerCase();
   return useQuery({
-    queryKey: ["categories", householdId],
+    queryKey: ["categories", householdId, wanted ?? "all"],
     enabled: !!householdId,
     queryFn: async (): Promise<Category[]> => {
       const { data, error } = await supabase
@@ -33,7 +43,9 @@ export function useCategories() {
         .eq("household_id", householdId!)
         .order("name");
       if (error) throw error;
-      return (data ?? []) as Category[];
+      const rows = (data ?? []) as Category[];
+      if (!wanted) return rows;
+      return rows.filter((c) => categoryDomain(c) === wanted);
     },
   });
 }
