@@ -34,6 +34,7 @@ import { CalendarPlus, ChevronLeft, ChevronRight, HelpCircle, PencilLine, Plus }
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ItemBar, ProgressRing, itemColor, DonutChart } from "@/components/viz";
+import { BudgetSplitLines } from "@/components/BudgetSplitLines";
 import { categoryVisual } from "@/lib/visual-meta";
 import { setTxPreFilter } from "@/lib/tx-filter-store";
 
@@ -773,11 +774,13 @@ function SpendingRow({
 
       {open ? (
         <div className="mt-2 space-y-2 pl-[3.75rem]">
-          <p className="text-[10px] tabular-nums text-muted-foreground">
-            Budget {formatMoney(r.budgeted)} spending + {formatMoney(r.billsBudgeted)}{" "}
-            bills · Spent {formatMoney(r.spendingSpent)} spending +{" "}
-            {formatMoney(r.billsSpent)} bills · 3-mo avg {formatMoney(r.avg3)}
-          </p>
+          <BudgetSplitLines
+            spendingBudgeted={r.budgeted}
+            billsBudgeted={r.billsBudgeted}
+            spendingSpent={r.spendingSpent}
+            billsSpent={r.billsSpent}
+            extra={{ label: "3-mo avg", value: r.avg3 }}
+          />
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
