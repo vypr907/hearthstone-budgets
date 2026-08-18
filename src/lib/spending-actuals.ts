@@ -110,11 +110,16 @@ export function buildActualResolver(
  * ADR-034: monthly-equivalent bill load per category — the "+ $Y bills" half of
  * the budgeted figure. Bills with an unusable custom cycle contribute nothing.
  */
-export function billsBudgetedByCategory(bills: Bill[]): Map<string, number> {
+export function billsBudgetedByCategory(
+  bills: Bill[],
+  categories: Category[] = [],
+): Map<string, number> {
+  const income = incomeCategoryIds(categories);
   const out = new Map<string, number>();
   for (const b of bills) {
     if (b.is_active === false) continue;
     if (!b.category_id) continue;
+    if (income.has(b.category_id)) continue; // ADR-069
     const monthly = monthlyEquivalent(b);
     if (monthly == null || !Number.isFinite(monthly)) continue;
     out.set(b.category_id, (out.get(b.category_id) ?? 0) + monthly);
