@@ -53,8 +53,8 @@ function todayISO() {
 const NO_CATEGORY = "__none__";
 const NO_LINK = "__none__";
 
-/** Entry mode for the Add Transaction dialog. */
-type TxMode = "expense" | "split" | "transfer";
+/** Entry mode for the Add Transaction dialog. ADR-069 adds "income". */
+type TxMode = "expense" | "split" | "transfer" | "income";
 
 /** Shared large, icon-based category dropdown (ADR-054 visual pass). */
 function CategorySelect({
