@@ -139,8 +139,21 @@ export function AddTransactionFab() {
   /** ADR-064: one optional category for the transfer pair as a whole. */
   const [transferCategoryId, setTransferCategoryId] = useState(NO_CATEGORY);
 
+  /** ADR-069: expense/split/transfer see spending categories only. */
   const sortedCategories = useMemo(
-    () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
+    () =>
+      categories
+        .filter((c) => categoryDomain(c) === "spending")
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [categories],
+  );
+
+  /** ADR-069: income mode sees income-domain categories only. */
+  const incomeCategories = useMemo(
+    () =>
+      categories
+        .filter((c) => categoryDomain(c) === "income")
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [categories],
   );
 
