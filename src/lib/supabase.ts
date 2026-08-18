@@ -130,6 +130,8 @@ export type Debt = {
   opening_arrears?: number | null;
   /** ADR-049: date the opening arrears figure was accurate as of. */
   arrears_as_of?: string | null;
+  /** ADR-068: paycheck deduction that funds this debt (must have an account). */
+  funding_deduction_id?: string | null;
 
   created_at: string;
   updated_at: string;
