@@ -34,6 +34,18 @@
 - [x] Verify ADR-067 in the live app: the Categories screen Parent Category field lists existing values as a dropdown, "+ Add new" lets you type and save a genuinely new one, and editing an existing category preselects its current parent.
 - [x] Verify the ADR-053/063 manual-transaction-title change in the live app: a manual transaction with a place and no description shows the place alone as its title; with both set, shows "<Place> · <Description>" with the description visibly subdued; Fee/Bill payment/Debt payment titles are unchanged.
 
+## Dashboard/UX polish pass — Lovable prompts ready (2026-08-18)
+
+- [ ] Send item 1 (Dashboard grid cutoff + font sizing) to Lovable — root cause and exact fix are in SESSION.md/chat history for this date.
+- [ ] Send item 2 (BudgetSplitLines shared component — dual ItemBar progress bars, Direction B) to Lovable.
+- [ ] Send item 3 (Paycheck Budget floating "left to allocate" bar) to Lovable.
+- [ ] Send item 4 (Transactions search v1: description/place text search + amountMin/amountMax range) to Lovable.
+- [ ] Send item 5 (tooltip/help pass: hero metric, Available credit, Still owed vs Past due, Projected badge) to Lovable.
+- [ ] Send item 6 (Dashboard reorder + collapsible Payoff Progress defaulting **closed**, binary Past Due deduction grouping) to Lovable. Note: only the binary (deduction-combined vs. other) grouping is buildable today — true Deduction-vs-HSA split needs the excluded Bucket C schema work.
+- [ ] Send item 7 (Transfer mode helper text explaining no Place is needed) to Lovable.
+- [ ] Send item 8 (Accounts Recent Activity rows clickable, reusing exported TransactionDetail) to Lovable.
+- [ ] Bucket C follow-up (separate from this pass, ADRs being drafted elsewhere): once Deduction vs. HSA payment-source separation lands, revisit item 6's Past Due grouping to make it a true 3-way split.
+
 ## Standing open items
 
 - [ ] Re-tag older transactions with a place (institution_id) so Spending by place totals are complete — can now be done from TransactionDetail edit mode (Group 7 Part 3 landed).

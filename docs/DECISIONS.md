@@ -771,6 +771,19 @@ card grouped by category, Net Worth Trend moved to the bottom, overdue amounts a
 progress corrected). Budget/actual spending-vs-bills split implemented 2026-08-06 on the
 Spending screen and the Dashboard budget-vs-actual card.
 
+**2026-08-18 addendum — what the hero "set aside this pay period" figure means:**
+`periodTotals.total` (`src/routes/app.index.tsx`) = sum, over
+`obligationsInRange(bills, debts, period.start, period.end)`
+(`src/lib/paycheck-budget.ts`), of each bill's `cycle_amount_due ?? amount` plus each
+debt's `minimum_payment`, for bills/debts due inside the current period — excluding
+debts flagged `is_paycheck_deduction` and any already `date_paid_off`. `period` runs
+from the primary income source's most recent past-or-today paycheck date up to its
+next scheduled one (or 14 days out with none scheduled), falling back to the
+calendar month when there's no primary income source. This is a forward-looking
+target — bills + minimum debt payments due before the next paycheck — not money
+already moved into savings, despite the "set aside" wording. Documented here for
+tooltip copy; no behavior change.
+
 
 ## ADR-035: Universal Partial Payments for Bills and Debts
 Decision:
