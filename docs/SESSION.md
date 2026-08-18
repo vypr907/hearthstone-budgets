@@ -104,3 +104,37 @@
   - `src/routes/app.bills.tsx` / `src/routes/app.debts.tsx`: Recent transactions
     sections now take the full bill/debt row and render the reverse button.
   - No schema changes. Typecheck clean.
+
+- ADR-068 Deduction-Funded Bill/Debt Auto-Payment implemented (extends ADR-055;
+  no new ADR created). Schema (`bills.funding_deduction_id`,
+  `debts.funding_deduction_id`, `deduction_payment_events`) was already applied
+  manually — not re-run.
+  - Step 1 diagnosis: mark-paycheck-received is `useMarkIncomeReceived()` in
+    `src/lib/income-hooks.ts`; it builds the net split deposit rows from
+    `income_source_splits` and appends one deposit per deduction with a
+    `destination_account_id` (percent computed against the event's
+    `actual_amount`), inserting them all in a single `transactions` insert
+    sharing `split_group_id = income_event.id`. Cycle state comes from
+    `deriveCycleInfo()` (`src/lib/ledger-state.ts`); the single writer for a
+    payment is `applyClearedPayment()` (`src/lib/payments.ts`, ADR-037 guard).
+  - New `src/lib/deduction-funding.ts` → `applyDeductionFundedPayments()`:
+    settles the CURRENT cycle only for bills/debts whose `funding_deduction_id`
+    matches a funded deduction. Payable is written first, then the deduction's
+    deposit transaction is linked (`linked_bill_id`/`linked_debt_id` +
+    `split_group_id`). Mismatch → paid anyway + `deduction_payment_events`
+    row (`expected_amount` = cycle due, `actual_amount` = posted deduction).
+    Already-cleared cycle → untouched, `already_paid_noop` row logged. No
+    future-cycle pre-pay.
+  - `income-hooks.ts`: deposit insert now `.select("id")` so each deduction's
+    transaction id is known; bills/debts queries invalidated after the run; new
+    `useHouseholdDeductions()` hook.
+  - `app.bills.tsx` / `app.debts.tsx`: "Funded by deduction" picker with
+    reporting-only entries disabled, plus a save-time block with an inline
+    error (app-level rule, not a DB constraint).
+  - `app.index.tsx`: past-due rows funded by a deduction now carry a
+    "Deduction-funded" / "HSA-funded" badge. `accounts` has no
+    `include_in_net_worth` column here, so the HSA case is derived from the
+    destination account's `account_type`/`name`. Past Due reorg untouched.
+  - Typecheck clean. Known issue: the pre-existing `arrears.test.ts` failure
+    (opening-arrears expectation) is unrelated and still failing.
+

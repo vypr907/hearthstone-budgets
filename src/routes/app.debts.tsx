@@ -32,6 +32,7 @@ import {
   statusVariant,
 } from "@/components/detail";
 import { formatMoney, debtDueDate } from "@/lib/format";
+import { useHouseholdDeductions } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -543,6 +544,8 @@ function DebtDialog({
   const upsert = useUpsertDebt();
   const del = useDeleteDebt();
   const { data: institutions = [] } = useInstitutions();
+  const { data: deductions = [] } = useHouseholdDeductions();
+  const [fundingDeductionId, setFundingDeductionId] = useState("none");
   const [name, setName] = useState("");
   const [remaining, setRemaining] = useState("");
   const [original, setOriginal] = useState("");
@@ -599,6 +602,7 @@ function DebtDialog({
     setOpeningArrears(debt?.opening_arrears != null ? String(debt.opening_arrears) : "");
     setArrearsAsOf(debt?.arrears_as_of ? debt.arrears_as_of.slice(0, 10) : "");
     setInvoiceNumber(debt?.invoice_number ?? "");
+    setFundingDeductionId(debt?.funding_deduction_id ?? "none");
     setNameTouched(!!debt?.name);
     setRemainingTouched(!!debt?.id);
     setMinPayTouched(!!debt?.id);
@@ -644,6 +648,17 @@ function DebtDialog({
     // so a quick invoice entry never trips the not-null constraint.
     const startingBalance =
       originalNum ?? remainingNum ?? Number(debt?.starting_balance ?? 0) ?? 0;
+    // ADR-068: a reporting-only deduction posts no transaction, so it can't
+    // fund a debt — block the save rather than writing a dead link.
+    if (fundingDeductionId !== "none") {
+      const funder = deductions.find((d) => d.id === fundingDeductionId);
+      if (!funder?.destination_account_id) {
+        toast.error(
+          "That deduction is reporting-only — pick one with a destination account to fund this debt.",
+        );
+        return;
+      }
+    }
     // A one-time charge has no due day — it has a real date.
     const dated = cycle !== "monthly";
     try {
@@ -669,6 +684,7 @@ function DebtDialog({
         opening_arrears: openingArrears ? Number(openingArrears) : 0,
         arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
         invoice_number: isInvoice ? invoiceNumber.trim() || null : null,
+        funding_deduction_id: fundingDeductionId === "none" ? null : fundingDeductionId,
       });
       toast.success(isEdit ? "Debt updated" : "Debt added");
       onClose();
@@ -772,6 +788,35 @@ function DebtDialog({
                 </SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          {/* ADR-068: a deduction that lands in an account can auto-pay this debt. */}
+          <div>
+            <Label>Funded by deduction</Label>
+            <Select value={fundingDeductionId} onValueChange={setFundingDeductionId}>
+              <SelectTrigger className="h-14 text-base">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="py-3 text-base">
+                  Not deduction-funded
+                </SelectItem>
+                {deductions.map((d) => (
+                  <SelectItem
+                    key={d.id}
+                    value={d.id}
+                    disabled={!d.destination_account_id}
+                    className="py-3 text-base"
+                  >
+                    {d.name}
+                    {d.destination_account_id ? "" : " — reporting only"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              When the paycheck is marked received, this debt's current cycle is paid
+              automatically. Reporting-only deductions can't fund a debt.
+            </p>
           </div>
           {/* ADR-052: invoice reference number drives the auto-composed name. */}
           {isInvoice ? (

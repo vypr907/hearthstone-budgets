@@ -15,6 +15,7 @@ import {
   useDeleteBillAdjustment,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
+import { useHouseholdDeductions } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -569,6 +570,8 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   const del = useDeleteBill();
   const { data: categories = [] } = useCategories();
   const { data: institutions = [] } = useInstitutions();
+  const { data: deductions = [] } = useHouseholdDeductions();
+  const [fundingDeductionId, setFundingDeductionId] = useState("none");
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDay, setDueDay] = useState("");
@@ -601,6 +604,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setVariable(!!bill?.is_variable_amount);
     setOpeningArrears(bill?.opening_arrears != null ? String(bill.opening_arrears) : "");
     setArrearsAsOf(bill?.arrears_as_of ? bill.arrears_as_of.slice(0, 10) : "");
+    setFundingDeductionId(bill?.funding_deduction_id ?? "none");
     const derived = deriveCustomInterval(bill?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
@@ -615,6 +619,17 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     if (cycle === "custom" && !intervalDays) {
       toast.error("Enter how often this custom bill repeats");
       return;
+    }
+    // ADR-068: a reporting-only deduction posts no transaction, so it can't
+    // fund a bill — block the save rather than writing a dead link.
+    if (fundingDeductionId !== "none") {
+      const funder = deductions.find((d) => d.id === fundingDeductionId);
+      if (!funder?.destination_account_id) {
+        toast.error(
+          "That deduction is reporting-only — pick one with a destination account to fund this bill.",
+        );
+        return;
+      }
     }
     try {
       await upsert.mutateAsync({
@@ -631,6 +646,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         is_variable_amount: variable,
         opening_arrears: openingArrears ? Number(openingArrears) : 0,
         arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
+        funding_deduction_id: fundingDeductionId === "none" ? null : fundingDeductionId,
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
       onClose();
@@ -790,6 +806,32 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
                 <SelectItem value={ADD_INSTITUTION}>+ Add new institution</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          {/* ADR-068: a deduction that lands in an account can auto-pay this bill. */}
+          <div>
+            <Label>Funded by deduction</Label>
+            <Select value={fundingDeductionId} onValueChange={setFundingDeductionId}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not deduction-funded</SelectItem>
+                {deductions.map((d) => (
+                  <SelectItem
+                    key={d.id}
+                    value={d.id}
+                    disabled={!d.destination_account_id}
+                  >
+                    {d.name}
+                    {d.destination_account_id ? "" : " — reporting only"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              When the paycheck is marked received, this bill's current cycle is paid
+              automatically. Reporting-only deductions can't fund a bill.
+            </p>
           </div>
           <div>
             <Label>Manual or auto</Label>
