@@ -646,6 +646,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         is_variable_amount: variable,
         opening_arrears: openingArrears ? Number(openingArrears) : 0,
         arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
+        funding_deduction_id: fundingDeductionId === "none" ? null : fundingDeductionId,
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
       onClose();
