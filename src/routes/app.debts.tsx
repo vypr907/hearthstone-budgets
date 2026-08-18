@@ -773,6 +773,35 @@ function DebtDialog({
               </SelectContent>
             </Select>
           </div>
+          {/* ADR-068: a deduction that lands in an account can auto-pay this debt. */}
+          <div>
+            <Label>Funded by deduction</Label>
+            <Select value={fundingDeductionId} onValueChange={setFundingDeductionId}>
+              <SelectTrigger className="h-14 text-base">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="py-3 text-base">
+                  Not deduction-funded
+                </SelectItem>
+                {deductions.map((d) => (
+                  <SelectItem
+                    key={d.id}
+                    value={d.id}
+                    disabled={!d.destination_account_id}
+                    className="py-3 text-base"
+                  >
+                    {d.name}
+                    {d.destination_account_id ? "" : " — reporting only"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              When the paycheck is marked received, this debt's current cycle is paid
+              automatically. Reporting-only deductions can't fund a debt.
+            </p>
+          </div>
           {/* ADR-052: invoice reference number drives the auto-composed name. */}
           {isInvoice ? (
             <div>
