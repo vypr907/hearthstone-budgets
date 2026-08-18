@@ -45,6 +45,10 @@ Private shared household budget and debt-payoff Android application migrated fro
   - ADR-066 complete (app-side): `debt_type` enforced as a lowercase DB check constraint; advance-type debts reactivate (clear `date_paid_off`) on re-advance instead of staying hidden as paid off
   - ADR-067 complete: Categories screen Parent Category field is a dropdown over existing values with inline "+ Add new"; category icon picker expanded to 77 options
   - ADR-053/063 addendum complete: manual transactions title themselves from place instead of a generic "Transaction" fallback, once a place is set
+  - Mobile polish pass complete (8 items): safe-area bottom clearance, shared `BudgetSplitLines` dual bars, sticky "left to allocate" pill, Transactions text + amount-range search, `HelpButton` popovers, Dashboard reorder with collapsible Payoff Progress and grouped Past Due, Transfer helper text, clickable Accounts Recent Activity
+  - ADR-070 complete: payment reversal tool (`useReversePayment` + `ReversePaymentButton`) on Bill/Debt recent transactions
+  - ADR-068 complete: deduction-funded bill/debt auto-payment on mark-received (`src/lib/deduction-funding.ts`, `deduction_payment_events`, "Funded by deduction" picker, past-due funding badges)
+  - ADR-069 complete (code side): domain-aware categories, Income mode in Add Transaction, budget grids/write path restricted to `domain='spending'`; pending the manual migration adding `domain='income'` and the four income categories
 - Phase 12 not started: Wrap as a Real Android App (Capacitor)
 - Phase 12 not started: Publish to Google Play (Internal Testing)
 - Phase 13 not started: Cutover: Retire the Sheet
