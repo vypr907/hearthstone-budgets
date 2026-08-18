@@ -26,7 +26,9 @@ export function buildActualResolver(
   actuals: SpendingActual[],
   transactions: Transaction[],
   bills: Bill[] = [],
+  categories: Category[] = [],
 ) {
+  const income = incomeCategoryIds(categories);
   const billCategory = new Map<string, string | null>(
     bills.map((b) => [b.id, b.category_id ?? null]),
   );
@@ -38,6 +40,7 @@ export function buildActualResolver(
     const categoryId =
       t.category_id ?? (linkedBillId ? (billCategory.get(linkedBillId) ?? null) : null);
     if (!categoryId) continue;
+    if (income.has(categoryId)) continue; // ADR-069: ad-hoc income isn't spend
     const amount = Number(t.amount || 0);
     if (amount >= 0) continue; // only money out counts as spend
     const d = new Date(t.transaction_date);
