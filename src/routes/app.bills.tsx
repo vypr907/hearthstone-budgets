@@ -15,6 +15,7 @@ import {
   useDeleteBillAdjustment,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
+import { useHouseholdDeductions } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
