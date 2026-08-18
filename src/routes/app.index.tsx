@@ -382,9 +382,15 @@ function Dashboard() {
             <p className="mt-1 text-4xl font-extrabold tracking-tight tabular-nums">
               {formatMoney(spendable.total)}
             </p>
-            <p className="mt-1 text-sm opacity-90">
-              {formatMoney(periodTotals.total)} set aside this {period.label} ·{" "}
-              {formatMoney(payoffTotals.remaining)} debt to go
+            <p className="mt-1 inline-flex items-center gap-1 text-sm opacity-90">
+              <span>
+                {formatMoney(periodTotals.total)} set aside this {period.label} ·{" "}
+                {formatMoney(payoffTotals.remaining)} debt to go
+              </span>
+              <HelpButton>
+                Bills and minimum debt payments due before your next paycheck — not money
+                already moved into savings.
+              </HelpButton>
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-[12px] bg-brand-foreground/15 p-3">
@@ -424,7 +430,13 @@ function Dashboard() {
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Available credit</span>
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  Available credit
+                  <HelpButton>
+                    Unused credit-card limit, counted as spendable since it's money you
+                    could use right now.
+                  </HelpButton>
+                </span>
                 <span className="font-bold tabular-nums">
                   {formatMoney(spendable.availableCredit)}
                 </span>
@@ -503,35 +515,6 @@ function Dashboard() {
                           : 0
                       }
                     />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {payoffProgress.length > 0 && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Payoff progress
-              </p>
-              <div className="mt-3 space-y-3">
-                {payoffProgress.map((d, i) => (
-                  <div key={d.id}>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="flex min-w-0 items-center gap-1.5 truncate">
-                        <span aria-hidden>{emojiFor(d.name, "🏦")}</span>
-                        <span className="truncate">{d.name}</span>
-                      </span>
-                      <span className="shrink-0 font-bold tabular-nums">
-                        {formatMoney(d.remaining)}
-                      </span>
-                    </div>
-                    <ItemBar className="mt-1" value={d.pct} color={itemColor(i)} />
-                    <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                      {Math.round(d.pct)}% paid off
-                    </p>
                   </div>
                 ))}
               </div>
