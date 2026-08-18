@@ -830,3 +830,133 @@
   id and by a `"Fee: "` description check) and render exactly as they did
   before — those descriptions are written verbatim by `src/lib/payments.ts`
   and are never empty, so they never hit the old fallback either.
+
+## 2026-08-18 – Mobile Polish Pass (8 items)
+
+### Completed
+
+* Planning pass first (spec-only, no code): root-caused the Dashboard grid
+  cutoff, confirmed the "boring card" pattern was shared by `BudgetTile` and
+  `SpendRow`, documented the hero set-aside formula as a 2026-08-18 addendum to
+  ADR-034 in `docs/DECISIONS.md`, and resolved four judgment calls with the
+  user (dual progress bars over a 2x2 grid, amount **range** search, Payoff
+  Progress collapsible defaulting closed, items 7/8 built rather than noted).
+* Safe-area clearance: `src/routes/app.tsx` uses
+  `pb-[calc(6rem+env(safe-area-inset-bottom))]` and the `AddTransactionFab`
+  FAB `bottom-[calc(6rem+env(safe-area-inset-bottom))]`; `BudgetTile`'s
+  over/left caption bumped `text-[10px]` → `text-xs`.
+* New `src/components/BudgetSplitLines.tsx` — dual `ItemBar` rows (Spending vs
+  Bills) with an optional `extra` line, rendered in `BudgetTile`
+  (`app.index.tsx`) and `SpendRow` (`app.spending.tsx`, `extra` = 3-month avg).
+* Paycheck Budget: sticky, safe-area-aware "left to allocate" pill inside
+  `PeriodBudget`, additive to the existing Card and sharing its value/colour
+  logic.
+* Transactions: persistent description/place search input plus "Amount from" /
+  "Amount to" range inputs, wired into the filter chain, `activeFilterCount`
+  and `clearFilters()`.
+* New `src/components/HelpButton.tsx` (Popover + HelpCircle) on the Dashboard
+  hero set-aside figure, Available credit row, Past due header and the
+  Paycheck "Projected" badge.
+* Dashboard reorg: Payoff progress moved below "Still owed" and made
+  collapsible (default closed); Past due split into a "Paycheck / HSA
+  deduction" group (via `debts.is_paycheck_deduction`) and "Other", extracted
+  as a shared `OverdueRow`. `overdueTotal` unchanged.
+* Transfer mode gained static helper text explaining that transfers move money
+  between the household's own accounts, so no Place is needed.
+* `TransactionDetail` exported from `app.transactions.tsx` and mounted in
+  `app.accounts.tsx`; Recent Activity rows are now clickable.
+
+### Notes
+
+* No schema changes; no new ADRs (references ADR-023/029/032/034/039/049/053/
+  056/059/060/063). Typecheck clean.
+* Past Due grouping is binary only — a true Deduction-vs-HSA 3-way split needs
+  schema work that stayed out of scope.
+
+## 2026-08-18 – ADR-070: Payment Reversal Tool
+
+### Completed
+
+* `src/lib/payments.ts`: new `useReversePayment()` — rolls the payable back
+  first through the existing `updateRow()` guard (`.select("id")`, throws on 0
+  rows) and only then inserts the offsetting cleared transaction, so a failed
+  payable write can never leave an orphan reversal row.
+  Bills: `cycle_paid_to_date = max(0, paid - abs(amount))`, `payment_status`
+  back to `unpaid` when below `cycle_amount_due ?? amount`.
+  Debts: same cycle rule plus `remaining_balance += abs(amount)` and
+  `date_paid_off` cleared.
+* New `src/components/ReversePaymentButton.tsx`: Undo2 icon button beside the
+  trash button, shown only for cleared, bill/debt-linked, negative rows, with a
+  confirm dialog and a reversal-date field defaulting to today.
+* `app.bills.tsx` / `app.debts.tsx`: Recent transactions sections now take the
+  full bill/debt row and render the reverse button.
+
+### Notes
+
+* Patterns reused from ADR-037 (payable-first writes) and ADR-046 (fee/ledger
+  pairing); no new ADR created. No schema changes.
+
+## 2026-08-18 – ADR-068: Deduction-Funded Bill/Debt Auto-Payment
+
+### Completed
+
+* Diagnosis: mark-paycheck-received is `useMarkIncomeReceived()` in
+  `src/lib/income-hooks.ts`; it builds net split deposits from
+  `income_source_splits` and appends one deposit per deduction with a
+  `destination_account_id` (percent computed against the event's
+  `actual_amount`), inserted together sharing `split_group_id = income_event.id`.
+  Cycle state comes from `deriveCycleInfo()`; the single payment writer is
+  `applyClearedPayment()`.
+* New `src/lib/deduction-funding.ts` → `applyDeductionFundedPayments()`:
+  settles the CURRENT cycle only for bills/debts whose `funding_deduction_id`
+  matches a funded deduction. Payable written first, then the deduction's
+  deposit transaction is linked (`linked_bill_id` / `linked_debt_id` +
+  `split_group_id`). Amount mismatch → paid anyway plus a
+  `deduction_payment_events` row (`event_type='mismatch'`, `expected_amount` =
+  cycle due, `actual_amount` = posted deduction). Already-cleared cycle →
+  untouched, `already_paid_noop` row logged. No future-cycle pre-pay.
+* `income-hooks.ts`: deposit insert now `.select("id")` so each deduction's
+  transaction id is known; bills/debts queries invalidated after the run; new
+  `useHouseholdDeductions()` hook.
+* `app.bills.tsx` / `app.debts.tsx`: "Funded by deduction" picker with
+  reporting-only deductions disabled, plus a save-time block with an inline
+  error (app-level rule, not a DB constraint).
+* `app.index.tsx`: past-due rows funded by a deduction carry a
+  "Deduction-funded" / "HSA-funded" badge; the HSA case is derived from the
+  destination account's `account_type`/`name` since `accounts` has no
+  `include_in_net_worth` column here.
+
+### Notes
+
+* Schema (`bills.funding_deduction_id`, `debts.funding_deduction_id`,
+  `deduction_payment_events`) was applied manually in Supabase before this work
+  and was not re-run. Extends ADR-055; no new ADR created.
+* Known issue: the pre-existing `arrears.test.ts` failure (opening-arrears
+  expectation) is unrelated and still failing.
+
+## 2026-08-18 – ADR-069: Ad-Hoc Income Category (code side, pre-migration)
+
+### Completed
+
+* `src/lib/data-hooks.ts`: new `categoryDomain()` helper and an optional
+  `domain` argument on `useCategories()` (no-argument behavior unchanged);
+  `useUpsertSpendingBudget()` now refuses to write a budget row against an
+  `income`-domain category.
+* `src/lib/spending-actuals.ts`: `buildActualResolver()` and
+  `billsBudgetedByCategory()` accept an optional `categories[]` and explicitly
+  exclude income-domain categories instead of relying on the amount sign as an
+  incidental filter.
+* `app.index.tsx` / `app.spending.tsx`: budget grids and the budget category
+  picker include `domain='spending'` rows only.
+* `src/components/AddTransactionFab.tsx`: explicit **Income** mode
+  (Expense | Income | Transfer). Income mode offers `domain='income'`
+  categories only, stores a positive amount, and hides split entry and
+  bill/debt linking; Expense/Split modes now offer `domain='spending'`
+  categories only.
+
+### Notes
+
+* Mode is user-chosen, never inferred from the amount sign.
+* Until the manual SQL migration extending `categories.domain` to `'income'`
+  and inserting the four income categories (Income, Credit, Refund, Gift) runs,
+  Income mode shows an empty category list with an inline hint. Typecheck clean.
