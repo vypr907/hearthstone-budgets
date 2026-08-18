@@ -764,8 +764,8 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
           <span
             className={
               over
-                ? "text-[10px] uppercase tracking-widest text-destructive"
-                : "text-[10px] uppercase tracking-widest text-muted-foreground"
+                ? "text-xs uppercase tracking-widest text-destructive"
+                : "text-xs uppercase tracking-widest text-muted-foreground"
             }
           >
             {over
@@ -775,15 +775,13 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
         </div>
       </div>
       {open ? (
-        <div className="mt-2 space-y-0.5 text-[10px] tabular-nums text-muted-foreground">
-          <p>
-            Budget {formatMoney(g.spendingBudgeted)} spending +{" "}
-            {formatMoney(g.billsBudgeted)} bills
-          </p>
-          <p>
-            Spent {formatMoney(g.spendingSpent)} spending + {formatMoney(g.billsSpent)}{" "}
-            bills
-          </p>
+        <div className="mt-2">
+          <BudgetSplitLines
+            spendingBudgeted={g.spendingBudgeted}
+            billsBudgeted={g.billsBudgeted}
+            spendingSpent={g.spendingSpent}
+            billsSpent={g.billsSpent}
+          />
         </div>
       ) : null}
     </button>
