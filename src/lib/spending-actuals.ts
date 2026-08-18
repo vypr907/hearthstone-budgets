@@ -1,6 +1,17 @@
-import type { Bill, SpendingActual, Transaction } from "./supabase";
-import { monthKey } from "./data-hooks";
+import type { Bill, Category, SpendingActual, Transaction } from "./supabase";
+import { categoryDomain, monthKey } from "./data-hooks";
 import { monthlyEquivalent } from "./format";
+
+/**
+ * ADR-069: set of category ids in the 'income' domain. Ad-hoc income never
+ * belongs in a spending budget, so it is excluded explicitly rather than
+ * relying on the amount sign as an incidental filter.
+ */
+function incomeCategoryIds(categories: Category[] = []): Set<string> {
+  return new Set(
+    categories.filter((c) => categoryDomain(c) === "income").map((c) => c.id),
+  );
+}
 
 /**
  * Current-month actuals come from the ledger when a category has any logged
