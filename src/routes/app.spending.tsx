@@ -144,17 +144,28 @@ function SpendingPage() {
   }, [categories]);
 
   const resolver = useMemo(
-    () => buildActualResolver(actuals, transactions, bills),
-    [actuals, transactions, bills],
+    () => buildActualResolver(actuals, transactions, bills, categories),
+    [actuals, transactions, bills, categories],
   );
 
-  const billsBudget = useMemo(() => billsBudgetedByCategory(bills), [bills]);
+  const billsBudget = useMemo(
+    () => billsBudgetedByCategory(bills, categories),
+    [bills, categories],
+  );
+
+  /** ADR-069: spending-domain categories only — never income. */
+  const spendingCategories = useMemo(
+    () => categories.filter((c) => categoryDomain(c) === "spending"),
+    [categories],
+  );
 
   const groups = useMemo(() => {
     const last3 = [0, 1, 2].map((n) => shiftMonth(activeMonth, -n));
 
     const rows: Row[] = budgets
-      .filter((b) => !!b.category_id)
+      .filter(
+        (b) => !!b.category_id && categoryDomain(categoryById[b.category_id!]) === "spending",
+      )
       .map((b) => {
         const catId = b.category_id!;
         const current = resolver.resolve(catId, activeMonth);
