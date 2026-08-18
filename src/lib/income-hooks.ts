@@ -8,6 +8,7 @@ import {
   type PayPeriodAllocation,
 } from "./supabase";
 import { useAuth } from "./auth-context";
+import { applyDeductionFundedPayments } from "./deduction-funding";
 
 export function useIncomeSources() {
   const { householdId } = useAuth();
