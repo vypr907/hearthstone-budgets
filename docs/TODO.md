@@ -44,7 +44,7 @@
 - [ ] Send item 6 (Dashboard reorder + collapsible Payoff Progress defaulting **closed**, binary Past Due deduction grouping) to Lovable. Note: only the binary (deduction-combined vs. other) grouping is buildable today — true Deduction-vs-HSA split needs the excluded Bucket C schema work.
 - [ ] Send item 7 (Transfer mode helper text explaining no Place is needed) to Lovable.
 - [ ] Send item 8 (Accounts Recent Activity rows clickable, reusing exported TransactionDetail) to Lovable.
-- [ ] Bucket C follow-up (separate from this pass, ADRs being drafted elsewhere): once Deduction vs. HSA payment-source separation lands, revisit item 6's Past Due grouping to make it a true 3-way split.
+- [ ] Revisit item 6's Past Due grouping as a true 3-way split now that ADR-068 labels rows Deduction-funded vs HSA-funded (labels landed 2026-08-18; the grouping itself is still binary).
 
 ## Standing open items
 

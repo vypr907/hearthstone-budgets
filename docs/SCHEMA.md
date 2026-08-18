@@ -616,6 +616,34 @@ Deductions with `destination_account_id` set get a real deposit transaction
 when the pay event is marked received (ADR-047), sharing that event's
 `split_group_id`. Deductions with no destination account are reporting-only.
 
+## Deduction-funded bills/debts (ADR-068)
+
+Applied manually 2026-08-18 in the Supabase SQL Editor.
+
+```sql
+alter table bills add column funding_deduction_id uuid references income_source_deductions(id);
+alter table debts add column funding_deduction_id uuid references income_source_deductions(id);
+
+create table if not exists deduction_payment_events (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  bill_id uuid references bills(id) on delete cascade,
+  debt_id uuid references debts(id) on delete cascade,
+  deduction_id uuid not null references income_source_deductions(id) on delete cascade,
+  event_type text not null check (event_type in ('mismatch','already_paid_noop')),
+  expected_amount numeric(12,2),
+  actual_amount numeric(12,2),
+  note text,
+  created_at timestamptz not null default now()
+);
+```
+
+A bill/debt may only point at a deduction that has a `destination_account_id`;
+that rule is enforced in the app's write path (bill/debt dialogs), not by a DB
+constraint. `deduction_payment_events` is written only when a deduction-funded
+payment doesn't match the cycle's due amount, or when the cycle was already
+cleared by hand and the auto-payment did nothing.
+
 ---
 
 ## transactions.transfer_group_id (ADR-056)
