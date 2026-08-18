@@ -212,7 +212,10 @@ function Dashboard() {
     >();
     for (const b of budgets) {
       if (!b.category_id) continue;
-      const parent = byId[b.category_id]?.parent_category?.trim() || "";
+      const cat = byId[b.category_id];
+      // ADR-069: only spending-domain categories belong in the budget grid.
+      if (!cat || categoryDomain(cat) !== "spending") continue;
+      const parent = cat.parent_category?.trim() || "";
       const key = parent || "__none__";
       const g = groups.get(key) ?? {
         name: parent || "Ungrouped",
