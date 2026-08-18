@@ -342,30 +342,37 @@ export function AddTransactionFab() {
             <DialogTitle>Add transaction</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {/* Mode tabs: Expense | Transfer */}
+            {/* Mode tabs: Expense | Income | Transfer (ADR-069) */}
             <div className="flex rounded-lg border p-1 gap-1">
-              <button
-                type="button"
-                onClick={() => setMode("expense")}
-                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                  mode !== "transfer"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Expense
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("transfer")}
-                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                  mode === "transfer"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Transfer
-              </button>
+              {(
+                [
+                  ["expense", "Expense"],
+                  ["income", "Income"],
+                  ["transfer", "Transfer"],
+                ] as const
+              ).map(([m, labelText]) => {
+                const active =
+                  m === "expense"
+                    ? mode === "expense" || mode === "split"
+                    : mode === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setMode(m);
+                      setCategoryId(NO_CATEGORY);
+                    }}
+                    className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {labelText}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Date applies to every mode. */}
