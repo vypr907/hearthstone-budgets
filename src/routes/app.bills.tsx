@@ -569,6 +569,8 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   const del = useDeleteBill();
   const { data: categories = [] } = useCategories();
   const { data: institutions = [] } = useInstitutions();
+  const { data: deductions = [] } = useHouseholdDeductions();
+  const [fundingDeductionId, setFundingDeductionId] = useState("none");
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDay, setDueDay] = useState("");
