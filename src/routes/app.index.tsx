@@ -194,8 +194,8 @@ function Dashboard() {
   /** Budget vs actual for the current month, grouped by parent_category. */
   const budgetChart = useMemo(() => {
     const month = monthKey(new Date());
-    const resolver = buildActualResolver(actuals, transactions, bills);
-    const billsBudget = billsBudgetedByCategory(bills);
+    const resolver = buildActualResolver(actuals, transactions, bills, categories);
+    const billsBudget = billsBudgetedByCategory(bills, categories);
     const byId: Record<string, (typeof categories)[number]> = {};
     for (const c of categories) byId[c.id] = c;
     const groups = new Map<
