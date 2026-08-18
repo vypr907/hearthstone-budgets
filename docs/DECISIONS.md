@@ -1950,6 +1950,39 @@ alter table debts add column funding_deduction_id uuid references income_source_
 
 Status: Decided 2026-08-18. Not yet implemented — logging destination still open; SQL above
 is additive only (no constraint/trigger) and safe to run once reviewed.
+## ADR-068: Deduction-Funded Bill/Debt Auto-Payment (continued)
+
+Logging resolved: no existing generic audit/activity table (`information_schema` confirmed
+empty on log/audit/activity naming), and `bill_adjustments`/`debt_adjustments` are scoped
+to balance-affecting financial adjustments (ADR-058) — not a fit for mismatch/no-op
+events, which never touch a balance. New dedicated table:
+
+```sql
+create table deduction_payment_events (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  bill_id uuid references bills(id),
+  debt_id uuid references debts(id),
+  deduction_id uuid not null references income_source_deductions(id),
+  event_type text not null check (event_type in ('mismatch', 'already_paid_noop')),
+  expected_amount numeric(12,2),
+  actual_amount numeric(12,2),
+  note text,
+  created_at timestamptz not null default now()
+);
+
+alter table deduction_payment_events enable row level security;
+create policy "household access" on deduction_payment_events for all
+  using (is_household_member(household_id))
+  with check (is_household_member(household_id));
+
+grant select, insert, update, delete on deduction_payment_events to authenticated;
+grant all on deduction_payment_events to service_role;
+```
+
+Status: Decided 2026-08-18. Ready to implement — SQL above plus the earlier
+`funding_deduction_id` columns on `bills`/`debts` can be run together in the SQL Editor as
+one BEGIN...COMMIT block.
 
 
 ## ADR-069: Ad-Hoc Income Category
@@ -1992,6 +2025,51 @@ insert into categories (household_id, name, domain) values
 
 Status: Decided 2026-08-18. Not yet implemented — domain-filtered query audit and backfill
 source-category confirmation are prerequisites before running the SQL above.
+
+## ADR-069: Ad-Hoc Income Category (continued — required code changes)
+
+Audit finding (2026-08-18): No domain filtering exists anywhere in the frontend today.
+`useCategories()`, `useSpendingBudgets()`, `useSpendingActuals()` filter only on
+`household_id`. Dashboard budget grid, Spending screen, `buildActualResolver()`, and the
+Add Transaction category picker are all driven purely by presence of a `spending_budgets`
+row or a transaction's `category_id` — none check `domain`. Introducing `domain = 'income'`
+without code changes would let a `spending_budgets` row exist against "Gift" or "Credit"
+and surface it in the Dashboard/Spending grids identically to a real spending category, and
+would offer income categories in the spending-entry picker.
+
+Required changes (Lovable-ready prompt, reference ADR-069, do not create a new ADR):
+
+1. `useCategories()` (src/lib/data-hooks.ts) — add an optional `domain` filter param so
+   callers can request `domain = 'spending'` explicitly rather than relying on absence of
+   a filter.
+2. Add Transaction category picker (src/components/AddTransactionFab.tsx:142-145) — filter
+   `sortedCategories` by `domain === 'spending'` for expense entries; income categories
+   should only appear when the transaction being entered is income (positive amount /
+   explicit "Income" entry mode — exact UX for how a user signals "this is income" needs a
+   decision, see open question below).
+3. Dashboard budget grid (src/routes/app.index.tsx:193-236) and Spending screen
+   (src/routes/app.spending.tsx:154-156) — both currently iterate `spending_budgets` rows
+   unconditionally. Add a join/filter so only rows where the linked category has
+   `domain = 'spending'` are included. This also implies: creating a `spending_budgets` row
+   against an income category should be prevented at the source, not just filtered at
+   display time — otherwise stray budget rows accumulate silently.
+4. `buildActualResolver()` / `billsBudgetedByCategory()` (src/lib/spending-actuals.ts) —
+   currently filters only by `amount < 0`. Should also exclude `domain = 'income'`
+   categories explicitly rather than relying on the sign check as an incidental filter.
+
+Open question (needs your decision before Lovable prompt is finalized): how does a user
+signal "this transaction is income" in Add Transaction — a separate entry mode/toggle, or
+just picking an income-domain category and the amount sign is inferred? This affects #2
+directly.
+
+Reason:
+The domain column alone does nothing without consumers respecting it — this was flagged
+as a prerequisite in the original ADR-069 draft and the audit confirms it's required, not
+optional, before the schema migration ships.
+
+Status: Audit complete 2026-08-18. Code changes not yet implemented. Schema migration
+(domain constraint + 4 category inserts) should not run until Lovable has this prompt
+staffed, to avoid a window where income categories exist but nothing respects them.
 
 ## ADR-070: Payment Reversal Tool
 
