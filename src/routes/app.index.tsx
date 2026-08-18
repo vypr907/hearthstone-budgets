@@ -349,6 +349,18 @@ function Dashboard() {
 
   const overdueTotal = overdue.reduce((sum, o) => sum + o.amount, 0);
 
+  /** ADR-032: payroll/HSA-deducted debts read differently from ordinary arrears. */
+  const deductionDebtIds = new Set(
+    debts.filter((d) => d.is_paycheck_deduction === true).map((d) => d.id),
+  );
+  const isDeductionOverdue = (id: string) =>
+    deductionDebtIds.has(id.replace(/^(debt|bill)-/, ""));
+  const overdueDeductions = overdue.filter((o) => isDeductionOverdue(o.id));
+  const overdueRest = overdue.filter((o) => !isDeductionOverdue(o.id));
+
+  /** Payoff progress is collapsed by default to keep the dashboard short. */
+  const [payoffOpen, setPayoffOpen] = useState(false);
+
 
 
 
@@ -573,12 +585,62 @@ function Dashboard() {
           </CardContent>
         </Card>
 
+        {payoffProgress.length > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <button
+                type="button"
+                onClick={() => setPayoffOpen((v) => !v)}
+                aria-expanded={payoffOpen}
+                className="flex w-full items-center justify-between gap-2"
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Payoff progress
+                </span>
+                {payoffOpen ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+              {payoffOpen ? (
+                <div className="mt-3 space-y-3">
+                  {payoffProgress.map((d, i) => (
+                    <div key={d.id}>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex min-w-0 items-center gap-1.5 truncate">
+                          <span aria-hidden>{emojiFor(d.name, "🏦")}</span>
+                          <span className="truncate">{d.name}</span>
+                        </span>
+                        <span className="shrink-0 font-bold tabular-nums">
+                          {formatMoney(d.remaining)}
+                        </span>
+                      </div>
+                      <ItemBar className="mt-1" value={d.pct} color={itemColor(i)} />
+                      <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                        {Math.round(d.pct)}% paid off
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
+
+
 
 
         <div>
           <div className="mb-2 flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-destructive" />
-            <h2 className="text-sm font-semibold uppercase tracking-wide">Past due</h2>
+            <h2 className="inline-flex items-center gap-1 text-sm font-semibold uppercase tracking-wide">
+              Past due
+              <HelpButton>
+                'Still owed' is what's due before your next paycheck. 'Past due' is what's
+                already missed a due date.
+              </HelpButton>
+            </h2>
             {overdueTotal > 0 ? (
               <span className="ml-auto text-sm font-bold tabular-nums text-destructive">
                 {formatMoney(overdueTotal)}
@@ -592,27 +654,29 @@ function Dashboard() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-2">
-              {overdue.map((o) => (
-                <Card key={o.id}>
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <EmojiIcon name={o.name} fallback={o.kind === "Debt" ? "🏦" : "🧾"} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{o.name}</p>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                        {o.kind}
-                        {o.cycles > 1 ? ` · ${o.cycles} cycles behind` : ""}
-                        {o.due_date ? ` · since ${o.due_date}` : ""}
-                      </p>
-                    </div>
-
-                    <p className="shrink-0 text-lg font-extrabold tabular-nums text-destructive">
-                      {formatMoney(o.amount)}
+            <div className="space-y-3">
+              {overdueDeductions.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Paycheck / HSA deduction
+                  </p>
+                  {overdueDeductions.map((o) => (
+                    <OverdueRow key={o.id} item={o} />
+                  ))}
+                </div>
+              ) : null}
+              {overdueRest.length > 0 ? (
+                <div className="space-y-2">
+                  {overdueDeductions.length > 0 ? (
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Other
                     </p>
-                  </CardContent>
-                </Card>
-              ))}
-
+                  ) : null}
+                  {overdueRest.map((o) => (
+                    <OverdueRow key={o.id} item={o} />
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
         </div>
