@@ -483,7 +483,9 @@ export function AddTransactionFab() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="tx-amount">Amount spent</Label>
+                  <Label htmlFor="tx-amount">
+                    {mode === "income" ? "Amount received" : "Amount spent"}
+                  </Label>
                   <Input
                     id="tx-amount"
                     type="number"
@@ -495,7 +497,9 @@ export function AddTransactionFab() {
                     onChange={(e) => setAmount(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Money out. Enter a negative amount for money in.
+                    {mode === "income"
+                      ? "Money in — side income, a reimbursement, refund or gift."
+                      : "Money out. Enter a negative amount for money in."}
                   </p>
                 </div>
 
