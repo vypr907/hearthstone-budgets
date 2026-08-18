@@ -291,6 +291,39 @@ export function AddTransactionFab() {
     }
   }
 
+  /**
+   * ADR-069: ad-hoc income (side income, reimbursement, refund, gift). Always
+   * stored as a positive amount — mode is chosen, never inferred from the sign.
+   */
+  async function submitIncome() {
+    if (!accountId) {
+      toast.error("Pick an account");
+      return;
+    }
+    const n = Math.abs(Number(amount));
+    if (!amount || !Number.isFinite(n) || n === 0) {
+      toast.error("Enter an amount");
+      return;
+    }
+    try {
+      await save.mutateAsync({
+        account_id: accountId,
+        amount: n,
+        category_id: categoryId === NO_CATEGORY ? null : categoryId,
+        description: description.trim() || null,
+        status,
+        transaction_date: txDate,
+        ...(merchantId ? { institution_id: merchantId } : {}),
+      });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+      toast.success("Income added");
+      reset();
+      setOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   const isBusy = save.isPending || saveSplit.isPending || saveTransfer.isPending;
 
   return (
