@@ -58,5 +58,32 @@
   as new items 7 (Transfer mode helper text explaining no Place is needed)
   and 8 (Accounts Recent Activity rows become clickable, reusing
   `TransactionDetail` exported from app.transactions.tsx into
-  app.accounts.tsx). All 8 finalized prompts are in chat history for this
-  date, none sent to Lovable yet.
+   app.accounts.tsx). All 8 finalized prompts are in chat history for this
+   date, none sent to Lovable yet.
+
+- Implemented all 8 mobile-polish items (no new ADRs; references ADR-023/029/
+  032/034/039/049/053/056/059/060/063).
+  1. Safe-area bottom clearance: `src/routes/app.tsx` `pb-[calc(6rem+env(safe-area-inset-bottom))]`,
+     `AddTransactionFab` FAB `bottom-[calc(6rem+env(safe-area-inset-bottom))]`;
+     BudgetTile over/left caption bumped `text-[10px]` → `text-xs`.
+  2. New `src/components/BudgetSplitLines.tsx` (dual ItemBar rows, optional
+     `extra` line) now renders the expanded breakdown in `BudgetTile`
+     (app.index.tsx) and `SpendRow` (app.spending.tsx, `extra` = 3-mo avg).
+  3. Paycheck Budget: sticky safe-area-aware "left to allocate" pill inside
+     `PeriodBudget`, additive to the existing Card, same value/colour logic.
+  4. Transactions: persistent description/place search input plus
+     "Amount from"/"Amount to" range inputs in the filter panel; wired into
+     the filter chain, `activeFilterCount`, and `clearFilters()`.
+  5. New `src/components/HelpButton.tsx` (Popover + HelpCircle) placed on the
+     Dashboard hero set-aside figure, Available credit row, Past due header,
+     and the Paycheck "Projected" badge.
+  6. Dashboard reorg: Payoff progress moved below "Still owed" and made
+     collapsible (default closed); Past due split into a
+     "Paycheck / HSA deduction" group (via `debts.is_paycheck_deduction`) and
+     "Other", extracted as a shared `OverdueRow`. `overdueTotal` unchanged.
+     No HSA-specific schema/logic added — still out of scope.
+  7. Transfer mode: static helper text explaining transfers move money
+     between the household's own accounts, so no Place is needed.
+  8. `TransactionDetail` exported from app.transactions.tsx and mounted in
+     app.accounts.tsx; Recent Activity rows are now clickable (`onSelect`).
+  Known issues: none observed; typecheck clean, no schema changes.

@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { AppHeader } from "@/components/AppHeader";
+import { HelpButton } from "@/components/HelpButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -482,8 +483,14 @@ function PeriodBudget({
                     {o.kind} · {o.dueDate}
                   </span>
                   {o.projected ? (
-                    <span className="ml-2 rounded border border-dashed px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                      Projected
+                    <span className="ml-2 inline-flex items-center gap-1">
+                      <span className="rounded border border-dashed px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        Projected
+                      </span>
+                      <HelpButton>
+                        This bill hasn't posted a due date in this range yet — it's a
+                        forecast based on its usual schedule, not a confirmed charge.
+                      </HelpButton>
                     </span>
                   ) : null}
                 </span>
@@ -741,6 +748,31 @@ function PeriodBudget({
           </CardContent>
         </Card>
       ) : null}
+
+      {/* Sticky mirror of the "Left to allocate" figure while editing. */}
+      <div className="pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-30 mx-auto max-w-lg px-4">
+        <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-full border bg-card/95 px-4 py-2 shadow-[var(--shadow-card)] backdrop-blur">
+          <span className="text-xs text-muted-foreground">
+            {left < 0
+              ? "Over-allocated"
+              : left === 0
+                ? "Fully allocated"
+                : "Left to allocate"}
+          </span>
+          <span
+            className={cn(
+              "text-lg font-bold tabular-nums",
+              left < 0
+                ? "text-destructive"
+                : left === 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-blue-600 dark:text-blue-400",
+            )}
+          >
+            {formatMoney(left)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

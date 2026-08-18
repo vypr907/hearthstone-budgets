@@ -284,7 +284,7 @@ export function AddTransactionFab() {
       <Button
         aria-label="Add transaction"
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-4 z-40 h-14 w-14 rounded-full shadow-lg"
+        className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 h-14 w-14 rounded-full shadow-lg"
       >
         <Plus className="h-6 w-6" />
       </Button>
@@ -382,6 +382,11 @@ export function AddTransactionFab() {
                     onChange={(e) => setTransferAmount(e.target.value)}
                   />
                 </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Moves money between your household's own accounts — no place needed,
+                  since nothing's being spent.
+                </p>
 
                 {/* ADR-064: one category for the whole transfer. */}
                 <div className="space-y-2">
