@@ -262,6 +262,17 @@ Transactions are the source of truth for:
 * Manual adjustments
 
 A cleared bill or debt payment must have a matching cleared transaction.
+### Payment Reversals (ADR-070)
+
+A bounced/returned payment is corrected via a second transactions row, not a delete or
+update of the original — mirrors the fee-transaction shape (ADR-046). The reversal row:
+same account_id, amount = -original.amount, status = 'cleared', same linked_bill_id/
+linked_debt_id as the original, description "Reversed: <name> payment".
+
+The originating bill's cycle_paid_to_date (or debt's remaining_balance/cycle_paid_to_date)
+is updated first, using greatest(0, current - abs(original.amount)) so the same logic is
+correct whether or not the cycle already rolled forward since the bounced payment cleared.
+See ADR-070 for the full write order and payment_status reset rule.
 
 ---
 

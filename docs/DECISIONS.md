@@ -1896,3 +1896,136 @@ the FK/migration ADR-011 decided wasn't yet justified.
 Status: Decided 2026-08-17. Implemented 2026-08-17 (Categories screen Parent
 Category field: Select over distinct existing `parent_category` values, "None",
 and inline "+ Add new" text entry).
+
+
+## ADR-068: Deduction-Funded Bill/Debt Auto-Payment
+
+Decision:
+Add nullable `funding_deduction_id` to `bills` and `debts`, referencing
+`income_source_deductions(id)`. A deduction can only be linked as a funding source if it
+has a `destination_account_id` set — reporting-only deductions can't fund anything, since
+there'd be no transaction to attach the payment to. On mark-paycheck-received (extends
+ADR-055's flow), after posting each deduction's deposit transaction, any bill/debt where
+`funding_deduction_id` matches and the **current cycle only** is `unpaid`/`pending` gets
+marked paid and linked to that deposit transaction / `split_group_id`. No future-cycle
+pre-pay — this only ever touches the cycle a bill/debt is currently sitting in, consistent
+with `deriveCycleInfo()` and ADR-057's overdue-aware allocation.
+
+If the bill's due amount doesn't match the deduction's amount/percent that cycle, mark it
+paid anyway and log the mismatch — the deduction is authoritative, logging just gives
+visibility without blocking the flow. If that cycle was already manually marked paid
+before paycheck-received fires, no-op and log it — no double-posting.
+
+Dashboard "Past Due" Deduction vs. HSA grouping reads `funding_deduction_id` →
+`destination_account_id` → the linked account's institution/`include_in_net_worth`, so no
+new flag is needed to distinguish HSA-funded from plain-payroll-deducted items — it's
+derived from which account the linked deduction deposits into (real HSA account vs. the
+existing `is_spendable = false` / `include_in_net_worth = false` "Payroll Deduction"
+pseudo-account).
+
+The "destination_account_id required to fund a bill/debt" rule is enforced at the
+app layer (Lovable/Kiro), not as a DB constraint — Postgres CHECK constraints can't
+reference another table, and a trigger was judged unnecessary overhead for a two-user
+household app. A one-time SQL check against existing data is run before this ships to
+confirm no bad state exists.
+
+Migration: forward-only. No blanket backfill — Steven will supply a specific list of
+existing bills/debts to backfill `funding_deduction_id` via manual SQL script.
+
+Open/unresolved: where mismatch and no-op-override events get logged (new table vs.
+existing audit mechanism) is not yet decided — do not implement logging until this is
+resolved in a follow-up note.
+
+Reason:
+Reuses ADR-055's deposit/split_group_id pattern instead of inventing a second payment
+mechanism. Keeping this to current-cycle-only avoids new lookahead logic that would
+otherwise interact with ADR-060's ephemeral recurrence projection and risk double-crediting
+if a deduction cadence doesn't match a bill's due cadence.
+
+Schema:
+```sql
+alter table bills add column funding_deduction_id uuid references income_source_deductions(id);
+alter table debts add column funding_deduction_id uuid references income_source_deductions(id);
+```
+
+Status: Decided 2026-08-18. Not yet implemented — logging destination still open; SQL above
+is additive only (no constraint/trigger) and safe to run once reviewed.
+
+
+## ADR-069: Ad-Hoc Income Category
+
+Decision:
+Extend `categories.domain` from `'bill' | 'debt' | 'spending'` to a 4th value, `'income'`.
+Scope is ad-hoc income only — side income, reimbursements, credits, gifts received — fully
+separate from `income_sources` and the structured pay-period engine (ADR-055 and related),
+which this does not touch.
+
+Four new categories created under `domain = 'income'`: **Income, Credit, Refund, Gift**.
+
+Before this ships, audit existing domain-filtered queries to confirm they're safe with a
+4th value — Dashboard category grid totals, `spending_budgets`/`spending_actuals` (must
+explicitly filter `domain = 'spending'` rather than assuming "not bill/debt"), and the
+category picker in Add Transaction.
+
+Backfill: existing transactions that are positive-amount and currently miscategorized
+get re-tagged into the matching new income category. Source category IDs (e.g. the
+existing "Gifts" category) need to be confirmed live via Supabase SQL Editor before the
+backfill script is written — not assumed from documentation.
+
+Reason:
+A 4th domain value keeps one source of truth for category type instead of adding a
+parallel flag. Scoping this to ad-hoc income only, and explicitly not touching
+`income_sources`, avoids collision with ADR-055's gross/net deduction logic.
+
+Schema:
+```sql
+alter table categories drop constraint categories_domain_check;
+alter table categories add constraint categories_domain_check
+  check (domain in ('bill','debt','spending','income'));
+
+insert into categories (household_id, name, domain) values
+  ('<household_id>', 'Income', 'income'),
+  ('<household_id>', 'Credit', 'income'),
+  ('<household_id>', 'Refund', 'income'),
+  ('<household_id>', 'Gift', 'income');
+```
+
+Status: Decided 2026-08-18. Not yet implemented — domain-filtered query audit and backfill
+source-category confirmation are prerequisites before running the SQL above.
+
+## ADR-070: Payment Reversal Tool
+
+Decision:
+A "Reverse" action on any cleared transaction with linked_bill_id or linked_debt_id set,
+shown in the "Recent transactions" section on Bill/Debt detail (same location as the
+existing delete button, ADR-037). Only offered when status = 'cleared', a link is set, and
+amount < 0 (an actual payment, not a fee or manual entry).
+
+Confirming a reversal, in order:
+1. Update the payable BEFORE writing the reversal row (payable-first pattern, ADR-037):
+   - Bills: cycle_paid_to_date = greatest(0, cycle_paid_to_date - abs(original.amount)).
+     If the result is less than (cycle_amount_due ?? amount), also set payment_status = 'unpaid'.
+   - Debts: remaining_balance += abs(original.amount); cycle_paid_to_date =
+     greatest(0, cycle_paid_to_date - abs(original.amount)); same payment_status reset rule;
+     if date_paid_off was set, clear it (reactivation, mirrors ADR-066).
+2. Insert a new transaction: same account, amount = -original.amount (sign-flipped, money
+   returns), status = 'cleared', same linked_bill_id/linked_debt_id, description
+   "Reversed: <bill/debt name> payment", transaction_date = user-supplied date (default today).
+
+No schema change — reuses the existing unlinked/linked transaction pattern (same shape as
+the fee mechanism, ADR-046).
+
+Reason:
+ADR-008 established that Undo is for accidental same-session clicks only — a genuinely
+bounced/returned payment is real money movement that reversed and needs its own auditable
+correcting transaction, not a rollback. The greatest(0, ...) clamp on cycle_paid_to_date
+means the same code path is correct whether or not the bill/debt's cycle already rolled
+forward past the bounced payment: if it already rolled (cycle_paid_to_date reset to 0), the
+subtraction is a no-op and only the account-balance correction applies; if it hasn't rolled
+yet, the subtraction actually reopens the cycle. No "which case are we in" branch needed.
+
+Risk (accepted): reversing a stale, non-most-recent payment on a bill/debt that has since
+had further cycles is allowed but will read confusingly in the ledger. Not blocked — flagged
+in code as a comment.
+
+Status: Decided 2026-08-18. Not yet implemented.
