@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import {
   monthKey,
+  categoryDomain,
   useAccounts,
   useAllAccountBalances,
   useBills,
@@ -25,6 +26,7 @@ import { billsBudgetedByCategory, buildActualResolver } from "@/lib/spending-act
 import { todayISO } from "@/lib/snapshot";
 import { billRemainingOwed, debtRemainingOwed, toPayable } from "@/lib/payments";
 import { computeArrears } from "@/lib/arrears";
+import { useHouseholdDeductions } from "@/lib/income-hooks";
 
 import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
 import { eventDate, obligationsInRange, periodRange } from "@/lib/paycheck-budget";
@@ -90,6 +92,7 @@ function Dashboard() {
   const { data: balanceHistory = [] } = useAllAccountBalances();
   const { data: sources = [] } = useIncomeSources();
   const { data: events = [] } = useIncomeEvents();
+  const { data: householdDeductions = [] } = useHouseholdDeductions();
 
 
   const balances = useMemo(
@@ -192,8 +195,8 @@ function Dashboard() {
   /** Budget vs actual for the current month, grouped by parent_category. */
   const budgetChart = useMemo(() => {
     const month = monthKey(new Date());
-    const resolver = buildActualResolver(actuals, transactions, bills);
-    const billsBudget = billsBudgetedByCategory(bills);
+    const resolver = buildActualResolver(actuals, transactions, bills, categories);
+    const billsBudget = billsBudgetedByCategory(bills, categories);
     const byId: Record<string, (typeof categories)[number]> = {};
     for (const c of categories) byId[c.id] = c;
     const groups = new Map<
@@ -210,7 +213,10 @@ function Dashboard() {
     >();
     for (const b of budgets) {
       if (!b.category_id) continue;
-      const parent = byId[b.category_id]?.parent_category?.trim() || "";
+      const cat = byId[b.category_id];
+      // ADR-069: only spending-domain categories belong in the budget grid.
+      if (!cat || categoryDomain(cat) !== "spending") continue;
+      const parent = cat.parent_category?.trim() || "";
       const key = parent || "__none__";
       const g = groups.get(key) ?? {
         name: parent || "Ungrouped",
@@ -318,6 +324,19 @@ function Dashboard() {
     };
   }, [periodObligations, bills, debts, categories]);
 
+  /**
+   * ADR-068: a past-due item funded by a paycheck deduction reads differently —
+   * the money comes off the paycheck, not out of a spending account.
+   */
+  const fundingLabel = (fundingDeductionId: string | null | undefined) => {
+    if (!fundingDeductionId) return null;
+    const d = householdDeductions.find((x) => x.id === fundingDeductionId);
+    if (!d?.destination_account_id) return null;
+    const acct = accounts.find((a) => a.id === d.destination_account_id);
+    const hint = `${acct?.account_type ?? ""} ${acct?.name ?? ""}`.toLowerCase();
+    return /hsa|fsa/.test(hint) ? "HSA-funded" : "Deduction-funded";
+  };
+
   // ADR-049: overdue is a money figure — missed cycles plus carried-in arrears —
   // so an item months behind reads as more than one cycle's amount.
   const overdue = [
@@ -330,6 +349,7 @@ function Dashboard() {
         cycles: arrears.cyclesMissed,
         due_date: arrears.oldestMissedDate ?? b.next_due_date?.slice(0, 10) ?? "",
         kind: "Bill" as const,
+        funding: fundingLabel(b.funding_deduction_id),
       };
     }),
     ...debts.map((d) => {
@@ -341,6 +361,7 @@ function Dashboard() {
         cycles: arrears.cyclesMissed,
         due_date: arrears.oldestMissedDate ?? debtDueDate(d) ?? "",
         kind: "Debt" as const,
+        funding: fundingLabel(d.funding_deduction_id),
       };
     }),
   ]
@@ -793,6 +814,8 @@ type OverdueItem = {
   cycles: number;
   due_date: string;
   kind: "Bill" | "Debt";
+  /** ADR-068: set when a paycheck deduction covers this item. */
+  funding?: string | null;
 };
 
 /** One past-due row (ADR-049: past due is a money figure). */
@@ -802,7 +825,14 @@ function OverdueRow({ item: o }: { item: OverdueItem }) {
       <CardContent className="flex items-center gap-3 p-4">
         <EmojiIcon name={o.name} fallback={o.kind === "Debt" ? "🏦" : "🧾"} />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{o.name}</p>
+          <p className="flex items-center gap-2 truncate font-medium">
+            <span className="truncate">{o.name}</span>
+            {o.funding ? (
+              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {o.funding}
+              </span>
+            ) : null}
+          </p>
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
             {o.kind}
             {o.cycles > 1 ? ` · ${o.cycles} cycles behind` : ""}

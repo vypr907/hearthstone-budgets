@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  categoryDomain,
   useAccounts,
   useBills,
   useCategories,
@@ -53,8 +54,8 @@ function todayISO() {
 const NO_CATEGORY = "__none__";
 const NO_LINK = "__none__";
 
-/** Entry mode for the Add Transaction dialog. */
-type TxMode = "expense" | "split" | "transfer";
+/** Entry mode for the Add Transaction dialog. ADR-069 adds "income". */
+type TxMode = "expense" | "split" | "transfer" | "income";
 
 /** Shared large, icon-based category dropdown (ADR-054 visual pass). */
 function CategorySelect({
@@ -139,8 +140,21 @@ export function AddTransactionFab() {
   /** ADR-064: one optional category for the transfer pair as a whole. */
   const [transferCategoryId, setTransferCategoryId] = useState(NO_CATEGORY);
 
+  /** ADR-069: expense/split/transfer see spending categories only. */
   const sortedCategories = useMemo(
-    () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
+    () =>
+      categories
+        .filter((c) => categoryDomain(c) === "spending")
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [categories],
+  );
+
+  /** ADR-069: income mode sees income-domain categories only. */
+  const incomeCategories = useMemo(
+    () =>
+      categories
+        .filter((c) => categoryDomain(c) === "income")
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [categories],
   );
 
@@ -277,6 +291,39 @@ export function AddTransactionFab() {
     }
   }
 
+  /**
+   * ADR-069: ad-hoc income (side income, reimbursement, refund, gift). Always
+   * stored as a positive amount — mode is chosen, never inferred from the sign.
+   */
+  async function submitIncome() {
+    if (!accountId) {
+      toast.error("Pick an account");
+      return;
+    }
+    const n = Math.abs(Number(amount));
+    if (!amount || !Number.isFinite(n) || n === 0) {
+      toast.error("Enter an amount");
+      return;
+    }
+    try {
+      await save.mutateAsync({
+        account_id: accountId,
+        amount: n,
+        category_id: categoryId === NO_CATEGORY ? null : categoryId,
+        description: description.trim() || null,
+        status,
+        transaction_date: txDate,
+        ...(merchantId ? { institution_id: merchantId } : {}),
+      });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+      toast.success("Income added");
+      reset();
+      setOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   const isBusy = save.isPending || saveSplit.isPending || saveTransfer.isPending;
 
   return (
@@ -295,30 +342,37 @@ export function AddTransactionFab() {
             <DialogTitle>Add transaction</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {/* Mode tabs: Expense | Transfer */}
+            {/* Mode tabs: Expense | Income | Transfer (ADR-069) */}
             <div className="flex rounded-lg border p-1 gap-1">
-              <button
-                type="button"
-                onClick={() => setMode("expense")}
-                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                  mode !== "transfer"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Expense
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("transfer")}
-                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                  mode === "transfer"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Transfer
-              </button>
+              {(
+                [
+                  ["expense", "Expense"],
+                  ["income", "Income"],
+                  ["transfer", "Transfer"],
+                ] as const
+              ).map(([m, labelText]) => {
+                const active =
+                  m === "expense"
+                    ? mode === "expense" || mode === "split"
+                    : mode === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setMode(m);
+                      setCategoryId(NO_CATEGORY);
+                    }}
+                    className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {labelText}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Date applies to every mode. */}
@@ -429,7 +483,9 @@ export function AddTransactionFab() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="tx-amount">Amount spent</Label>
+                  <Label htmlFor="tx-amount">
+                    {mode === "income" ? "Amount received" : "Amount spent"}
+                  </Label>
                   <Input
                     id="tx-amount"
                     type="number"
@@ -441,7 +497,9 @@ export function AddTransactionFab() {
                     onChange={(e) => setAmount(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Money out. Enter a negative amount for money in.
+                    {mode === "income"
+                      ? "Money in — side income, a reimbursement, refund or gift."
+                      : "Money out. Enter a negative amount for money in."}
                   </p>
                 </div>
 
@@ -466,19 +524,21 @@ export function AddTransactionFab() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between rounded-md border p-3">
-                  <div className="pr-3">
-                    <Label htmlFor="tx-split">Split into multiple categories</Label>
-                    <p className="text-xs text-muted-foreground">
-                      One entry, several category lines that must add up to the total.
-                    </p>
+                {mode !== "income" ? (
+                  <div className="flex items-center justify-between rounded-md border p-3">
+                    <div className="pr-3">
+                      <Label htmlFor="tx-split">Split into multiple categories</Label>
+                      <p className="text-xs text-muted-foreground">
+                        One entry, several category lines that must add up to the total.
+                      </p>
+                    </div>
+                    <Switch
+                      id="tx-split"
+                      checked={mode === "split"}
+                      onCheckedChange={(v) => setMode(v ? "split" : "expense")}
+                    />
                   </div>
-                  <Switch
-                    id="tx-split"
-                    checked={mode === "split"}
-                    onCheckedChange={(v) => setMode(v ? "split" : "expense")}
-                  />
-                </div>
+                ) : null}
 
                 {mode === "split" ? (
                   <SplitLinesEditor
@@ -493,12 +553,17 @@ export function AddTransactionFab() {
                     <CategorySelect
                       value={categoryId}
                       onChange={setCategoryId}
-                      categories={sortedCategories}
+                      categories={mode === "income" ? incomeCategories : sortedCategories}
                     />
+                    {mode === "income" && incomeCategories.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No income categories yet — add one on the Categories screen.
+                      </p>
+                    ) : null}
                   </div>
                 )}
 
-                {mode !== "split" ? (
+                {mode !== "split" && mode !== "income" ? (
                   <div className="space-y-2">
                     <Label>Link to bill/debt (optional)</Label>
                     <Select value={link} onValueChange={setLink}>
@@ -546,13 +611,21 @@ export function AddTransactionFab() {
             <Button
               className="h-12 w-full"
               disabled={isBusy}
-              onClick={mode === "transfer" ? submitTransfer : submitExpense}
+              onClick={
+                mode === "transfer"
+                  ? submitTransfer
+                  : mode === "income"
+                    ? submitIncome
+                    : submitExpense
+              }
             >
               {mode === "transfer"
                 ? "Save transfer"
-                : mode === "split"
-                  ? "Save split transaction"
-                  : "Save transaction"}
+                : mode === "income"
+                  ? "Save income"
+                  : mode === "split"
+                    ? "Save split transaction"
+                    : "Save transaction"}
             </Button>
           </DialogFooter>
         </DialogContent>

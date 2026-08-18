@@ -1,6 +1,17 @@
-import type { Bill, SpendingActual, Transaction } from "./supabase";
-import { monthKey } from "./data-hooks";
+import type { Bill, Category, SpendingActual, Transaction } from "./supabase";
+import { categoryDomain, monthKey } from "./data-hooks";
 import { monthlyEquivalent } from "./format";
+
+/**
+ * ADR-069: set of category ids in the 'income' domain. Ad-hoc income never
+ * belongs in a spending budget, so it is excluded explicitly rather than
+ * relying on the amount sign as an incidental filter.
+ */
+function incomeCategoryIds(categories: Category[] = []): Set<string> {
+  return new Set(
+    categories.filter((c) => categoryDomain(c) === "income").map((c) => c.id),
+  );
+}
 
 /**
  * Current-month actuals come from the ledger when a category has any logged
@@ -15,7 +26,9 @@ export function buildActualResolver(
   actuals: SpendingActual[],
   transactions: Transaction[],
   bills: Bill[] = [],
+  categories: Category[] = [],
 ) {
+  const income = incomeCategoryIds(categories);
   const billCategory = new Map<string, string | null>(
     bills.map((b) => [b.id, b.category_id ?? null]),
   );
@@ -27,6 +40,7 @@ export function buildActualResolver(
     const categoryId =
       t.category_id ?? (linkedBillId ? (billCategory.get(linkedBillId) ?? null) : null);
     if (!categoryId) continue;
+    if (income.has(categoryId)) continue; // ADR-069: ad-hoc income isn't spend
     const amount = Number(t.amount || 0);
     if (amount >= 0) continue; // only money out counts as spend
     const d = new Date(t.transaction_date);
@@ -96,11 +110,16 @@ export function buildActualResolver(
  * ADR-034: monthly-equivalent bill load per category — the "+ $Y bills" half of
  * the budgeted figure. Bills with an unusable custom cycle contribute nothing.
  */
-export function billsBudgetedByCategory(bills: Bill[]): Map<string, number> {
+export function billsBudgetedByCategory(
+  bills: Bill[],
+  categories: Category[] = [],
+): Map<string, number> {
+  const income = incomeCategoryIds(categories);
   const out = new Map<string, number>();
   for (const b of bills) {
     if (b.is_active === false) continue;
     if (!b.category_id) continue;
+    if (income.has(b.category_id)) continue; // ADR-069
     const monthly = monthlyEquivalent(b);
     if (monthly == null || !Number.isFinite(monthly)) continue;
     out.set(b.category_id, (out.get(b.category_id) ?? 0) + monthly);

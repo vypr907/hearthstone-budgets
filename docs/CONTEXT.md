@@ -45,6 +45,10 @@ Private shared household budget and debt-payoff Android application migrated fro
   - ADR-066 complete (app-side): `debt_type` enforced as a lowercase DB check constraint; advance-type debts reactivate (clear `date_paid_off`) on re-advance instead of staying hidden as paid off
   - ADR-067 complete: Categories screen Parent Category field is a dropdown over existing values with inline "+ Add new"; category icon picker expanded to 77 options
   - ADR-053/063 addendum complete: manual transactions title themselves from place instead of a generic "Transaction" fallback, once a place is set
+  - Mobile polish pass complete (8 items): safe-area bottom clearance, shared `BudgetSplitLines` dual bars, sticky "left to allocate" pill, Transactions text + amount-range search, `HelpButton` popovers, Dashboard reorder with collapsible Payoff Progress and grouped Past Due, Transfer helper text, clickable Accounts Recent Activity
+  - ADR-070 complete: payment reversal tool (`useReversePayment` + `ReversePaymentButton`) on Bill/Debt recent transactions
+  - ADR-068 complete: deduction-funded bill/debt auto-payment on mark-received (`src/lib/deduction-funding.ts`, `deduction_payment_events`, "Funded by deduction" picker, past-due funding badges)
+  - ADR-069 complete (code side): domain-aware categories, Income mode in Add Transaction, budget grids/write path restricted to `domain='spending'`; pending the manual migration adding `domain='income'` and the four income categories
 - Phase 12 not started: Wrap as a Real Android App (Capacitor)
 - Phase 12 not started: Publish to Google Play (Internal Testing)
 - Phase 13 not started: Cutover: Retire the Sheet
@@ -93,6 +97,10 @@ Private shared household budget and debt-payoff Android application migrated fro
 - A transaction's place (`institution_id`) is separate from its free-text description; both are captured via the shared `PlacePicker` (ADR-063); a manual transaction titles itself from place when one is set, instead of falling back to generic "Transaction" text
 - A transfer's category applies to both rows of the pair (ADR-064)
 - Bill/debt payment and fee transactions inherit the payable's `institution_id` at write time (ADR-065)
+- Reversing a payment rolls the payable back first (ADR-037 guard), then writes an offsetting cleared transaction; a failed payable write never leaves an orphan reversal (ADR-070)
+- A deduction is authoritative: a funded bill/debt's CURRENT cycle is marked paid on mark-received even when amounts differ, with the discrepancy logged to `deduction_payment_events`; already-cleared cycles are never touched and no future cycle is pre-paid (ADR-068)
+- A bill/debt may only be funded by a deduction that has a `destination_account_id`; enforced at save time in the app, not by a DB constraint (ADR-068)
+- `categories.domain` is the single source of truth for where a category may appear: only `spending` categories get budgets or land in budget grids; `income` categories are ad-hoc income only and are chosen via an explicit Income mode, never inferred from the amount sign (ADR-069)
 - One-time payables treat all linked transactions as a single open cycle; the rolling cycle window does not apply to them
 - Future occurrences are projected at render time from the stored due date; projections are marked "Projected", count toward totals, and never write back to next_due_date/due_day (ADR-060)
 
@@ -112,4 +120,4 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Institution logo_url is only ever suggested from login_url for the user to confirm — never written silently.
 - A custom cycle with no cycle_interval_days throws on date math; render-only paths use shiftDateSafe().
 - Payment Schedule past months are history, not a simulation: no per-debt breakdown, check-off only. Ledger status badges appear on the current month only.
-- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, debts.cycle_paid_to_date, savings_goals.account_id/linked_bill_id, pay_period_allocations.goal_id, bills/debts.cycle_interval_days, spending_actuals.is_manual_override, transactions.split_group_id, bills/debts.opening_arrears, debts.invoice_number, transactions.institution_id, income_source_splits, income_source_deductions, transactions.transfer_group_id, bill_adjustments, debt_adjustments.affects_balance, pay_period_allocations.bill_id/debt_id) must exist before those screens work.
+- Schema changes are applied manually in Supabase; new columns/tables (savings_goals, transactions.linked_goal_id, households.export_format, categories.icon/color, institutions.logo_url, debts.is_paycheck_deduction, debts.cycle_paid_to_date, savings_goals.account_id/linked_bill_id, pay_period_allocations.goal_id, bills/debts.cycle_interval_days, spending_actuals.is_manual_override, transactions.split_group_id, bills/debts.opening_arrears, debts.invoice_number, transactions.institution_id, income_source_splits, income_source_deductions, transactions.transfer_group_id, bill_adjustments, debt_adjustments.affects_balance, pay_period_allocations.bill_id/debt_id, bills/debts.funding_deduction_id, deduction_payment_events, categories.domain='income') must exist before those screens work.

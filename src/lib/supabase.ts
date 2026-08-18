@@ -49,6 +49,8 @@ export type Bill = {
   opening_arrears?: number | null;
   /** ADR-049: date the opening arrears figure was accurate as of. */
   arrears_as_of?: string | null;
+  /** ADR-068: paycheck deduction that funds this bill (must have an account). */
+  funding_deduction_id?: string | null;
 
   created_at: string;
   updated_at: string;
@@ -128,6 +130,8 @@ export type Debt = {
   opening_arrears?: number | null;
   /** ADR-049: date the opening arrears figure was accurate as of. */
   arrears_as_of?: string | null;
+  /** ADR-068: paycheck deduction that funds this debt (must have an account). */
+  funding_deduction_id?: string | null;
 
   created_at: string;
   updated_at: string;
@@ -304,6 +308,24 @@ export type IncomeSourceDeduction = {
   /** Optional account the deduction deposits into. If null, row is reporting-only. */
   destination_account_id: string | null;
   is_pre_tax: boolean | null;
+  created_at?: string | null;
+};
+
+/**
+ * ADR-068: audit trail for deduction-funded payments — either the posted
+ * deduction didn't match the cycle's due amount, or the cycle was already
+ * cleared by hand so the auto-payment did nothing.
+ */
+export type DeductionPaymentEvent = {
+  id: string;
+  household_id: string;
+  bill_id: string | null;
+  debt_id: string | null;
+  deduction_id: string;
+  event_type: "mismatch" | "already_paid_noop";
+  expected_amount: number | null;
+  actual_amount: number | null;
+  note: string | null;
   created_at?: string | null;
 };
 
