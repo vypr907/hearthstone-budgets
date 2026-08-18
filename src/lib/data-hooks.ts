@@ -1135,6 +1135,17 @@ export function useUpsertSpendingBudget() {
       amount: number;
       description?: string | null;
     }) => {
+      // ADR-069: income categories can never carry a spending budget.
+      if (categoryId) {
+        const { data: cat, error: catError } = await supabase
+          .from("categories")
+          .select("domain")
+          .eq("id", categoryId)
+          .maybeSingle();
+        if (catError) throw catError;
+        if (categoryDomain(cat as { domain?: string | null } | null) === "income")
+          throw new Error("Income categories can't have a spending budget.");
+      }
       if (id) {
         const { error } = await supabase
           .from("spending_budgets")
