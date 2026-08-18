@@ -295,6 +295,7 @@ export function useMarkIncomeReceived() {
               ? Number(d.amount)
               : Math.round(((Number(d.percent ?? 0) / 100) * amount) * 100) / 100;
           if (dedAmount <= 0) continue;
+          postedDeductions.push({ deduction: d, amount: dedAmount, rowIndex: rows.length });
           rows.push({
             household_id: householdId!,
             account_id: d.destination_account_id,
@@ -307,14 +308,58 @@ export function useMarkIncomeReceived() {
         }
       }
 
-      const { error } = await supabase.from("transactions").insert(rows);
+      const { data: inserted, error } = await supabase
+        .from("transactions")
+        .insert(rows)
+        .select("id");
       if (error) throw error;
-      return { deposits: rows.length };
+
+      // ADR-068: settle the current cycle of any bill/debt funded by one of
+      // these deductions. Never blocks the paycheck itself — the deposits are
+      // already written, so a failure here is surfaced without rolling back.
+      let funded = { paid: 0, events: 0 };
+      try {
+        funded = await applyDeductionFundedPayments({
+          householdId: householdId!,
+          splitGroupId: event.id,
+          posted: postedDeductions.map((p) => ({
+            deduction: p.deduction,
+            amount: p.amount,
+            transactionId: (inserted as Array<{ id: string }> | null)?.[p.rowIndex]?.id ?? null,
+          })),
+        });
+      } catch (e) {
+        throw new Error(
+          `Paycheck deposits posted, but the deduction-funded payments failed: ${(e as Error).message}`,
+        );
+      }
+
+      return { deposits: rows.length, autoPaid: funded.paid, events: funded.events };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["income_events", householdId] });
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
+      qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+    },
+  });
+}
+
+/** ADR-068: every deduction in the household, for the bill/debt funding picker. */
+export function useHouseholdDeductions() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["income_source_deductions", "household", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<IncomeSourceDeduction[]> => {
+      const { data, error } = await supabase
+        .from("income_source_deductions")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as IncomeSourceDeduction[];
     },
   });
 }
