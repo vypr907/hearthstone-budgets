@@ -87,3 +87,20 @@
   8. `TransactionDetail` exported from app.transactions.tsx and mounted in
      app.accounts.tsx; Recent Activity rows are now clickable (`onSelect`).
   Known issues: none observed; typecheck clean, no schema changes.
+
+- ADR-070 Payment Reversal Tool implemented (patterns from ADR-037 payable-first
+  writes and ADR-046 fee/ledger pairing; no new ADR created).
+  - `src/lib/payments.ts`: new `useReversePayment()` — rolls the payable back
+    first via the existing `updateRow()` (`.select("id")` + throw on 0 rows) and
+    only then inserts the offsetting cleared transaction, so a failed payable
+    write can never leave an orphan reversal row. Bills:
+    `cycle_paid_to_date = max(0, paid - abs(amount))`, `payment_status='unpaid'`
+    when below `cycle_amount_due ?? amount`. Debts: same cycle rule plus
+    `remaining_balance += abs(amount)` and `date_paid_off` cleared.
+  - New `src/components/ReversePaymentButton.tsx`: Undo2 icon button beside the
+    existing trash button, visible only for cleared, bill/debt-linked, negative
+    rows; confirm dialog ("Reverse this payment? This will undo it as if it
+    never cleared.") with a reversal-date field defaulting to today.
+  - `src/routes/app.bills.tsx` / `src/routes/app.debts.tsx`: Recent transactions
+    sections now take the full bill/debt row and render the reverse button.
+  - No schema changes. Typecheck clean.
