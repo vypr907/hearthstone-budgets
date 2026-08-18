@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { AppHeader } from "@/components/AppHeader";
+import { HelpButton } from "@/components/HelpButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
