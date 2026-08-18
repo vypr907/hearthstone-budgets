@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import {
   monthKey,
+  categoryDomain,
   useAccounts,
   useAllAccountBalances,
   useBills,
