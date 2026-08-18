@@ -611,13 +611,21 @@ export function AddTransactionFab() {
             <Button
               className="h-12 w-full"
               disabled={isBusy}
-              onClick={mode === "transfer" ? submitTransfer : submitExpense}
+              onClick={
+                mode === "transfer"
+                  ? submitTransfer
+                  : mode === "income"
+                    ? submitIncome
+                    : submitExpense
+              }
             >
               {mode === "transfer"
                 ? "Save transfer"
-                : mode === "split"
-                  ? "Save split transaction"
-                  : "Save transaction"}
+                : mode === "income"
+                  ? "Save income"
+                  : mode === "split"
+                    ? "Save split transaction"
+                    : "Save transaction"}
             </Button>
           </DialogFooter>
         </DialogContent>
