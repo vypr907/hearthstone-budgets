@@ -1948,8 +1948,28 @@ alter table bills add column funding_deduction_id uuid references income_source_
 alter table debts add column funding_deduction_id uuid references income_source_deductions(id);
 ```
 
-Status: Decided 2026-08-18. Not yet implemented — logging destination still open; SQL above
-is additive only (no constraint/trigger) and safe to run once reviewed.
+Logging destination (resolved 2026-08-18): a dedicated `deduction_payment_events` table
+(`bill_id`, `debt_id`, `deduction_id`, `event_type` in ('mismatch','already_paid_noop'),
+`expected_amount`, `actual_amount`, `note`, `created_at`). See SCHEMA.md.
+
+Implementation (2026-08-18):
+- `src/lib/deduction-funding.ts` → `applyDeductionFundedPayments()` runs at the end of
+  `useMarkIncomeReceived()` (`src/lib/income-hooks.ts`), after the ADR-055 deduction
+  deposits are inserted (`.select("id")` so each deposit's id is known). It loads bills
+  and debts whose `funding_deduction_id` matches a deduction that has a destination
+  account, derives the current cycle with the existing `deriveCycleInfo()` (no new date
+  logic), and for unpaid/pending/partial cycles calls `applyClearedPayment()` first
+  (ADR-037 payable-first + `updateRow()` guard) before linking the deposit transaction
+  via `linked_bill_id`/`linked_debt_id` and the pay event's `split_group_id`. Mismatched
+  and already-cleared cases write `deduction_payment_events` rows.
+- Write-path validation lives in the bill and debt dialogs (`app.bills.tsx`,
+  `app.debts.tsx`): a "Funded by deduction" picker disables reporting-only deductions and
+  the save is blocked with an inline error if one is somehow selected.
+- Dashboard Past Due labels: `accounts` has no `include_in_net_worth` column in this
+  project, so the HSA-vs-plain distinction is derived from the destination account's
+  `account_type`/`name` (matches hsa/fsa → "HSA-funded", otherwise "Deduction-funded").
+
+Status: Decided 2026-08-18. Implemented 2026-08-18.
 
 
 ## ADR-069: Ad-Hoc Income Category
