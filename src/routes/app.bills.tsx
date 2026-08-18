@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -317,7 +318,7 @@ function BillDetailDialog({
           <SetAsideAction bill={bill} />
           {/* ADR-058: bill adjustments section */}
           <BillAdjustments bill={bill} />
-          <RecentBillTransactions billId={bill.id} />
+          <RecentBillTransactions bill={bill} />
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onEdit(bill)} className="h-11">
@@ -507,7 +508,8 @@ function BillAdjustments({ bill }: { bill: Bill }) {
 }
 
 /** Last 10 ledger rows linked to this bill, newest first (ADR-035). */
-function RecentBillTransactions({ billId }: { billId: string }) {
+function RecentBillTransactions({ bill }: { bill: Bill }) {
+  const billId = bill.id;
   const { data: transactions = [] } = useTransactions();
   const del = useDeleteLinkedTransaction();
   const rows = useMemo(
@@ -554,6 +556,7 @@ function RecentBillTransactions({ billId }: { billId: string }) {
               >
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
+              <ReversePaymentButton transaction={t} payable={toPayable("bill", bill)} />
             </div>
           ))}
         </div>

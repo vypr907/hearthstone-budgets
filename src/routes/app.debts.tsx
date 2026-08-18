@@ -53,6 +53,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
@@ -501,7 +502,7 @@ function DebtDetailDialog({
           <PayActions payable={toPayable("debt", debt)} />
           <PastDueEditor debt={debt} />
 
-          <RecentDebtTransactions debtId={debt.id} />
+          <RecentDebtTransactions debt={debt} />
 
           <DebtAdjustments debt={debt} />
 
@@ -1009,7 +1010,8 @@ function DebtDialog({
 
 
 /** Last 10 ledger rows linked to this debt, newest first. */
-function RecentDebtTransactions({ debtId }: { debtId: string }) {
+function RecentDebtTransactions({ debt }: { debt: Debt }) {
+  const debtId = debt.id;
   const { data: transactions = [] } = useTransactions();
   const del = useDeleteLinkedTransaction();
 
@@ -1057,6 +1059,8 @@ function RecentDebtTransactions({ debtId }: { debtId: string }) {
               >
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
+              <ReversePaymentButton transaction={t} payable={toPayable("debt", debt)} />
+
             </div>
           ))}
         </div>

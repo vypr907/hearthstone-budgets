@@ -606,3 +606,64 @@ export function useResetCycle() {
     onSuccess: done,
   });
 }
+
+/**
+ * ADR-070: reverse a cleared bill/debt payment. The original ledger row is left
+ * intact for history; the payable is rolled back and an offsetting cleared
+ * transaction is written.
+ *
+ * Order matters (ADR-037): the payable write goes first through `updateRow`, so
+ * a blocked/silent 0-row update aborts before any reversal row exists.
+ */
+export function useReversePayment() {
+  const { householdId } = useAuth();
+  const done = useAfterPayment();
+  return useMutation({
+    mutationFn: async ({
+      transaction,
+      payable,
+      date,
+    }: {
+      transaction: Transaction;
+      payable: Payable;
+      date?: string;
+    }) => {
+      const amt = Math.abs(Number(transaction.amount ?? 0));
+      if (!(amt > 0)) throw new Error("This transaction has no amount to reverse.");
+
+      if (payable.kind === "bill") {
+        const bill = payable.bill!;
+        const paid = Math.max(0, Number(bill.cycle_paid_to_date ?? 0) - amt);
+        const due = bill.cycle_amount_due != null ? Number(bill.cycle_amount_due) : Number(bill.amount || 0);
+        const update: Record<string, unknown> = { cycle_paid_to_date: paid };
+        if (paid + 0.005 < due) update.payment_status = "unpaid";
+        await updateRow("bills", payable.id, update);
+      } else {
+        const debt = payable.debt!;
+        const paid = Math.max(0, Number(debt.cycle_paid_to_date ?? 0) - amt);
+        const due = debtCycleDue(debt);
+        const update: Record<string, unknown> = {
+          remaining_balance: Number(debt.remaining_balance ?? 0) + amt,
+          cycle_paid_to_date: paid,
+        };
+        if (paid + 0.005 < due) update.payment_status = "unpaid";
+        if (debt.date_paid_off) update.date_paid_off = null;
+        await updateRow("debts", payable.id, update);
+      }
+
+      const { error } = await supabase.from("transactions").insert({
+        household_id: transaction.household_id ?? householdId,
+        account_id: transaction.account_id,
+        category_id: transaction.category_id ?? payable.category_id,
+        amount: -Number(transaction.amount ?? 0),
+        status: "cleared",
+        description: `Reversed: ${payable.name} payment`,
+        transaction_date: date || todayISO(),
+        [linkColumn(payable.kind)]: payable.id,
+        institution_id: transaction.institution_id ?? payable.institution_id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: done,
+  });
+}
