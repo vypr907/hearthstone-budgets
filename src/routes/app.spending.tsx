@@ -6,6 +6,7 @@ import {
   monthKey,
   shiftMonth,
   useCategories,
+  categoryDomain,
   useClearSpendingOverride,
   useCreateCategory,
   useSpendingActuals,
