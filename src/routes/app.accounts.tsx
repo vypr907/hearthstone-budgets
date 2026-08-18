@@ -40,6 +40,7 @@ import { toast } from "sonner";
 import type { Account, Institution, Transaction } from "@/lib/supabase";
 import { format } from "date-fns";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
+import { TransactionDetail } from "@/routes/app.transactions";
 
 export const Route = createFileRoute("/app/accounts")({
   head: () => ({
@@ -70,6 +71,8 @@ function AccountsPage() {
   const { data: institutions = [] } = useInstitutions();
   const [editing, setEditing] = useState<Partial<Account> | null>(null);
   const [logging, setLogging] = useState<Account | null>(null);
+  /** Reuses the Transactions screen detail dialog for recent-activity rows. */
+  const [detail, setDetail] = useState<Transaction | null>(null);
 
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<"name" | "current" | "type">("name");
@@ -251,6 +254,7 @@ function AccountsPage() {
                   <RecentActivity
                     rows={recentByAccount[a.id] ?? []}
                     institutionById={institutionById}
+                    onSelect={setDetail}
                   />
                   <Button
                     variant="outline"
@@ -268,6 +272,7 @@ function AccountsPage() {
 
       <AccountDialog account={editing} onClose={() => setEditing(null)} />
       <LogBalanceDialog account={logging} onClose={() => setLogging(null)} />
+      <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />
     </>
   );
 }
@@ -276,9 +281,11 @@ function AccountsPage() {
 function RecentActivity({
   rows,
   institutionById,
+  onSelect,
 }: {
   rows: Transaction[];
   institutionById: Record<string, Institution>;
+  onSelect: (t: Transaction) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { data: categories = [] } = useCategories();
@@ -301,7 +308,11 @@ function RecentActivity({
       {shown.map((entry) => {
         const t = entry.head;
         return (
-          <div key={entry.key} className="border-b px-2 py-2 text-sm last:border-b-0">
+          <div
+            key={entry.key}
+            onClick={() => onSelect(t)}
+            className="cursor-pointer border-b px-2 py-2 text-sm last:border-b-0"
+          >
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="truncate">
