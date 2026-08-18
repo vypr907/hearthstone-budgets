@@ -786,6 +786,37 @@ function BudgetTotals({ rows }: { rows: BudgetGroup[] }) {
   );
 }
 
+type OverdueItem = {
+  id: string;
+  name: string;
+  amount: number;
+  cycles: number;
+  due_date: string;
+  kind: "Bill" | "Debt";
+};
+
+/** One past-due row (ADR-049: past due is a money figure). */
+function OverdueRow({ item: o }: { item: OverdueItem }) {
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 p-4">
+        <EmojiIcon name={o.name} fallback={o.kind === "Debt" ? "🏦" : "🧾"} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{o.name}</p>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            {o.kind}
+            {o.cycles > 1 ? ` · ${o.cycles} cycles behind` : ""}
+            {o.due_date ? ` · since ${o.due_date}` : ""}
+          </p>
+        </div>
+        <p className="shrink-0 text-lg font-extrabold tabular-nums text-destructive">
+          {formatMoney(o.amount)}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Compact tile per parent category — ring first, numbers on tap. */
 function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number }) {
   const [open, setOpen] = useState(false);
