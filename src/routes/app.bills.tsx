@@ -791,6 +791,32 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               </SelectContent>
             </Select>
           </div>
+          {/* ADR-068: a deduction that lands in an account can auto-pay this bill. */}
+          <div>
+            <Label>Funded by deduction</Label>
+            <Select value={fundingDeductionId} onValueChange={setFundingDeductionId}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not deduction-funded</SelectItem>
+                {deductions.map((d) => (
+                  <SelectItem
+                    key={d.id}
+                    value={d.id}
+                    disabled={!d.destination_account_id}
+                  >
+                    {d.name}
+                    {d.destination_account_id ? "" : " — reporting only"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              When the paycheck is marked received, this bill's current cycle is paid
+              automatically. Reporting-only deductions can't fund a bill.
+            </p>
+          </div>
           <div>
             <Label>Manual or auto</Label>
             <Select value={manual} onValueChange={setManual}>
