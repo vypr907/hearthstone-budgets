@@ -10,8 +10,9 @@ Google Play Internal Testing. Two shared household logins, identical data.
 
 ## Workflow loop (mandatory)
 notes → ADR (docs/DECISIONS.md) → SQL migration (manual, Supabase SQL Editor,
-no CLI) → code change → update docs/SCHEMA.md, docs/CHANGELOG.md,
-docs/SESSION.md, docs/TODO.md.
+no CLI — schema/data writes only, the read-only MCP below cannot run these) →
+code change → update docs/SCHEMA.md, docs/CHANGELOG.md, docs/SESSION.md,
+docs/TODO.md.
 
 ## SESSION.md logging
 After completing each meaningful step (not each file edit), append an entry
@@ -22,7 +23,11 @@ At session end, summarize docs/SESSION.md into docs/CHANGELOG.md, then clear it.
 ## Hard rules
 - No schema change without an approved ADR. Cite the ADR # in your own notes.
 - Never invent tables/columns/business rules — verify against live schema
-  (Supabase SQL Editor) before assuming docs are current.
+  before assuming docs are current. A read-only Supabase MCP server (docs/
+  database/debugging/development, `.mcp.json`, project scope) is connected —
+  query it directly instead of asking the user to run SELECTs. It cannot
+  write: schema/data changes still require the user to run SQL manually in
+  the Supabase SQL Editor.
 - TODO.md = scoped/actionable only. Unready ideas → SCRATCHPAD.md.
 - Don't rewrite working code unless asked.
 

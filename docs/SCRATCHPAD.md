@@ -51,8 +51,11 @@ Show me the diffs for all three files before finalizing.
 
 
 # Things to work on
-(Scoped 2026-08-19 into docs/TODO.md's "Dashboard / Paycheck Budget UX pass" —
-see there for the checkpointed plan. Removed here to avoid duplication.)
+- dashboard: first Budget vs Actual card, I want tool tip explaining the card, like Monthly Summary has. Need to be very clear on the difference between the two.
+   - Budget vs Actual needs to be scoped to pay period only (as of today, that would be 8/13 to 8/27). Also is still labeled as "This Month", should be "This Pay Period"
+   - Monthly Summary should focus on what's gone out vs expected. Don't need the "<amt> over", "<amt> left" to be the big subheader.
+- Everything page: still shows two invoices that have been paid off as unpaid
+- for debts, need to be able to add historical debt payments. Example: OrthoAlaska is 1 cycle over due. I submitted a pending payment for this month, but my only option is to mark the existing transaction cleared, but not to submit an older payment to clear the past due. Also, when submitting the payment, there's no way to select the date. If I just add a transaction, even if I link it to the bill/debt, it doesn't label it as a debt payment
 ---
 
 ## Idea: smarter institution_type for inline-created merchants (Add Transaction)
