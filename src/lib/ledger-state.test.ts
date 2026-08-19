@@ -86,4 +86,15 @@ describe("ADR-036 cycle state (Rent 2, $609 due)", () => {
   it("returns to UNPAID after the reset removes the cycle's transactions", () => {
     expect(info(rent(), []).state).toBe("unpaid");
   });
+
+  it("nets an ADR-008 correcting/reversal transaction against the original payment", () => {
+    // t1: a $609 payment (money out). t2: an ADR-070 reversal of the same
+    // magnitude (money back in) — these must net to 0, not double-count.
+    const i = info(rent({ cycle_amount_due: 609 }), [
+      tx(609, "cleared", "t1"),
+      tx(-609, "cleared", "t2"),
+    ]);
+    expect(i.clearedSum).toBe(0);
+    expect(i.state).toBe("unpaid");
+  });
 });

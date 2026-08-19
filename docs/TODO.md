@@ -18,6 +18,7 @@
 
 - [ ] Add unit tests for `projectOccurrences()` (monthly + biweekly items) alongside the existing arrears tests.
 - [ ] Fix the pre-existing `arrears.test.ts` opening-arrears failure (unrelated to recent work, still red).
+- [ ] Run the suite (blocked locally by AppLocker) to confirm the new `ledger-state.test.ts` ADR-008 netting regression test passes, and verify live: reverse a cleared bill payment, confirm the bill's cycle state drops back to `unpaid`/`partial` instead of staying `cleared`.
 
 ## Follow-up work
 

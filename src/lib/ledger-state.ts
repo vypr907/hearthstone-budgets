@@ -97,9 +97,15 @@ export function deriveCycleInfo(
         // The cycle covering today may already have been resolved and rolled forward.
         const prevStart = shiftDateSafe(openStart, cycleName, -1, cycleDays);
         const prev = linked.filter((t) => between(t, prevStart, openStart));
-        const clearedPrev = prev
-          .filter((t) => t.status === "cleared")
-          .reduce((s, t) => s + Math.abs(Number(t.amount ?? 0)), 0);
+        // ADR-008: net signed amounts rather than summing absolute values, so a
+        // correcting/reversal transaction offsets the payment it reverses
+        // instead of double-counting alongside it.
+        const clearedPrev = Math.max(
+          0,
+          prev
+            .filter((t) => t.status === "cleared")
+            .reduce((s, t) => s - Number(t.amount ?? 0), 0),
+        );
         if (prev.length > 0 && due > 0 && clearedPrev + 0.005 >= due) {
           cycleTx = prev;
           resolved = true;
@@ -110,9 +116,15 @@ export function deriveCycleInfo(
         cycleTx.filter((t) => t.status === "pending").sort((a, b) =>
           day(b.transaction_date).localeCompare(day(a.transaction_date)),
         )[0] ?? null;
-      const clearedSum = cycleTx
-        .filter((t) => t.status === "cleared")
-        .reduce((s, t) => s + Math.abs(Number(t.amount ?? 0)), 0);
+      // ADR-008: net signed amounts rather than summing absolute values, so a
+      // correcting/reversal transaction offsets the payment it reverses
+      // instead of double-counting alongside it.
+      const clearedSum = Math.max(
+        0,
+        cycleTx
+          .filter((t) => t.status === "cleared")
+          .reduce((s, t) => s - Number(t.amount ?? 0), 0),
+      );
 
       let state: LedgerState = "unpaid";
       if (pending) state = "pending";
