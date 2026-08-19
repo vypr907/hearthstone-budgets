@@ -25,6 +25,11 @@ import {
   spendableContribution,
 } from "@/lib/balances";
 import { billsBudgetedByCategory, buildActualResolver } from "@/lib/spending-actuals";
+import {
+  combinedActualByCategory,
+  debtsBudgetedByCategory,
+  trailingAverageByCategory,
+} from "@/lib/monthly-summary";
 import { todayISO } from "@/lib/snapshot";
 import { billRemainingOwed, debtRemainingOwed, toPayable } from "@/lib/payments";
 import { computeArrears } from "@/lib/arrears";
@@ -242,6 +247,89 @@ function Dashboard() {
     }
     return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [budgets, actuals, transactions, categories, bills]);
+
+  /**
+   * ADR-073: monthly summary, grouped by parent_category like `budgetChart`,
+   * but combining bills + debts + spending and comparing against both the
+   * manual budget target and a trailing 6-month actual average. Unlike
+   * `budgetChart` (which only ever shows categories with a `spending_budgets`
+   * row), this includes any category with a bill, debt, budget row, actual
+   * spend, or trailing average — so a debt-only category still shows up.
+   */
+  const monthlySummary = useMemo(() => {
+    const month = monthKey(new Date());
+    const debtsBudget = debtsBudgetedByCategory(debts, categories);
+    const billsBudget = billsBudgetedByCategory(bills, categories);
+    const spendingBudget = new Map(
+      budgets
+        .filter((b) => b.category_id)
+        .map((b) => [b.category_id as string, Number(b.budgeted_amount || 0)]),
+    );
+    const actualByCategory = combinedActualByCategory(transactions, bills, debts, categories, month);
+    const trailingByCategory = trailingAverageByCategory(transactions, bills, debts, categories, month, 6);
+    const byId: Record<string, (typeof categories)[number]> = {};
+    for (const c of categories) byId[c.id] = c;
+
+    const ids = new Set<string>([
+      ...spendingBudget.keys(),
+      ...billsBudget.keys(),
+      ...debtsBudget.keys(),
+      ...actualByCategory.keys(),
+      ...trailingByCategory.keys(),
+    ]);
+
+    const groups = new Map<
+      string,
+      {
+        name: string;
+        budgetTarget: number;
+        trailingAverage: number;
+        actual: number;
+        spendingBudgeted: number;
+        billsBudgeted: number;
+        debtsBudgeted: number;
+        spendingSpent: number;
+        billsSpent: number;
+        debtsSpent: number;
+      }
+    >();
+    for (const id of ids) {
+      const cat = byId[id];
+      // ADR-069: only spending-domain categories belong here.
+      if (!cat || categoryDomain(cat) !== "spending") continue;
+      const parent = cat.parent_category?.trim() || "";
+      const key = parent || "__none__";
+      const g = groups.get(key) ?? {
+        name: parent || "Ungrouped",
+        budgetTarget: 0,
+        trailingAverage: 0,
+        actual: 0,
+        spendingBudgeted: 0,
+        billsBudgeted: 0,
+        debtsBudgeted: 0,
+        spendingSpent: 0,
+        billsSpent: 0,
+        debtsSpent: 0,
+      };
+      const spending = spendingBudget.get(id) ?? 0;
+      const billsB = billsBudget.get(id) ?? 0;
+      const debtsB = debtsBudget.get(id) ?? 0;
+      g.spendingBudgeted += spending;
+      g.billsBudgeted += billsB;
+      g.debtsBudgeted += debtsB;
+      g.budgetTarget += spending + billsB + debtsB;
+      g.trailingAverage += trailingByCategory.get(id) ?? 0;
+      const a = actualByCategory.get(id);
+      if (a) {
+        g.actual += a.total;
+        g.spendingSpent += a.spendingSpent;
+        g.billsSpent += a.billsSpent;
+        g.debtsSpent += a.debtsSpent;
+      }
+      groups.set(key, g);
+    }
+    return [...groups.values()].sort((a, b) => b.actual - a.actual);
+  }, [budgets, transactions, categories, bills, debts]);
 
 
 
@@ -768,6 +856,32 @@ function Dashboard() {
           )}
         </div>
 
+        {monthlySummary.length > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Monthly summary
+                <HelpButton>
+                  Bills, debt minimum payments, and spending combined, by
+                  category, for this calendar month so far — compared against
+                  both your budget target and the household's own trailing
+                  6-month average. Paycheck/HSA-deducted debts are excluded,
+                  same as everywhere else they never touch spendable cash.
+                </HelpButton>
+              </p>
+              <MonthlySummaryTotals groups={monthlySummary} />
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {monthlySummary.map((g, i) => (
+                  <MonthlySummaryTile key={g.name} group={g} index={i} />
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+                Tap a category for the spending / bills / debts split
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {netWorthData.length > 1 && (
           <Card>
             <CardContent className="p-4">
@@ -957,6 +1071,116 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
             billsBudgeted={g.billsBudgeted}
             spendingSpent={g.spendingSpent}
             billsSpent={g.billsSpent}
+          />
+        </div>
+      ) : null}
+    </button>
+  );
+}
+
+/** ADR-073: bills + debts + spending combined, vs. budget target and trailing average. */
+type MonthlySummaryGroup = {
+  name: string;
+  budgetTarget: number;
+  trailingAverage: number;
+  actual: number;
+  spendingBudgeted: number;
+  billsBudgeted: number;
+  debtsBudgeted: number;
+  spendingSpent: number;
+  billsSpent: number;
+  debtsSpent: number;
+};
+
+/** Headline bar: actual so far vs. budget target, with the trailing average as a reference line. */
+function MonthlySummaryTotals({ groups }: { groups: MonthlySummaryGroup[] }) {
+  const actual = groups.reduce((s, g) => s + g.actual, 0);
+  const budgetTarget = groups.reduce((s, g) => s + g.budgetTarget, 0);
+  const trailingAverage = groups.reduce((s, g) => s + g.trailingAverage, 0);
+  const pct =
+    budgetTarget > 0 ? Math.min(100, (actual / budgetTarget) * 100) : actual > 0 ? 100 : 0;
+  const over = budgetTarget > 0 && actual > budgetTarget;
+  const vsAverage = actual - trailingAverage;
+  return (
+    <div className="mt-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-3xl font-extrabold tabular-nums">{formatMoney(actual)}</p>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          of {formatMoney(budgetTarget)} budget
+        </p>
+      </div>
+      <ItemBar
+        value={pct}
+        color={over ? "var(--destructive)" : "var(--brand)"}
+        className="mt-2"
+      />
+      {trailingAverage > 0 ? (
+        <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+          6-mo average {formatMoney(trailingAverage)} ·{" "}
+          {vsAverage >= 0
+            ? `${formatMoney(vsAverage)} above average so far`
+            : `${formatMoney(Math.abs(vsAverage))} below average so far`}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** One category tile: ring against budget target, tap to reveal spending/bills/debts split + trailing average. */
+function MonthlySummaryTile({ group: g, index: i }: { group: MonthlySummaryGroup; index: number }) {
+  const [open, setOpen] = useState(false);
+  const pct = g.budgetTarget
+    ? Math.min(100, (g.actual / g.budgetTarget) * 100)
+    : g.actual > 0
+      ? 100
+      : 0;
+  const over = g.budgetTarget > 0 && g.actual > g.budgetTarget;
+  const color = over ? "var(--destructive)" : itemColor(i);
+  const vsAverage = g.actual - g.trailingAverage;
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      className="rounded-[14px] bg-muted/40 p-3 text-left active:bg-muted"
+      aria-expanded={open}
+    >
+      <div className="flex items-center gap-2">
+        <ProgressRing value={pct} color={color} size={44} />
+        <div className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1 text-sm font-medium">
+            <span aria-hidden>{emojiFor(g.name)}</span>
+            <span className="truncate">{g.name}</span>
+          </span>
+          <span
+            className={
+              over
+                ? "text-xs uppercase tracking-widest text-destructive"
+                : "text-xs uppercase tracking-widest text-muted-foreground"
+            }
+          >
+            {over
+              ? `${formatMoney(g.actual - g.budgetTarget)} over`
+              : `${formatMoney(g.budgetTarget - g.actual)} left`}
+          </span>
+          {g.trailingAverage > 0 ? (
+            <span className="block text-[10px] text-muted-foreground">
+              {vsAverage >= 0
+                ? `${formatMoney(vsAverage)} above avg`
+                : `${formatMoney(Math.abs(vsAverage))} below avg`}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      {open ? (
+        <div className="mt-2">
+          <BudgetSplitLines
+            spendingBudgeted={g.spendingBudgeted}
+            billsBudgeted={g.billsBudgeted}
+            debtsBudgeted={g.debtsBudgeted}
+            spendingSpent={g.spendingSpent}
+            billsSpent={g.billsSpent}
+            debtsSpent={g.debtsSpent}
+            extra={{ label: "6-mo average", value: g.trailingAverage }}
           />
         </div>
       ) : null}

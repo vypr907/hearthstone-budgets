@@ -51,6 +51,8 @@ export type Bill = {
   arrears_as_of?: string | null;
   /** ADR-068: paycheck deduction that funds this bill (must have an account). */
   funding_deduction_id?: string | null;
+  /** ADR-074: the account this bill is usually paid from. */
+  usual_payment_account_id?: string | null;
 
   created_at: string;
   updated_at: string;
@@ -132,6 +134,8 @@ export type Debt = {
   arrears_as_of?: string | null;
   /** ADR-068: paycheck deduction that funds this debt (must have an account). */
   funding_deduction_id?: string | null;
+  /** ADR-074: the account this debt is usually paid from. */
+  usual_payment_account_id?: string | null;
 
   created_at: string;
   updated_at: string;

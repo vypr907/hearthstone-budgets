@@ -33,7 +33,7 @@ import {
   StatusBadge,
   statusVariant,
 } from "@/components/detail";
-import { formatMoney, debtDueDate } from "@/lib/format";
+import { formatMoney, debtDueDate, accountLabel } from "@/lib/format";
 import { useHouseholdDeductions, useIncomeSources, useIncomeEvents } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -547,10 +547,13 @@ function DebtDialog({
   const del = useDeleteDebt();
   const { data: transactions = [] } = useTransactions();
   const { data: institutions = [] } = useInstitutions();
+  const { data: accounts = [] } = useAccounts();
   const { data: deductions = [] } = useHouseholdDeductions();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
   const [fundingDeductionId, setFundingDeductionId] = useState("none");
+  /** ADR-074: the account this debt is usually paid from. */
+  const [usualPaymentAccountId, setUsualPaymentAccountId] = useState("none");
   const [name, setName] = useState("");
   const [remaining, setRemaining] = useState("");
   const [original, setOriginal] = useState("");
@@ -611,6 +614,7 @@ function DebtDialog({
     setArrearsAsOf(debt?.arrears_as_of ? debt.arrears_as_of.slice(0, 10) : "");
     setInvoiceNumber(debt?.invoice_number ?? "");
     setFundingDeductionId(debt?.funding_deduction_id ?? "none");
+    setUsualPaymentAccountId(debt?.usual_payment_account_id ?? "none");
     setNameTouched(!!debt?.name);
     setRemainingTouched(!!debt?.id);
     setMinPayTouched(!!debt?.id);
@@ -704,12 +708,23 @@ function DebtDialog({
     } else if (nextRemaining != null && nextRemaining > 0) {
       datePaidOff = null;
     }
+    // ADR-074: an explicit pick always wins; otherwise fall back to the most
+    // recent linked-payment transaction's account, same derivation as the
+    // backfill script ran once already.
+    let usualPaymentAccountId2: string | null = usualPaymentAccountId !== "none" ? usualPaymentAccountId : null;
+    if (!usualPaymentAccountId2) {
+      const linked = transactions
+        .filter((t) => t.linked_debt_id === debt?.id)
+        .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+      usualPaymentAccountId2 = linked[linked.length - 1]?.account_id ?? null;
+    }
     try {
       await upsert.mutateAsync({
         id: debt?.id,
         name: name.trim(),
         remaining_balance: remainingNum ?? originalNum,
         date_paid_off: datePaidOff,
+        usual_payment_account_id: usualPaymentAccountId2,
         starting_balance: startingBalance,
         // Interest rate is optional: blank stores null rather than 0.
         interest_rate: rate.trim() !== "" && Number.isFinite(Number(rate)) ? Number(rate) : null,
@@ -861,6 +876,26 @@ function DebtDialog({
               When the paycheck is marked received, this debt's current cycle is paid
               automatically. Reporting-only deductions can't fund a debt.
             </p>
+          </div>
+          {/* ADR-074: which account this debt is usually paid from, for Paycheck
+              Budget's "Group: Account" view. */}
+          <div>
+            <Label>Usual payment account</Label>
+            <Select value={usualPaymentAccountId} onValueChange={setUsualPaymentAccountId}>
+              <SelectTrigger className="h-14 text-base">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="py-3 text-base">
+                  Not set
+                </SelectItem>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id} className="py-3 text-base">
+                    {accountLabel(a)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {/* ADR-052: invoice reference number drives the auto-composed name. */}
           {isInvoice ? (

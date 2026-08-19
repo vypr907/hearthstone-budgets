@@ -2226,3 +2226,88 @@ Status: Decided 2026-08-18. App side implemented 2026-08-19 (`PayPeriodAllocatio
 `useSetAllocation`'s `feeAmount` arg, `PlanPaymentDialog`'s optional Fee amount field, Planned
 row's "$total ($base + $fee fee)" display) — pending the `alter table` + `notify pgrst,
 'reload schema'` being run manually in Supabase SQL Editor.
+
+## ADR-073: Monthly Summary Card — Trailing Average vs. Budget, Combined Bills+Debts+Spending
+
+Decision:
+A new Dashboard card ("Monthly summary"), placed after "Past due" and before the net worth
+trend chart. Per parent-category group (same grouping as the existing "Budget vs actual ·
+this month" card), combines bills + debts + spending into one actual-so-far figure for the
+current calendar month, and compares it against two expected figures shown side by side:
+
+1. The existing manual budget target — `spending_budgets` + bills' monthly-equivalent load
+   (`billsBudgetedByCategory`, unchanged) + a **new** `debtsBudgetedByCategory()`, which
+   mirrors the bills version using `minimum_payment` in place of `amount`. Paycheck-deducted
+   debts (`isPaycheckDeducted`, ADR-032) are excluded, matching how they're excluded from
+   every other spendable-cash obligation total in the app.
+2. A trailing 6-calendar-month actual average, same combined bills+debts+spending basis, over
+   the 6 full calendar months immediately before the current one — the current (incomplete)
+   month is never included in its own average.
+
+Ledger-derived actuals reuse `buildActualResolver`'s pattern (category_id, falling back to
+the linked bill's/debt's category) but add a `linked_debt_id` bucket alongside the existing
+`linked_bill_id` one. Transactions linked to a paycheck-deducted debt are excluded entirely
+(not counted as spending either), for the same reason as (1). This is a pure display
+computation — never written back to `spending_budgets`, `pay_period_allocations`, or any
+existing obligations/budget calculation. The existing "Budget vs actual · this month" card is
+untouched.
+
+Reason:
+The household budgets per pay period (ADR-024/034/039) since bills/debts land on their own
+due dates, not evenly across a calendar month — but that makes "am I spending more than usual
+this month" hard to eyeball. A trailing average grounds "usual" in the household's own real
+history instead of relying solely on a manually maintained target, while keeping the existing
+target-based card intact. Separately, `billsBudgetedByCategory` never included debts, so a
+category with only a debt minimum payment (no bill) looked emptier than its real monthly
+load — extending the same monthly-equivalent pattern to debts fixes that for this card
+without touching the existing card's behavior.
+
+Schema: None — pure client-side computation over existing tables.
+
+Status: Decided 2026-08-19. Implemented 2026-08-19.
+
+## ADR-074: Usual Payment Account on Bills/Debts (Account Grouping)
+
+Decision:
+Add nullable `usual_payment_account_id uuid references accounts(id)` to both `bills` and
+`debts`. A manual picker on each item's edit form lets the household record which account a
+bill/debt is normally paid from. When the field is unset, the form defaults it once (not
+resynced afterward) from the most recent transaction linked to that bill/debt
+(`linked_bill_id`/`linked_debt_id`) if one exists — otherwise it stays null until set by hand.
+Powers a new "Group: Account" mode in Paycheck Budget's "Due this period" toggle (alongside
+the Due Date default and the Category mode shipped under ADR-073's work), showing subtotals
+per account so the household can see how much needs to be in each account to cover what's due.
+
+Reason:
+Neither bills nor debts store any link to "the account this usually gets paid from" —
+`institution_id` records the payee/merchant, not the household's own paying account. A manual
+field beats trying to infer it fresh on every render from ledger history (unreliable/empty for
+items never paid yet), while still saving a first guess from history so existing items with
+payment history aren't blank by default.
+
+Schema:
+```sql
+alter table bills add column usual_payment_account_id uuid references accounts(id);
+alter table debts add column usual_payment_account_id uuid references accounts(id);
+```
+
+Migration steps:
+1. Run the SQL above (Supabase SQL Editor, no CLI), then `notify pgrst, 'reload schema';`.
+2. Backfill existing bills/debts that have payment history, one-time script:
+   ```sql
+   update bills b set usual_payment_account_id = (
+     select t.account_id from transactions t
+     where t.linked_bill_id = b.id order by t.transaction_date desc limit 1
+   ) where b.usual_payment_account_id is null;
+
+   update debts d set usual_payment_account_id = (
+     select t.account_id from transactions t
+     where t.linked_debt_id = d.id order by t.transaction_date desc limit 1
+   ) where d.usual_payment_account_id is null;
+   ```
+3. Add the field to the Bill/Debt edit forms (manual picker), defaulting new/unset items to
+   the most recent linked-payment account when one resolves.
+4. Add "Group: Account" as a third option in Paycheck Budget's obligations toggle, with an
+   `obligationsByAccount` memo mirroring `obligationsByCategory` (ADR-073-adjacent work).
+
+Status: Decided 2026-08-19. Not yet implemented — pending sign-off before the SQL above runs.

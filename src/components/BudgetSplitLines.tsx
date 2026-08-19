@@ -11,17 +11,25 @@ export function BudgetSplitLines({
   billsBudgeted,
   spendingSpent,
   billsSpent,
+  debtsBudgeted,
+  debtsSpent,
   extra,
 }: {
   spendingBudgeted: number;
   billsBudgeted: number;
   spendingSpent: number;
   billsSpent: number;
+  /** ADR-073: omitted by callers that don't track debts in this breakdown. */
+  debtsBudgeted?: number;
+  debtsSpent?: number;
   extra?: { label: string; value: number };
 }) {
   const rows = [
     { icon: "🛒", label: "Spending", spent: spendingSpent, budgeted: spendingBudgeted },
     { icon: "🧾", label: "Bills", spent: billsSpent, budgeted: billsBudgeted },
+    ...(debtsBudgeted != null || debtsSpent != null
+      ? [{ icon: "🏦", label: "Debts", spent: debtsSpent ?? 0, budgeted: debtsBudgeted ?? 0 }]
+      : []),
   ];
   return (
     <div className="space-y-2">

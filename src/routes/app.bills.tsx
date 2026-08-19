@@ -8,13 +8,14 @@ import {
   useUpsertBill,
   useCategories,
   useInstitutions,
+  useAccounts,
   useTransactions,
   useDeleteLinkedTransaction,
   useBillAdjustments,
   useAddBillAdjustment,
   useDeleteBillAdjustment,
 } from "@/lib/data-hooks";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, accountLabel } from "@/lib/format";
 import { useHouseholdDeductions } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -570,8 +571,12 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
   const del = useDeleteBill();
   const { data: categories = [] } = useCategories();
   const { data: institutions = [] } = useInstitutions();
+  const { data: accounts = [] } = useAccounts();
+  const { data: transactions = [] } = useTransactions();
   const { data: deductions = [] } = useHouseholdDeductions();
   const [fundingDeductionId, setFundingDeductionId] = useState("none");
+  /** ADR-074: the account this bill is usually paid from. */
+  const [usualPaymentAccountId, setUsualPaymentAccountId] = useState("none");
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDay, setDueDay] = useState("");
@@ -605,6 +610,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
     setOpeningArrears(bill?.opening_arrears != null ? String(bill.opening_arrears) : "");
     setArrearsAsOf(bill?.arrears_as_of ? bill.arrears_as_of.slice(0, 10) : "");
     setFundingDeductionId(bill?.funding_deduction_id ?? "none");
+    setUsualPaymentAccountId(bill?.usual_payment_account_id ?? "none");
     const derived = deriveCustomInterval(bill?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
@@ -631,6 +637,16 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         return;
       }
     }
+    // ADR-074: an explicit pick always wins; otherwise fall back to the most
+    // recent linked-payment transaction's account.
+    let usualPaymentAccountId2: string | null =
+      usualPaymentAccountId !== "none" ? usualPaymentAccountId : null;
+    if (!usualPaymentAccountId2) {
+      const linked = transactions
+        .filter((t) => t.linked_bill_id === bill?.id)
+        .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+      usualPaymentAccountId2 = linked[linked.length - 1]?.account_id ?? null;
+    }
     try {
       await upsert.mutateAsync({
         id: bill?.id,
@@ -647,6 +663,7 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
         opening_arrears: openingArrears ? Number(openingArrears) : 0,
         arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
         funding_deduction_id: fundingDeductionId === "none" ? null : fundingDeductionId,
+        usual_payment_account_id: usualPaymentAccountId2,
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
       onClose();
@@ -832,6 +849,24 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
               When the paycheck is marked received, this bill's current cycle is paid
               automatically. Reporting-only deductions can't fund a bill.
             </p>
+          </div>
+          {/* ADR-074: which account this bill is usually paid from, for
+              Paycheck Budget's "Group: Account" view. */}
+          <div>
+            <Label>Usual payment account</Label>
+            <Select value={usualPaymentAccountId} onValueChange={setUsualPaymentAccountId}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not set</SelectItem>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {accountLabel(a)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Manual or auto</Label>

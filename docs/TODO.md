@@ -92,25 +92,43 @@ in-app after.
 
 ### Phase 2 — bigger builds
 
-- [ ] **New monthly summary card** (Dashboard, near the bottom, before the net
-  worth tracker): per category, combine bills + debts + spending; show BOTH the
-  manual budget target (existing `spending_budgets`/`billsBudgetedByCategory`
-  pipeline) AND a trailing historical average side by side, vs. actual so far
-  this month. Proposed trailing window: 6 months, matching `netWorthTrend()`'s
-  existing window (`app.index.tsx:134`) for consistency — confirm at build
-  time. No schema change (computed client-side from existing transactions/
-  bills/debts) — but the trailing-average methodology is a real implementation
-  choice future devs should know about; consider a short ADR when built.
-- [ ] **"Due this period" grouping toggle** (`app.paycheck.tsx:493-550`): add
-  Due Date (current default, unchanged) / Category / Account modes, each with
-  subtotals.
-  - Category: no schema change — bills/debts already have `category_id`.
-  - Account: needs a new nullable `usual_payment_account_id` on `bills` AND
-    `debts` (references `accounts`). **Draft and get sign-off on a new ADR
-    before writing any SQL** (schema change, per CLAUDE.md hard rule). Decision:
-    manual picker on the Bill/Debt edit form, but default-populate it from the
-    most recent linked-payment transaction's account when history exists
-    (backfill script + form default logic) rather than leaving it blank.
+- [x] **New monthly summary card** (2026-08-19) — **ADR-073** drafted and
+  implemented. New `src/lib/monthly-summary.ts`: `debtsBudgetedByCategory()`
+  (mirrors `billsBudgetedByCategory`, excludes paycheck-deducted debts per
+  ADR-032), `combinedActualByCategory()` (bills+debts+spending ledger actual
+  for one month, extends `buildActualResolver`'s pattern with a
+  `linked_debt_id` bucket), `trailingAverageByCategory()` (6 full calendar
+  months before the current one, current month never included). New
+  `monthlySummary` memo in `app.index.tsx` groups by parent_category like
+  `budgetChart`, but — unlike `budgetChart` — includes any category with a
+  bill, debt, budget row, actual, or trailing average, not only ones with a
+  `spending_budgets` row (so debt-only categories show up). New card
+  ("Monthly summary") rendered between "Past due" and the net worth trend
+  chart, with `MonthlySummaryTotals`/`MonthlySummaryTile` components
+  (`app.index.tsx`, mirror `BudgetTotals`/`BudgetTile`). `BudgetSplitLines`
+  gained optional `debtsBudgeted`/`debtsSpent` props (backward compatible —
+  the existing "Budget vs actual" card doesn't pass them, so its 2-row
+  display is unchanged). No schema change.
+- [x] **"Due this period" grouping toggle — Due Date/Category done (2026-08-19)**.
+  `app.paycheck.tsx`: `ObligationRow`/`obligationRowKey` extracted (shared by
+  both modes), `obligationsByCategory` memo (groups via `groupRows()` from
+  `ListControls.tsx`, reused rather than reinventing — subtotal per group,
+  sorted descending), small `Select` toggle next to the "Due this period"
+  header. Due Date mode is the unchanged original flat list. No schema change.
+- [x] **ADR-074 drafted and approved** (2026-08-19) — see `docs/DECISIONS.md`.
+- [x] **SQL run** (2026-08-19): `usual_payment_account_id` added to `bills`
+  and `debts`, backfilled from linked-payment history.
+- [x] **Account grouping mode — done (2026-08-19).** `usual_payment_account_id`
+  added to `Bill`/`Debt` types (`supabase.ts`). "Usual payment account" picker
+  added to both edit forms (`app.debts.tsx`, `app.bills.tsx`) — an explicit
+  pick always wins; if left unset, `save()` falls back to the most recent
+  linked-payment transaction's account (same derivation the backfill script
+  ran once, mirrors the `date_paid_off` fix's pattern). "Group: Account" is
+  now a third option in Paycheck Budget's obligations toggle
+  (`app.paycheck.tsx`), with an `obligationsByAccount` memo mirroring
+  `obligationsByCategory`.
+
+**All 7 items from SCRATCHPAD.md's "Things to work on" are now complete.**
 
 ## Tests
 

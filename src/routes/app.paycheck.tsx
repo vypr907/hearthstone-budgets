@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { AppHeader } from "@/components/AppHeader";
 import { HelpButton } from "@/components/HelpButton";
+import { groupRows } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -254,6 +255,39 @@ function spendingCategories(categories: Cat[]) {
   return spending.length > 0 ? spending : categories;
 }
 
+type ObligationRowItem = import("@/lib/paycheck-budget").Obligation;
+
+const obligationRowKey = (o: ObligationRowItem) =>
+  `${o.kind}-${o.id}-${o.dueDate}${o.projected ? "-p" : ""}`;
+
+/** One "Due this period" row — shared by the flat Due-date list and each Category group. */
+function ObligationRow({ o }: { o: ObligationRowItem }) {
+  return (
+    <div className="flex items-center justify-between py-1 text-sm">
+      <span className="flex-1">
+        {o.name}
+        <span className="ml-2 text-xs text-muted-foreground">
+          {o.kind} · {o.dueDate}
+        </span>
+        {o.projected ? (
+          <span className="ml-2 inline-flex items-center gap-1">
+            <span className="rounded border border-dashed px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              Projected
+            </span>
+            <HelpButton>
+              This bill hasn't posted a due date in this range yet — it's a
+              forecast based on its usual schedule, not a confirmed charge.
+            </HelpButton>
+          </span>
+        ) : null}
+      </span>
+      <span className={o.projected ? "font-medium text-muted-foreground" : "font-medium"}>
+        {formatMoney(o.amount)}
+      </span>
+    </div>
+  );
+}
+
 function PeriodBudget({
   event,
   start,
@@ -308,6 +342,43 @@ function PeriodBudget({
     () => obligationsInRange(bills, debts, start, end, end),
     [bills, debts, start, end],
   );
+  /** "Due this period" can group by Category or Account alongside its Due Date default. */
+  const [obligationsGroupBy, setObligationsGroupBy] = useState<"due" | "category" | "account">("due");
+  const obligationsByCategory = useMemo(() => {
+    const billCategoryId = new Map(bills.map((b) => [b.id, b.category_id]));
+    const debtCategoryId = new Map(debts.map((d) => [d.id, d.category_id]));
+    const categoryName = new Map(categories.map((c) => [c.id, c.name]));
+    const groups = groupRows(obligations, (o) => {
+      const catId = o.kind === "bill" ? billCategoryId.get(o.id) : debtCategoryId.get(o.id);
+      return catId ?? "__none__";
+    });
+    return groups
+      .map(([key, rows]) => ({
+        key,
+        name: key === "__none__" ? "Uncategorized" : (categoryName.get(key) ?? "Uncategorized"),
+        rows,
+        total: sum(rows.map((o) => o.amount)),
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [obligations, bills, debts, categories]);
+  /** ADR-074: which account each bill/debt is usually paid from — subtotals show what needs to be in each account. */
+  const obligationsByAccount = useMemo(() => {
+    const billAccountId = new Map(bills.map((b) => [b.id, b.usual_payment_account_id]));
+    const debtAccountId = new Map(debts.map((d) => [d.id, d.usual_payment_account_id]));
+    const accountName = new Map(accounts.map((a) => [a.id, a.name]));
+    const groups = groupRows(obligations, (o) => {
+      const acctId = o.kind === "bill" ? billAccountId.get(o.id) : debtAccountId.get(o.id);
+      return acctId ?? "__none__";
+    });
+    return groups
+      .map(([key, rows]) => ({
+        key,
+        name: key === "__none__" ? "No account set" : (accountName.get(key) ?? "No account set"),
+        rows,
+        total: sum(rows.map((o) => o.amount)),
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [obligations, bills, debts, accounts]);
   // ADR-071: bill/debt ids with a manually planned row for this period —
   // excluded from the total below so Left-to-allocate doesn't double-
   // subtract the same payment. "Due this period"'s own list is unaffected.
@@ -492,37 +563,42 @@ function PeriodBudget({
 
       <Card>
         <CardContent className="space-y-2 p-4">
-          <h2 className="text-base font-semibold">Due this period</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Due this period</h2>
+            {obligations.length > 0 ? (
+              <Select
+                value={obligationsGroupBy}
+                onValueChange={(v) => setObligationsGroupBy(v as "due" | "category" | "account")}
+              >
+                <SelectTrigger className="h-8 w-auto gap-1.5 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="due">Group: Due date</SelectItem>
+                  <SelectItem value="category">Group: Category</SelectItem>
+                  <SelectItem value="account">Group: Account</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
+          </div>
           {obligations.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing due in this range.</p>
+          ) : obligationsGroupBy === "due" ? (
+            obligations.map((o) => <ObligationRow key={obligationRowKey(o)} o={o} />)
           ) : (
-            obligations.map((o) => (
-              <div
-                key={`${o.kind}-${o.id}-${o.dueDate}${o.projected ? "-p" : ""}`}
-                className="flex items-center justify-between py-1 text-sm"
-              >
-                <span className="flex-1">
-                  {o.name}
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {o.kind} · {o.dueDate}
-                  </span>
-                  {o.projected ? (
-                    <span className="ml-2 inline-flex items-center gap-1">
-                      <span className="rounded border border-dashed px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        Projected
-                      </span>
-                      <HelpButton>
-                        This bill hasn't posted a due date in this range yet — it's a
-                        forecast based on its usual schedule, not a confirmed charge.
-                      </HelpButton>
-                    </span>
-                  ) : null}
-                </span>
-                <span className={o.projected ? "font-medium text-muted-foreground" : "font-medium"}>
-                  {formatMoney(o.amount)}
-                </span>
-              </div>
-            ))
+            (obligationsGroupBy === "category" ? obligationsByCategory : obligationsByAccount).map(
+              (g) => (
+                <div key={g.key} className="space-y-1">
+                  <div className="flex items-center justify-between border-t pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span>{g.name}</span>
+                    <span>{formatMoney(g.total)}</span>
+                  </div>
+                  {g.rows.map((o) => (
+                    <ObligationRow key={obligationRowKey(o)} o={o} />
+                  ))}
+                </div>
+              ),
+            )
           )}
           <div className="flex items-center justify-between border-t pt-2 text-sm font-semibold">
             <span>Obligations total</span>
