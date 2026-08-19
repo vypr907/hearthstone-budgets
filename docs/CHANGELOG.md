@@ -960,3 +960,178 @@
 * Until the manual SQL migration extending `categories.domain` to `'income'`
   and inserting the four income categories (Income, Credit, Refund, Gift) runs,
   Income mode shows an empty category list with an inline hint. Typecheck clean.
+
+## 2026-08-19 – Bug Fixes: ADR-008 Ledger Netting, ADR-056 Addendum (Advance Debt Sync)
+
+### Completed
+
+* `deriveCycleInfo()` (`src/lib/ledger-state.ts`) summed `Math.abs(amount)`
+  across cleared transactions for both `clearedSum` and `clearedPrev`, double-
+  counting an ADR-008 correcting/reversal transaction instead of netting it
+  against the payment it offsets. Replaced both with a signed net, floored at
+  0. Regression test added in `ledger-state.test.ts` (a cleared payment
+  followed by an equal cleared reversal now nets to `unpaid`, not `cleared`).
+* ADR-056 addendum: `useCreateAdvance` only ever wrote `remaining_balance`,
+  never `minimum_payment`/`next_due_date`. New `advanceMinimumPaymentPatch()`
+  (`src/lib/payments.ts`) keeps `minimum_payment` mirroring `remaining_balance`
+  for `debt_type='advance'` debts, merged into all 6 debt balance-writing
+  sites. New `nextPayDate()` (`src/lib/paycheck-budget.ts`) defaults Next due
+  date once for biweekly advance-type debts with none set, from the
+  household's primary income source — never an ongoing resync.
+
+### Notes
+
+* Could not run the test suite locally (vitest blocked by AppLocker) —
+  flagged for live verification.
+
+## 2026-08-19 – ADR-071: Left-to-Allocate Fix (Amends ADR-059)
+
+### Completed
+
+* `obligationsTotal` in Paycheck Budget summed every `obligationsInRange()`
+  row with no awareness of manually planned `pay_period_allocations` rows,
+  double-subtracting a bill/debt that's both auto-matched in "Due this
+  period" and separately planned for the same pay period. New
+  `obligationsTotalExcludingPlanned()` (`src/lib/paycheck-budget.ts`) and a
+  per-period `plannedKeys` set exclude those items' due-date amount from the
+  aggregate total only — the "Due this period" list itself, "Planned" card,
+  and ADR-060 recurrence projection are unchanged.
+
+## 2026-08-19 – ADR-072: Optional Fee Amount on Planned Bill/Debt Allocations
+
+### Completed
+
+* `PayPeriodAllocation.fee_amount` (`src/lib/supabase.ts`), threaded through
+  `useSetAllocation`'s new `feeAmount` arg and `commitPlanned`.
+  `PlanPaymentDialog` (bill/debt-only) gained an optional Fee amount field;
+  the Planned row shows "$total ($base + $fee fee)" when set, plain "$total"
+  otherwise. `amount` keeps its existing total-outflow meaning, so ADR-071's
+  math needed no changes.
+
+### Notes
+
+* SQL migration (`alter table pay_period_allocations add column
+  fee_amount numeric(12,2)` + schema reload) run by the user.
+
+## 2026-08-19 – TSP Loan Deduction Manual Backfill (data-only, no ADR)
+
+### Completed
+
+* Diagnosed why a DFAS paycheck marked received before its income source had
+  `income_source_deductions` rows configured could never retroactively
+  auto-post them: `useMarkIncomeReceived()`'s idempotency guard
+  (`income-hooks.ts`) is keyed on any transaction already sharing the event's
+  `split_group_id`, and a manual single-deposit transaction already existed
+  for that event — closing the window permanently, with no in-app path
+  (including "Post deposits") able to reopen it.
+* Manually replicated both halves via Supabase SQL Editor: two deposit
+  transactions matching the shape `useMarkIncomeReceived`/
+  `deduction-funding.ts` would have written, and the two funded debts'
+  cycle settlement matching `applyClearedPayment`'s debt branch by hand.
+* Mid-correction, found and fixed a data error: both TSP debts' `billing_cycle`
+  had been (re)set to `biweekly` — corrected to `monthly` with `due_day`,
+  since monthly debts derive their displayed due date live from `due_day`,
+  not `next_due_date`.
+
+### Notes
+
+* Known issue surfaced, not fixed: `computeArrears()` ignores `payment_status`
+  for monthly debts, so a monthly debt cleared after its `due_day` has passed
+  this month shows "1 cycle past due" regardless of being cleared. Worked
+  around per-debt via `arrears_as_of`; see TODO.md follow-up.
+
+## 2026-08-19 – Dashboard / Paycheck Budget UX Pass, Phase 1
+
+### Completed
+
+* Scoped from SCRATCHPAD.md's "Things to work on" — investigated each item in
+  code and interviewed the user on open design decisions before implementing.
+* Fix Places now excludes transfers, paycheck deposits, splits, and
+  deductions (`transfer_group_id`/`split_group_id`) from the unassigned list,
+  not just plain no-`institution_id` transactions.
+* Dashboard hero: relabeled "$X set aside this pay period" → "$X due this pay
+  period" (it never meant money set aside); added tooltips to Combined
+  Spendable and the Bills/Debts tiles; split the one combined tooltip into
+  two.
+* `AppHeader` gained an optional `action` slot (backward compatible); new
+  Paycheck Budget quick-link in the header plus a full-width card link under
+  the hero.
+* Past Due's Paycheck/HSA deduction grouping is now collapsible (collapsed by
+  default, count + subtotal shown in the header).
+* Fixed the "Aurora Audiology" bug: two independent "paid off" definitions
+  existed — the Debts screen's `isPaidOff` (`remaining_balance <= 0`) vs.
+  `obligationsInRange()`'s `date_paid_off` check, which only auto-sets inside
+  `applyClearedPayment()`. Backfilled the one live debt in this state (date
+  derived from its most recent linked transaction) and added the same
+  derivation to the Debt edit form's `save()` so a manual balance edit can't
+  cause this drift again.
+
+### Notes
+
+* No schema changes in this phase.
+
+## 2026-08-19 – Dashboard / Paycheck Budget UX Pass, Phase 2 (ADR-073, ADR-074)
+
+### Completed
+
+* **ADR-073** — new "Monthly summary" Dashboard card (`src/lib/
+  monthly-summary.ts`): bills + debts + spending combined per category for
+  the current calendar month, compared against both the manual budget target
+  and a trailing 6-month actual average. Debts enter category budget math for
+  the first time (`debtsBudgetedByCategory()`, excludes paycheck-deducted
+  debts per ADR-032). `BudgetSplitLines` gained optional `debtsBudgeted`/
+  `debtsSpent` props, backward compatible with the existing "Budget vs
+  actual" card.
+* **ADR-074** — `usual_payment_account_id` added to `bills` and `debts`
+  (schema change, SQL run by the user, backfilled from linked-payment
+  history). New "Usual payment account" picker on both edit forms — an
+  explicit pick wins, otherwise falls back to the most recent linked-payment
+  account. New "Group: Category" and "Group: Account" modes (with subtotals)
+  added to Paycheck Budget's "Due this period" toggle, alongside the
+  unchanged Due Date default.
+
+## 2026-08-19 – Read-Only Supabase MCP Connected
+
+### Completed
+
+* Connected a project-scoped, read-only Supabase MCP server (`docs`/
+  `database`/`debugging`/`development` features, `read_only=true`) via
+  `.mcp.json`. CLAUDE.md's workflow loop and "verify against live schema"
+  rule updated: query the MCP directly instead of asking the user to run
+  SELECTs. It cannot write — schema/data changes still require the user to
+  run SQL manually in the Supabase SQL Editor.
+
+## 2026-08-19 – Everything Page, Payment Date, Budget vs Actual Rescope
+
+### Completed
+
+* **ADR-036 addendum**: `deriveCycleInfo()` was 100% ledger-transaction-
+  derived with no awareness of `remaining_balance`/`date_paid_off`, so a debt
+  paid off any way other than through Hearthstone's own Submit/Clear flow
+  read "Unpaid" forever on the Everything screen. Now overrides `state`/
+  `remaining` to cleared/0 when a debt's `remaining_balance <= 0`, matching
+  the Debts screen's own `isPaidOff` definition — a different code path than
+  the Aurora Audiology fix.
+* Submit/Clear payment dialog gained a date field: `PayInput.date`, threaded
+  through `useMarkSubmitted`/`useMarkCleared`/`insertFeeTransaction`
+  (previously always hardcoded to today).
+* Add Transaction now auto-fills `"Bill/Debt payment · <name>"` when linked
+  to a bill/debt and the description is left blank — never overrides typed
+  text.
+* Budget vs Actual card rescoped from calendar month to the current pay
+  period. Discovered mid-implementation that `spending_budgets` has no
+  `month` column at all (only `spending_actuals` does), so the manual budget
+  target needed no change. New `actualByCategoryInRange()` (`src/lib/
+  paycheck-budget.ts`, range-based, kept separate from `monthly-summary.ts`'s
+  month-based version to avoid a circular import and protect Monthly
+  Summary's own behavior) replaces the calendar-month ledger lookup;
+  bills/debts target now uses real per-period due amounts instead of the
+  monthly-equivalent smoothed figure; debts added to the card's breakdown for
+  the first time; card relabeled "· this pay period" with a tooltip
+  explaining the difference from Monthly Summary. Monthly Summary's own tile
+  subheader swapped from "$X over/left" to "$actual of $expected" in the same
+  pass.
+
+### Notes
+
+* No schema changes.
