@@ -73,6 +73,7 @@ import {
   inRange,
   isReceived,
   obligationsInRange,
+  obligationsTotalExcludingPlanned,
   deductedObligationsInRange,
   periodRange,
   sum,
@@ -307,7 +308,22 @@ function PeriodBudget({
     () => obligationsInRange(bills, debts, start, end, end),
     [bills, debts, start, end],
   );
-  const obligationsTotal = sum(obligations.map((o) => o.amount));
+  // ADR-071: bill/debt ids with a manually planned row for this period —
+  // excluded from the total below so Left-to-allocate doesn't double-
+  // subtract the same payment. "Due this period"'s own list is unaffected.
+  const plannedKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of allocations) {
+      if (a.income_event_id !== event.id) continue;
+      if (a.bill_id) set.add(`bill:${a.bill_id}`);
+      else if (a.debt_id) set.add(`debt:${a.debt_id}`);
+    }
+    return set;
+  }, [allocations, event.id]);
+  const obligationsTotal = useMemo(
+    () => obligationsTotalExcludingPlanned(obligations, plannedKeys),
+    [obligations, plannedKeys],
+  );
   // ADR-032: shown for awareness, never subtracted from the paycheck.
   const deducted = useMemo(
     () => deductedObligationsInRange(debts, start, end),

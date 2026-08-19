@@ -2183,4 +2183,10 @@ ADR-059 intentionally didn't deduplicate the two sections since "due" and
 same rent payment through both the auto-match and the manual plan is a
 straightforward math bug the visual-separation reasoning never addressed.
 
-Status: Decided 2026-08-18. Not yet implemented.
+Status: Decided 2026-08-18. Implemented 2026-08-19 — new
+`obligationsTotalExcludingPlanned()` (`src/lib/paycheck-budget.ts`), wired
+into `PeriodBudget`'s `obligationsTotal` (`src/routes/app.paycheck.tsx`) via
+a `plannedKeys` set built from this period's `pay_period_allocations` rows.
+`obligations` (the "Due this period" list) and `planned`/`plannedTotal` are
+untouched — only the aggregate total feeding Left-to-allocate and the
+"Obligations total" footer changed.

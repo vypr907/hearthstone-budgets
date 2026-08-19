@@ -210,3 +210,20 @@ export function deductedObligationsInRange(
 export function sum(values: number[]): number {
   return values.reduce((t, v) => t + v, 0);
 }
+
+/**
+ * ADR-071: an item with a manually planned pay_period_allocations row for
+ * this period has its auto-matched due-date amount excluded from the total —
+ * the Planned row already represents the real expected payment, so counting
+ * both double-subtracts it from Left-to-allocate. Individual "Due this
+ * period" line items are unaffected; this only changes the aggregate total.
+ * `plannedKeys` entries are `"bill:<id>"` / `"debt:<id>"`.
+ */
+export function obligationsTotalExcludingPlanned(
+  obligations: Obligation[],
+  plannedKeys: Set<string>,
+): number {
+  return sum(
+    obligations.filter((o) => !plannedKeys.has(`${o.kind}:${o.id}`)).map((o) => o.amount),
+  );
+}

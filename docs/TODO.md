@@ -13,6 +13,7 @@
 - [ ] ADR-068: mark a paycheck received with a deduction that funds a bill/debt; confirm the current cycle settles, the deposit transaction is linked, and mismatch / already-paid cases log `deduction_payment_events` rows.
 - [ ] ADR-070: reverse a cleared bill payment and a cleared debt payment; confirm cycle paid-to-date, payment status, remaining balance and `date_paid_off` all roll back and the offsetting transaction appears.
 - [ ] ADR-069: after the migration, confirm Income mode saves a positive transaction with an income category and that income categories never appear in budget grids or the budget category picker.
+- [ ] ADR-071 (2026-08-19): plan a payment for a bill/debt that's also due-date-matched in "Due this period" for the same pay period, and confirm "Obligations total" / Left-to-allocate only count it once (via the Planned amount), while the "Due this period" line item itself is still shown at its full due-date amount, unchanged.
 - [ ] Work through Fix Places once the ADR-065 backfill has run, to confirm only genuinely place-less transactions remain.
 
 ## Tests

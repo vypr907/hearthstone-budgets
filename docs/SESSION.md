@@ -1,5 +1,22 @@
 ## Session Notes
 
+- Implemented ADR-071 (amends ADR-059, no new ADR): fixed Left-to-allocate
+  double-subtracting a bill/debt that has both an auto-matched "Due this
+  period" row and a manually planned `pay_period_allocations` row for the
+  same period. Traced the calculation first: `obligationsTotal`
+  (`src/routes/app.paycheck.tsx`) was a plain `sum()` over every
+  `obligationsInRange()` row, with no awareness of planned rows at all.
+  Added `obligationsTotalExcludingPlanned()` (`src/lib/paycheck-budget.ts`)
+  and a `plannedKeys` set (bill/debt ids with a planned row for *this*
+  period specifically, not globally) to exclude those items' due-date
+  amount from the total. `obligations` (the "Due this period" list, unchanged
+  per-item) and `planned`/`plannedTotal`/`allocated` are untouched — only
+  the aggregate total feeding `left` and the "Obligations total" footer
+  changed. Recurrence projection (ADR-060) and the visual Due/Planned
+  section split (ADR-059) not touched. Files touched:
+  `src/lib/paycheck-budget.ts`, `src/routes/app.paycheck.tsx`. Next: user
+  to verify live (see TODO.md).
+
 - ADR-056 addendum (interviewed the user to confirm scope — no free guessing):
   fixed the EarnIn/advance-type debt bug where minimum payment, still owed
   this cycle, remaining balance, and next due date all stayed blank after
