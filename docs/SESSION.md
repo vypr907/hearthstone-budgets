@@ -1,5 +1,48 @@
 ## Session Notes
 
+- Data-only correction (no ADR — one-off backfill, not a schema/business-rule
+  change): DFAS paycheck event `62d5c1d9-...` was marked received (ADR-047)
+  before its income source had `income_source_deductions` rows for TSP Loan 1
+  ($295.57) / TSP Loan 2 ($55.94) configured, so `useMarkIncomeReceived`'s
+  idempotency guard (`income-hooks.ts:184-191`, keyed on any transaction
+  already sharing the event's `split_group_id`) permanently closed that
+  event's window to auto-post them once a manual single-deposit transaction
+  existed for it — confirmed via code read, `hasUsableSplits()`/`receive()`/
+  `confirmDeposit()` call sites, and live Supabase queries; no in-app path
+  (including the "Post deposits" backfill button, gated by the same guard)
+  can retroactively trigger ADR-055/068 posting for an already-received
+  event. Manually replicated both halves by hand via Supabase SQL Editor:
+  (1) two deposit transactions into `f1142b94-...` (TSP loan
+  destination_account_id), `status='cleared'`, `split_group_id` = the
+  paycheck event's id so they group in the ledger UI, `linked_debt_id` set —
+  matching the shape `income-hooks.ts:300-308` + `deduction-funding.ts:
+  129-137` would have written; (2) settled each debt's current cycle per
+  `applyClearedPayment`'s debt branch (`payments.ts:136-189`) by hand: TSP
+  Loan (`6b1fbc66-...`) remaining_balance 14788.84→14493.27, TSP Loan 2
+  (`08f5ba5e-...`) 3000.00→2944.06, both cycle_paid_to_date reset to 0.
+  Mid-correction, discovered/fixed a data error: both debts' `billing_cycle`
+  had been (re)set to `biweekly` — corrected to `monthly` (their actual
+  cycle) with `due_day=15`, `next_due_date=null` (monthly debts derive their
+  displayed due date live from `due_day` via `debtDueDate()` in `format.ts:
+  54-62`, not from `next_due_date`), `payment_status='cleared'`.
+  Known issue surfaced (not fixed, no ADR — existing ADR-049 behavior, not
+  new): `computeArrears()` (`arrears.ts:51-94`) ignores `payment_status`
+  entirely for monthly debts — it recomputes "due date" live as `due_day`
+  within the current calendar month and walks `cycle_paid_to_date` vs. the
+  due amount, so any monthly debt cleared after its `due_day` has passed
+  this month shows "1 cycle past due" via `PastDueBadge` regardless of
+  `payment_status='cleared'`. Not specific to this manual entry — the real
+  `applyClearedPayment` code path would produce the same badge for any
+  monthly debt paid late-in-month, since it also resets `cycle_paid_to_date`
+  to 0 without touching `next_due_date`/`due_day`. Worked around per-debt via
+  `arrears_as_of` (exists exactly for this — `arrears.ts:78`, cycles on or
+  before it don't count): set to 2026-08-19 on both TSP debts, which
+  resumes normal arrears tracking from September onward without masking
+  future missed cycles. Files touched: none (data-only, via SQL Editor).
+  Next: none outstanding for this correction; flag the `computeArrears`/
+  monthly-`payment_status` gap for a future ADR-049 follow-up if it recurs
+  on other monthly debts.
+
 - Implemented ADR-072 (app side): `PlanPaymentDialog` (`app.paycheck.tsx`,
   already bill/debt-only, so category/goal rows are unaffected by
   construction) gains an optional "Fee amount" field alongside the existing
