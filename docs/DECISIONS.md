@@ -1443,6 +1443,36 @@ alter table transactions add column if not exists transfer_group_id uuid;
 
 Status: Decided 2026-08-11. SQL run — pending your individual verification of income_source_deductions/bill_adjustments table existence (see prior message's split-out checks).
 
+**2026-08-19 addendum — advance minimum-payment invariant and pay-period-aware due date:**
+For `debt_type = 'advance'` debts, `minimum_payment` always mirrors
+`remaining_balance` — the whole draw is due next cycle, no manual entry.
+`advanceMinimumPaymentPatch()` (`src/lib/payments.ts`) is merged into every
+write that changes a debt's `remaining_balance` (`useCreateAdvance`,
+`useDeleteAdvance`, `useAddDebtAdjustment`, `useDeleteDebtAdjustment`,
+`applyClearedPayment`'s debt branch, `useReversePayment`'s debt branch), so
+the invariant can't drift regardless of which action changed the balance.
+
+Separately: a biweekly advance-type debt's `next_due_date` is a one-time
+smart default from the household's next scheduled paycheck
+(`nextPayDate()`, `src/lib/paycheck-budget.ts`, keyed off the primary income
+source's events) — filled in on the Add/Edit Debt form when Type=Advance and
+Cycle=Biweekly are both set and the field is still empty, and again as a
+fallback when a new advance is recorded against a biweekly advance-type debt
+with no due date yet. In both cases it only fills a blank field and is never
+re-applied once the user has touched it or a due date already exists — no
+ongoing resync, and every other billing cycle/debt type is unaffected.
+
+Reason:
+The original advance write path (this ADR) only ever touched
+`remaining_balance` — taking an advance left minimum payment, still-owed-
+this-cycle, and next due date all blank, since nothing else in the app
+computed them. Advance products (MoneyLion Instacash, EarnIn, etc.) are due
+in full next payday, so mirroring minimum_payment to the balance and
+defaulting the due date to the next paycheck reflects that directly instead
+of requiring manual upkeep. Scoped to `debt_type='advance'` only — every
+other debt/bill type keeps its existing minimum_payment and due-date
+behavior unchanged.
+
 ---
 
 ## ADR-057: Overdue-Aware Payment Allocation (Extends ADR-035, ADR-049)

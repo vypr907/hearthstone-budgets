@@ -83,6 +83,15 @@ export function debtCycleDue(debt: Debt) {
   return Number(debt.minimum_payment || 0);
 }
 
+/**
+ * ADR-056 addendum: for debt_type='advance' debts, minimum_payment always
+ * mirrors remaining_balance — the whole draw is due next cycle, no manual
+ * entry. Merge this into any debts update that also sets remaining_balance.
+ */
+export function advanceMinimumPaymentPatch(debt: Debt, newRemainingBalance: number) {
+  return debt.debt_type === "advance" ? { minimum_payment: newRemainingBalance } : {};
+}
+
 /** Still owed toward this debt's current cycle minimum (0 when settled). */
 export function debtRemainingOwed(debt: Debt) {
   const paid = Number(debt.cycle_paid_to_date ?? 0);
@@ -134,7 +143,10 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
     const paid = previouslyPaid + clearedAmount;
     const cycle = (debt.billing_cycle ?? "monthly").toLowerCase();
 
-    const update: Record<string, unknown> = { remaining_balance: nextBalance };
+    const update: Record<string, unknown> = {
+      remaining_balance: nextBalance,
+      ...advanceMinimumPaymentPatch(debt, nextBalance),
+    };
     if (nextBalance === 0 && !debt.date_paid_off) update.date_paid_off = todayISO();
 
     if (target > 0 && paid + 0.005 < target) {
@@ -642,9 +654,11 @@ export function useReversePayment() {
         const debt = payable.debt!;
         const paid = Math.max(0, Number(debt.cycle_paid_to_date ?? 0) - amt);
         const due = debtCycleDue(debt);
+        const nextBalance = Number(debt.remaining_balance ?? 0) + amt;
         const update: Record<string, unknown> = {
-          remaining_balance: Number(debt.remaining_balance ?? 0) + amt,
+          remaining_balance: nextBalance,
           cycle_paid_to_date: paid,
+          ...advanceMinimumPaymentPatch(debt, nextBalance),
         };
         if (paid + 0.005 < due) update.payment_status = "unpaid";
         if (debt.date_paid_off) update.date_paid_off = null;

@@ -87,6 +87,7 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Transfers write two transactions sharing `transfer_group_id`; deleting one side deletes both (ADR-056)
 - Advances write a deposit transaction + a `debt_adjustments` row (`adjustment_type='advance'`); delete reverses both (ADR-056)
 - Recording a new advance against a paid-off `debt_type = 'advance'` debt clears `date_paid_off` in the same write, reactivating it in place; every other debt_type keeps the permanent paid-off behavior (ADR-066)
+- For `debt_type='advance'` debts, `minimum_payment` always mirrors `remaining_balance` (enforced at every debt balance-writing site, `advanceMinimumPaymentPatch()`); a biweekly advance-type debt's `next_due_date` defaults once to the household's next scheduled paycheck (`nextPayDate()`) when otherwise blank — never an ongoing resync (ADR-056 addendum)
 - `debts.debt_type` is a DB-enforced lowercase check constraint (advance, credit card, invoice, loan, medical, other); the Categories Parent Category field is a dropdown over existing `parent_category` values with inline add-new, while `parent_category` itself stays free text (ADR-066, ADR-067)
 - `applyClearedPayment` reduces `opening_arrears` on overflow; bills cap payments at `cycle_due + opening_arrears` and reject excess (ADR-057)
 - `debt_adjustments` and `bill_adjustments` rows with `affects_balance=false` are record-only and never modify balances; delete skips reversal for them (ADR-058)

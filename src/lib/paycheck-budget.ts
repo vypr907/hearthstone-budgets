@@ -1,4 +1,4 @@
-import type { Bill, Debt, IncomeEvent } from "./supabase";
+import type { Bill, Debt, IncomeEvent, IncomeSource } from "./supabase";
 import { debtDueDate, shiftDateSafe } from "./format";
 
 /** The date a paycheck actually lands on: actual when received, else expected. */
@@ -15,6 +15,27 @@ export function eventAmount(e: IncomeEvent): number {
 
 export function isReceived(e: IncomeEvent): boolean {
   return e.actual_date != null || (e.status ?? "").toLowerCase() === "received";
+}
+
+/**
+ * The next date the household's primary income source is scheduled to pay,
+ * strictly after `after`. Null when there's no primary source or no
+ * scheduled event after that date — callers should leave a date field blank
+ * rather than guess, same as when no income data exists at all.
+ */
+export function nextPayDate(
+  sources: IncomeSource[],
+  events: IncomeEvent[],
+  after: string,
+): string | null {
+  const primary = sources.find((s) => s.is_primary) ?? null;
+  if (!primary) return null;
+  const upcoming = events
+    .filter((e) => e.income_source_id === primary.id)
+    .map(eventDate)
+    .filter((d): d is string => !!d && d > after)
+    .sort();
+  return upcoming[0] ?? null;
 }
 
 function addDays(date: string, days: number): string {

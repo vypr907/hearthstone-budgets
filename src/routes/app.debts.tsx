@@ -23,6 +23,8 @@ import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
 
 import { useCycleState } from "@/lib/ledger-state";
 import { toPayable, debtRemainingOwed } from "@/lib/payments";
+import { nextPayDate } from "@/lib/paycheck-budget";
+import { todayISO } from "@/lib/snapshot";
 import {
   DetailGrid,
   DetailItem,
@@ -32,7 +34,7 @@ import {
   statusVariant,
 } from "@/components/detail";
 import { formatMoney, debtDueDate } from "@/lib/format";
-import { useHouseholdDeductions } from "@/lib/income-hooks";
+import { useHouseholdDeductions, useIncomeSources, useIncomeEvents } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -545,6 +547,8 @@ function DebtDialog({
   const del = useDeleteDebt();
   const { data: institutions = [] } = useInstitutions();
   const { data: deductions = [] } = useHouseholdDeductions();
+  const { data: incomeSources = [] } = useIncomeSources();
+  const { data: incomeEvents = [] } = useIncomeEvents();
   const [fundingDeductionId, setFundingDeductionId] = useState("none");
   const [name, setName] = useState("");
   const [remaining, setRemaining] = useState("");
@@ -557,6 +561,9 @@ function DebtDialog({
   const [dueDay, setDueDay] = useState("");
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [nextDue, setNextDue] = useState("");
+  // ADR-056 addendum: a new advance-type biweekly debt defaults Next due date
+  // to the household's next paycheck, once, until the user edits it by hand.
+  const [nextDueTouched, setNextDueTouched] = useState(false);
   const [debtType, setDebtType] = useState("");
   const [institutionId, setInstitutionId] = useState("none");
   const [institutionDialogOpen, setInstitutionDialogOpen] = useState(false);
@@ -606,6 +613,7 @@ function DebtDialog({
     setNameTouched(!!debt?.name);
     setRemainingTouched(!!debt?.id);
     setMinPayTouched(!!debt?.id);
+    setNextDueTouched(!!debt?.id);
     const derived = deriveCustomInterval(debt?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
@@ -624,12 +632,29 @@ function DebtDialog({
     setName(composed);
   }
 
+  /**
+   * ADR-056 addendum: an untouched Next due date defaults to the household's
+   * next paycheck once the debt is a biweekly advance — still a plain
+   * editable field after that, never re-applied once the user touches it.
+   */
+  function maybeDefaultNextDue(nextType: string, nextCycle: BillingCycle) {
+    if (nextDueTouched || nextDue || nextType !== "advance" || nextCycle !== "biweekly") return;
+    const due = nextPayDate(incomeSources, incomeEvents, todayISO());
+    if (due) setNextDue(due);
+  }
+
   /** Invoices default to a single dated charge unless put on a payment plan. */
   function chooseType(v: string) {
     const next = v === "none" ? "" : v;
     setDebtType(next);
     autoName(institutionId, invoiceNumber, next);
     if (next === "invoice" && !isEdit && cycle === "monthly") setCycle("one_time");
+    maybeDefaultNextDue(next, cycle);
+  }
+
+  function chooseCycle(v: BillingCycle) {
+    setCycle(v);
+    maybeDefaultNextDue(debtType, v);
   }
 
   async function save() {
@@ -912,7 +937,10 @@ function DebtDialog({
                 <Input
                   type="date"
                   value={nextDue}
-                  onChange={(e) => setNextDue(e.target.value)}
+                  onChange={(e) => {
+                    setNextDueTouched(true);
+                    setNextDue(e.target.value);
+                  }}
                   className="h-11"
                 />
               </div>
@@ -920,7 +948,7 @@ function DebtDialog({
           </div>
           <div>
             <Label>Billing cycle</Label>
-            <Select value={cycle} onValueChange={(v) => setCycle(v as BillingCycle)}>
+            <Select value={cycle} onValueChange={(v) => chooseCycle(v as BillingCycle)}>
               <SelectTrigger className="h-11">
                 <SelectValue />
               </SelectTrigger>

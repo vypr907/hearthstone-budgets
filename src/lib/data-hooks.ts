@@ -20,6 +20,9 @@ import {
 } from "./supabase";
 import { advanceDate, needsEnvelope } from "./format";
 import { useAuth } from "./auth-context";
+import { advanceMinimumPaymentPatch } from "./payments";
+import { nextPayDate } from "./paycheck-budget";
+import { useIncomeSources, useIncomeEvents } from "./income-hooks";
 
 /** Normalized domain comparison — stored values vary in case/whitespace. */
 export function categoryDomain(c: { domain?: string | null } | undefined | null) {
@@ -657,7 +660,7 @@ export function useAddDebtAdjustment() {
         );
         const { error: debtError } = await supabase
           .from("debts")
-          .update({ remaining_balance: next })
+          .update({ remaining_balance: next, ...advanceMinimumPaymentPatch(args.debt, next) })
           .eq("id", args.debt.id);
         if (debtError) throw debtError;
       }
@@ -692,7 +695,7 @@ export function useDeleteDebtAdjustment() {
         );
         const { error: debtError } = await supabase
           .from("debts")
-          .update({ remaining_balance: next })
+          .update({ remaining_balance: next, ...advanceMinimumPaymentPatch(args.debt, next) })
           .eq("id", args.debt.id);
         if (debtError) throw debtError;
       }
@@ -890,6 +893,8 @@ export function useDeleteTransferPair() {
 export function useCreateAdvance() {
   const { householdId } = useAuth();
   const qc = useQueryClient();
+  const { data: sources = [] } = useIncomeSources();
+  const { data: events = [] } = useIncomeEvents();
   return useMutation({
     mutationFn: async (args: {
       debt: Debt;
@@ -919,11 +924,22 @@ export function useCreateAdvance() {
       // ADR-066: an advance against a paid-off advance-type debt reactivates
       // it in the same write, rather than staying "paid off" and hidden.
       const reactivate = args.debt.debt_type === "advance" && !!args.debt.date_paid_off;
+      // ADR-056 addendum: a one-time smart default, same as the debt form —
+      // an advance against a biweekly advance-type debt with no due date yet
+      // fills it from the household's next paycheck. Never overwrites a due
+      // date that's already set (no ongoing resync).
+      const needsDueDate =
+        args.debt.debt_type === "advance" &&
+        (args.debt.billing_cycle ?? "").toLowerCase() === "biweekly" &&
+        !args.debt.next_due_date;
+      const nextDue = needsDueDate ? nextPayDate(sources, events, args.advanceDate) : null;
       const { error: debtError } = await supabase
         .from("debts")
         .update({
           remaining_balance: next,
+          ...advanceMinimumPaymentPatch(args.debt, next),
           ...(reactivate ? { date_paid_off: null } : {}),
+          ...(nextDue ? { next_due_date: nextDue } : {}),
         })
         .eq("id", args.debt.id);
       if (debtError) throw debtError;
@@ -966,7 +982,7 @@ export function useDeleteAdvance() {
       );
       const { error: debtError } = await supabase
         .from("debts")
-        .update({ remaining_balance: next })
+        .update({ remaining_balance: next, ...advanceMinimumPaymentPatch(args.debt, next) })
         .eq("id", args.debt.id);
       if (debtError) throw debtError;
       // Step 2: delete the adjustment row.

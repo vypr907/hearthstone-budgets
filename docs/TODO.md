@@ -2,13 +2,14 @@
 
 ## Pending manual SQL (Supabase SQL Editor)
 
-- [ ] ADR-028: `alter table households add column export_format text not null default 'png' check (export_format in ('png','pdf'));`
+- [x] ADR-028: `alter table households add column export_format text not null default 'png' check (export_format in ('png','pdf'));`
 - [ ] ADR-065 backfill (script, not a migration file): set `institution_id` on existing bill/debt payment and paired fee transactions where null, from the linked bill/debt. Until run, older payments keep appearing in Fix Places.
-- [ ] ADR-069: extend `categories.domain` to allow `'income'` and insert the four income categories (Income, Credit, Refund, Gift). Until run, Add Transaction's Income mode shows an empty category list.
+- [x] ADR-069: extend `categories.domain` to allow `'income'` and insert the four income categories (Income, Credit, Refund, Gift). Until run, Add Transaction's Income mode shows an empty category list.
 
 ## Verification
 
-- [ ] ADR-066: re-advance a paid-off advance-type debt (e.g. MoneyLion Instacash) and confirm it drops `date_paid_off`, reactivates and un-hides — same debt id, no duplicate row. Also confirm the Type picker saves "credit card" without tripping the check constraint. **STILL HIDES.**
+- [ ] ADR-066: re-advance a paid-off advance-type debt (e.g. MoneyLion Instacash) and confirm it drops `date_paid_off`, reactivates and un-hides — same debt id, no duplicate row. Also confirm the Type picker saves "credit card" without tripping the check constraint. **STILL HIDES.** Note: `useCreateAdvance` was touched again 2026-08-19 (minimum_payment/next_due_date sync, unrelated to this bug) — re-check against current code before diagnosing.
+- [ ] ADR-056 addendum (2026-08-19): record a real advance against a biweekly `debt_type='advance'` debt with no due date yet (e.g. EarnIn) and confirm minimum payment, still owed this cycle, remaining balance, and next due date all populate correctly — minimum payment should equal remaining balance, next due date should land on the household's actual next paycheck. Also re-test the original reported case: if remaining_balance still doesn't update after this fix, that points to something beyond the write-path bug found here (data/live-only issue) and needs a live Supabase check, not another code read.
 - [ ] ADR-068: mark a paycheck received with a deduction that funds a bill/debt; confirm the current cycle settles, the deposit transaction is linked, and mismatch / already-paid cases log `deduction_payment_events` rows.
 - [ ] ADR-070: reverse a cleared bill payment and a cleared debt payment; confirm cycle paid-to-date, payment status, remaining balance and `date_paid_off` all roll back and the offsetting transaction appears.
 - [ ] ADR-069: after the migration, confirm Income mode saves a positive transaction with an income category and that income categories never appear in budget grids or the budget category picker.
