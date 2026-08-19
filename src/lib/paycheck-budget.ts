@@ -1,4 +1,4 @@
-import type { Bill, Debt, IncomeEvent, IncomeSource } from "./supabase";
+import type { Bill, Category, Debt, IncomeEvent, IncomeSource, Transaction } from "./supabase";
 import { debtDueDate, shiftDateSafe } from "./format";
 
 /** The date a paycheck actually lands on: actual when received, else expected. */
@@ -226,4 +226,66 @@ export function obligationsTotalExcludingPlanned(
   return sum(
     obligations.filter((o) => !plannedKeys.has(`${o.kind}:${o.id}`)).map((o) => o.amount),
   );
+}
+
+export type CategoryActual = {
+  spendingSpent: number;
+  billsSpent: number;
+  debtsSpent: number;
+  total: number;
+};
+
+/**
+ * Combined bills+debts+spending actual per category for an arbitrary date
+ * range (e.g. a pay period), rather than a calendar month. Mirrors
+ * `monthly-summary.ts`'s `combinedActualByCategory()` — kept separate (not
+ * imported from there) since that module already imports `isPaycheckDeducted`
+ * from this one, and the Monthly Summary card must stay calendar-month exact.
+ * Paycheck-deducted debts (ADR-032) are excluded, same as everywhere else.
+ */
+export function actualByCategoryInRange(
+  transactions: Transaction[],
+  bills: Bill[],
+  debts: Debt[],
+  categories: Category[],
+  start: string,
+  end: string,
+): Map<string, CategoryActual> {
+  const income = new Set(
+    categories.filter((c) => (c.domain ?? "").toLowerCase() === "income").map((c) => c.id),
+  );
+  const billCategory = new Map(bills.map((b) => [b.id, b.category_id]));
+  const debtCategory = new Map(debts.map((d) => [d.id, d.category_id]));
+  const deductedDebtIds = new Set(debts.filter(isPaycheckDeducted).map((d) => d.id));
+  const out = new Map<string, CategoryActual>();
+
+  const bump = (
+    categoryId: string,
+    field: "spendingSpent" | "billsSpent" | "debtsSpent",
+    amount: number,
+  ) => {
+    const row = out.get(categoryId) ?? { spendingSpent: 0, billsSpent: 0, debtsSpent: 0, total: 0 };
+    row[field] += amount;
+    row.total += amount;
+    out.set(categoryId, row);
+  };
+
+  for (const t of transactions) {
+    if (!inRange(t.transaction_date, start, end)) continue;
+    const amount = Number(t.amount || 0);
+    if (amount >= 0) continue; // only money out counts as spend
+    const linkedBillId = t.linked_bill_id ?? null;
+    const linkedDebtId = t.linked_debt_id ?? null;
+    if (linkedDebtId && deductedDebtIds.has(linkedDebtId)) continue; // ADR-032
+    const categoryId =
+      t.category_id ??
+      (linkedBillId ? billCategory.get(linkedBillId) ?? null : null) ??
+      (linkedDebtId ? debtCategory.get(linkedDebtId) ?? null : null);
+    if (!categoryId) continue;
+    if (income.has(categoryId)) continue; // ADR-069
+    if (linkedDebtId) bump(categoryId, "debtsSpent", Math.abs(amount));
+    else if (linkedBillId) bump(categoryId, "billsSpent", Math.abs(amount));
+    else bump(categoryId, "spendingSpent", Math.abs(amount));
+  }
+  return out;
 }

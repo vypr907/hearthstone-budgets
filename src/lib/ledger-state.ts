@@ -131,11 +131,20 @@ export function deriveCycleInfo(
       else if (due > 0 && clearedSum + 0.005 >= due) state = "cleared";
       else if (clearedSum > 0) state = "partial";
 
+      // ADR-036 addendum (2026-08-19): a debt whose balance has already
+      // reached zero is cleared regardless of what this cycle's ledger
+      // transactions show — matches the Debts screen's own isPaidOff
+      // definition instead of a paid-off debt reading UNPAID forever
+      // because it was never paid through Hearthstone's own pay flow.
+      if (p.kind === "debt" && Number(p.debt?.remaining_balance ?? 0) <= 0) {
+        state = "cleared";
+      }
+
       return {
         state,
         due,
         clearedSum,
-        remaining: Math.max(0, due - clearedSum),
+        remaining: state === "cleared" ? 0 : Math.max(0, due - clearedSum),
         transactions: cycleTx,
         pending,
         resolved,

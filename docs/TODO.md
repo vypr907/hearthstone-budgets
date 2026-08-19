@@ -130,6 +130,67 @@ in-app after.
 
 **All 7 items from SCRATCHPAD.md's "Things to work on" are now complete.**
 
+## Dashboard/Everything/Payments follow-up (2026-08-19, scoped from SCRATCHPAD.md round 2)
+
+Investigated and interviewed 2026-08-19. Sequenced smallest-first.
+
+- [x] **Ledger state: `remaining_balance <= 0` always reads as cleared — done
+  (2026-08-19).** ADR-036 amended (addendum, `docs/DECISIONS.md`).
+  `deriveCycleInfo()` (`ledger-state.ts`) now overrides `state`/`remaining` to
+  cleared/0 when `p.kind === 'debt'` and `remaining_balance <= 0`, after the
+  normal ledger derivation runs. No schema change. Different code path than
+  the Aurora Audiology fix (`obligationsInRange`'s `date_paid_off` check) —
+  doesn't overlap with that earlier work.
+- [x] **Submit/Clear payment: date field — done (2026-08-19).** `PayInput`
+  gained an optional `date` field (`payments.ts`); `useMarkSubmitted`,
+  `useMarkCleared`'s direct-insert branch, and `insertFeeTransaction` all use
+  `date || todayISO()` instead of a hardcoded `todayISO()`. `pay-flow.tsx`:
+  new `dateValue` state (defaults to today, reset in `start()`/`tap()`), a
+  "Payment date" `<Input type="date">` in the amount prompt's pay stage,
+  threaded through `resolveAccount()` → `choice` → `perform()` →
+  `submit`/`clear`.mutateAsync. The pending-quick-clear path (`tap()`,
+  `info.state === 'pending'`) is unaffected — it clears an existing
+  transaction's status, no new row/date involved.
+- [x] **Add Transaction: standardize the description — done (2026-08-19).**
+  `AddTransactionFab.tsx`'s `submitExpense()`: `description.trim() ||
+  linkedPayment`, where `linkedPayment` is `"Bill payment · <name>"`/`"Debt
+  payment · <name>"` when a bill/debt is linked, `null` otherwise — only
+  fills in when the user left the field blank, never overrides typed text.
+- [x] **Budget vs Actual card: rescoped to pay period — done (2026-08-19).**
+  Discovered mid-implementation: `spending_budgets` (`supabase.ts`'s
+  `SpendingBudget` type) has no `month` column at all — it's a flat
+  `budgeted_amount` per category, genuinely not calendar-month-scoped in the
+  schema (the original `budgetChart` never filtered `budgets` by month
+  either — nothing to change there). Only the ledger-actual and bills/debts
+  sides needed rescoping:
+  - New `actualByCategoryInRange()` in `paycheck-budget.ts` (combined
+    bills+debts+spending ledger actual for an arbitrary `[start, end)` date
+    range, via the existing `inRange()`) — kept separate from
+    `monthly-summary.ts`'s `combinedActualByCategory()` (which stays
+    calendar-month exact for Monthly Summary; importing across would've
+    created a circular dependency, `monthly-summary.ts` already imports
+    `isPaycheckDeducted` from `paycheck-budget.ts`).
+  - `budgetChart` (`app.index.tsx`) moved to after `period`/
+    `periodObligations`/`periodTotals` are computed (was defined earlier in
+    the file, before those existed) and rewritten: bills/debts target now
+    sums `periodObligations` per category (real due-date amounts for this
+    specific period, same source as the hero tiles) instead of
+    `billsBudgetedByCategory`'s monthly-equivalent; actual-so-far now uses
+    `actualByCategoryInRange(period.start, period.end)`.
+  - `BudgetGroup` type and `BudgetSplitLines` call in `BudgetTile` gained
+    `debtsBudgeted`/`debtsSpent` (debts were previously absent from this
+    card entirely) — 3-way spending/bills/debts breakdown, matching Monthly
+    Summary's.
+  - Card relabeled "Budget vs actual · this month" → "· this pay period",
+    with a new `HelpButton` tooltip explicit about the difference from
+    Monthly Summary.
+  - Removed now-unused `useSpendingActuals()`/`buildActualResolver` from
+    `app.index.tsx` (only consumer was the old `budgetChart`).
+  - Monthly Summary tile subheader (bundled, same visual area): replaced
+    the "$X over"/"$X left" framing with "$actual of $expected", per
+    "focus on what's gone out vs expected." No schema change anywhere in
+    this item.
+
 ## Tests
 
 - [ ] Add unit tests for `projectOccurrences()` (monthly + biweekly items) alongside the existing arrears tests.

@@ -13,6 +13,7 @@ import {
 import type { CycleInfo } from "@/lib/ledger-state";
 import { useAccounts, useInstitutions, useTransactions } from "@/lib/data-hooks";
 import { accountLast4, formatMoney } from "@/lib/format";
+import { todayISO } from "@/lib/snapshot";
 import { accountTypeVisual } from "@/lib/visual-meta";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { computeArrears } from "@/lib/arrears";
@@ -55,6 +56,7 @@ export function usePayFlow() {
     amount?: number;
     cycleAmount?: number;
     fee?: number;
+    date?: string;
   } | null>(null);
   const [ask, setAsk] = useState<{
     payable: Payable;
@@ -65,6 +67,8 @@ export function usePayFlow() {
   const [askValue, setAskValue] = useState("");
   // ADR-046: optional fee charged alongside this payment.
   const [feeValue, setFeeValue] = useState("");
+  // Payment date, defaulting to today — lets a payment be backdated.
+  const [dateValue, setDateValue] = useState(todayISO());
 
   const busy = submit.isPending || clear.isPending || undo.isPending || reset.isPending;
 
@@ -75,6 +79,7 @@ export function usePayFlow() {
     amount?: number,
     cycleAmount?: number,
     fee?: number,
+    date?: string,
   ) {
     try {
       const res = (await (action === "submitted" ? submit : clear).mutateAsync({
@@ -83,6 +88,7 @@ export function usePayFlow() {
         amount,
         cycleAmount,
         fee,
+        date,
       })) as { next_due_date?: string | null; remaining_owed?: number } | undefined;
       const msg = `${payable.name} ${action}`;
       if (res?.remaining_owed) {
@@ -111,9 +117,10 @@ export function usePayFlow() {
     amount?: number,
     cycleAmount?: number,
     fee?: number,
+    date?: string,
   ) {
     // Any household account can pay any bill/debt (ADR-007 correction 2026-08-03).
-    setChoice({ payable, action, amount, cycleAmount, fee });
+    setChoice({ payable, action, amount, cycleAmount, fee, date });
   }
 
   /** Amount to pre-fill for the "paying now" prompt: whatever is still owed. */
@@ -134,6 +141,7 @@ export function usePayFlow() {
       !!payable.bill?.is_variable_amount &&
       payable.bill?.cycle_amount_due == null;
     setFeeValue("");
+    setDateValue(todayISO());
     if (needsCycle) {
       setAskValue(String(billCycleDue(payable.bill!) || ""));
       setAsk({ payable, action, stage: "cycle" });
@@ -168,6 +176,7 @@ export function usePayFlow() {
     }
     // unpaid or partial: submit a new (possibly partial) payment.
     setFeeValue("");
+    setDateValue(todayISO());
     setAskValue(String(info.remaining || defaultPayAmount(payable) || ""));
     setAsk({ payable, action: "submitted", stage: needsCycleAmount(payable) ? "cycle" : "pay" });
   }
@@ -214,7 +223,7 @@ export function usePayFlow() {
                 onClick={() => {
                   const c = choice!;
                   setChoice(null);
-                  void perform(c.payable, c.action, a.id, c.amount, c.cycleAmount, c.fee);
+                  void perform(c.payable, c.action, a.id, c.amount, c.cycleAmount, c.fee, c.date);
                 }}
               >
                 <span aria-hidden className="text-lg" title={a.account_type ?? undefined}>
@@ -323,6 +332,18 @@ export function usePayFlow() {
           ) : null}
           {ask?.stage === "pay" ? (
             <div className="pt-2">
+              <Label htmlFor="pay-date">Payment date</Label>
+              <Input
+                id="pay-date"
+                type="date"
+                className="h-11"
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
+              />
+            </div>
+          ) : null}
+          {ask?.stage === "pay" ? (
+            <div className="pt-2">
               <Label htmlFor="pay-fee">Fee (optional)</Label>
               <Input
                 id="pay-fee"
@@ -359,7 +380,7 @@ export function usePayFlow() {
               }
               setAsk(null);
               const fee = Number(feeValue) > 0 ? Number(feeValue) : undefined;
-              resolveAccount(a.payable, a.action, value, a.cycleAmount, fee);
+              resolveAccount(a.payable, a.action, value, a.cycleAmount, fee, dateValue || undefined);
             }}
           >
             Continue

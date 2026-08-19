@@ -12,7 +12,6 @@ import {
   useCategories,
   useDebts,
   useLatestBalances,
-  useSpendingActuals,
   useSpendingBudgets,
   useTransactions,
 } from "@/lib/data-hooks";
@@ -24,7 +23,7 @@ import {
   creditOwed,
   spendableContribution,
 } from "@/lib/balances";
-import { billsBudgetedByCategory, buildActualResolver } from "@/lib/spending-actuals";
+import { billsBudgetedByCategory } from "@/lib/spending-actuals";
 import {
   combinedActualByCategory,
   debtsBudgetedByCategory,
@@ -36,7 +35,12 @@ import { computeArrears } from "@/lib/arrears";
 import { useHouseholdDeductions } from "@/lib/income-hooks";
 
 import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
-import { eventDate, obligationsInRange, periodRange } from "@/lib/paycheck-budget";
+import {
+  actualByCategoryInRange,
+  eventDate,
+  obligationsInRange,
+  periodRange,
+} from "@/lib/paycheck-budget";
 import { categoryVisual } from "@/lib/visual-meta";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
@@ -94,7 +98,6 @@ function Dashboard() {
   const { data: latest = {} } = useLatestBalances();
   const { data: transactions = [] } = useTransactions();
   const { data: budgets = [] } = useSpendingBudgets();
-  const { data: actuals = [] } = useSpendingActuals();
   const { data: categories = [] } = useCategories();
   const { data: balanceHistory = [] } = useAllAccountBalances();
   const { data: sources = [] } = useIncomeSources();
@@ -198,55 +201,6 @@ function Dashboard() {
         .sort((a, b) => b.pct - a.pct),
     [debts],
   );
-
-  /** Budget vs actual for the current month, grouped by parent_category. */
-  const budgetChart = useMemo(() => {
-    const month = monthKey(new Date());
-    const resolver = buildActualResolver(actuals, transactions, bills, categories);
-    const billsBudget = billsBudgetedByCategory(bills, categories);
-    const byId: Record<string, (typeof categories)[number]> = {};
-    for (const c of categories) byId[c.id] = c;
-    const groups = new Map<
-      string,
-      {
-        name: string;
-        budgeted: number;
-        spendingBudgeted: number;
-        billsBudgeted: number;
-        actual: number;
-        spendingSpent: number;
-        billsSpent: number;
-      }
-    >();
-    for (const b of budgets) {
-      if (!b.category_id) continue;
-      const cat = byId[b.category_id];
-      // ADR-069: only spending-domain categories belong in the budget grid.
-      if (!cat || categoryDomain(cat) !== "spending") continue;
-      const parent = cat.parent_category?.trim() || "";
-      const key = parent || "__none__";
-      const g = groups.get(key) ?? {
-        name: parent || "Ungrouped",
-        budgeted: 0,
-        spendingBudgeted: 0,
-        billsBudgeted: 0,
-        actual: 0,
-        spendingSpent: 0,
-        billsSpent: 0,
-      };
-      const spendingBudget = Number(b.budgeted_amount || 0);
-      const billBudget = billsBudget.get(b.category_id) ?? 0;
-      const current = resolver.resolve(b.category_id, month);
-      g.spendingBudgeted += spendingBudget;
-      g.billsBudgeted += billBudget;
-      g.budgeted += spendingBudget + billBudget;
-      g.actual += current.amount;
-      g.spendingSpent += current.spendingSpent;
-      g.billsSpent += current.billsSpent;
-      groups.set(key, g);
-    }
-    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [budgets, actuals, transactions, categories, bills]);
 
   /**
    * ADR-073: monthly summary, grouped by parent_category like `budgetChart`,
@@ -370,6 +324,76 @@ function Dashboard() {
     }
     return { bills: billTotal, debts: debtTotal, total: billTotal + debtTotal };
   }, [periodObligations]);
+
+  /**
+   * Budget vs actual for the CURRENT PAY PERIOD (rescoped from calendar
+   * month 2026-08-19 — the household budgets per paycheck, not per calendar
+   * month; `spending_budgets.budgeted_amount` has no month dimension in the
+   * schema, so it's used as-is as the per-period target). Bills/debts use
+   * the real amounts actually due this period (same source as the hero
+   * card's "Bills/Debts this pay period" tiles), NOT Monthly Summary's
+   * monthly-equivalent smoothed figure — keeps the two cards' math
+   * conceptually distinct: Monthly Summary = smoothed average, this card =
+   * this period's real numbers.
+   */
+  const budgetChart = useMemo(() => {
+    const billCategory = new Map(bills.map((b) => [b.id, b.category_id]));
+    const debtCategory = new Map(debts.map((d) => [d.id, d.category_id]));
+    const periodBillsByCategory = new Map<string, number>();
+    const periodDebtsByCategory = new Map<string, number>();
+    for (const o of periodObligations) {
+      const categoryId = o.kind === "bill" ? billCategory.get(o.id) : debtCategory.get(o.id);
+      if (!categoryId) continue;
+      const map = o.kind === "bill" ? periodBillsByCategory : periodDebtsByCategory;
+      map.set(categoryId, (map.get(categoryId) ?? 0) + o.amount);
+    }
+    const actualByCategory = actualByCategoryInRange(
+      transactions,
+      bills,
+      debts,
+      categories,
+      period.start,
+      period.end,
+    );
+    const byId: Record<string, (typeof categories)[number]> = {};
+    for (const c of categories) byId[c.id] = c;
+    const groups = new Map<string, BudgetGroup>();
+    for (const b of budgets) {
+      if (!b.category_id) continue;
+      const cat = byId[b.category_id];
+      // ADR-069: only spending-domain categories belong in the budget grid.
+      if (!cat || categoryDomain(cat) !== "spending") continue;
+      const parent = cat.parent_category?.trim() || "";
+      const key = parent || "__none__";
+      const g = groups.get(key) ?? {
+        name: parent || "Ungrouped",
+        budgeted: 0,
+        spendingBudgeted: 0,
+        billsBudgeted: 0,
+        debtsBudgeted: 0,
+        actual: 0,
+        spendingSpent: 0,
+        billsSpent: 0,
+        debtsSpent: 0,
+      };
+      const spendingBudget = Number(b.budgeted_amount || 0);
+      const billBudget = periodBillsByCategory.get(b.category_id) ?? 0;
+      const debtBudget = periodDebtsByCategory.get(b.category_id) ?? 0;
+      const current = actualByCategory.get(b.category_id);
+      g.spendingBudgeted += spendingBudget;
+      g.billsBudgeted += billBudget;
+      g.debtsBudgeted += debtBudget;
+      g.budgeted += spendingBudget + billBudget + debtBudget;
+      if (current) {
+        g.actual += current.total;
+        g.spendingSpent += current.spendingSpent;
+        g.billsSpent += current.billsSpent;
+        g.debtsSpent += current.debtsSpent;
+      }
+      groups.set(key, g);
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [budgets, transactions, categories, bills, debts, periodObligations, period]);
 
   /** ADR-034: what's still owed in the period, grouped by category. */
   const owedByCategory = useMemo(() => {
@@ -639,8 +663,18 @@ function Dashboard() {
         {budgetChart.length > 0 && (
           <Card>
             <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Budget vs actual · this month
+              <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Budget vs actual · this pay period
+                <HelpButton>
+                  Your budgeted amount per category, compared against bills,
+                  debt minimum payments, and spending actually due/spent in
+                  this specific pay period ({period.start} → {period.end}).
+                  Different from "Monthly summary" below, which always
+                  covers the current calendar month and compares against
+                  both a budget target and your own trailing 6-month average
+                  — use this card for per-paycheck planning, that one for a
+                  monthly-spending sanity check.
+                </HelpButton>
               </p>
               <BudgetTotals rows={budgetChart} />
               <div className="mt-3 grid grid-cols-2 gap-3">
@@ -649,7 +683,7 @@ function Dashboard() {
                 ))}
               </div>
               <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-                Tap a category for the spending / bills split
+                Tap a category for the spending / bills / debts split
               </p>
             </CardContent>
           </Card>
@@ -959,9 +993,11 @@ type BudgetGroup = {
   budgeted: number;
   spendingBudgeted: number;
   billsBudgeted: number;
+  debtsBudgeted: number;
   actual: number;
   spendingSpent: number;
   billsSpent: number;
+  debtsSpent: number;
 };
 
 /** Single headline bar for the whole month's budget load. */
@@ -1069,8 +1105,10 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
           <BudgetSplitLines
             spendingBudgeted={g.spendingBudgeted}
             billsBudgeted={g.billsBudgeted}
+            debtsBudgeted={g.debtsBudgeted}
             spendingSpent={g.spendingSpent}
             billsSpent={g.billsSpent}
+            debtsSpent={g.debtsSpent}
           />
         </div>
       ) : null}
@@ -1158,9 +1196,7 @@ function MonthlySummaryTile({ group: g, index: i }: { group: MonthlySummaryGroup
                 : "text-xs uppercase tracking-widest text-muted-foreground"
             }
           >
-            {over
-              ? `${formatMoney(g.actual - g.budgetTarget)} over`
-              : `${formatMoney(g.budgetTarget - g.actual)} left`}
+            {formatMoney(g.actual)} of {formatMoney(g.budgetTarget)} expected
           </span>
           {g.trailingAverage > 0 ? (
             <span className="block text-[10px] text-muted-foreground">

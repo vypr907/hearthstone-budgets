@@ -847,6 +847,18 @@ previous window; the derivation looks back one interval (while today <= the new 
 start) so a just-resolved item reads CLEARED rather than UNPAID. Reset uses
 `useResetCycle()` and deletes every transaction in that window.
 
+**Addendum (2026-08-19):** `deriveCycleInfo()` was purely ledger-transaction-derived —
+zero awareness of `debts.remaining_balance`/`date_paid_off` — so a debt paid off any way
+other than through Hearthstone's own Submit/Clear flow (balance corrected by hand, paid
+off before tracking started, etc.) read UNPAID forever on the Everything screen, even
+though the Debts screen's own `isPaidOff` (`app.debts.tsx:149`, `remaining_balance <= 0`)
+correctly showed it as paid off. Fixed by overriding the derived state to CLEARED (and
+`remaining` to 0) whenever `p.kind === 'debt'` and `remaining_balance <= 0`, after the
+normal ledger-based derivation runs — matches the Debts screen's own definition instead of
+introducing a third one. Bills have no equivalent balance field, so this is debt-only.
+Distinct from ADR-047/ADR-072-era work: this doesn't touch `obligationsInRange()`'s
+`date_paid_off` check (the Aurora Audiology fix) — a different code path entirely.
+
 ## ADR-037: Payable-First Payment Writes and Repair Delete
 Decision:
 Submit and Clear write the bill/debt row before writing the ledger row, and every

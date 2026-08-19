@@ -62,6 +62,8 @@ export type PayInput = {
   cycleAmount?: number;
   /** ADR-046: optional processing/convenience fee charged with the payment. */
   fee?: number;
+  /** Payment date; defaults to today when omitted — lets a payment be backdated. */
+  date?: string;
 };
 
 const table = (kind: PayableKind) => (kind === "bill" ? "bills" : "debts");
@@ -270,6 +272,8 @@ async function insertFeeTransaction(
   status: "pending" | "cleared",
   /** Shared with the payment row so the pair stays atomic (ADR-046). */
   splitGroupId?: string | null,
+  /** Matches the paired payment's date; defaults to today when omitted. */
+  date?: string,
 ) {
   if (!hasFee(fee)) return;
   const amt = Math.abs(Number(fee) || 0);
@@ -297,7 +301,7 @@ async function insertFeeTransaction(
     amount: -amt,
     status,
     description: `Fee: ${p.name}`,
-    transaction_date: todayISO(),
+    transaction_date: date || todayISO(),
     // Paired to the payment, NOT linked to the payable — see ADR-046 note above.
     split_group_id: splitGroupId ?? null,
     // ADR-065: inherit the payable's own institution, same as the payment row.
@@ -387,7 +391,7 @@ export function useMarkSubmitted() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable, accountId, amount, cycleAmount, fee }: PayInput) => {
+    mutationFn: async ({ payable, accountId, amount, cycleAmount, fee, date }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const amt = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       // Mark the payable pending first so a failed status write never leaves an
@@ -404,7 +408,7 @@ export function useMarkSubmitted() {
         amount: -amt,
         status: "pending",
         description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
-        transaction_date: todayISO(),
+        transaction_date: date || todayISO(),
         [linkColumn(p.kind)]: p.id,
         split_group_id: groupId,
         // ADR-065: default the place from the linked bill's/debt's own institution.
@@ -412,7 +416,7 @@ export function useMarkSubmitted() {
       });
       if (error) throw error;
 
-      await insertFeeTransaction(householdId, p, accountId, fee, "pending", groupId);
+      await insertFeeTransaction(householdId, p, accountId, fee, "pending", groupId, date);
 
       const owed = payableRemainingOwed(p) - amt;
       return owed > 0.005 ? { remaining_owed: owed } : {};
@@ -430,7 +434,7 @@ export function useMarkCleared() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable, accountId, amount, cycleAmount, fee }: PayInput) => {
+    mutationFn: async ({ payable, accountId, amount, cycleAmount, fee, date }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const requested = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       const existing = await findLinkedTransaction(p, "pending");
@@ -460,14 +464,14 @@ export function useMarkCleared() {
           amount: -requested,
           status: "cleared",
           description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
-          transaction_date: todayISO(),
+          transaction_date: date || todayISO(),
           [linkColumn(p.kind)]: p.id,
           split_group_id: groupId,
           // ADR-065: default the place from the linked bill's/debt's own institution.
           institution_id: p.institution_id,
         });
         if (error) throw error;
-        await insertFeeTransaction(householdId, p, accountId, fee, "cleared", groupId);
+        await insertFeeTransaction(householdId, p, accountId, fee, "cleared", groupId, date);
       }
 
       return result;

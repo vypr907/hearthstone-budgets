@@ -263,12 +263,20 @@ export function AddTransactionFab() {
     const [linkKind, linkId] = link === NO_LINK ? [null, null] : link.split(":");
     const bill = linkKind === "bill" ? bills.find((b) => b.id === linkId) : undefined;
     const debt = linkKind === "debt" ? debts.find((d) => d.id === linkId) : undefined;
+    // Matches the official Submit/Clear flow's standardized label — only
+    // fills in when the user left the description blank, never overrides
+    // text they actually typed.
+    const linkedPayment = bill
+      ? `Bill payment · ${bill.name}`
+      : debt
+        ? `Debt payment · ${debt.name}`
+        : null;
     try {
       await save.mutateAsync({
         account_id: accountId,
         amount: n > 0 ? -n : n,
         category_id: categoryId === NO_CATEGORY ? null : categoryId,
-        description: description.trim() || null,
+        description: description.trim() || linkedPayment,
         status,
         transaction_date: txDate,
         ...(merchantId ? { institution_id: merchantId } : {}),
