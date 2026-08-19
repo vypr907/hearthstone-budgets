@@ -1,5 +1,20 @@
 ## Session Notes
 
+- Implemented ADR-072 (app side): `PlanPaymentDialog` (`app.paycheck.tsx`,
+  already bill/debt-only, so category/goal rows are unaffected by
+  construction) gains an optional "Fee amount" field alongside the existing
+  Planned amount. Added `PayPeriodAllocation.fee_amount` (`src/lib/
+  supabase.ts`), forwarded through `useSetAllocation`'s new `feeAmount` arg
+  (`src/lib/income-hooks.ts`) and `commitPlanned`. The Planned row shows
+  "$total ($base + $fee fee)" when a fee is set, plain "$total" otherwise —
+  `amount` keeps its existing total-outflow meaning, so ADR-071's
+  Left-to-allocate math needed no changes. SQL migration (`alter table
+  pay_period_allocations add column fee_amount numeric(12,2)` +
+  `notify pgrst, 'reload schema'`) reported to the user to run manually —
+  not run by this session (no DB access). Files touched: `src/lib/
+  supabase.ts`, `src/lib/income-hooks.ts`, `src/routes/app.paycheck.tsx`.
+  Next: user to run the SQL, then verify live (see TODO.md).
+
 - Implemented ADR-071 (amends ADR-059, no new ADR): fixed Left-to-allocate
   double-subtracting a bill/debt that has both an auto-matched "Due this
   period" row and a manually planned `pay_period_allocations` row for the

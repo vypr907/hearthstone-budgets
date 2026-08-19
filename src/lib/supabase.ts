@@ -355,7 +355,8 @@ export type PayPeriodAllocation = {
   /** ADR-059: manually planned payment toward a debt in this pay period. */
   debt_id?: string | null;
   allocated_amount: number | null;
-
+  /** ADR-072: display-only fee breakdown, bill/debt-targeted rows only. */
+  fee_amount?: number | null;
 };
 
 

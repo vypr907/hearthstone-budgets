@@ -2222,4 +2222,7 @@ Schema:
 alter table pay_period_allocations add column if not exists fee_amount numeric(12,2);
 ```
 
-Status: Decided 2026-08-18. Not yet implemented.
+Status: Decided 2026-08-18. App side implemented 2026-08-19 (`PayPeriodAllocation.fee_amount`,
+`useSetAllocation`'s `feeAmount` arg, `PlanPaymentDialog`'s optional Fee amount field, Planned
+row's "$total ($base + $fee fee)" display) — pending the `alter table` + `notify pgrst,
+'reload schema'` being run manually in Supabase SQL Editor.

@@ -5,6 +5,7 @@
 - [x] ADR-028: `alter table households add column export_format text not null default 'png' check (export_format in ('png','pdf'));`
 - [ ] ADR-065 backfill (script, not a migration file): set `institution_id` on existing bill/debt payment and paired fee transactions where null, from the linked bill/debt. Until run, older payments keep appearing in Fix Places.
 - [x] ADR-069: extend `categories.domain` to allow `'income'` and insert the four income categories (Income, Credit, Refund, Gift). Until run, Add Transaction's Income mode shows an empty category list.
+- [ ] ADR-072: `alter table pay_period_allocations add column if not exists fee_amount numeric(12,2);` then `notify pgrst, 'reload schema';`. Until run, saving a Fee amount on "Plan a payment" will fail — the app-side write already sends `fee_amount`.
 
 ## Verification
 
@@ -15,6 +16,7 @@
 - [ ] ADR-069: after the migration, confirm Income mode saves a positive transaction with an income category and that income categories never appear in budget grids or the budget category picker.
 - [ ] ADR-071 (2026-08-19): plan a payment for a bill/debt that's also due-date-matched in "Due this period" for the same pay period, and confirm "Obligations total" / Left-to-allocate only count it once (via the Planned amount), while the "Due this period" line item itself is still shown at its full due-date amount, unchanged.
 - [ ] Work through Fix Places once the ADR-065 backfill has run, to confirm only genuinely place-less transactions remain.
+- [ ] ADR-072: after the migration, plan a bill/debt payment with a Fee amount and confirm the Planned row shows "$total ($base + $fee fee)"; confirm a plan with no fee still shows just the plain total.
 
 ## Tests
 

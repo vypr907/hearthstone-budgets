@@ -381,6 +381,8 @@ export function useSetAllocation() {
       billId?: string | null;
       debtId?: string | null;
       amount: number;
+      /** ADR-072: display-only fee breakdown, bill/debt-targeted rows only. */
+      feeAmount?: number | null;
     }) => {
       const targets = [args.categoryId, args.goalId, args.billId, args.debtId].filter(Boolean);
       if (targets.length > 1) {
@@ -410,6 +412,7 @@ export function useSetAllocation() {
         bill_id: args.billId ?? null,
         debt_id: args.debtId ?? null,
         allocated_amount: args.amount,
+        fee_amount: args.feeAmount ?? null,
       };
       const { error } = await supabase.from("pay_period_allocations").upsert(payload);
       if (error) throw error;

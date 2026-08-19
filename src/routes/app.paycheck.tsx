@@ -378,8 +378,11 @@ function PeriodBudget({
       targetId: string;
       name: string;
       amount: number;
+      /** ADR-072: display-only fee breakdown, null when not set. */
+      feeAmount: number | null;
     }[] = [];
     for (const a of mine) {
+      const feeAmount = a.fee_amount != null ? Number(a.fee_amount) : null;
       if (a.bill_id) {
         const b = bills.find((x) => x.id === a.bill_id);
         rows.push({
@@ -388,6 +391,7 @@ function PeriodBudget({
           targetId: a.bill_id,
           name: b?.name ?? "Bill",
           amount: Number(a.allocated_amount ?? 0),
+          feeAmount,
         });
       } else if (a.debt_id) {
         const d = debts.find((x) => x.id === a.debt_id);
@@ -397,6 +401,7 @@ function PeriodBudget({
           targetId: a.debt_id,
           name: d?.name ?? "Debt",
           amount: Number(a.allocated_amount ?? 0),
+          feeAmount,
         });
       }
     }
@@ -416,6 +421,8 @@ function PeriodBudget({
     kind: "bill" | "debt";
     targetId: string;
     amount: number;
+    /** ADR-072: display-only fee breakdown. */
+    feeAmount?: number | null;
   }) => {
     try {
       await setAllocation.mutateAsync({
@@ -424,6 +431,7 @@ function PeriodBudget({
         billId: args.kind === "bill" ? args.targetId : null,
         debtId: args.kind === "debt" ? args.targetId : null,
         amount: Math.max(0, Math.round(args.amount * 100) / 100),
+        feeAmount: args.feeAmount ?? null,
       });
     } catch (e) {
       toast.error((e as Error).message);
@@ -565,7 +573,18 @@ function PeriodBudget({
                     {p.name}
                     <span className="ml-2 text-xs text-muted-foreground">{p.kind} · planned</span>
                   </span>
-                  <span className="font-medium">{formatMoney(p.amount)}</span>
+                  <span className="font-medium">
+                    {p.feeAmount ? (
+                      <>
+                        {formatMoney(p.amount)}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          ({formatMoney(p.amount - p.feeAmount)} + {formatMoney(p.feeAmount)} fee)
+                        </span>
+                      </>
+                    ) : (
+                      formatMoney(p.amount)
+                    )}
+                  </span>
                   <button
                     type="button"
                     className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
@@ -801,11 +820,18 @@ function PlanPaymentDialog({
 }: {
   bills: import("@/lib/supabase").Bill[];
   debts: import("@/lib/supabase").Debt[];
-  onSave: (args: { kind: "bill" | "debt"; targetId: string; amount: number }) => Promise<void>;
+  onSave: (args: {
+    kind: "bill" | "debt";
+    targetId: string;
+    amount: number;
+    /** ADR-072: display-only fee breakdown. */
+    feeAmount?: number | null;
+  }) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState("");
   const [amount, setAmount] = useState("");
+  const [feeAmount, setFeeAmount] = useState("");
 
   const options = useMemo(
     () => [
@@ -830,10 +856,16 @@ function PlanPaymentDialog({
   const save = async () => {
     if (!target) return;
     const [kind, id] = target.split(":");
-    await onSave({ kind: kind as "bill" | "debt", targetId: id, amount: Number(amount || 0) });
+    await onSave({
+      kind: kind as "bill" | "debt",
+      targetId: id,
+      amount: Number(amount || 0),
+      feeAmount: feeAmount ? Number(feeAmount) : null,
+    });
     setOpen(false);
     setTarget("");
     setAmount("");
+    setFeeAmount("");
   };
 
   return (
@@ -880,6 +912,21 @@ function PlanPaymentDialog({
               placeholder="0"
               onChange={(e) => setAmount(e.target.value)}
             />
+          </div>
+          <div className="space-y-1">
+            <Label>Fee amount (optional)</Label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              className="h-12"
+              value={feeAmount}
+              placeholder="0"
+              onChange={(e) => setFeeAmount(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Part of the planned amount that's a fee, not principal — shown as a breakdown
+              on the Planned row.
+            </p>
           </div>
         </div>
         <DialogFooter>
