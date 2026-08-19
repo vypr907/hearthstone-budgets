@@ -1,6 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
+import { Button } from "@/components/ui/button";
+import { CalendarClock } from "lucide-react";
 import {
   monthKey,
   categoryDomain,
@@ -32,7 +34,7 @@ import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
 import { eventDate, obligationsInRange, periodRange } from "@/lib/paycheck-budget";
 import { categoryVisual } from "@/lib/visual-meta";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 import { EmojiIcon, ItemBar, ProgressRing, emojiFor, itemColor } from "@/components/viz";
 import { BudgetSplitLines } from "@/components/BudgetSplitLines";
 import { HelpButton } from "@/components/HelpButton";
@@ -378,6 +380,9 @@ function Dashboard() {
     deductionDebtIds.has(id.replace(/^(debt|bill)-/, ""));
   const overdueDeductions = overdue.filter((o) => isDeductionOverdue(o.id));
   const overdueRest = overdue.filter((o) => !isDeductionOverdue(o.id));
+  const overdueDeductionsTotal = overdueDeductions.reduce((sum, o) => sum + o.amount, 0);
+  /** Deduction/HSA past-due items are already handled automatically — collapsed by default. */
+  const [overdueDeductionsOpen, setOverdueDeductionsOpen] = useState(false);
 
   /** Payoff progress is collapsed by default to keep the dashboard short. */
   const [payoffOpen, setPayoffOpen] = useState(false);
@@ -402,41 +407,75 @@ function Dashboard() {
 
   return (
     <>
-      <AppHeader title="Dashboard" />
+      <AppHeader
+        title="Dashboard"
+        action={
+          <Link to="/app/paycheck">
+            <Button variant="ghost" size="icon" aria-label="Paycheck Budget">
+              <CalendarClock className="h-5 w-5" />
+            </Button>
+          </Link>
+        }
+      />
       <div className="space-y-4 p-4">
         <div
           className="overflow-hidden rounded-[16px] text-brand-foreground shadow-[var(--shadow-card)]"
           style={{ backgroundImage: "var(--gradient-brand)" }}
         >
           <div className="p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-widest opacity-80">
+            <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest opacity-80">
               Combined spendable
+              <HelpButton>
+                Checking and credit-card accounts only. Credit cards add their
+                unused limit, not their balance. Savings, investment, and
+                retirement accounts are never counted here.
+              </HelpButton>
             </p>
             <p className="mt-1 text-4xl font-extrabold tracking-tight tabular-nums">
               {formatMoney(spendable.total)}
             </p>
-            <p className="mt-1 inline-flex items-center gap-1 text-sm opacity-90">
-              <span>
-                {formatMoney(periodTotals.total)} set aside this {period.label} ·{" "}
-                {formatMoney(payoffTotals.remaining)} debt to go
+            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm opacity-90">
+              <span className="inline-flex items-center gap-1">
+                {formatMoney(periodTotals.total)} due this {period.label}
+                <HelpButton>
+                  Every bill and minimum debt payment due inside this{" "}
+                  {period.label} — the full amount owed on each, not what's
+                  already been paid this {period.label} and not money set
+                  aside anywhere. "Still owed this {period.label}" below is
+                  what's actually left to pay.
+                </HelpButton>
               </span>
-              <HelpButton>
-                Bills and minimum debt payments due before your next paycheck — not money
-                already moved into savings.
-              </HelpButton>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1">
+                {formatMoney(payoffTotals.remaining)} debt to go
+                <HelpButton>
+                  Total remaining balance across every debt that isn't paid
+                  off yet.
+                </HelpButton>
+              </span>
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-[12px] bg-brand-foreground/15 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest opacity-80">
                   Bills this {period.label}
+                  <HelpButton>
+                    Every bill due this {period.label}, at its full due-date
+                    amount — includes bills already partly or fully paid this
+                    {" "}{period.label}.
+                  </HelpButton>
                 </p>
                 <p className="text-xl font-bold tabular-nums">
                   {formatMoney(periodTotals.bills)}
                 </p>
               </div>
               <div className="rounded-[12px] bg-brand-foreground/15 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest opacity-80">
                   Debts this {period.label}
+                  <HelpButton>
+                    Every debt's minimum payment due this {period.label}, at
+                    the full amount — includes debts already partly or fully
+                    paid this {period.label}.
+                  </HelpButton>
                 </p>
                 <p className="text-xl font-bold tabular-nums">
                   {formatMoney(periodTotals.debts)}
@@ -449,6 +488,20 @@ function Dashboard() {
           </div>
         </div>
 
+        <Link to="/app/paycheck">
+          <Card className="active:bg-muted/60">
+            <CardContent className="flex items-center gap-3 p-4">
+              <CalendarClock className="h-5 w-5 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Paycheck Budget</p>
+                <p className="text-xs text-muted-foreground">
+                  Plan and allocate this {period.label}'s income
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
 
         <Card>
           <CardContent className="p-4">
@@ -678,12 +731,25 @@ function Dashboard() {
             <div className="space-y-3">
               {overdueDeductions.length > 0 ? (
                 <div className="space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    Paycheck / HSA deduction
-                  </p>
-                  {overdueDeductions.map((o) => (
-                    <OverdueRow key={o.id} item={o} />
-                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setOverdueDeductionsOpen((v) => !v)}
+                    aria-expanded={overdueDeductionsOpen}
+                    className="flex w-full items-center justify-between gap-2"
+                  >
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Paycheck / HSA deduction · {overdueDeductions.length}
+                      {" "}· {formatMoney(overdueDeductionsTotal)}
+                    </span>
+                    {overdueDeductionsOpen ? (
+                      <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                  </button>
+                  {overdueDeductionsOpen
+                    ? overdueDeductions.map((o) => <OverdueRow key={o.id} item={o} />)
+                    : null}
                 </div>
               ) : null}
               {overdueRest.length > 0 ? (

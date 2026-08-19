@@ -48,8 +48,17 @@ function FixPlacesPage() {
     return m;
   }, [accounts]);
 
+  /**
+   * Transfers, paycheck deposits, splits, and deductions (ADR-047/055/056)
+   * never get an institution_id — there's no merchant to assign, they move
+   * money between the household's own accounts/sources. Excluded here so
+   * Fix Places only ever surfaces genuinely place-less spending.
+   */
   const unassigned = useMemo(
-    () => transactions.filter((t: Transaction) => !t.institution_id),
+    () =>
+      transactions.filter(
+        (t: Transaction) => !t.institution_id && !t.transfer_group_id && !t.split_group_id,
+      ),
     [transactions],
   );
 

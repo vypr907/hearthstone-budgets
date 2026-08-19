@@ -51,17 +51,8 @@ Show me the diffs for all three files before finalizing.
 
 
 # Things to work on
-- for transfers, what place do I use? If I'm transferring money from my One account to my wife's One account, or from my USAA to her One account, how does that work? These still show up in fix places
-- on Dashboard, top hero it has "$1409.21 set aside this pay period". what does this number mean? I want to add tooltips/help buttons all over the app. Added a tooltip to the Dashboard hero that says: "Bills and minimum debt payments due before your next paycheck — not money already moved into savings." this doesn't actually explain what the numbers on the hero mean:
-   - Combined Spendable (tooltip should explain how this number is calculated in a very simple manner)
-   - $<> Set aside this pay period (entirely unsure as to what this number means or where it comes from)
-   - $<> debt to go (this one is clear enough on it's own)
-   - Bills this pay period (is this how much is still due this pay period, or just the total of all bills for the pay period?)
-   - Debts this pay period (same question)
-- Dashboard, "Payoff Progress" should be below "Still Owed This Pay Period", "Past Due" should separate bills/debts that are paid by Deduction/HSA (this is done, but want it collapsible)
-- for Dashboard, the primary focus should be on current pay period status (bills/debts/spending/balances/etc), which I think it is, but want to confirm, as the main card says "Budget vs Actual - This Month" (but I think it's pulling numbers from per paycheck budget) but I'd also like a card, near the bottom, but before the net worth tracker, that shows more of a monthly status. It's tricky because I want to budget per pay period/pay check especially because each paycheck will have different bills and debts tied to it based on due dates, but I want to be able to see monthly numbers... average spending vs current, by-category outgoing numbers (bills/debts + spending, show expected and actual so far)
-- Dashboard should have a button that goes directly to the Paycheck Budget screen
-- in Paycheck Budget, for a future paycheck, it lists Aurora Audiology, which is a debt that has been paid off already. Also, would like a toggle for the "Due this Period" section that allows sorting/grouping by Due Date (which is the current default) or grouping by category (these options should also have subtotals). Also want to be able to group by Account (the account the bill or debt usually gets paid with) that shows subtotals. This way the user can see how much needs to be in that account in order to satisfy the bills/debts
+(Scoped 2026-08-19 into docs/TODO.md's "Dashboard / Paycheck Budget UX pass" —
+see there for the checkpointed plan. Removed here to avoid duplication.)
 ---
 
 ## Idea: smarter institution_type for inline-created merchants (Add Transaction)

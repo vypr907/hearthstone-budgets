@@ -545,6 +545,7 @@ function DebtDialog({
 }) {
   const upsert = useUpsertDebt();
   const del = useDeleteDebt();
+  const { data: transactions = [] } = useTransactions();
   const { data: institutions = [] } = useInstitutions();
   const { data: deductions = [] } = useHouseholdDeductions();
   const { data: incomeSources = [] } = useIncomeSources();
@@ -686,11 +687,29 @@ function DebtDialog({
     }
     // A one-time charge has no due day — it has a real date.
     const dated = cycle !== "monthly";
+    const nextRemaining = remainingNum ?? originalNum;
+    // Keep date_paid_off in sync with a manually-edited balance, the same way
+    // applyClearedPayment()/useReversePayment() keep it in sync with a real
+    // payment — otherwise this screen's own isPaidOff (remaining_balance <= 0)
+    // and obligationsInRange()'s date_paid_off check can silently disagree.
+    let datePaidOff: string | null = debt?.date_paid_off ?? null;
+    if (nextRemaining != null && nextRemaining <= 0) {
+      if (!datePaidOff) {
+        const linkedDates = transactions
+          .filter((t) => t.linked_debt_id === debt?.id)
+          .map((t) => t.transaction_date)
+          .sort();
+        datePaidOff = linkedDates[linkedDates.length - 1] ?? todayISO();
+      }
+    } else if (nextRemaining != null && nextRemaining > 0) {
+      datePaidOff = null;
+    }
     try {
       await upsert.mutateAsync({
         id: debt?.id,
         name: name.trim(),
         remaining_balance: remainingNum ?? originalNum,
+        date_paid_off: datePaidOff,
         starting_balance: startingBalance,
         // Interest rate is optional: blank stores null rather than 0.
         interest_rate: rate.trim() !== "" && Number.isFinite(Number(rate)) ? Number(rate) : null,

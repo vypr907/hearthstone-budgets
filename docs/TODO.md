@@ -18,6 +18,100 @@
 - [x] Work through Fix Places once the ADR-065 backfill has run, to confirm only genuinely place-less transactions remain.
 - [x] ADR-072: after the migration, plan a bill/debt payment with a Fee amount and confirm the Planned row shows "$total ($base + $fee fee)"; confirm a plan with no fee still shows just the plain total.
 
+## Dashboard / Paycheck Budget UX pass (2026-08-19, scoped from SCRATCHPAD.md)
+
+Interviewed and scoped 2026-08-19 — decisions baked into the checkpoints below so
+work can resume from here after any interruption. Sequenced quick wins first, then
+the two bigger builds. No screenshots needed — build from code structure, review
+in-app after.
+
+### Phase 1 — quick wins
+
+- [x] **Fix Places / transfers** (2026-08-19): `unassigned` in
+  `app.fix-places.tsx` now filters out any transaction with `transfer_group_id`
+  OR `split_group_id` set, alongside the existing `!institution_id` check —
+  excludes transfers, paycheck deposits, splits, and deductions (ADR-047/055/
+  056), matching the decision to exclude all structurally-placeless
+  transactions, not just transfers. No schema change.
+- [x] **Dashboard hero relabel + tooltips** (2026-08-19, `app.index.tsx:403-462`):
+  - Relabeled "$X set aside this {period.label}" → "$X due this {period.label}".
+  - Added a tooltip to "Combined spendable" (previously had none): checking +
+    credit-account spendable contribution only, credit adds unused limit not
+    balance, savings/investment/retirement always excluded.
+  - Split the one combined tooltip into two — "due this {period.label}" and
+    "debt to go" are now separate spans, each with its own `HelpButton`, and
+    the "due" copy explicitly cross-references "Still owed this
+    {period.label}" as the netted figure.
+  - Added tooltips to the "Bills this {period.label}" / "Debts this
+    {period.label}" tile labels: gross due-date totals, not netted against
+    partial payments already made this period.
+- [x] **Dashboard → Paycheck Budget button** (2026-08-19): `AppHeader` gained
+  an optional `action?: ReactNode` prop (`AppHeader.tsx`), rendered next to
+  the sign-out button — no other caller passes it, so every other screen is
+  unaffected. Dashboard passes a `CalendarClock` icon-button linking to
+  `/app/paycheck`. Also added a full-width `Card` link (same route) right
+  under the hero, before "Spendable breakdown" (`app.index.tsx:488-501`).
+- [x] **Past Due Deduction/HSA collapsible** (2026-08-19): added
+  `overdueDeductionsOpen` state (`app.index.tsx`, defaults collapsed, same
+  pattern as `payoffOpen`) and a chevron toggle button on the "Paycheck / HSA
+  deduction" group header, which now also shows the item count and subtotal
+  so the collapsed state stays informative. The "Other" group is unaffected —
+  always visible, not collapsible (only the deduction/HSA subgroup was
+  in scope). Payoff Progress's position/collapsibility were already correct,
+  confirmed via code read — no action needed there.
+- [x] **Aurora Audiology bug — diagnosed 2026-08-19.** Root cause confirmed live:
+  debt `c20ab102-4462-4ac6-8571-04559c301db6`, `remaining_balance = 0.00`,
+  `payment_status = 'cleared'`, `date_paid_off = null`. Two inconsistent
+  "paid off" definitions exist in the codebase: the Debts screen
+  (`app.debts.tsx:149`, `isPaidOff = remaining_balance <= 0`) vs.
+  `obligationsInRange()`/`debt-payoff.ts:40`/`balances.ts:175`/`snapshot.ts:72`
+  (all key off `date_paid_off` only). `date_paid_off` auto-sets in exactly one
+  place — `applyClearedPayment()` (`payments.ts:150`), when a real payment
+  zeroes the balance. The Debt edit form's save (`app.debts.tsx:690-713`,
+  `remaining_balance` written raw from the input) has no equivalent logic, so
+  a manual balance correction to $0 leaves `date_paid_off` null forever and
+  the debt keeps generating future obligations everywhere except the Debts
+  screen. Decision: backfill + guard the edit form (not the broader
+  unify-all-checks option). Remaining sub-steps:
+  - [x] Audit for other debts in the same drifted state (2026-08-19): only
+    Aurora Audiology matched — no other debts drifted.
+  - [x] Backfill `date_paid_off` (2026-08-19), derived from each debt's most
+    recent linked transaction date, falling back to `current_date` when none
+    exists — ran clean, matched only Aurora Audiology per the audit above.
+  - [x] Code fix (2026-08-19) in `app.debts.tsx`'s `DebtDialog`/`save()`:
+    added `useTransactions()` (already imported for other uses in this file,
+    no new fetch) and a `datePaidOff` derivation before the upsert call
+    (`app.debts.tsx:690-706`) — when the saved balance is `<= 0` and
+    `date_paid_off` wasn't already set, uses the most recent
+    `linked_debt_id`-matching transaction's date, falling back to
+    `todayISO()` only if none exists; clears it to `null` when the saved
+    balance goes back `> 0` and it was previously set (mirrors
+    `useReversePayment`'s `payments.ts:664` pattern). `date_paid_off` added
+    to the `upsert.mutateAsync` payload (`app.debts.tsx:712`). No schema
+    change — `date_paid_off` is an existing base column.
+
+### Phase 2 — bigger builds
+
+- [ ] **New monthly summary card** (Dashboard, near the bottom, before the net
+  worth tracker): per category, combine bills + debts + spending; show BOTH the
+  manual budget target (existing `spending_budgets`/`billsBudgetedByCategory`
+  pipeline) AND a trailing historical average side by side, vs. actual so far
+  this month. Proposed trailing window: 6 months, matching `netWorthTrend()`'s
+  existing window (`app.index.tsx:134`) for consistency — confirm at build
+  time. No schema change (computed client-side from existing transactions/
+  bills/debts) — but the trailing-average methodology is a real implementation
+  choice future devs should know about; consider a short ADR when built.
+- [ ] **"Due this period" grouping toggle** (`app.paycheck.tsx:493-550`): add
+  Due Date (current default, unchanged) / Category / Account modes, each with
+  subtotals.
+  - Category: no schema change — bills/debts already have `category_id`.
+  - Account: needs a new nullable `usual_payment_account_id` on `bills` AND
+    `debts` (references `accounts`). **Draft and get sign-off on a new ADR
+    before writing any SQL** (schema change, per CLAUDE.md hard rule). Decision:
+    manual picker on the Bill/Debt edit form, but default-populate it from the
+    most recent linked-payment transaction's account when history exists
+    (backfill script + form default logic) rather than leaving it blank.
+
 ## Tests
 
 - [ ] Add unit tests for `projectOccurrences()` (monthly + biweekly items) alongside the existing arrears tests.
