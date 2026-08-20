@@ -50,6 +50,7 @@ import { Switch } from "@/components/ui/switch";
 import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { PastDueBadge } from "@/components/PastDueBadge";
 import { PastDueEditor } from "@/components/PastDueEditor";
+import { StrandedBillRepair } from "@/components/StrandedBillRepair";
 import { ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 import { formatTypeLabel } from "@/lib/visual-meta";
@@ -149,6 +150,7 @@ function BillsPage() {
     <>
       <AppHeader title="Bills" />
       <div className="space-y-3 p-4">
+        <StrandedBillRepair bills={bills} />
         <Button className="h-12 w-full text-base" onClick={() => setEditing({})}>
           <Plus className="mr-2 h-5 w-5" /> Add bill
         </Button>

@@ -30,6 +30,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+*.code-workspace
 
 # Other random files and folders
 nextquestion.md

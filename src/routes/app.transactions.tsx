@@ -587,10 +587,16 @@ export function TransactionDetail({
     try {
       await upsert.mutateAsync({
         id: transaction!.id,
+        // ADR-037 addendum: the amount field is disabled while linked, so this
+        // is always the untouched original value — sent through unconditionally
+        // to satisfy the mutation's required `amount`.
         amount: Number(amount),
+        // Status on a linked row must go through applyClearedPayment (Pay
+        // actions / Reverse) so bills/debts stay in sync — editing it here
+        // would silently strand cycle_paid_to_date.
+        ...(isLinked ? {} : { status: status as "pending" | "cleared" }),
         description: description || null,
         transaction_date: date,
-        status: status as "pending" | "cleared",
         account_id: accountId === "none" ? null : accountId,
         category_id: categoryId === "none" ? null : categoryId,
         institution_id: institutionId === "none" ? null : institutionId,
@@ -677,6 +683,13 @@ export function TransactionDetail({
           </div>
         ) : (
           <div className="space-y-3">
+            {isLinked && (
+              <p className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                Amount and status are locked on linked entries — use{" "}
+                {linkedBill ? "the bill's" : "the debt's"} Pay actions (or Reverse) so{" "}
+                {linkedBill?.name ?? linkedDebt?.name} stays in sync.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Amount</Label>
@@ -686,6 +699,7 @@ export function TransactionDetail({
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="h-11"
+                  disabled={isLinked}
                 />
               </div>
               <div>
@@ -708,7 +722,7 @@ export function TransactionDetail({
             </div>
             <div>
               <Label>Status</Label>
-              <Select value={status} onValueChange={setStatus}>
+              <Select value={status} onValueChange={setStatus} disabled={isLinked}>
                 <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
