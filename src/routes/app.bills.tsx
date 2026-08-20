@@ -40,7 +40,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Bill, BillingCycle } from "@/lib/supabase";
+import type { Account, Bill, BillingCycle, Transaction } from "@/lib/supabase";
+import { TransactionDetail } from "@/routes/app.transactions";
 import { DetailGrid, DetailItem, DetailMoney, DetailText, StatusBadge } from "@/components/detail";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
@@ -515,7 +516,16 @@ function BillAdjustments({ bill }: { bill: Bill }) {
 function RecentBillTransactions({ bill }: { bill: Bill }) {
   const billId = bill.id;
   const { data: transactions = [] } = useTransactions();
+  const { data: accounts = [] } = useAccounts();
+  const { data: allInstitutions = [] } = useInstitutions();
+  const institutionById = useInstitutionIndex(allInstitutions);
   const del = useDeleteLinkedTransaction();
+  const [detail, setDetail] = useState<Transaction | null>(null);
+  const accountById = useMemo(() => {
+    const m: Record<string, Account> = {};
+    for (const a of accounts) m[a.id] = a;
+    return m;
+  }, [accounts]);
   const rows = useMemo(
     () =>
       transactions
@@ -531,40 +541,63 @@ function RecentBillTransactions({ bill }: { bill: Bill }) {
         <EmptyState className="mt-1 py-2 text-left">No payments logged yet.</EmptyState>
       ) : (
         <div className="mt-1 divide-y divide-border/50">
-          {rows.map((t) => (
-            <div key={t.id} className="flex items-center justify-between py-2 text-sm">
-              <span className="min-w-0 flex-1 truncate">
-                {t.transaction_date?.slice(0, 10)}
-                {t.description ? ` · ${t.description}` : ""}
-              </span>
-              <span className="ml-2 shrink-0 text-xs capitalize text-muted-foreground">
-                {t.status ?? "—"}
-              </span>
-              <span className="ml-2 shrink-0 tabular-nums">
-                {formatMoney(Number(t.amount ?? 0))}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="ml-1 h-9 w-9 shrink-0"
-                aria-label="Delete transaction"
-                disabled={del.isPending}
-                onClick={() => {
-                  if (!confirm("Delete this ledger transaction? The bill row is left as-is."))
-                    return;
-                  del.mutate(t, {
-                    onSuccess: () => toast.success("Transaction deleted"),
-                    onError: (e: unknown) => toast.error((e as Error).message),
-                  });
-                }}
+          {rows.map((t) => {
+            const account = t.account_id ? accountById[t.account_id] : undefined;
+            return (
+              <div
+                key={t.id}
+                className="flex cursor-pointer items-center justify-between gap-2 py-2 text-sm"
+                onClick={() => setDetail(t)}
               >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-              <ReversePaymentButton transaction={t} payable={toPayable("bill", bill)} />
-            </div>
-          ))}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate">
+                    {t.transaction_date?.slice(0, 10)}
+                    {t.description ? ` · ${t.description}` : ""}
+                  </p>
+                  {account ? (
+                    <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                      <ObligationIcon
+                        institution={institutionById[account.institution_id ?? ""]}
+                        name={account.name}
+                        fallback="🏦"
+                        size={16}
+                        className="h-4 w-4 rounded-[4px] text-[9px]"
+                      />
+                      <span className="truncate">{account.name}</span>
+                    </span>
+                  ) : null}
+                </div>
+                <span className="shrink-0 text-xs capitalize text-muted-foreground">
+                  {t.status ?? "—"}
+                </span>
+                <span className="shrink-0 tabular-nums">
+                  {formatMoney(Number(t.amount ?? 0))}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="ml-1 h-9 w-9 shrink-0"
+                  aria-label="Delete transaction"
+                  disabled={del.isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!confirm("Delete this ledger transaction? The bill row is left as-is."))
+                      return;
+                    del.mutate(t, {
+                      onSuccess: () => toast.success("Transaction deleted"),
+                      onError: (e: unknown) => toast.error((e as Error).message),
+                    });
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+                <ReversePaymentButton transaction={t} payable={toPayable("bill", bill)} />
+              </div>
+            );
+          })}
         </div>
       )}
+      <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />
     </div>
   );
 }

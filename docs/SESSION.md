@@ -16,3 +16,11 @@
     bill payments found," and use "Clean up" + redo the payment to verify end to end.
     Build can't be verified locally (AppLocker blocks vite/tsc) — flagging for manual
     smoke test.
+
+- Bill detail's "Recent transactions" rows (`RecentBillTransactions`, `app.bills.tsx`)
+  now show a small account icon/label (reusing `ObligationIcon` at 16px, keyed off the
+  transaction's `account_id` → account → institution) and are clickable to open the
+  shared `TransactionDetail` dialog (reused from `app.transactions.tsx`, same component
+  already reused on the Accounts screen). Delete/Reverse buttons stop propagation so
+  they don't also trigger the row click. No schema change. Build unverified locally
+  (AppLocker) — flagging for manual smoke test on the Bills detail screen.
