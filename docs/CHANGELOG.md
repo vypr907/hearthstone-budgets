@@ -1221,3 +1221,251 @@
   that cycle is itself already overdue; there's no way to pay arrears only
   without also crediting the current cycle (by design, ADR-057).
 * Build/tests unverified locally (AppLocker blocks vite/tsc/vitest).
+
+## 2026-08-21 – ADR-076/077: Arrears-Only Payments & Correct This Payment (+ QA Pass)
+
+### Completed
+
+* **ADR-076 — Arrears-only payments.** New `priorCyclesArrears()` /
+  `arrearsPaymentTag()` (`src/lib/arrears.ts`) compute arrears owed strictly
+  before the current cycle, and the ADR-075 tag needed to exclude an
+  arrears-only transaction from the current cycle's ledger window.
+  `applyArrearsPayment()` / `useMarkArrearsPaid()` (`payments.ts`) + new
+  `ArrearsPaymentAction.tsx`, wired into `PayActions.tsx` as "Log arrears
+  payment" everywhere Submit/Reset already appear, hidden when nothing is
+  owed from before the current cycle. Generalized `applyClearedPayment`'s
+  overflow-into-arrears reduction to use `priorArrears` instead of raw
+  `opening_arrears`, removing a gate that silently no-oped whenever arrears
+  came purely from the live missed-cycle walk — this also fixed "Total due"
+  overstating what's owed (the pay preset used the same formula).
+  `applyClearedPayment`/`useMarkCleared`/`PayInput` all gained a
+  `priorArrears` parameter computed by the caller (arrears.ts already
+  imports from payments.ts, so the reverse import isn't possible); updated
+  all 4 call sites (`pay-flow.tsx`, `AddTransactionFab.tsx`,
+  `deduction-funding.ts`, `app.pending.tsx`).
+* **ADR-077 — Correct this payment.** `useCorrectPayment` (`payments.ts`)
+  edits a cleared, linked PARTIAL payment's amount/date/account in place via
+  a `cycle_paid_to_date` delta; rejects anything that would cross a resolve
+  boundary either direction, pointing at Reverse instead. New
+  `CorrectPaymentButton.tsx` next to Reverse/Delete on Bills' and Debts'
+  Recent Transactions. `StrandedBillRepair`/`StrandedDebtRepair` gained a
+  "Credit now" action alongside "Clean up" — applies a stranded group's
+  already-cleared total via `applyClearedPayment` instead of deleting the
+  rows and asking for a redo.
+* Also fixed while in this code: `computeArrears()` now trusts a monthly
+  debt's `payment_status='cleared'` for its current cycle only when
+  `updated_at` is recent enough to plausibly be for that cycle — closes a
+  "cleared but still shows 1 cycle past due" gap without risking a stale
+  flag hiding a genuinely overdue debt.
+
+### QA pass (2026-08-21)
+
+* Full test suite (Lovable sandbox): `arrears.test.ts` 13/13, then 24/24
+  after the fix below; `ledger-state.test.ts` 10/10. Build OK.
+* Live smoke test found and fixed a real bug: `arrearsPaymentTag()` returned
+  the CURRENT due date whenever the current cycle was itself overdue (the
+  arrears walk's first iteration reports it as `oldestMissedDate`), so an
+  arrears payment read as a partial payment of the current cycle and also
+  tripped the stranded-payment panel. `arrears.ts` now forces the tag
+  strictly before the current due date. Re-verified live: button only
+  appears with prior arrears, current cycle stays correctly unpaid, and
+  sequential differently-dated arrears payments apply cleanly.
+* Reviewed Lovable's own follow-up fix to the same function (`173c7ef`):
+  behavior was correct, but removed a dead branch that could never execute
+  (the arrears walk always starts at the current due date, so the
+  "oldestMissedDate before dueDate" case is impossible) and fixed a test
+  that passed for the wrong reason.
+* Remaining 6 other smoke tasks all PASS, including a re-verify that
+  ADR-066's advance-reactivation doesn't reproduce as a real bug (only a
+  cosmetic stale "Cleared" chip until the next status write, logged not
+  fixed).
+
+### Notes
+
+* No schema change for either ADR. Known issue found by QA, not fixed here
+  (needed a real ADR decision — became ADR-078 below): the FIRST arrears
+  payment on a payable whose current cycle is also overdue dropped that
+  cycle's own amount from the past-due total.
+* Pre-existing, non-regression TS2871 nullish-expression warnings noted in
+  `monthly-summary.ts`/`paycheck-budget.ts`, logged for later cleanup.
+* Build/tests unverified locally (AppLocker); verified in the Lovable
+  sandbox instead.
+
+## 2026-08-21 – ADR-078: `arrears_paid_to_date` Counter; ADR-079: `updated_at` Trigger
+
+### Completed
+
+* **ADR-078** — new `bills`/`debts.arrears_paid_to_date` running counter
+  replaces ADR-076's original `opening_arrears`/`arrears_as_of` routing for
+  arrears-directed credit, fixing the QA-found gap above: that mechanism
+  could only suppress a PREFIX of the missed-cycle walk, the wrong shape for
+  what ADR-076 needed to consolidate. `computeArrears()` now subtracts
+  `arrears_paid_to_date` from the always-fresh raw total, floored at 0;
+  `opening_arrears`/`arrears_as_of` are back to their original ADR-049
+  one-time-carry-in-only meaning. Deliberately **no reset** of the new
+  counter anywhere — traced the actual math before implementing (a normal
+  cycle resolve only ever shrinks the raw walk by an amount always covered
+  by `cycle_paid_to_date`, never overlapping what the counter tracks) after
+  catching that the originally-drafted "reset on every resolve" clause would
+  have wiped legitimate arrears credit almost immediately; corrected in the
+  ADR text before writing any code.
+* **ADR-079** — `set_updated_at()` Postgres trigger on `bills`/`debts`,
+  found while diagnosing the Beiers bill below: neither table's `updated_at`
+  had a DB trigger or any app code path setting it on UPDATE, so it was
+  frozen at insert time forever. This silently undermined two "was this
+  touched recently" checks built this session (the stranded-repair dedup
+  guard, and ADR-077's monthly `clearedRecently` check) — both failed
+  closed, not unsafe, just non-functional. Pure DB trigger, no app changes.
+* Diagnosed the real Beiers bill's "Credit now" rejection via the read-only
+  MCP: `cycle_amount_due` was null (missing an active $20 late-fee
+  adjustment) and `next_due_date` had drifted a month ahead. Root cause
+  logged as a real, separate, unfixed bug: `useResetCycle`/`useMarkUnpaid`
+  write `cycle_amount_due: null` unconditionally, with no awareness of
+  active `bill_adjustments`.
+* All three pending SQL migrations (ADR-078, ADR-079, the one-time Beiers
+  fix) confirmed run and verified live via the read-only MCP.
+
+### Notes
+
+* No schema change to `opening_arrears`/`arrears_as_of` themselves; new
+  `arrears_paid_to_date` column (nullable numeric, default 0) on both
+  tables.
+* Known limitation, documented in ADR-078, not fixed (pre-existing ADR-076
+  scope): `applyArrearsPayment` never touches `cycle_paid_to_date`, so a
+  cycle paid off in advance via an arrears payment still offers Submit once
+  its own due date becomes current.
+* Build/tests unverified locally (AppLocker).
+
+## 2026-08-21 – Stranded Repair: "Credit Now" Double-Credit Fix; Data Cleanup Sweep
+
+### Fixed
+
+* `StrandedBillRepair`/`StrandedDebtRepair`'s "Credit now" passed a
+  stranded group's full `clearedSum` to `applyClearedPayment`, which treats
+  its amount as NEW money layered on top of `cycle_paid_to_date` —
+  double-crediting whatever portion of that window was already correctly
+  credited. Only surfaced on the Rent (via Flex) bill, the first case with
+  a PARTIALLY-credited window; every earlier case (Beiers, Prose, ATT) had
+  `cycle_paid_to_date=0`, where the bug is invisible. Fixed both repair
+  panels to credit `clearedSum - cycle_paid_to_date` instead; applied to
+  the debt-side panel too for consistency even though it can't currently
+  hit the bug.
+
+### Completed
+
+* Walked the user through the same `cycle_amount_due=null` root cause as
+  Beiers on two more bills (Prose, ATT): one-time SQL to set
+  `cycle_amount_due` to the real cleared amount, then "Credit now". Rent hit
+  the double-credit bug above instead, so it got a direct SQL fix bypassing
+  "Credit now" entirely (code fix not yet deployed at the time). All three
+  confirmed cleared from the Stranded panel by the user.
+* Corrected an earlier ad-hoc SQL sweep that had flagged ~15+ bills
+  household-wide as potentially stranded: the user reported none actually
+  show in the Stranded panel, and hand-tracing several against the real
+  `findStrandedBillPayments()` window logic (rather than the oversimplified
+  SQL query used originally) confirmed they're genuinely excluded, not a
+  bug. Corrected `docs/TODO.md` instead of leaving a false lead.
+* Diagnosed and fixed "SoFi - Invest": not a stranded-payment bug, but a
+  genuine data-modeling error — a biweekly auto-transfer (savings → Robo
+  investment account) tracked as a Bill, so it only ever debited savings
+  and never credited the destination. Deleted a duplicate same-day $5
+  debit, converted the remaining debit into a real transfer pair (paired
+  credit into Robo via a shared `transfer_group_id`), deleted the SoFi -
+  Invest bill row. Confirmed live via the read-only MCP.
+
+### Notes
+
+* Files touched: `src/components/StrandedBillRepair.tsx`,
+  `src/components/StrandedDebtRepair.tsx`. No schema change for the
+  double-credit fix; SoFi-Invest was pure data cleanup, no code change.
+* Logged a real gap surfaced by SoFi-Invest, not scoped: Transfer mode
+  (ADR-056) correctly double-enters money but has no recurrence/reminder
+  attached the way Bills do — needs its own ADR if pursued
+  (`docs/SCRATCHPAD.md`).
+
+## 2026-08-21 – ADR-080: Overdue Items Stay in "Due This Period"; Paycheck Budget Status Icons
+
+### Completed
+
+* **ADR-080** — `obligationsInRange()`/`deductedObligationsInRange()`
+  (`src/lib/paycheck-budget.ts`) now include a bill/debt whose due date has
+  slipped before the period start too, as long as the period hasn't fully
+  elapsed (`end > today`), so an overdue item keeps showing at its normal
+  per-cycle amount every period until it's actually paid instead of only
+  appearing in the separate Past Due section. Fixed at this shared level so
+  both the Dashboard's "Still owed this period" and Paycheck Budget's "Due
+  this period" pick it up from one change.
+* Paycheck Budget's "Due this period" rows gained a status icon — green
+  check (cleared), timer (pending), exclamation (partial) — shown only when
+  the selected period is the current one. Reused the existing ADR-036
+  `deriveCycleInfo()`/`LedgerState` machinery rather than a new status
+  computation; pending/partial icons are tap targets (Popover, same pattern
+  as `HelpButton`) showing the pending amount or the paid/remaining split.
+* Fixed a duplicate-identifier typecheck error (TS2440) this introduced:
+  `app.paycheck.tsx` had both an import of `todayISO` from
+  `paycheck-budget.ts` and a pre-existing local function of the same name;
+  removed the local declaration.
+
+### Notes
+
+* No schema change. Files touched: `src/lib/paycheck-budget.ts`,
+  `src/routes/app.paycheck.tsx`. Dashboard has no equivalent per-row list to
+  attach status icons to ("Still owed this period" is category-grouped, not
+  itemized) — left as-is, not requested.
+* User tested both pieces live and confirmed correct.
+
+## 2026-08-21 – Accounts: Transfer Labels, Timezone Off-by-One Fix, Account Type Dropdown; Stash-Invest
+
+### Completed
+
+* Accounts & Balances' "Recent activity" list gained the same "Transfer"
+  badge the Transactions screen already shows per-row; the shared
+  `TransactionDetail` dialog now looks up a transfer's other leg by
+  `transfer_group_id` and shows "From"/"To" account fields (sign of
+  `amount` decides which, per ADR-056) instead of a single "Account" field.
+* Account "Type" field (`AccountDialog`) changed from free text to a
+  dropdown, same pattern as `InstitutionDialog`'s existing type picker.
+  Queried live `account_type` values before building the list rather than
+  guessing — found the real set is
+  `checking`/`savings`/`credit`/`invest`/`retirement`/`hsa`/`lpfsa`, not
+  `investment` as `visual-meta.ts`'s icon map assumed. Fixed that latent
+  mismatch there (every invest/hsa/lpfsa account had been rendering the
+  generic fallback icon) plus the same `investment`→`invest` mismatch in
+  `balances.ts`'s `EXCLUDED_TYPES` and `snapshot.ts`'s `BALANCE_TYPE_ORDER`.
+* Diagnosed and fixed "Stash - Invest" the same way as SoFi-Invest: a
+  $5/paycheck auto-transfer into Stash's Personal Portfolio tracked as a
+  Bill. Converted the one existing cleared debit into a real transfer pair
+  and deleted the bill row (checked first for `bill_adjustments`/
+  `pay_period_allocations` dependents — none). Confirmed live via the
+  read-only MCP.
+
+### Fixed
+
+* Timezone off-by-one bug, reported as Accounts' Recent Activity showing a
+  transaction dated one day earlier than entered (detail dialog showed the
+  correct date, since it renders the raw string instead of parsing it).
+  Root cause: `new Date("2026-08-15")` parses a date-only string as UTC
+  midnight, which in any timezone behind UTC reads back as the prior local
+  day. Same root cause was live in 4 places:
+  * Display-only — swapped `new Date(x)` for date-fns' `parseISO(x)` (parses
+    in local time): Recent Activity's date, the account balance snapshot's
+    "as of" date (both `app.accounts.tsx`), and Debt detail's "Date paid
+    off" (`app.debts.tsx`).
+  * A real bug, not just display — `monthly-summary.ts`'s
+    `combinedActualByCategory()` and `spending-actuals.ts`'s
+    `buildActualResolver()` both built a month bucket via
+    `monthKey(new Date(transaction_date))`, so a transaction dated the 1st
+    of a month could silently land in the PREVIOUS month's Monthly Summary/
+    Spending actuals. Fixed by slicing the date string directly instead of
+    routing through `new Date()` at all, matching the string-slicing
+    convention already used elsewhere for date-only comparisons.
+
+### Notes
+
+* No schema change, no ADR for any item in this entry (bug fixes and UI
+  reuse of existing conventions, not new decisions). Files touched:
+  `src/routes/app.accounts.tsx`, `src/routes/app.transactions.tsx`,
+  `src/routes/app.debts.tsx`, `src/lib/monthly-summary.ts`,
+  `src/lib/spending-actuals.ts`, `src/components/AccountDialog.tsx`,
+  `src/lib/visual-meta.ts`, `src/lib/balances.ts`, `src/lib/snapshot.ts`.
+* Build/tests unverified locally (AppLocker).
