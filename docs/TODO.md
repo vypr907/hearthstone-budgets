@@ -33,13 +33,8 @@
 ## Follow-up work
 
 - [ ] Revisit Past Due grouping as a true 3-way split now that ADR-068 labels rows Deduction-funded vs HSA-funded — the grouping itself is still binary (`debts.is_paycheck_deduction` only; bills have no equivalent field).
-- [ ] Smoke-test on device/Lovable (build unverified locally, AppLocker):
-      - Bill detail's Recent Transactions rows show the paying account and open `TransactionDetail` on tap.
-      - Bills screen shows Beiers under "Stranded bill payments found"; "Credit now" and "Clean up" both work.
-      - ADR-075: pay a bill one day late, confirm the next cycle shows Submit, not Reset.
-      - ADR-076: "Log arrears payment" appears only when arrears > 0, correctly caps at what's owed, and doesn't disturb the current cycle's own Submit/Clear state. Try it both as a single catch-up payment and as several separately-dated historical entries.
-      - ADR-076: the "Total due" preset amount is no longer inflated on a bill/debt whose current cycle is itself already overdue.
-      - ADR-077: "Correct this payment" edits a partial payment's amount/date/account in place; confirm it's hidden (not just erroring) once a payment has resolved a cycle.
+- [ ] ADR-049/076 gap: the first "Log arrears payment" on a payable whose CURRENT cycle is also overdue drops that cycle's own amount from the past-due total (`applyArrearsPayment` sets `arrears_as_of = today`, whose cutoff suppresses a prefix of the cycle walk starting at the current cycle, while `opening_arrears` only carries the later missed cycles). Needs an ADR decision on the as-of/opening_arrears representation before coding.
+- [ ] Cosmetic: an advance debt reactivated by a new advance (ADR-066) keeps a stale "Cleared" chip / "% paid off" until the next status write.
 
 ## Standing open items
 
