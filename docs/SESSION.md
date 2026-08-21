@@ -75,3 +75,45 @@
   - Tasks 2-8 are live smoke tests and are blocked pending a throwaway
     household login — the sandbox cannot mint a session for the
     self-managed Supabase project.
+
+- QA pass tasks 2-8 (2026-08-21): smoke-tested against the live household in
+  the Lovable sandbox (headless browser, throwaway test login). Results:
+  - Task 2 PASS — Bill detail's Recent Transactions rows show the account
+    icon + name; tapping a row opens the transaction detail dialog.
+  - Task 3 PASS — stranded panel listed the seeded payment; "Credit now"
+    rolled the bill's cycle, the panel cleared, and the original transaction
+    survived (not deleted).
+  - Task 4 PASS (ADR-075) — bill paid one day after its due date rolled to
+    the next cycle showing "Submit payment", not "Reset this cycle".
+  - Task 5 FIXED then PASS (ADR-076) — `arrearsPaymentTag()` returned the
+    CURRENT due date whenever the current cycle was itself overdue (the
+    arrears walk's first iteration reports it as `oldestMissedDate`), and
+    `deriveCycleInfo` keeps transactions tagged `>= dueDate`. So an arrears
+    payment read as a partial payment of the current cycle and also tripped
+    the stranded-payment panel. `arrears.ts` now forces the tag strictly
+    before the current due date (falls back one cycle via `shiftDateSafe`);
+    regression test added in `arrears.test.ts` (24 tests green). Re-verified
+    live: the button only appears with prior arrears, the current cycle stays
+    "Unpaid · $100.00 left", and two differently-dated payments applied
+    cleanly ($300 -> $150 -> $125 past due).
+    - Known issue (NOT fixed — needs an ADR decision, see TODO): the FIRST
+      arrears payment on a payable whose current cycle is also overdue drops
+      the current cycle's own amount from the past-due total ($300 - $50 paid
+      showed $150, not $250). Cause: `applyArrearsPayment` sets
+      `arrears_as_of = today`, and `computeArrears`' as-of cutoff suppresses a
+      PREFIX of the cycle walk — and the current cycle is the oldest entry in
+      that walk — while `opening_arrears` only carries the *later* missed
+      cycles. Subsequent payments are correct. Cannot be fixed without
+      changing the ADR-049 as-of/opening_arrears representation.
+  - Task 6 PASS — pay dialog on an already-overdue cycle offers
+    "Total due (+ $125.00 arrears) · $225.00" (= $100 cycle + $125 arrears),
+    taps cleanly and advances to the account step.
+  - Task 7 PASS (ADR-077) — pencil edited a $20 cleared partial to $35;
+    debt went to `cycle_paid_to_date` 35 / remaining 985 (correct reverse+
+    reapply). Pencil is absent, not erroring, on a cycle-resolving payment.
+  - Task 8 PASS (ADR-066), does NOT reproduce — recording a $50 advance
+    against a $0/hidden advance debt cleared `date_paid_off` and the debt
+    reappeared in the default (paid-off-hidden) list at $50 remaining.
+    - Cosmetic nit: the reactivated row still shows the stale "Cleared" chip
+      and "88% paid off" until the next status write. Logged, not fixed.
+  - Files touched: `src/lib/arrears.ts`, `src/lib/arrears.test.ts`.

@@ -196,8 +196,12 @@ describe("priorCyclesArrears (ADR-076)", () => {
 });
 
 describe("arrearsPaymentTag (ADR-076)", () => {
-  it("tags with the oldest missed cycle when one exists", () => {
-    const tag = arrearsPaymentTag(toPayable("bill", bill({})), "2026-03-15");
+  it("tags with the oldest missed cycle when one exists that predates the current due date", () => {
+    // Due date already rolled to Feb, Jan still missed → Jan is strictly older.
+    const tag = arrearsPaymentTag(
+      toPayable("bill", bill({ next_due_date: "2026-02-10", opening_arrears: 100 })),
+      "2026-03-15",
+    );
     expect(tag).toBe("2026-01-10");
   });
 
@@ -208,4 +212,20 @@ describe("arrearsPaymentTag (ADR-076)", () => {
     );
     expect(tag).toBe("2026-04-10"); // one month before the current due date
   });
+
+  /**
+   * Fixed 2026-08-21: when the CURRENT cycle is itself overdue the arrears
+   * walk's first iteration reports the current due date as oldestMissedDate.
+   * Tagging with that put the arrears payment inside the current cycle's own
+   * window (deriveCycleInfo keeps `tagged >= dueDate`), so it read as a
+   * partial payment of the current cycle and tripped the stranded-payment
+   * panel. The tag must always be strictly older than the current due date.
+   */
+  it("never tags on/after the current due date when the current cycle is itself overdue", () => {
+    const payable = toPayable("bill", bill({ next_due_date: "2026-01-10" }));
+    const tag = arrearsPaymentTag(payable, "2026-03-15");
+    expect(tag).toBe("2025-12-10"); // one cycle before the current due date
+    expect(tag! < "2026-01-10").toBe(true);
+  });
 });
+
