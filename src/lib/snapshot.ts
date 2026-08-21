@@ -181,7 +181,15 @@ export async function exportSnapshot(node: HTMLElement, format: "png" | "pdf") {
 
 export type BalanceSubtotal = { type: string; label: string; total: number };
 
-const BALANCE_TYPE_ORDER = ["checking", "savings", "credit", "investment", "retirement"];
+const BALANCE_TYPE_ORDER = [
+  "checking",
+  "savings",
+  "credit",
+  "invest",
+  "retirement",
+  "hsa",
+  "lpfsa",
+];
 
 const typeLabel = (t: string) =>
   t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());

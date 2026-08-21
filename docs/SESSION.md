@@ -352,3 +352,31 @@
     shows up in that month's Monthly Summary / Spending actuals, since that
     half of the bug had no visible symptom before now (only silently wrong
     totals) and wasn't part of what the user originally reported.
+
+- Account "Type" field was free text; user asked for a dropdown. Converted
+  `AccountDialog`'s Type input to a `Select`, same pattern as
+  `InstitutionDialog`'s existing Type dropdown (fixed list, no free-text
+  escape hatch — matches the "no schema constraint, UI list only"
+  convention already used for institution_type). Queried live
+  `account_type` values via the read-only MCP before picking the list, so
+  it wouldn't invent labels that don't match real data — found the live
+  set is `checking`/`savings`/`credit`/`invest`/`retirement`/`hsa`/`lpfsa`,
+  not `investment` as `visual-meta.ts`'s icon map assumed. New
+  `ACCOUNT_TYPES` constant (`AccountDialog.tsx`) uses the real values, plus
+  `cash` (already iconned, no live accounts yet) and `other` as catch-all.
+  - Fixed a latent (harmless but real) icon-mapping bug while in this
+    code: `visual-meta.ts`'s `ACCOUNT_TYPE_META` keyed on `investment`,
+    which never matched any live account (`invest` is what's actually
+    stored) — every invest/hsa/lpfsa account has been rendering the
+    generic 🏦 fallback icon instead of its own. Renamed the key to
+    `invest`, added `hsa`/`lpfsa` entries. Also corrected the same
+    `investment` → `invest` mismatch in `balances.ts`'s `EXCLUDED_TYPES`
+    (added `hsa`/`lpfsa` too — harmless today since `SPENDABLE_TYPES`'
+    allowlist already excludes them regardless, but now accurate) and
+    `snapshot.ts`'s `BALANCE_TYPE_ORDER` (cosmetic subtotal ordering in
+    the exported report).
+  - Files touched: `src/components/AccountDialog.tsx`,
+    `src/lib/visual-meta.ts`, `src/lib/balances.ts`, `src/lib/snapshot.ts`.
+    No schema change (account_type was always free text, still is — just
+    a fixed list in the UI, same as institution_type), no ADR.
+  - Next step: none — build unverified locally (AppLocker).

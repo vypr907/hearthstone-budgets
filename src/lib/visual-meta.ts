@@ -103,8 +103,10 @@ const ACCOUNT_TYPE_META: Record<string, { icon: string; color: string }> = {
   checking: { icon: "💳", color: "#3b82f6" },
   savings: { icon: "🐷", color: "#22c55e" },
   credit: { icon: "💳", color: "#a855f7" },
-  investment: { icon: "📈", color: "#14b8a6" },
+  invest: { icon: "📈", color: "#14b8a6" },
   retirement: { icon: "🏖️", color: "#f59e0b" },
+  hsa: { icon: "🩺", color: "#0ea5e9" },
+  lpfsa: { icon: "🦷", color: "#0ea5e9" },
   cash: { icon: "💵", color: "#64748b" },
 };
 

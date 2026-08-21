@@ -22,6 +22,24 @@ import {
 } from "@/components/ui/select";
 import { Trash2 } from "lucide-react";
 import type { Account } from "@/lib/supabase";
+import { formatTypeLabel } from "@/lib/visual-meta";
+
+/**
+ * Allowed account_type values (no schema constraint — UI list only). Kept in
+ * sync with visual-meta.ts's ACCOUNT_TYPE_META, which maps these same keys to
+ * an icon/colour; "other" falls back to a generic icon there.
+ */
+export const ACCOUNT_TYPES = [
+  "checking",
+  "savings",
+  "credit",
+  "invest",
+  "retirement",
+  "hsa",
+  "lpfsa",
+  "cash",
+  "other",
+];
 
 /**
  * Shared account add/edit form. Reused by the Accounts screen and by the
@@ -130,12 +148,19 @@ export function AccountDialog({
           </div>
           <div>
             <Label>Type</Label>
-            <Input
-              placeholder="Checking, savings, credit…"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="h-11"
-            />
+            <Select value={type || "none"} onValueChange={(v) => setType(v === "none" ? "" : v)}>
+              <SelectTrigger className="h-11">
+                <SelectValue placeholder="Pick a type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unset</SelectItem>
+                {ACCOUNT_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {formatTypeLabel(t)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Starting balance</Label>
