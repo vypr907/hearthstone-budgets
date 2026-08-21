@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -56,6 +57,8 @@ import {
 } from "@/lib/data-hooks";
 import { buildActualResolver } from "@/lib/spending-actuals";
 import { useBills, useDebts } from "@/lib/data-hooks";
+import { deriveCycleInfo, type CycleInfo } from "@/lib/ledger-state";
+import { toPayable } from "@/lib/payments";
 import {
   useDeleteIncomeEvent,
   useIncomeEvents,
@@ -78,11 +81,12 @@ import {
   deductedObligationsInRange,
   periodRange,
   sum,
+  todayISO,
 } from "@/lib/paycheck-budget";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PAYCHECK_DEDUCTION_ICON, categoryVisual } from "@/lib/visual-meta";
-import { Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Plus } from "lucide-react";
 
 /**
  * ADR-047 follow-up: returns true when the income source has at least one
@@ -260,26 +264,76 @@ type ObligationRowItem = import("@/lib/paycheck-budget").Obligation;
 const obligationRowKey = (o: ObligationRowItem) =>
   `${o.kind}-${o.id}-${o.dueDate}${o.projected ? "-p" : ""}`;
 
-/** One "Due this period" row — shared by the flat Due-date list and each Category group. */
-function ObligationRow({ o }: { o: ObligationRowItem }) {
+/**
+ * Status icon shown next to a "Due this period" row when the selected period
+ * is the current one: green check once the cycle's cleared, a timer while a
+ * payment's pending, an exclamation for a partial payment. Unpaid gets no
+ * icon — that's the default, nothing to call out. Pending/partial are tap
+ * targets (same Popover-as-tooltip pattern as HelpButton) since there's a
+ * number worth surfacing that doesn't fit inline.
+ */
+function ObligationStatusIcon({ info }: { info: CycleInfo }) {
+  if (info.state === "unpaid") return null;
+  if (info.state === "cleared") {
+    return (
+      <CheckCircle2
+        className="h-4 w-4 shrink-0 text-state-cleared"
+        aria-label="Paid this cycle"
+      />
+    );
+  }
+  const isPending = info.state === "pending";
+  const note = isPending
+    ? `${formatMoney(Math.abs(Number(info.pending?.amount ?? 0)))} submitted, pending clearance.`
+    : `${formatMoney(info.clearedSum)} of ${formatMoney(info.due)} paid — ${formatMoney(
+        info.remaining,
+      )} left this cycle.`;
   return (
-    <div className="flex items-center justify-between py-1 text-sm">
-      <span className="flex-1">
-        {o.name}
-        <span className="ml-2 text-xs text-muted-foreground">
-          {o.kind} · {o.dueDate}
-        </span>
-        {o.projected ? (
-          <span className="ml-2 inline-flex items-center gap-1">
-            <span className="rounded border border-dashed px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-              Projected
-            </span>
-            <HelpButton>
-              This bill hasn't posted a due date in this range yet — it's a
-              forecast based on its usual schedule, not a confirmed charge.
-            </HelpButton>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={isPending ? "Payment pending" : "Partially paid"}
+          className="shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {isPending ? (
+            <Clock className="h-4 w-4 text-state-pending" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 text-state-partial" />
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" className="max-w-64">
+        <p className="text-sm">{note}</p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** One "Due this period" row — shared by the flat Due-date list and each Category group. */
+function ObligationRow({ o, status }: { o: ObligationRowItem; status?: CycleInfo }) {
+  return (
+    <div className="flex items-center justify-between gap-2 py-1 text-sm">
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="flex-1">
+          {o.name}
+          <span className="ml-2 text-xs text-muted-foreground">
+            {o.kind} · {o.dueDate}
           </span>
-        ) : null}
+          {o.projected ? (
+            <span className="ml-2 inline-flex items-center gap-1">
+              <span className="rounded border border-dashed px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                Projected
+              </span>
+              <HelpButton>
+                This bill hasn't posted a due date in this range yet — it's a
+                forecast based on its usual schedule, not a confirmed charge.
+              </HelpButton>
+            </span>
+          ) : null}
+        </span>
+        {status ? <ObligationStatusIcon info={status} /> : null}
       </span>
       <span className={o.projected ? "font-medium text-muted-foreground" : "font-medium"}>
         {formatMoney(o.amount)}
@@ -342,6 +396,27 @@ function PeriodBudget({
     () => obligationsInRange(bills, debts, start, end, end),
     [bills, debts, start, end],
   );
+  // ADR-080 follow-up: status icons only make sense for the period covering
+  // today — a future period's bills can't have been paid yet, and a past
+  // period's ledger state has already moved on to the next cycle.
+  const isCurrentPeriod = useMemo(() => {
+    const today = todayISO();
+    return start <= today && today < end;
+  }, [start, end]);
+  const obligationStatus = useMemo(() => {
+    const map = new Map<string, CycleInfo>();
+    if (!isCurrentPeriod) return map;
+    const today = todayISO();
+    const billsById = new Map(bills.map((b) => [b.id, b]));
+    const debtsById = new Map(debts.map((d) => [d.id, d]));
+    for (const o of obligations) {
+      if (o.projected) continue; // no ledger state for a forecast, not a real cycle
+      const item = o.kind === "bill" ? billsById.get(o.id) : debtsById.get(o.id);
+      if (!item) continue;
+      map.set(obligationRowKey(o), deriveCycleInfo(toPayable(o.kind, item), allTransactions, today));
+    }
+    return map;
+  }, [obligations, isCurrentPeriod, allTransactions, bills, debts]);
   /** "Due this period" can group by Category or Account alongside its Due Date default. */
   const [obligationsGroupBy, setObligationsGroupBy] = useState<"due" | "category" | "account">("due");
   const obligationsByCategory = useMemo(() => {
@@ -584,7 +659,9 @@ function PeriodBudget({
           {obligations.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing due in this range.</p>
           ) : obligationsGroupBy === "due" ? (
-            obligations.map((o) => <ObligationRow key={obligationRowKey(o)} o={o} />)
+            obligations.map((o) => (
+              <ObligationRow key={obligationRowKey(o)} o={o} status={obligationStatus.get(obligationRowKey(o))} />
+            ))
           ) : (
             (obligationsGroupBy === "category" ? obligationsByCategory : obligationsByAccount).map(
               (g) => (
@@ -594,7 +671,11 @@ function PeriodBudget({
                     <span>{formatMoney(g.total)}</span>
                   </div>
                   {g.rows.map((o) => (
-                    <ObligationRow key={obligationRowKey(o)} o={o} />
+                    <ObligationRow
+                      key={obligationRowKey(o)}
+                      o={o}
+                      status={obligationStatus.get(obligationRowKey(o))}
+                    />
                   ))}
                 </div>
               ),

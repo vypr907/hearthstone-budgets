@@ -1,6 +1,13 @@
 import type { Bill, Category, Debt, IncomeEvent, IncomeSource, Transaction } from "./supabase";
 import { debtDueDate, shiftDateSafe } from "./format";
 
+export function todayISO() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(
+    n.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 /** The date a paycheck actually lands on: actual when received, else expected. */
 export function eventDate(e: IncomeEvent): string | null {
   return (e.actual_date ?? e.expected_date)?.slice(0, 10) ?? null;
@@ -118,7 +125,29 @@ export function isPaycheckDeducted(debt: Debt): boolean {
 }
 
 /**
- * Bills and debts whose effective due date lands inside the pay period.
+ * True when `due` falls inside [start, end), OR when it's already overdue
+ * (before `start`) and the period being viewed hasn't fully elapsed yet
+ * (`end > today`) — an unpaid bill/debt doesn't drop off the "due this
+ * period" list just because its due date slipped into the past; it keeps
+ * showing, with its normal per-cycle amount, in the current period and every
+ * future one until it's actually paid (which is the only thing that ever
+ * advances `next_due_date`/`debtDueDate` past `start`). Past periods that
+ * have already fully elapsed are left alone — this isn't retroactive.
+ */
+function isDueOrOverdueInPeriod(
+  due: string | null | undefined,
+  start: string,
+  end: string,
+  today: string,
+): boolean {
+  if (!due) return false;
+  if (inRange(due, start, end)) return true;
+  return due < start && end > today;
+}
+
+/**
+ * Bills and debts whose effective due date lands inside the pay period, or
+ * is still overdue from before it (see `isDueOrOverdueInPeriod`).
  * Paycheck-deducted debts (ADR-032) are excluded — list them separately with
  * `deductedObligationsInRange()`.
  */
@@ -129,6 +158,7 @@ export function obligationsInRange(
   end: string,
   /** ADR-060: when set, project recurrences forward through this date. */
   projectThrough?: string | null,
+  today: string = todayISO(),
 ): Obligation[] {
   const rows: Obligation[] = [];
   const through = projectThrough?.slice(0, 10) ?? null;
@@ -136,7 +166,7 @@ export function obligationsInRange(
     if (b.is_active === false) continue;
     const due = b.next_due_date?.slice(0, 10) ?? null;
     const amount = Number(b.cycle_amount_due ?? b.amount ?? 0);
-    if (inRange(due, start, end)) {
+    if (isDueOrOverdueInPeriod(due, start, end, today)) {
       rows.push({ id: b.id, kind: "bill", name: b.name, dueDate: due!, amount });
     }
     if (through) {
@@ -157,7 +187,7 @@ export function obligationsInRange(
     if (d.date_paid_off) continue;
     if (isPaycheckDeducted(d)) continue;
     const due = debtDueDate(d);
-    if (inRange(due, start, end)) {
+    if (isDueOrOverdueInPeriod(due, start, end, today)) {
       rows.push({
         id: d.id,
         kind: "debt",
@@ -188,13 +218,14 @@ export function deductedObligationsInRange(
   debts: Debt[],
   start: string,
   end: string,
+  today: string = todayISO(),
 ): Obligation[] {
   const rows: Obligation[] = [];
   for (const d of debts) {
     if (d.date_paid_off) continue;
     if (!isPaycheckDeducted(d)) continue;
     const due = debtDueDate(d);
-    if (!inRange(due, start, end)) continue;
+    if (!isDueOrOverdueInPeriod(due, start, end, today)) continue;
     rows.push({
       id: d.id,
       kind: "debt",

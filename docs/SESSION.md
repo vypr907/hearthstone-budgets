@@ -247,3 +247,44 @@
   (paired +$5 credit into Robo via a shared `transfer_group_id`,
   `linked_bill_id` cleared), SoFi-Invest bill row deleted. Removed the
   now-closed item from TODO.md.
+
+- Implemented ADR-080: Dashboard's "Still owed this period" was silently
+  dropping overdue bills/debts (they only appeared in the separate "Past
+  due" section, driven by different logic). Fixed at the shared
+  `obligationsInRange()`/`deductedObligationsInRange()` level
+  (`paycheck-budget.ts`) per user's own scoping answer, so Paycheck
+  Budget's "Due this period" gets the same fix automatically. New
+  `isDueOrOverdueInPeriod()` helper: includes an item when its due date is
+  inside `[start, end)` OR when it's before `start` but the period hasn't
+  fully elapsed yet (`end > today`) — overdue items now show at their
+  normal per-cycle amount every period until actually paid, per the user's
+  explicit "every period until paid" choice. Added an optional `today`
+  param (defaults to a new `todayISO()` helper) to both functions; all 3
+  existing call sites (`app.index.tsx`, `app.paycheck.tsx`, `snapshot.ts`)
+  pass ≤5 positional args so the default applies untouched, no caller
+  changes needed. No schema change.
+  - Files touched: `src/lib/paycheck-budget.ts`.
+- Added status icons to Paycheck Budget's "Due this period" rows (second
+  half of the same user request): green check (cleared), timer (pending),
+  exclamation (partial), only when the selected period covers today
+  (`isCurrentPeriod` check in `PeriodBudget`) — a future period's bills
+  can't have been paid yet and a past period's already moved on. No icon
+  for plain unpaid or for projected rows (no real ledger cycle to check).
+  Reused the existing ADR-036 `deriveCycleInfo()`/`LedgerState` machinery
+  (same one Bills/Debts/Everything already use for Submit/Reset state)
+  rather than inventing a new status computation — new
+  `ObligationStatusIcon` component only picks different icons/copy for the
+  same 4 states. Pending/partial icons are tap targets (Popover, same
+  pattern as `HelpButton`) showing the amount pending or the
+  paid/remaining split, per the user's "icon itself is the tooltip" ask.
+  - Files touched: `src/routes/app.paycheck.tsx` (new
+    `ObligationStatusIcon`, `ObligationRow` gained a `status` prop,
+    `PeriodBudget` computes `isCurrentPeriod`/`obligationStatus`),
+    `src/lib/paycheck-budget.ts` (exported the existing `todayISO()`
+    helper for reuse instead of duplicating it). No schema change.
+  - Not done: Dashboard has no equivalent per-row list to attach icons to
+    ("Still owed this period" is category-grouped, not itemized) — user
+    only asked for this on Paycheck Budget, so left as-is.
+  - Next step: none open on this request — build unverified locally
+    (AppLocker, per CLAUDE.md); worth a quick look at both pieces (overdue
+    inclusion + status icons) live before considering this fully closed.
