@@ -225,3 +225,19 @@
     transactions never credited to `cycle_paid_to_date` (most with
     `cycle_paid_to_date=0`, where "Credit now" should already work
     correctly as-is; not yet individually verified).
+
+- ATT and Rent fixed the same way as Beiers/Prose (ATT: `cycle_amount_due`
+  SQL fix + "Credit now"; Rent: direct SQL since it hit the double-credit
+  bug above, code fix not yet deployed). Both confirmed cleared from the
+  Stranded panel by the user.
+
+- Corrected the "~15+ bills" sweep from earlier: user reports none of them
+  show in the Stranded panel. Re-traced several by hand against the real
+  `findStrandedBillPayments()` window logic (not the rough SQL scan I used
+  originally) and confirmed they're genuinely excluded — their transaction
+  dates fall on/before the current cycle window's own start boundary, so
+  the app correctly treats them as already-superseded, not stranded. The
+  SQL scan was a false-positive-prone heuristic, not a bug; corrected
+  TODO.md rather than leaving the user chasing it further. One possible
+  exception flagged for a real check: SoFi-Invest, whose transaction (7/29)
+  traces as falling just inside the current window, unlike the others.

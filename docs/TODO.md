@@ -17,15 +17,20 @@
         and status = 'cleared' and resolved_cycle_due_date is null;
       commit;
       ```
-- [ ] Household-wide sweep found 2026-08-22 (SQL scan via read-only MCP): ~15+ bills
-      have at least one cleared, linked, untagged transaction never credited to
-      `cycle_paid_to_date` (Aarons Club, Anthropic-Claude, Dave, Flex, Google Play
-      Pass, Kikoff, Planet Fitness x2, SoFi-Invest, Starz, Stash-Invest, UberEats,
-      Hulu/Disney+, plus Beiers/Prose/ATT/Rent already handled). Most have
-      `cycle_paid_to_date=0` and their cleared amount matches `bill.amount` exactly —
-      "Credit now" should already work fine on these as-is once the double-credit fix
-      below ships. Not individually verified — work through the Stranded panel once
-      redeployed rather than re-diagnosing each by hand.
+- [x] ~~Household-wide sweep found 2026-08-22~~ — **false alarm, correcting**: the SQL
+      scan that flagged ~15 bills (Aarons Club, Anthropic-Claude, Dave, Flex, Google
+      Play Pass, Kikoff, Planet Fitness x2, Starz, Stash-Invest, UberEats, Hulu/Disney+)
+      only checked "is there a cleared, untagged transaction bigger than
+      `cycle_paid_to_date`" — it didn't replicate `findStrandedBillPayments()`'s actual
+      date-windowing (only transactions inside the bill's current cycle window count).
+      Hand-traced most of them against the real window logic (2026-08-22): their
+      transaction dates land exactly on/before the window's own start boundary, so the
+      app correctly excludes them as belonging to an already-superseded cycle — not
+      stranded. Confirmed by the user: none of these show in the Stranded panel.
+      Trust the app's panel over ad-hoc SQL scans for this going forward.
+      - One exception worth a real look: **SoFi-Invest** — its transaction (7/29) lands
+        just inside the current window relative to next_due_date (8/27), unlike the
+        others. Worth checking whether it actually shows in Stranded.
 
 ## Follow-up work
 
