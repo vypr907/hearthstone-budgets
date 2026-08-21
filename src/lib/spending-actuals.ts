@@ -1,5 +1,5 @@
 import type { Bill, Category, SpendingActual, Transaction } from "./supabase";
-import { categoryDomain, monthKey } from "./data-hooks";
+import { categoryDomain } from "./data-hooks";
 import { monthlyEquivalent } from "./format";
 
 /**
@@ -43,8 +43,11 @@ export function buildActualResolver(
     if (income.has(categoryId)) continue; // ADR-069: ad-hoc income isn't spend
     const amount = Number(t.amount || 0);
     if (amount >= 0) continue; // only money out counts as spend
-    const d = new Date(t.transaction_date);
-    const key = `${categoryId}|${monthKey(d)}`;
+    // Slice the stored date string directly rather than routing through
+    // `new Date()` — a date-only string parses as UTC midnight, which in
+    // any timezone behind UTC reads back as the prior local day, silently
+    // bucketing 1st-of-month transactions into the wrong month.
+    const key = `${categoryId}|${t.transaction_date.slice(0, 7)}-01`;
     fromLedger.set(key, (fromLedger.get(key) ?? 0) + Math.abs(amount));
     if (linkedBillId)
       billsLedger.set(key, (billsLedger.get(key) ?? 0) + Math.abs(amount));

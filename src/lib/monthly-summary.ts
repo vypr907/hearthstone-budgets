@@ -69,7 +69,11 @@ export function combinedActualByCategory(
   };
 
   for (const t of transactions) {
-    if (monthKey(new Date(t.transaction_date)) !== month) continue;
+    // Slice the stored date string directly rather than routing through
+    // `new Date()` — a date-only string parses as UTC midnight, which in
+    // any timezone behind UTC reads back as the prior local day, silently
+    // bucketing 1st-of-month transactions into the wrong month.
+    if (`${t.transaction_date.slice(0, 7)}-01` !== month) continue;
     const amount = Number(t.amount || 0);
     if (amount >= 0) continue; // only money out counts as spend
     const linkedBillId = t.linked_bill_id ?? null;

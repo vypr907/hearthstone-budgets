@@ -39,7 +39,7 @@ import { Pencil, Plus, Search, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Account, Institution, Transaction } from "@/lib/supabase";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 import { TransactionDetail } from "@/routes/app.transactions";
 
@@ -223,7 +223,7 @@ function AccountsPage() {
                       <p className="truncate text-xs text-muted-foreground">
                         {a.account_type || "Account"}
                         {b?.asOf
-                          ? ` · snapshot ${format(new Date(b.asOf), "MMM d")}`
+                          ? ` · snapshot ${format(parseISO(b.asOf), "MMM d")}`
                           : " · starting balance"}
                       </p>
 
@@ -323,7 +323,7 @@ function RecentActivity({
                   />
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {format(new Date(t.transaction_date), "MMM d")}
+                  {format(parseISO(t.transaction_date), "MMM d")}
                   {t.status === "pending" ? " · pending" : ""}
                   {entry.isSplit ? ` · split (${entry.rows.length})` : ""}
                 </p>

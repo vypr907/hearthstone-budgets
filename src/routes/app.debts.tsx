@@ -76,7 +76,7 @@ const ADJUSTMENT_TYPES = [
   "nsf_fee",
   "other",
 ];
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 
@@ -514,7 +514,7 @@ function DebtDetailDialog({
             <div>
               <p className="text-xs text-muted-foreground">Date paid off</p>
               <p className="mt-1 text-sm">
-                {format(new Date(debt.date_paid_off), "MMM d, yyyy")}
+                {format(parseISO(debt.date_paid_off), "MMM d, yyyy")}
               </p>
             </div>
           )}

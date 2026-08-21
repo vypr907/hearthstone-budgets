@@ -314,3 +314,41 @@
     `src/routes/app.transactions.tsx`. No schema change, no ADR (pure reuse
     of the existing transfer_group_id/badge convention, not a new decision).
   - Next step: none open — build unverified locally (AppLocker).
+
+- Found and fixed a real timezone off-by-one bug, reported by the user as
+  Accounts' Recent Activity showing a transaction dated 8/15 as the 14th
+  (detail dialog showed 8/15 correctly, since it renders the raw date
+  string rather than parsing it). Root cause: `new Date("2026-08-15")`
+  parses a date-only string as UTC midnight; in any timezone behind UTC,
+  formatting that instant with local getters reads back as the prior local
+  day. Same root cause was live in 4 places, 2 display-only and 2 that
+  silently affect real numbers (not just what the user reported):
+  - Display-only (swapped `new Date(x)` for date-fns' `parseISO(x)`, which
+    parses in local time): Recent Activity's date (`app.accounts.tsx`,
+    the reported bug), the account balance snapshot's "as of" date
+    (`app.accounts.tsx`), and Debt detail's "Date paid off"
+    (`app.debts.tsx`).
+  - Real bug, not just display: `monthly-summary.ts`'s
+    `combinedActualByCategory()` and `spending-actuals.ts`'s
+    `buildActualResolver()` both built a month bucket via
+    `monthKey(new Date(t.transaction_date))` — a transaction dated the 1st
+    of a month could silently bucket into the PREVIOUS month's actuals
+    (Monthly Summary card, Spending screen's per-category actual/history).
+    Fixed by slicing the stored date string directly
+    (`` `${t.transaction_date.slice(0,7)}-01` ``) instead of routing
+    through `new Date()` at all — matches the string-slicing convention
+    already used everywhere else in the codebase for date-only comparisons
+    (`inRange()`, `deriveCycleInfo()`'s `day()`, etc.), and sidesteps the
+    parsing question entirely rather than trading one Date-parsing bug for
+    another. Removed spending-actuals.ts's now-unused `monthKey` import.
+  - No other unsafe `new Date(someDateString)` call sites found in `src` —
+    every other `new Date(...)` either takes no argument or already builds
+    from explicit `(year, month, day)` components, which is timezone-safe.
+  - Files touched: `src/routes/app.accounts.tsx`, `src/routes/app.debts.tsx`,
+    `src/lib/monthly-summary.ts`, `src/lib/spending-actuals.ts`. No schema
+    change, no ADR (bug fix, not a new decision).
+  - Next step: none open — build unverified locally (AppLocker). Worth
+    confirming live that a transaction dated on the 1st of a month now
+    shows up in that month's Monthly Summary / Spending actuals, since that
+    half of the bug had no visible symptom before now (only silently wrong
+    totals) and wasn't part of what the user originally reported.
