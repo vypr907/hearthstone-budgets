@@ -7,6 +7,7 @@ import {
 } from "./supabase";
 import { deriveCycleInfo } from "./ledger-state";
 import { applyClearedPayment, billCycleDue, debtCycleDue, toPayable } from "./payments";
+import { priorCyclesArrears } from "./arrears";
 
 /**
  * ADR-068 (extends ADR-055): a deduction that lands in a real account can also
@@ -123,7 +124,7 @@ export async function applyDeductionFundedPayments(args: {
 
       // ADR-037: the payable is written first; a 0-row update throws before any
       // ledger row gets linked to it.
-      await applyClearedPayment(payable, p.amount);
+      await applyClearedPayment(payable, p.amount, priorCyclesArrears(payable, today));
       paid += 1;
 
       if (p.transactionId) {

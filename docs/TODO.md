@@ -2,26 +2,44 @@
 
 ## Known issues
 
+- [ ] One-time data fix, user must run in Supabase SQL Editor (found live via MCP,
+      2026-08-21 — stale pre-ADR-056-addendum data, not a current code bug):
+      `update debts set minimum_payment = remaining_balance where debt_type = 'advance'
+      and minimum_payment <> remaining_balance;` — currently affects at least
+      Instacash (MoneyLion) and OnePay Advance.
 - [ ] Beiers bill's cycle_paid_to_date is desynced (stranded from the Transactions-edit
-      gap closed 2026-08-20, ADR-037 addendum) — open the Bills screen and use the new
-      "Stranded bill payments found" panel to clean it up and redo the payment. Also
-      spot-check the Rent (via Flex) bill: its cleared linked transactions ($2,309) sum
-      well above cycle_paid_to_date ($1,250) against a $1,700 due, though that may just
-      be multiple already-rolled cycles' worth of history rather than a real desync —
-      confirm before touching it.
-- [ ] ADR-066: re-advancing a paid-off advance-type debt (e.g. MoneyLion Instacash) still hides it instead of reactivating — confirmed still reproducing as of 2026-08-19 despite `useCreateAdvance` being touched again since (minimum_payment/next_due_date sync, ADR-056 addendum — unrelated to this bug). Needs a fresh diagnosis pass against current code, not another assumption-based read.
-- [ ] `computeArrears()` (`arrears.ts`) ignores `payment_status` for monthly debts — a monthly debt cleared after its `due_day` has passed this month shows "1 cycle past due" via `PastDueBadge` regardless of `payment_status='cleared'`. Surfaced 2026-08-19 during the TSP loan deduction backfill; worked around per-debt via `arrears_as_of`, not fixed at the code level. Revisit if it recurs on other monthly debts.
+      gap closed 2026-08-20, ADR-037 addendum) — open the Bills screen and use the
+      "Stranded bill payments found" panel's new "Credit now" button (ADR-077) to catch
+      it up without losing the transaction. Also spot-check the Rent (via Flex) bill:
+      its cleared linked transactions ($2,309) sum well above cycle_paid_to_date
+      ($1,250) against a $1,700 due, though that may just be multiple already-rolled
+      cycles' worth of history rather than a real desync — confirm before touching it.
+- [ ] ADR-066: re-advancing a paid-off advance-type debt — re-checked 2026-08-21, the
+      write path (`useCreateAdvance`) and the Debts screen's `isPaidOff` filter both
+      look correct against current code. MoneyLion Instacash (the original repro) isn't
+      even currently paid off (remaining_balance $600) and hasn't been touched since
+      before the 2026-08-19 fix, so the original report may already be resolved —
+      needs a live re-test (pay a debt off, re-advance it, confirm it un-hides) rather
+      than more static reading.
 
 ## Tests
 
 - [ ] Add unit tests for `projectOccurrences()` (monthly + biweekly items) alongside the existing arrears tests.
-- [ ] Fix the pre-existing `arrears.test.ts` opening-arrears failure (unrelated to recent work, still red).
-- [ ] Run the suite (blocked locally by AppLocker) to confirm both `ledger-state.test.ts` regression groups pass — the ADR-008 netting test, and the new ADR-075 late-payment tagging tests — and verify live: reverse a cleared bill payment (state should drop back to `unpaid`/`partial`), and pay a bill one day late (the next cycle should show Submit, not Reset, once the SQL migration is run).
+- [ ] Run the full suite (blocked locally by AppLocker) and confirm everything passes:
+      ADR-008 netting, ADR-075 late-payment tagging, the ADR-057 fixture fix, and the
+      new ADR-076 (`priorCyclesArrears`/`arrearsPaymentTag`/monthly payment_status)
+      tests in `arrears.test.ts`.
 
 ## Follow-up work
 
 - [ ] Revisit Past Due grouping as a true 3-way split now that ADR-068 labels rows Deduction-funded vs HSA-funded — the grouping itself is still binary (`debts.is_paycheck_deduction` only; bills have no equivalent field).
-- [ ] Smoke-test today's UI changes on device/Lovable (build unverified locally, AppLocker): Bills screen shows Beiers under "Stranded bill payments found" and "Clean up" works; Bill detail's Recent Transactions rows show the paying account and open `TransactionDetail` on tap.
+- [ ] Smoke-test on device/Lovable (build unverified locally, AppLocker):
+      - Bill detail's Recent Transactions rows show the paying account and open `TransactionDetail` on tap.
+      - Bills screen shows Beiers under "Stranded bill payments found"; "Credit now" and "Clean up" both work.
+      - ADR-075: pay a bill one day late, confirm the next cycle shows Submit, not Reset.
+      - ADR-076: "Log arrears payment" appears only when arrears > 0, correctly caps at what's owed, and doesn't disturb the current cycle's own Submit/Clear state. Try it both as a single catch-up payment and as several separately-dated historical entries.
+      - ADR-076: the "Total due" preset amount is no longer inflated on a bill/debt whose current cycle is itself already overdue.
+      - ADR-077: "Correct this payment" edits a partial payment's amount/date/account in place; confirm it's hidden (not just erroring) once a payment has resolved a cycle.
 
 ## Standing open items
 

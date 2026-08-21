@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/select";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
+import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
@@ -1186,6 +1187,7 @@ function RecentDebtTransactions({ debt }: { debt: Debt }) {
               >
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
+              <CorrectPaymentButton transaction={t} payable={toPayable("debt", debt)} />
               <ReversePaymentButton transaction={t} payable={toPayable("debt", debt)} />
 
             </div>

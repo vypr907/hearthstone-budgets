@@ -3,6 +3,7 @@ import { usePayFlow } from "@/lib/pay-flow";
 import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { formatMoney } from "@/lib/format";
 import type { Payable } from "@/lib/payments";
+import { ArrearsPaymentAction } from "@/components/ArrearsPaymentAction";
 
 const ACTION_LABEL: Record<string, string> = {
   unpaid: "Submit payment",
@@ -45,6 +46,8 @@ export function PayActions({
           {info.remaining > 0 ? ` · ${formatMoney(info.remaining)} left` : ""}
         </span>
       </Button>
+      {/* ADR-076: hidden unless something is owed from before the current cycle. */}
+      <ArrearsPaymentAction payable={payable} className="mt-2" />
       {/*
         The pay-flow dialogs portal their DOM to <body>, but React synthetic
         events still bubble through the React tree — so a click inside the

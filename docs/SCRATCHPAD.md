@@ -51,11 +51,14 @@ Show me the diffs for all three files before finalizing.
 
 
 # Things to work on
-- dashboard: first Budget vs Actual card, I want tool tip explaining the card, like Monthly Summary has. Need to be very clear on the difference between the two.
-   - Budget vs Actual needs to be scoped to pay period only (as of today, that would be 8/13 to 8/27). Also is still labeled as "This Month", should be "This Pay Period"
-   - Monthly Summary should focus on what's gone out vs expected. Don't need the "<amt> over", "<amt> left" to be the big subheader.
-- Everything page: still shows two invoices that have been paid off as unpaid
-- for debts, need to be able to add historical debt payments. Example: OrthoAlaska is 1 cycle over due. I submitted a pending payment for this month, but my only option is to mark the existing transaction cleared, but not to submit an older payment to clear the past due. Also, when submitting the payment, there's no way to select the date. If I just add a transaction, even if I link it to the bill/debt, it doesn't label it as a debt payment
+(cleared out 2026-08-21 — audited every item against current code before starting new
+work. Dashboard Budget vs Actual/Monthly Summary items were already done in earlier
+sessions [pay-period scope, "this pay period" label, HelpButton tooltips on both
+cards, Monthly Summary's "$actual of $expected" subheader] — confirmed by reading
+app.index.tsx directly. Everything page's paid-off-invoices-show-unpaid was very
+likely already fixed by the ADR-036 addendum [remaining_balance <= 0 forces "cleared"
+regardless of ledger] — worth a quick eyeball, not a dev task. The debts
+historical-payment ask became ADR-076's "Log arrears payment" action.)
 ---
 
 ## Idea: smarter institution_type for inline-created merchants (Add Transaction)
@@ -66,62 +69,9 @@ Possible future enhancement: infer or prompt for a real type (subscription/utili
 
 Not scoped. Not decided. If pursued, likely needs its own small ADR (touches UX + how institution_type/icon gets assigned) before a TODO line or Kiro prompt — see 2026-08-12 discussion on why this stays out of TODO.md for now.
 
-## Idea: fix late-payment cycle misattribution in deriveCycleInfo (ledger-state.ts)
-
-Found 2026-08-20 via the Peacock bill (StrandedBillRepair cleanup, then payment
-re-entered dated 7/23 for a 7/22 due date). Real bug, not fixed:
-
-When a bill/debt is paid even ONE DAY LATE (transaction_date after the due date it
-resolves), `deriveCycleInfo`'s "not past due" window — `(openStart, today]` where
-`openStart` = the previous due date — can't distinguish "a late payment that already
-closed the prior cycle" from "a fresh payment for the new cycle," because both land in
-that same date range. Result: right after a late-paid cycle resolves and rolls the due
-date forward, the UI shows the NEW cycle as "cleared" (offering "Reset this cycle") even
-though nothing has been paid toward it — until the new due date itself arrives, at which
-point it self-corrects to 'unpaid'. Clicking "Reset this cycle" in this state would
-delete the real (late) payment transaction, losing payment history.
-
-Explored two heuristic fixes, both provably wrong on other real cases:
-- Narrowing/consuming the leading transactions in the window as "old cycle" —
-  breaks the normal case of paying in full slightly early/on-time for the current cycle.
-- Using `bill.updated_at` as a cutoff (only count transactions created after the bill's
-  last write) — breaks ordinary partial payments, since every credit write to the bill
-  row (even a non-resolving partial) also moves `updated_at` past that same
-  transaction's `created_at`.
-
-Real fix needs a persisted signal of which due-date cycle a transaction actually
-resolved (e.g. a `transactions.resolved_cycle_due_date` or similar column written by
-`applyClearedPayment`) — the ledger alone can't disambiguate. Needs its own ADR +
-manual migration before it's TODO-actionable; not scoped or decided yet.
-
-Immediate safe workaround for anyone hitting this: don't use "Reset this cycle" —
-instead log the new cycle's payment through the "+" Add Transaction button (status
-Cleared, linked to the bill/debt), which credits correctly without touching the
-existing ledger rows.
-
-## Idea: "Total due" preset may overstate what's owed on an overdue current cycle
-
-Found 2026-08-20 while reasoning through ADR-075 (not yet verified against real
-numbers/tests — flagged, not confirmed). `computeArrears()` walks forward from the
-payable's *current* due date; if that due date has already passed, its own remaining
-balance is folded into the walk as the first missed "cycle." `usePayFlow`'s "Total due"
-preset then computes `owedThisCycle + arrears.amountOverdue` — but `arrears.amountOverdue`
-may already include that same `owedThisCycle` figure once the current cycle is itself
-overdue, double-counting it. Net effect (if confirmed): the "Total due" button could
-prompt for more than is actually owed on a bill/debt whose current cycle has already
-passed its own due date. Overpaying isn't harmful (just rolls into arrears reduction),
-but the number shown would be wrong. Needs tracing through `arrears.ts` +
-`pay-flow.tsx` with concrete numbers (or a unit test) before deciding on a fix.
-
-## Idea: no way to pay arrears only, skipping the current cycle
-
-Raised by the user 2026-08-20. Today's pay dialog presets are "this cycle," "this cycle
-+ arrears," "other" — no "arrears only." By design (ADR-057), a cleared payment always
-credits the current cycle first; only the overflow reduces `opening_arrears`. Paying
-arrears without touching the current cycle isn't possible with the existing allocation
-order. Would need its own decision: either a new preset/flag that skips current-cycle
-crediting, or a way to explicitly target the payment at arrears in `applyClearedPayment`.
-Not scoped or decided — needs its own ADR if pursued.
+(The late-payment misattribution, "Total due" overstatement, and "no arrears-only
+payment" ideas noted here on 2026-08-20 all became ADR-075/ADR-076, implemented
+2026-08-21 — see docs/DECISIONS.md.)
 
 ## Future: In-app theme color editor
 Per-user editable overrides on top of the base theme (color pickers per token,

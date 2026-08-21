@@ -41,6 +41,7 @@ import {
 } from "@/components/SplitLinesEditor";
 import { accountLabel } from "@/lib/format";
 import { applyClearedPayment, toPayable } from "@/lib/payments";
+import { priorCyclesArrears } from "@/lib/arrears";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Category } from "@/lib/supabase";
 
@@ -285,7 +286,7 @@ export function AddTransactionFab() {
       });
       if ((bill || debt) && status === "cleared") {
         const payable = bill ? toPayable("bill", bill) : toPayable("debt", debt!);
-        await applyClearedPayment(payable, Math.abs(n));
+        await applyClearedPayment(payable, Math.abs(n), priorCyclesArrears(payable));
         qc.invalidateQueries({ queryKey: ["bills"] });
         qc.invalidateQueries({ queryKey: ["debts"] });
       }

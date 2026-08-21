@@ -2388,3 +2388,90 @@ Extends: ADR-036.
 
 Status: Decided 2026-08-20. Implemented 2026-08-20. SQL run 2026-08-21 (verified live:
 `transactions.resolved_cycle_due_date` exists, nullable date).
+
+## ADR-076: Arrears-Only Payments and Generalized Arrears Reduction (Extends ADR-049, ADR-057)
+
+Decision:
+1. New `applyArrearsPayment(p: Payable, amount: number, date: string, accountId: string)`
+in `payments.ts`. Caps `amount` at `computeArrears(p).amountOverdue` (mirrors ADR-057's
+cap pattern). Writes a cleared, linked transaction for the amount/date/account, tagged
+`resolved_cycle_due_date` (ADR-075) with `arrears.oldestMissedDate ?? ` the cycle's own
+open-start date — so it's excluded from the current cycle's ledger-derived window and
+never shows up as if it paid the current cycle. Never touches `cycle_paid_to_date`.
+2. Consolidates the payable's `opening_arrears`/`arrears_as_of` on every arrears-directed
+credit (this new action AND the existing ADR-057 overflow-on-clear path):
+`new_opening_arrears = max(0, computeArrears(p).amountOverdue - amountCredited)`,
+`arrears_as_of = today`, regardless of whether `opening_arrears` was already > 0. This
+replaces ADR-057's `openingArrears > 0` gate, which silently no-oped whenever arrears
+came entirely from the live missed-cycle walk rather than a manual carry-in figure.
+3. New "Log arrears payment" UI action (PayActions-adjacent, shown only when
+`computeArrears().amountOverdue > 0`): prompts amount (default = arrears total, capped),
+backdatable date, account. Usable repeatedly — each call is an independent, separately
+dated ledger entry, so it doubles as bulk historical-payment entry.
+
+Reason:
+Bills/debts overdue by missed cycles (not manual carry-in) had no way to be paid down
+independently of the current cycle — every payment credited the current cycle first
+(ADR-057), with no path to target arrears alone. Building that action exposed that
+ADR-057's overflow-reduction was already broken for this exact case: it only reduces
+`opening_arrears` when `opening_arrears > 0`, so a bill 3 cycles overdue purely from
+missed payments (no manual carry-in) had a "Total due" preset that included the live
+missed-cycle walk's amount but a clear that couldn't reduce it — paying the shown "Total
+due" figure would still show cycles as overdue afterward. Consolidating the live walk
+into `opening_arrears` at the moment of any arrears-directed credit (rather than only
+ever subtracting from a pre-existing manual figure) fixes both problems with one
+mechanism.
+
+Scope note: only the amount actually credited toward arrears reduces `opening_arrears`;
+a partial arrears payment consolidates the current total first, then subtracts, so a $50
+payment against $300 in live missed-cycle arrears correctly leaves $250 (not $0, and not
+silently un-reduced).
+
+Extends: ADR-049, ADR-057, ADR-075.
+
+Status: Decided 2026-08-21. Implemented 2026-08-21. No schema change — reuses
+opening_arrears/arrears_as_of/resolved_cycle_due_date.
+
+## ADR-077: "Correct This Payment" — In-Place Ledger Repair for Partial Payments (Extends ADR-037)
+
+Decision:
+New `useCorrectPayment` (`payments.ts`) and a "Correct this payment" action alongside
+Reverse/Delete on a bill/debt's linked transactions (Bills/Debts/Everything Recent
+Transactions). Lets a cleared, linked transaction's amount/date/account be edited in
+place, but ONLY when both the original amount and the corrected amount are partial
+payments toward the same still-open cycle (neither the stored `cycle_paid_to_date`
+before the edit nor after it would meet/exceed the cycle's due amount — no resolve/roll
+boundary is crossed in either direction). The payable's `cycle_paid_to_date` is adjusted
+by the delta (`corrected − original`); the transaction row itself is updated in place,
+not replaced.
+If the correction would cross a resolve boundary (the original payment already resolved
+the cycle, or the corrected amount newly would), the mutation throws with a message
+pointing at Reverse + redo instead — that case isn't handled in v1.
+
+`findStrandedBillPayments`/`findStrandedDebtPayments` and their repair panels
+(`StrandedBillRepair`/`StrandedDebtRepair`) gain a second action, "Credit now," next to
+the existing "Clean up" (delete-and-redo): applies the stranded transaction's
+already-cleared amount to the payable via the same crediting path Submit/Clear uses
+(`applyClearedPayment`), instead of deleting the row and asking the user to redo the
+payment. The transaction itself is untouched — only the payable's counters catch up.
+"Clean up" stays available for cases where the transaction itself is also wrong and
+needs to be re-entered.
+
+Reason:
+ADR-037's addendum (2026-08-20) locked amount/status editing on linked transactions to
+close the gap that caused the Beiers/Peacock stranded-payment bugs — correctly, since
+unrestricted editing bypassing `applyClearedPayment` was the root cause. But that left no
+way to fix a simple data-entry mistake (wrong amount/date/account on an otherwise-valid
+partial payment) without deleting real ledger history and redoing it from scratch. The
+partial-only restriction keeps this safe: adjusting `cycle_paid_to_date` by a delta is
+unambiguous exactly when no due-date roll is involved; once a resolve is in play, later
+transactions may already assume the rolled-forward state, and unwinding that safely needs
+more than this ADR scopes — deferred rather than guessed at.
+The stranded-repair "Credit now" addition is the same idea applied to a stranded
+(never-credited) row: since nothing was ever credited, there's no delta to compute —
+crediting the existing row via the normal payment path is strictly simpler and preserves
+the real transaction instead of discarding it.
+
+Extends: ADR-037.
+
+Status: Decided 2026-08-21. Implemented 2026-08-21. No schema change.

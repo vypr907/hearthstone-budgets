@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Trash2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, CircleDollarSign, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useDeleteLinkedTransaction, useTransactions } from "@/lib/data-hooks";
 import { deriveCycleInfo } from "@/lib/ledger-state";
-import { toPayable } from "@/lib/payments";
+import { applyClearedPayment, toPayable } from "@/lib/payments";
+import { priorCyclesArrears } from "@/lib/arrears";
 import { formatMoney } from "@/lib/format";
 import type { Debt, Transaction } from "@/lib/supabase";
 
@@ -85,6 +87,19 @@ function readDismissed(): string[] {
 export function StrandedDebtRepair({ debts }: { debts: Debt[] }) {
   const { data: transactions = [] } = useTransactions();
   const del = useDeleteLinkedTransaction();
+  const qc = useQueryClient();
+  // ADR-077: apply the stranded amount to the debt via the same crediting
+  // path Submit/Clear uses, leaving the transactions themselves untouched.
+  const credit = useMutation({
+    mutationFn: async (g: StrandedGroup) => {
+      const payable = toPayable("debt", g.debt);
+      await applyClearedPayment(payable, g.clearedSum, priorCyclesArrears(payable));
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["debts"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+    },
+  });
   const [dismissed, setDismissed] = useState<string[]>(readDismissed);
 
   const groups = useMemo(
@@ -123,6 +138,21 @@ export function StrandedDebtRepair({ debts }: { debts: Debt[] }) {
     }
   };
 
+  const creditGroup = async (g: StrandedGroup) => {
+    if (
+      !confirm(
+        `Credit ${formatMoney(g.clearedSum)} already cleared for ${g.debt.name} to the debt now? The transaction(s) are left as-is.`,
+      )
+    )
+      return;
+    try {
+      await credit.mutateAsync(g);
+      toast.success(`${g.debt.name}: credited — caught up`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
   return (
     <Card className="border-amber-500/50">
       <CardContent className="space-y-3 p-4">
@@ -132,15 +162,16 @@ export function StrandedDebtRepair({ debts }: { debts: Debt[] }) {
             <p className="text-sm font-semibold">Stranded debt payments found</p>
             <p className="text-xs text-muted-foreground">
               These payments cleared in the ledger but never updated the debt (the
-              pre-fix failure in ADR-037). Delete the rows, then redo each payment
-              through Submit / Mark cleared.
+              pre-fix failure in ADR-037). "Credit now" applies them to the debt as-is;
+              "Clean up" deletes the rows so you can redo the payment instead (use this
+              if the transaction itself is also wrong).
             </p>
           </div>
         </div>
         {groups.map((g) => (
           <div
             key={g.debt.id}
-            className="flex items-center justify-between gap-2 border-t pt-2 text-sm"
+            className="flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-sm"
           >
             <span className="min-w-0 flex-1 truncate">
               {g.debt.name}
@@ -149,15 +180,26 @@ export function StrandedDebtRepair({ debts }: { debts: Debt[] }) {
                 {formatMoney(g.clearedSum)}
               </span>
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-10 shrink-0"
-              disabled={del.isPending}
-              onClick={() => clearGroup(g)}
-            >
-              <Trash2 className="mr-2 h-4 w-4 text-destructive" /> Clean up
-            </Button>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                className="h-10"
+                disabled={credit.isPending}
+                onClick={() => creditGroup(g)}
+              >
+                <CircleDollarSign className="mr-2 h-4 w-4" /> Credit now
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-10"
+                disabled={del.isPending}
+                onClick={() => clearGroup(g)}
+              >
+                <Trash2 className="mr-2 h-4 w-4 text-destructive" /> Clean up
+              </Button>
+            </div>
           </div>
         ))}
         <Button

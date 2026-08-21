@@ -64,6 +64,13 @@ export type PayInput = {
   fee?: number;
   /** Payment date; defaults to today when omitted — lets a payment be backdated. */
   date?: string;
+  /**
+   * ADR-076: the payable's arrears owed strictly from cycles before the
+   * current one (`priorCyclesArrears()`, arrears.ts) — only meaningful for
+   * useMarkCleared, which threads it into applyClearedPayment's overflow
+   * cap/reduction. Omit only when there's no arrears to worry about.
+   */
+  priorArrears?: number;
 };
 
 const table = (kind: PayableKind) => (kind === "bill" ? "bills" : "debts");
@@ -151,9 +158,17 @@ async function tagResolvedCycle(kind: PayableKind, id: string, oldDueDate: strin
   if (error) throw error;
 }
 
+/**
+ * ADR-076: `priorArrears` is the payable's arrears owed strictly from cycles
+ * BEFORE the current one (`priorCyclesArrears()` in arrears.ts) — computed by
+ * the caller, not here, so this module doesn't import arrears.ts (which
+ * already imports from this one). Required, not defaulted: every call site
+ * must think about it, since passing 0 silently caps/reduces arrears wrong.
+ */
 export async function applyClearedPayment(
   p: Payable,
   clearedAmount: number,
+  priorArrears: number,
 ): Promise<{ remaining_owed?: number; next_due_date?: string | null; resolved_due_date?: string }> {
   if (p.kind === "debt") {
     const debt = p.debt!;
@@ -201,12 +216,14 @@ export async function applyClearedPayment(
       update.payment_status = "cleared";
     }
 
-    // ADR-057: overflow beyond the cycle minimum reduces opening_arrears.
+    // ADR-057/076: overflow beyond the cycle minimum reduces arrears — whether
+    // that arrears came from a manual opening_arrears carry-in or purely from
+    // the live missed-cycle walk (priorArrears covers both; no more gating on
+    // opening_arrears already being > 0, which silently no-oped the latter).
     const cycleCredit = target > 0 ? Math.max(0, target - previouslyPaid) : clearedAmount;
     const overflow = Math.max(0, clearedAmount - cycleCredit);
-    if (overflow > 0.005 && Number(debt.opening_arrears ?? 0) > 0) {
-      const newArrears = Math.max(0, Number(debt.opening_arrears) - overflow);
-      update.opening_arrears = newArrears;
+    if (overflow > 0.005) {
+      update.opening_arrears = Math.max(0, priorArrears - overflow);
       update.arrears_as_of = todayISO();
     }
 
@@ -217,13 +234,13 @@ export async function applyClearedPayment(
 
   const bill = p.bill!;
   const dueThisCycle = billCycleDue(bill);
-  const openingArrears = Math.max(0, Number(bill.opening_arrears ?? 0));
 
-  // ADR-057: bills have no prepayment-credit field — cap the payment at what's
-  // actually owed (current cycle remainder + arrears carry-in).
+  // ADR-057/076: bills have no prepayment-credit field — cap the payment at
+  // what's actually owed (current cycle remainder + arrears, whether that
+  // arrears is a manual opening_arrears carry-in or purely from missed cycles).
   const previouslyPaid = Number(bill.cycle_paid_to_date ?? 0);
   const remainingThisCycle = Math.max(0, dueThisCycle - previouslyPaid);
-  const maxAllowed = remainingThisCycle + openingArrears;
+  const maxAllowed = remainingThisCycle + priorArrears;
   if (maxAllowed > 0.005 && clearedAmount > maxAllowed + 0.005) {
     throw new Error(
       `This exceeds what the bill and its arrears currently owe (${formatMoney(maxAllowed)}) — reduce the amount, or log the extra as a separate manual transaction.`,
@@ -253,9 +270,11 @@ export async function applyClearedPayment(
     cycle_amount_due: null,
   };
 
-  // ADR-057: reduce opening_arrears by the overflow, advance arrears_as_of.
-  if (overflow > 0.005 && openingArrears > 0) {
-    billUpdate.opening_arrears = Math.max(0, openingArrears - overflow);
+  // ADR-057/076: reduce arrears (manual carry-in or missed-cycle-derived) by
+  // the overflow, advance arrears_as_of. No more gating on opening_arrears
+  // already being > 0.
+  if (overflow > 0.005) {
+    billUpdate.opening_arrears = Math.max(0, priorArrears - overflow);
     billUpdate.arrears_as_of = todayISO();
   }
 
@@ -265,6 +284,73 @@ export async function applyClearedPayment(
     next_due_date: billUpdate.next_due_date as string,
     resolved_due_date: resolvedDueDate ?? undefined,
   };
+}
+
+/**
+ * ADR-076: credit a payment directly against arrears — cycles strictly before
+ * the current one — without touching cycle_paid_to_date or the current
+ * cycle's own state. `priorArrears` is computed by the caller via
+ * `priorCyclesArrears()` (arrears.ts) to avoid a circular import (arrears.ts
+ * already imports from this module).
+ */
+export async function applyArrearsPayment(p: Payable, amount: number, priorArrears: number) {
+  if (!(amount > 0.005)) throw new Error("Enter a positive amount");
+  if (amount > priorArrears + 0.005) {
+    throw new Error(
+      `This exceeds what's owed from before the current cycle (${formatMoney(priorArrears)}) — reduce the amount, or pay the current cycle through Submit/Clear.`,
+    );
+  }
+  await updateRow(table(p.kind), p.id, {
+    opening_arrears: Math.max(0, priorArrears - amount),
+    arrears_as_of: todayISO(),
+  });
+}
+
+export type ArrearsPayInput = {
+  payable: Payable;
+  accountId: string;
+  amount: number;
+  /** ADR-076: caller-computed via priorCyclesArrears() (arrears.ts). */
+  priorArrears: number;
+  /** ADR-076/075: caller-computed via arrearsPaymentTag() (arrears.ts). */
+  resolvedTag: string | null;
+  /** Payment date; defaults to today when omitted — lets it be backdated. */
+  date?: string;
+};
+
+/** "Log arrears payment" (ADR-076): a payment against arrears only. */
+export function useMarkArrearsPaid() {
+  const { householdId } = useAuth();
+  const done = useAfterPayment();
+  return useMutation({
+    mutationFn: async ({
+      payable,
+      accountId,
+      amount,
+      priorArrears,
+      resolvedTag,
+      date,
+    }: ArrearsPayInput) => {
+      // Payable write first (ADR-037): a failed/blocked update aborts before
+      // any ledger row gets written.
+      await applyArrearsPayment(payable, amount, priorArrears);
+      const { error } = await supabase.from("transactions").insert({
+        household_id: householdId,
+        account_id: accountId,
+        category_id: payable.category_id,
+        amount: -Math.abs(amount),
+        status: "cleared",
+        description: `Arrears payment · ${payable.name}`,
+        transaction_date: date || todayISO(),
+        [linkColumn(payable.kind)]: payable.id,
+        resolved_cycle_due_date: resolvedTag,
+        // ADR-065: default the place from the linked bill's/debt's own institution.
+        institution_id: payable.institution_id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: done,
+  });
 }
 
 async function findLinkedTransaction(p: Payable, status?: string) {
@@ -464,7 +550,15 @@ export function useMarkCleared() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable, accountId, amount, cycleAmount, fee, date }: PayInput) => {
+    mutationFn: async ({
+      payable,
+      accountId,
+      amount,
+      cycleAmount,
+      fee,
+      date,
+      priorArrears,
+    }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const requested = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       const existing = await findLinkedTransaction(p, "pending");
@@ -472,7 +566,7 @@ export function useMarkCleared() {
 
       // Update the bill/debt FIRST: if that fails we bail out before touching the
       // ledger, instead of stranding a cleared transaction with no effect.
-      const result = await applyClearedPayment(p, clearedAmount);
+      const result = await applyClearedPayment(p, clearedAmount, priorArrears ?? 0);
 
       // ADR-075: this write happens after applyClearedPayment already ran, so
       // it's not caught by that function's own bulk tag — tag it here if this
@@ -717,6 +811,104 @@ export function useReversePayment() {
         [linkColumn(payable.kind)]: payable.id,
         institution_id: transaction.institution_id ?? payable.institution_id,
       });
+      if (error) throw error;
+    },
+    onSuccess: done,
+  });
+}
+
+export type CorrectPaymentInput = {
+  transaction: Transaction;
+  payable: Payable;
+  amount: number;
+  date: string;
+  accountId: string;
+};
+
+/**
+ * ADR-077: fix a wrong amount/date/account on an already-cleared, linked
+ * PARTIAL payment in place — no delete, no reversal row. Only safe when
+ * neither the stored cycle total before nor after the correction would
+ * meet/cross the cycle's due amount (i.e. no resolve boundary is crossed in
+ * either direction). Anything that would cross one is rejected — Reverse
+ * (ADR-070) already handles that case safely, this one doesn't try to.
+ */
+export function useCorrectPayment() {
+  const done = useAfterPayment();
+  return useMutation({
+    mutationFn: async ({ transaction, payable, amount, date, accountId }: CorrectPaymentInput) => {
+      if (!(amount > 0.005)) throw new Error("Enter a positive amount");
+      if (transaction.status !== "cleared") {
+        throw new Error("Only a cleared payment can be corrected.");
+      }
+      if (transaction.resolved_cycle_due_date) {
+        throw new Error(
+          "This payment already resolved a past cycle — correcting it here isn't supported. Reverse it, then redo the payment.",
+        );
+      }
+
+      const originalAmount = Math.abs(Number(transaction.amount ?? 0));
+
+      if (payable.kind === "debt") {
+        const debt = payable.debt!;
+        const due = debtCycleDue(debt);
+        const paidBefore = Number(debt.cycle_paid_to_date ?? 0);
+        if (originalAmount > paidBefore + 0.005) {
+          throw new Error(
+            "This transaction doesn't match the debt's current partial total — use Reverse instead.",
+          );
+        }
+        if (paidBefore + 0.005 >= due) {
+          throw new Error(
+            "This cycle is already fully paid — correcting a payment that resolved it isn't supported here. Reverse it, then redo the payment.",
+          );
+        }
+        const paidAfter = paidBefore - originalAmount + amount;
+        if (paidAfter + 0.005 >= due) {
+          throw new Error(
+            `That amount would fully pay off the cycle (due ${formatMoney(due)}) — correcting across a resolve isn't supported here. Reverse the original payment, then redo it through Submit/Clear.`,
+          );
+        }
+        const newRemaining = Math.max(
+          0,
+          Number(debt.remaining_balance ?? 0) + (originalAmount - amount),
+        );
+        await updateRow("debts", payable.id, {
+          cycle_paid_to_date: paidAfter,
+          remaining_balance: newRemaining,
+          ...advanceMinimumPaymentPatch(debt, newRemaining),
+        });
+      } else {
+        const bill = payable.bill!;
+        const due = billCycleDue(bill);
+        const paidBefore = Number(bill.cycle_paid_to_date ?? 0);
+        if (originalAmount > paidBefore + 0.005) {
+          throw new Error(
+            "This transaction doesn't match the bill's current partial total — use Reverse instead.",
+          );
+        }
+        if (paidBefore + 0.005 >= due) {
+          throw new Error(
+            "This cycle is already fully paid — correcting a payment that resolved it isn't supported here. Reverse it, then redo the payment.",
+          );
+        }
+        const paidAfter = paidBefore - originalAmount + amount;
+        if (paidAfter + 0.005 >= due) {
+          throw new Error(
+            `That amount would fully pay off the cycle (due ${formatMoney(due)}) — correcting across a resolve isn't supported here. Reverse the original payment, then redo it through Submit/Clear.`,
+          );
+        }
+        await updateRow("bills", payable.id, { cycle_paid_to_date: paidAfter });
+      }
+
+      const { error } = await supabase
+        .from("transactions")
+        .update({
+          amount: Number(transaction.amount) < 0 ? -amount : amount,
+          transaction_date: date,
+          account_id: accountId,
+        })
+        .eq("id", transaction.id);
       if (error) throw error;
     },
     onSuccess: done,

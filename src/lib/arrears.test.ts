@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { computeArrears } from "./arrears";
+import { describe, expect, it, vi } from "vitest";
+import { computeArrears, priorCyclesArrears, arrearsPaymentTag } from "./arrears";
 import { toPayable } from "./payments";
 import type { Bill, Debt } from "./supabase";
 
@@ -75,36 +75,45 @@ describe("computeArrears", () => {
   /**
    * ADR-057: a bill 3 cycles behind, paid in full via "Total due".
    *
-   * Before payment:  3 missed cycles × $100 = $300 overdue, no opening_arrears.
-   * After payment:   applyClearedPayment wrote clearedAmount = $300 (cycle $100
-   *   + overflow $200 applied against missed cycles via opening_arrears logic).
+   * Before payment: next_due_date is still stuck at Jan 10 (never advanced —
+   * nothing has resolved any of Jan/Feb/Mar). `arrears_as_of` marks Jan and
+   * Feb as already reflected in the $200 manual opening_arrears carry-in
+   * (per ADR-049, `counts = cursor > asOf` — a cutoff can only suppress a
+   * PREFIX of the walk starting from next_due_date, so it's Jan+Feb here,
+   * not "the two oldest" in the abstract). Only Mar — the walk's first
+   * cycle after that cutoff — is freshly counted: $200 opening + $100 Mar
+   * cycle = $300 overdue, cyclesMissed = 1.
    *
-   * This test asserts the *post-payment DB state* that applyClearedPayment
-   * produces: next_due_date advanced by 1 cycle, cycle_paid_to_date = 0,
-   * opening_arrears = 0, arrears_as_of = payment date "2026-04-01".
-   * computeArrears on that state must return 0 cyclesMissed and 0 amountOverdue,
-   * so PastDueBadge clears — not just a reduced dollar figure.
+   * (Fixed 2026-08-21: this test previously set `arrears_as_of: "2026-01-09"`,
+   * which is before Jan's own due date — that suppresses nothing, so Jan,
+   * Feb AND Mar all counted separately, i.e. $500, not the $300 this test
+   * asserts. Corrected the fixture to `"2026-02-10"` so the scenario the
+   * comment describes is the one actually being computed.)
    *
-   * The $200 overflow scenario: the bill had $200 as opening_arrears (the two
-   * prior missed cycles were carried in manually), the current cycle is $100,
-   * total = $300.  Payment of $300 → overflow = $200 → opening_arrears 0,
-   * arrears_as_of = "2026-04-01".  next_due_date rolled to "2026-05-10".
+   * After payment: applyClearedPayment($300) would have produced cycle
+   * credit $100 (the Mar cycle) + overflow $200 → opening_arrears
+   * max(0, 200-200) = 0, arrears_as_of = payment date "2026-04-01". In
+   * practice next_due_date only rolls one cycle per payment; this asserts
+   * the simplified end state (due date advanced past today) to confirm
+   * computeArrears returns 0 cyclesMissed and 0 amountOverdue — not just a
+   * reduced dollar figure.
    */
   it("ADR-057: 3 cycles behind, paid via Total due — cyclesMissed drops to 0", () => {
-    // State BEFORE payment: bill is at Jan due date, 2 prior cycles in opening_arrears,
-    // current Jan cycle unpaid.  Viewed on 2026-04-01 (3 cycles past Jan 10).
+    // State BEFORE payment: bill is at Jan due date, 2 prior cycles (Jan, Feb)
+    // covered by opening_arrears, Mar cycle freshly overdue. Viewed on
+    // 2026-04-01 (past the Mar 10 due date).
     const before = toPayable(
       "bill",
       bill({
-        opening_arrears: 200,       // Jan + Feb missed, carried in
-        arrears_as_of: "2026-01-09", // cycles AFTER Jan 9 are counted
+        opening_arrears: 200,        // Jan + Feb, carried in
+        arrears_as_of: "2026-02-10", // cycles on/before Feb 10 don't recount
         next_due_date: "2026-01-10",
         cycle_paid_to_date: 0,
       }),
     );
     const arrearsBefore = computeArrears(before, "2026-04-01");
-    expect(arrearsBefore.cyclesMissed).toBeGreaterThan(0);
-    expect(arrearsBefore.amountOverdue).toBe(300); // 200 opening + 100 Jan cycle
+    expect(arrearsBefore.cyclesMissed).toBe(1); // just Mar
+    expect(arrearsBefore.amountOverdue).toBe(300); // 200 opening + 100 Mar cycle
 
     // State AFTER payment: applyClearedPayment($300) would have produced:
     //   cycle credit = $100, overflow = $200
@@ -125,5 +134,78 @@ describe("computeArrears", () => {
     const arrearsAfter = computeArrears(after, "2026-04-01");
     expect(arrearsAfter.cyclesMissed).toBe(0);
     expect(arrearsAfter.amountOverdue).toBe(0);
+  });
+
+  describe("monthly payment_status trust (fixed 2026-08-21)", () => {
+    it("does not count the current month's cycle as missed when recently cleared", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-20T12:00:00Z"));
+      try {
+        const d = debt({
+          billing_cycle: "monthly",
+          due_day: 10,
+          minimum_payment: 75,
+          payment_status: "cleared",
+          updated_at: "2026-08-15", // cleared this month, after the due day passed
+        });
+        const a = computeArrears(toPayable("debt", d), "2026-08-20");
+        expect(a.cyclesMissed).toBe(0);
+        expect(a.amountOverdue).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("still counts a stale cleared flag left over from an earlier month", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-20T12:00:00Z"));
+      try {
+        const d = debt({
+          billing_cycle: "monthly",
+          due_day: 10,
+          minimum_payment: 75,
+          payment_status: "cleared",
+          updated_at: "2026-06-01", // stale — cleared 2+ months ago
+        });
+        const a = computeArrears(toPayable("debt", d), "2026-08-20");
+        expect(a.cyclesMissed).toBe(1);
+        expect(a.amountOverdue).toBe(75);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+});
+
+describe("priorCyclesArrears (ADR-076)", () => {
+  it("excludes the current cycle's own remaining balance, leaving only genuinely separate missed cycles", () => {
+    // Jan (current cycle, $100) + Feb (one further missed cycle, $100) = $200
+    // total overdue; Submit/Clear can only ever credit the current (Jan)
+    // cycle, so priorCyclesArrears excludes Jan's own $100, leaving $100.
+    const a = priorCyclesArrears(toPayable("bill", bill({})), "2026-02-15");
+    expect(a).toBe(100);
+  });
+
+  it("equals amountOverdue when nothing is currently missed live (manual carry-in only)", () => {
+    const a = priorCyclesArrears(
+      toPayable("bill", bill({ opening_arrears: 250, next_due_date: "2026-05-10" })),
+      "2026-02-15", // before the due date — nothing live-missed
+    );
+    expect(a).toBe(250);
+  });
+});
+
+describe("arrearsPaymentTag (ADR-076)", () => {
+  it("tags with the oldest missed cycle when one exists", () => {
+    const tag = arrearsPaymentTag(toPayable("bill", bill({})), "2026-03-15");
+    expect(tag).toBe("2026-01-10");
+  });
+
+  it("falls back to the current cycle's own opening date when nothing is live-missed", () => {
+    const tag = arrearsPaymentTag(
+      toPayable("bill", bill({ next_due_date: "2026-05-10" })),
+      "2026-02-15",
+    );
+    expect(tag).toBe("2026-04-10"); // one month before the current due date
   });
 });

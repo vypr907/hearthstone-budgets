@@ -69,6 +69,21 @@ export function computeArrears(p: Payable, today = todayISO()): Arrears {
   let missedAmount = 0;
   let oldest: string | null = null;
 
+  // A monthly debt/bill's due date recurs (recomputed from today, never
+  // advanced/rolled the way other cycles are — see debtDueDate()), so
+  // clearing it leaves no due-date signal that the CURRENT cycle is already
+  // settled; only payment_status='cleared' says so. Trust that flag for the
+  // walk's first (current) cycle ONLY when the row was actually touched
+  // recently enough to plausibly be for the cycle just walked past — a stale
+  // 'cleared' left over from an earlier month must still count as missed, or
+  // a genuinely-overdue debt could get silently hidden.
+  const clearedRecently =
+    cycle === "monthly" &&
+    row.payment_status === "cleared" &&
+    !!row.updated_at &&
+    !!start &&
+    row.updated_at.slice(0, 10) >= shiftDateSafe(start, cycle, -1, intervalDays);
+
   if (start && due > 0) {
     let cursor = start;
     let guard = 0;
@@ -76,7 +91,7 @@ export function computeArrears(p: Payable, today = todayISO()): Arrears {
     while (cursor < today && guard < 240) {
       guard += 1;
       const counts = !asOf || cursor > asOf;
-      if (counts) {
+      if (counts && !(first && clearedRecently)) {
         const amount = first ? Math.max(0, due - paidThisCycle) : due;
         if (amount > 0.005) {
           cyclesMissed += 1;
@@ -99,6 +114,45 @@ export function computeArrears(p: Payable, today = todayISO()): Arrears {
     amountOverdue: Math.round((openingArrears + missedAmount) * 100) / 100,
     oldestMissedDate: oldest,
   };
+}
+
+/**
+ * ADR-076: arrears owed strictly from cycles BEFORE the current one — excludes
+ * whatever the current (still-open) cycle itself still owes, since that's
+ * credited separately through the normal Submit/Clear flow. `computeArrears`
+ * folds the current cycle's own remainder into `amountOverdue` once it's
+ * overdue (its "first" walk iteration); this subtracts that back out. Used to
+ * cap/reduce arrears-only payments, and to generalize `applyClearedPayment`'s
+ * overflow reduction so it works whether arrears came from missed cycles or a
+ * manual `opening_arrears` carry-in.
+ */
+export function priorCyclesArrears(p: Payable, today = todayISO()): number {
+  const a = computeArrears(p, today);
+  if (a.cyclesMissed === 0) return a.amountOverdue;
+  const row = p.kind === "bill" ? p.bill : p.debt;
+  if (!row) return a.amountOverdue;
+  const due = p.kind === "bill" ? billCycleDue(p.bill!) : debtCycleDue(p.debt!);
+  const paidThisCycle = Math.max(0, Number(row.cycle_paid_to_date ?? 0));
+  const currentCycleRemaining = Math.max(0, due - paidThisCycle);
+  return Math.max(0, Math.round((a.amountOverdue - currentCycleRemaining) * 100) / 100);
+}
+
+/**
+ * ADR-076: the `resolved_cycle_due_date` tag for a payment logged directly
+ * against arrears — the oldest missed cycle it's covering, or (when nothing's
+ * live-missed, e.g. a manual carry-in only) the current cycle's own opening
+ * date. Either way this is strictly before the payable's current due date, so
+ * `deriveCycleInfo` (ADR-075) excludes it from that cycle's window.
+ */
+export function arrearsPaymentTag(p: Payable, today = todayISO()): string | null {
+  const a = computeArrears(p, today);
+  if (a.oldestMissedDate) return a.oldestMissedDate;
+  const dueDate = payableDueDate(p);
+  if (!dueDate) return null;
+  const row = p.kind === "bill" ? p.bill : p.debt;
+  const cycle = (row?.billing_cycle ?? "monthly").toLowerCase();
+  const intervalDays = row?.cycle_interval_days;
+  return shiftDateSafe(dueDate, cycle, -1, intervalDays);
 }
 
 /** Short badge copy: "2 cycles · $420 past due". */

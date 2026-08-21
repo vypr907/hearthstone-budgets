@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
+import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -591,6 +592,7 @@ function RecentBillTransactions({ bill }: { bill: Bill }) {
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
+                <CorrectPaymentButton transaction={t} payable={toPayable("bill", bill)} />
                 <ReversePaymentButton transaction={t} payable={toPayable("bill", bill)} />
               </div>
             );

@@ -33,6 +33,7 @@ import {
   useUpsertTransaction,
 } from "@/lib/data-hooks";
 import { useMarkCleared, toPayable } from "@/lib/payments";
+import { priorCyclesArrears } from "@/lib/arrears";
 import { formatMoney } from "@/lib/format";
 import { groupLedgerRows, type LedgerEntry } from "@/lib/split-groups";
 
@@ -154,14 +155,18 @@ function PendingPage() {
       // path so the cycle credit + due-date rollover happen exactly as they do
       // from Bills/Debts/Everything.
       if (t.linked_bill_id && billById[t.linked_bill_id]) {
+        const payable = toPayable("bill", billById[t.linked_bill_id]!);
         await markCleared.mutateAsync({
-          payable: toPayable("bill", billById[t.linked_bill_id]!),
+          payable,
           accountId: t.account_id!,
+          priorArrears: priorCyclesArrears(payable),
         });
       } else if (t.linked_debt_id && debtById[t.linked_debt_id]) {
+        const payable = toPayable("debt", debtById[t.linked_debt_id]!);
         await markCleared.mutateAsync({
-          payable: toPayable("debt", debtById[t.linked_debt_id]!),
+          payable,
           accountId: t.account_id!,
+          priorArrears: priorCyclesArrears(payable),
         });
       } else {
         // Plain manual entry (incl. every row of a split group).

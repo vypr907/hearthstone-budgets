@@ -796,3 +796,13 @@ grant update on public.household_members to authenticated;
 
 notify pgrst, 'reload schema';
 ```
+
+Note: ADR-076 (arrears-only payments) and ADR-077 ("Correct this payment") introduce
+no schema — both reuse existing columns (`opening_arrears`/`arrears_as_of` from
+ADR-049, `resolved_cycle_due_date` from ADR-075, `cycle_paid_to_date`/
+`remaining_balance` from ADR-035). ADR-076 does change what `opening_arrears`
+represents in practice: it's no longer only ever a one-time manual pre-tracking
+carry-in (ADR-049's original scope) — any arrears-directed credit (a "Log arrears
+payment" action, or overflow from a normal Submit/Clear) now consolidates the live
+missed-cycle total into it and bumps `arrears_as_of` to today, regardless of whether
+`opening_arrears` already held a manual figure.

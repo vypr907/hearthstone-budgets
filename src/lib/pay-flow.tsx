@@ -16,7 +16,7 @@ import { accountLast4, formatMoney } from "@/lib/format";
 import { todayISO } from "@/lib/snapshot";
 import { accountTypeVisual } from "@/lib/visual-meta";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
-import { computeArrears } from "@/lib/arrears";
+import { computeArrears, priorCyclesArrears } from "@/lib/arrears";
 
 import {
   Dialog,
@@ -89,6 +89,8 @@ export function usePayFlow() {
         cycleAmount,
         fee,
         date,
+        // ADR-076: only meaningful for "cleared" — submit never resolves a cycle.
+        priorArrears: action === "cleared" ? priorCyclesArrears(payable) : undefined,
       })) as { next_due_date?: string | null; remaining_owed?: number } | undefined;
       const msg = `${payable.name} ${action}`;
       if (res?.remaining_owed) {
@@ -275,20 +277,23 @@ export function usePayFlow() {
         <div className="space-y-2">
           <Label htmlFor="pay-amount">{ask?.payable.name}</Label>
 
-          {/* ADR-057: three presets shown on the pay stage only. */}
+          {/* ADR-057/076: three presets shown on the pay stage only. */}
           {ask?.stage === "pay" ? (() => {
-            const arrears = computeArrears(ask.payable);
+            // ADR-076: computeArrears().amountOverdue folds the current cycle's
+            // own remainder in once it's overdue — priorCyclesArrears strips
+            // that back out so it isn't added to owedThisCycle a second time.
+            const priorArrears = priorCyclesArrears(ask.payable);
             const owedThisCycle = Math.max(0,
               (ask.cycleAmount ?? (ask.payable.kind === "bill"
                 ? billCycleDue(ask.payable.bill!)
                 : Number(ask.payable.debt?.minimum_payment ?? 0)))
               - paidSoFar
             );
-            const totalDue = Math.round((owedThisCycle + arrears.amountOverdue) * 100) / 100;
+            const totalDue = Math.round((owedThisCycle + priorArrears) * 100) / 100;
             const presets = [
               { label: "Owed this cycle", value: owedThisCycle },
               ...(totalDue > owedThisCycle + 0.005
-                ? [{ label: `Total due (+ ${formatMoney(arrears.amountOverdue)} arrears)`, value: totalDue }]
+                ? [{ label: `Total due (+ ${formatMoney(priorArrears)} arrears)`, value: totalDue }]
                 : []),
               { label: "Other amount", value: null },
             ];

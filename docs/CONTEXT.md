@@ -62,6 +62,9 @@ Private shared household budget and debt-payoff Android application migrated fro
   - ADR-037 addendum complete: a second, UI-side cause of the stranded-payment symptom found on bills (Transactions screen's edit dialog could change a linked transaction's amount/status, bypassing `applyClearedPayment`) — now locked out; new `StrandedBillRepair` mirrors the existing debt-side repair scan, mounted on the Bills screen
   - Bill detail's Recent Transactions rows show the paying account (icon/label) and open the shared `TransactionDetail` dialog on tap
   - ADR-075 complete: `transactions.resolved_cycle_due_date` tags which cycle a cleared payment resolved, so `deriveCycleInfo()` stops misattributing a late payment to the next, freshly-rolled cycle; SQL migration run and verified live 2026-08-21
+  - ADR-076 complete: "Log arrears payment" action (`ArrearsPaymentAction.tsx`, shown in `PayActions`) credits money against arrears without touching the current cycle; `applyClearedPayment`'s overflow-into-arrears reduction generalized to work whether arrears came from missed cycles or a manual carry-in, also fixing "Total due" overstatement. No schema change.
+  - ADR-077 complete: "Correct this payment" (`CorrectPaymentButton.tsx`) edits a cleared, linked PARTIAL payment's amount/date/account in place, rejecting anything that would cross a resolve boundary (points at Reverse instead); `StrandedBillRepair`/`StrandedDebtRepair` gained a "Credit now" action alongside "Clean up". No schema change.
+  - Bug fix: `computeArrears()` now trusts a monthly debt's `payment_status='cleared'` for its current cycle only when recently touched, closing a false "past due" gap without risking a stale flag hiding real arrears
 - Phase 12 not started: Wrap as a Real Android App (Capacitor)
 - Phase 12 not started: Publish to Google Play (Internal Testing)
 - Phase 13 not started: Cutover: Retire the Sheet
@@ -126,6 +129,8 @@ Private shared household budget and debt-payoff Android application migrated fro
 - Dashboard's "Budget vs actual" card is scoped to the current pay period, not calendar month — `spending_budgets.budgeted_amount` has no month column in the schema and is used as a flat per-category target; bills/debts use real per-period due amounts. "Monthly summary" stays calendar-month exact; the two cards are intentionally different scopes
 - A read-only Supabase MCP server is connected (project-scoped, `.mcp.json`) for direct schema/data verification; it cannot write — schema/data changes still go through the manual Supabase SQL Editor
 - `deriveCycleInfo()` excludes a transaction tagged with a `resolved_cycle_due_date` earlier than the payable's current due date from the "current cycle" window, regardless of its raw `transaction_date` — fixes late-payment misattribution to the next cycle; forward-only, existing untagged transactions unaffected (ADR-075)
+- A payment can target arrears directly (cycles before the current one) via "Log arrears payment," without crediting the current cycle; usable repeatedly for separate historical entries. Any arrears-directed credit (this action, or overflow on a normal Submit/Clear) consolidates the live missed-cycle total into `opening_arrears` and bumps `arrears_as_of` to today — not just when a manual carry-in already existed (ADR-076)
+- A cleared, linked PARTIAL payment's amount/date/account can be corrected in place via `useCorrectPayment`, restricted to cases that don't cross a resolve boundary either direction; anything that would is rejected, pointing at Reverse + redo instead (ADR-077)
 
 ## Important Rules
 - Never store passwords.
