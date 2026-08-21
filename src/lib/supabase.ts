@@ -49,6 +49,8 @@ export type Bill = {
   opening_arrears?: number | null;
   /** ADR-049: date the opening arrears figure was accurate as of. */
   arrears_as_of?: string | null;
+  /** ADR-078: running total of arrears-directed payments (separate from opening_arrears). */
+  arrears_paid_to_date?: number | null;
   /** ADR-068: paycheck deduction that funds this bill (must have an account). */
   funding_deduction_id?: string | null;
   /** ADR-074: the account this bill is usually paid from. */
@@ -132,6 +134,8 @@ export type Debt = {
   opening_arrears?: number | null;
   /** ADR-049: date the opening arrears figure was accurate as of. */
   arrears_as_of?: string | null;
+  /** ADR-078: running total of arrears-directed payments (separate from opening_arrears). */
+  arrears_paid_to_date?: number | null;
   /** ADR-068: paycheck deduction that funds this debt (must have an account). */
   funding_deduction_id?: string | null;
   /** ADR-074: the account this debt is usually paid from. */

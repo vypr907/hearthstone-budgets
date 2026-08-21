@@ -175,6 +175,64 @@ describe("computeArrears", () => {
       }
     });
   });
+
+  describe("arrears_paid_to_date (ADR-078)", () => {
+    it("subtracts from the full raw total, including the current cycle's own remainder", () => {
+      // Same 3-cycles-behind scenario as above ($300 raw: current Jan cycle
+      // $100 + Feb + Mar $100 each). A $50 arrears payment should leave $250,
+      // not $150 — the bug Lovable QA found when this was still routed
+      // through opening_arrears/arrears_as_of (ADR-076's original mistake).
+      const a = computeArrears(
+        toPayable("bill", bill({ arrears_paid_to_date: 50 })),
+        "2026-03-15",
+      );
+      expect(a.amountOverdue).toBe(250);
+      expect(a.cyclesMissed).toBe(3); // raw cycle count is unreduced by design
+    });
+
+    it("keeps working correctly across a normal cycle resolve without any reset", () => {
+      // Proves ADR-078's "no reset needed" conclusion: a normal resolve (no
+      // overflow) never touches arrears_paid_to_date, and the raw walk
+      // shrinks on its own as next_due_date rolls forward — the two stay
+      // consistent without any special-casing.
+      const before = computeArrears(
+        toPayable("bill", bill({ arrears_paid_to_date: 50 })),
+        "2026-03-15",
+      );
+      expect(before.amountOverdue).toBe(250); // 300 - 50
+
+      // The CURRENT (Jan) cycle resolves normally — no overflow, so
+      // arrears_paid_to_date is untouched — next_due_date rolls to Feb.
+      const after = computeArrears(
+        toPayable(
+          "bill",
+          bill({ next_due_date: "2026-02-10", cycle_paid_to_date: 0, arrears_paid_to_date: 50 }),
+        ),
+        "2026-03-15",
+      );
+      // Raw total shrinks to $200 (Feb current + Mar), minus the same $50.
+      expect(after.amountOverdue).toBe(150);
+    });
+
+    it("floors at 0 when arrears_paid_to_date covers or exceeds the raw total", () => {
+      const a = computeArrears(
+        toPayable("bill", bill({ arrears_paid_to_date: 500 })),
+        "2026-03-15",
+      );
+      expect(a.amountOverdue).toBe(0);
+    });
+
+    it("reduces the paid-off-debt carry-in figure too", () => {
+      const a = computeArrears(
+        toPayable(
+          "debt",
+          debt({ remaining_balance: 0, opening_arrears: 100, arrears_paid_to_date: 40 }),
+        ),
+        "2026-06-01",
+      );
+      expect(a.amountOverdue).toBe(60);
+    });
+  });
 });
 
 describe("priorCyclesArrears (ADR-076)", () => {

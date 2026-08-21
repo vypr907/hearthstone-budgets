@@ -117,3 +117,49 @@
     - Cosmetic nit: the reactivated row still shows the stale "Cleared" chip
       and "88% paid off" until the next status write. Logged, not fixed.
   - Files touched: `src/lib/arrears.ts`, `src/lib/arrears.test.ts`.
+
+- Reviewed Lovable's QA-pass fix to `arrearsPaymentTag()` (`173c7ef`): the
+  behavioral fix is correct, but found and removed a genuinely dead branch —
+  `computeArrears`'s walk always starts AT the payable's current due date, so
+  `oldestMissedDate` (when set) is always >= that date, never before it, so
+  the "return oldestMissedDate directly" branch could never execute. Also
+  fixed a test whose assertion passed but for the wrong reason (exercised the
+  fallback path, not what its name/comment claimed). No behavior change.
+
+- Implemented ADR-078 (`arrears_paid_to_date` running counter), approved
+  after diagnosing the QA-logged gap: a "Log arrears payment" on a payable
+  whose current cycle was itself overdue dropped that cycle's own amount
+  from the past-due total, because ADR-076 routed arrears credit through
+  `opening_arrears`/`arrears_as_of` — a mechanism that can only suppress a
+  PREFIX of the missed-cycle walk, the wrong shape for what ADR-076
+  consolidates (everything except the walk's first/current entry).
+  - Caught a bug in my own drafted ADR-078 mid-implementation before writing
+    any code: the ADR's reset clause ("reset to 0 wherever cycle_paid_to_date
+    resets") would have wiped the counter on literally every normal cycle
+    resolve, discarding legitimate arrears credit almost immediately. Traced
+    the actual math instead of the intuition it was written from — a normal
+    resolve only ever shrinks the raw walk by the current cycle's own
+    amount, always covered by `cycle_paid_to_date`, never overlapping with
+    what the counter tracks — so no reset is needed at all. Corrected the
+    ADR text in DECISIONS.md before implementing (documented the wrong
+    version too, so the reasoning is preserved).
+  - `computeArrears` (arrears.ts) now subtracts `arrears_paid_to_date` from
+    the always-fresh raw total (`openingArrears + missedAmount`), floored at
+    0; `opening_arrears`/`arrears_as_of` are back to ADR-049's original
+    meaning only. `applyArrearsPayment` and `applyClearedPayment`'s
+    overflow-into-arrears branches (bills and debts) now increment the
+    counter instead of writing `opening_arrears`/`arrears_as_of`.
+  - Added regression tests: the exact QA-reported scenario ($300 raw, $50
+    paid → $250 not $150), a two-state test proving the no-reset design
+    stays correct across a normal resolve, the floor-at-0 case, and the
+    paid-off-debt carry-in case.
+  - No schema change to bills/debts.opening_arrears/arrears_as_of — new
+    column `arrears_paid_to_date` (nullable numeric, default 0) on both
+    tables. SQL migration given to the user, not yet run.
+  - Known limitation, documented in the ADR, not fixed (pre-existing
+    ADR-076 scope, unrelated to this bug): `applyArrearsPayment` never
+    touches `cycle_paid_to_date`, so a cycle paid off in advance via an
+    arrears payment still shows "Unpaid"/offers Submit once its own due date
+    becomes current — paying it there too would double-pay it.
+  - Next step: user runs the SQL migration, then smoke-tests the exact QA
+    scenario (partial arrears payment on an also-overdue current cycle).

@@ -804,12 +804,41 @@ grant update on public.household_members to authenticated;
 notify pgrst, 'reload schema';
 ```
 
-Note: ADR-076 (arrears-only payments) and ADR-077 ("Correct this payment") introduce
-no schema — both reuse existing columns (`opening_arrears`/`arrears_as_of` from
-ADR-049, `resolved_cycle_due_date` from ADR-075, `cycle_paid_to_date`/
-`remaining_balance` from ADR-035). ADR-076 does change what `opening_arrears`
-represents in practice: it's no longer only ever a one-time manual pre-tracking
-carry-in (ADR-049's original scope) — any arrears-directed credit (a "Log arrears
-payment" action, or overflow from a normal Submit/Clear) now consolidates the live
-missed-cycle total into it and bumps `arrears_as_of` to today, regardless of whether
-`opening_arrears` already held a manual figure.
+Note: ADR-077 ("Correct this payment") introduces no schema — reuses
+`cycle_paid_to_date`/`remaining_balance` (ADR-035) and `resolved_cycle_due_date`
+(ADR-075).
+
+ADR-076 (arrears-only payments) originally routed arrears-directed credit through
+`opening_arrears`/`arrears_as_of` (ADR-049) instead of a dedicated column. ADR-078
+(below) replaced that with a real column after the reuse proved wrong — see there for
+why, and for `opening_arrears`/`arrears_as_of`'s restored original (ADR-049-only)
+meaning.
+
+## bills/debts.arrears_paid_to_date (ADR-078)
+
+```sql
+bills (
+    ...
+    arrears_paid_to_date numeric default 0  -- ADR-078: running total of
+                                              -- arrears-directed payments
+)
+debts (
+    ...
+    arrears_paid_to_date numeric default 0  -- same
+)
+```
+
+```sql
+alter table bills add column if not exists arrears_paid_to_date numeric default 0;
+alter table debts add column if not exists arrears_paid_to_date numeric default 0;
+notify pgrst, 'reload schema';
+```
+
+A running counter of money credited via `applyArrearsPayment` (ADR-076's "Log arrears
+payment") or `applyClearedPayment`'s overflow-into-arrears path — subtracted from
+`computeArrears`'s live-computed raw total (`opening_arrears + missedAmount`) in
+`arrears.ts`. Never reset (see ADR-078's Decision for why that's safe): a normal cycle
+resolve only ever shrinks the raw walk by the current cycle's own amount, which is
+always covered by `cycle_paid_to_date`, never overlapping with what this counter
+tracks. Kept deliberately separate from `opening_arrears`/`arrears_as_of`, which are
+back to meaning only ADR-049's original one-time manual pre-tracking carry-in.

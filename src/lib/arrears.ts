@@ -9,7 +9,16 @@ import { billCycleDue, debtCycleDue, type Payable } from "./payments";
  *     this app started tracking the item (the ledger has no history for it),
  *     ignored for cycles on or before `arrears_as_of`.
  *  2. Missed cycles — every due date that has passed without the cycle being
- *     covered, walked forward from the item's current due date.
+ *     covered, walked forward from the item's current due date (always
+ *     computed fresh, in full — including the current cycle's own remainder).
+ *
+ * `arrears_paid_to_date` (ADR-078) is then subtracted from that sum. It's a
+ * running total of arrears-only payments and cleared-payment overflow
+ * (`applyArrearsPayment`/`applyClearedPayment`, payments.ts) — kept separate
+ * from `opening_arrears`/`arrears_as_of` because those can only suppress a
+ * PREFIX of the walk (cycles on/before a cutoff), which is the wrong shape
+ * for what arrears payments consolidate (everything EXCEPT the current,
+ * earliest-walked cycle — see ADR-078).
  */
 export type Arrears = {
   cyclesMissed: number;
@@ -53,10 +62,15 @@ export function computeArrears(p: Payable, today = todayISO()): Arrears {
   if (!row) return EMPTY;
 
   const openingArrears = Math.max(0, Number(row.opening_arrears ?? 0));
+  const arrearsPaidToDate = Math.max(0, Number(row.arrears_paid_to_date ?? 0));
   const asOf = day(row.arrears_as_of);
   const paidOff = p.kind === "debt" && Number(p.debt?.remaining_balance ?? 0) <= 0;
   if (paidOff) {
-    return { ...EMPTY, openingArrears, amountOverdue: openingArrears };
+    return {
+      ...EMPTY,
+      openingArrears,
+      amountOverdue: Math.max(0, openingArrears - arrearsPaidToDate),
+    };
   }
 
   const due = p.kind === "bill" ? billCycleDue(p.bill!) : debtCycleDue(p.debt!);
@@ -111,7 +125,10 @@ export function computeArrears(p: Payable, today = todayISO()): Arrears {
   return {
     cyclesMissed,
     openingArrears,
-    amountOverdue: Math.round((openingArrears + missedAmount) * 100) / 100,
+    amountOverdue: Math.max(
+      0,
+      Math.round((openingArrears + missedAmount - arrearsPaidToDate) * 100) / 100,
+    ),
     oldestMissedDate: oldest,
   };
 }

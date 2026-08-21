@@ -133,16 +133,6 @@ async function updateRow(
 }
 
 /**
- * Apply a cleared payment of `clearedAmount` to the bill/debt row: credit the
- * cycle, and only resolve the cycle (advance the due date, reset the counters)
- * once the cycle target is met. Shared by the Submit/Clear flow and by manual
- * transactions linked to a bill/debt (ADR-035).
- *
- * ADR-057: any amount paid beyond the current cycle reduces opening_arrears and
- * advances arrears_as_of to today. Bills cap at cycle_due + opening_arrears —
- * excess is rejected so money isn't silently left unaccounted.
- */
-/**
  * ADR-075: tag every cleared, linked, still-untagged transaction for this payable
  * with the due date a resolve just satisfied. `deriveCycleInfo` uses this to stop
  * misattributing a late payment (dated after the due date it resolved) to the
@@ -159,11 +149,22 @@ async function tagResolvedCycle(kind: PayableKind, id: string, oldDueDate: strin
 }
 
 /**
- * ADR-076: `priorArrears` is the payable's arrears owed strictly from cycles
- * BEFORE the current one (`priorCyclesArrears()` in arrears.ts) — computed by
- * the caller, not here, so this module doesn't import arrears.ts (which
- * already imports from this one). Required, not defaulted: every call site
- * must think about it, since passing 0 silently caps/reduces arrears wrong.
+ * Apply a cleared payment of `clearedAmount` to the bill/debt row: credit the
+ * cycle, and only resolve the cycle (advance the due date, reset the counters)
+ * once the cycle target is met. Shared by the Submit/Clear flow and by manual
+ * transactions linked to a bill/debt (ADR-035).
+ *
+ * ADR-057/078: any amount paid beyond the current cycle increments the
+ * running `arrears_paid_to_date` counter (never `opening_arrears`/
+ * `arrears_as_of` directly — see ADR-078 for why). Bills cap at
+ * `cycle_due + priorArrears` — excess is rejected so money isn't silently
+ * left unaccounted.
+ *
+ * `priorArrears` is the payable's arrears owed strictly from cycles BEFORE
+ * the current one (`priorCyclesArrears()` in arrears.ts) — computed by the
+ * caller, not here, so this module doesn't import arrears.ts (which already
+ * imports from this one). Required, not defaulted: every call site must
+ * think about it, since passing 0 silently caps/reduces arrears wrong.
  */
 export async function applyClearedPayment(
   p: Payable,
@@ -216,15 +217,16 @@ export async function applyClearedPayment(
       update.payment_status = "cleared";
     }
 
-    // ADR-057/076: overflow beyond the cycle minimum reduces arrears — whether
-    // that arrears came from a manual opening_arrears carry-in or purely from
-    // the live missed-cycle walk (priorArrears covers both; no more gating on
-    // opening_arrears already being > 0, which silently no-oped the latter).
+    // ADR-057/076/078: overflow beyond the cycle minimum reduces arrears —
+    // whether that arrears came from a manual opening_arrears carry-in or
+    // purely from the live missed-cycle walk. Tracked via a running
+    // arrears_paid_to_date counter (ADR-078), not opening_arrears/
+    // arrears_as_of — those can only suppress a PREFIX of the missed-cycle
+    // walk, the wrong shape for what an overflow payment consolidates.
     const cycleCredit = target > 0 ? Math.max(0, target - previouslyPaid) : clearedAmount;
     const overflow = Math.max(0, clearedAmount - cycleCredit);
     if (overflow > 0.005) {
-      update.opening_arrears = Math.max(0, priorArrears - overflow);
-      update.arrears_as_of = todayISO();
+      update.arrears_paid_to_date = Number(debt.arrears_paid_to_date ?? 0) + overflow;
     }
 
     await updateRow("debts", p.id, update);
@@ -270,12 +272,11 @@ export async function applyClearedPayment(
     cycle_amount_due: null,
   };
 
-  // ADR-057/076: reduce arrears (manual carry-in or missed-cycle-derived) by
-  // the overflow, advance arrears_as_of. No more gating on opening_arrears
-  // already being > 0.
+  // ADR-057/076/078: reduce arrears (manual carry-in or missed-cycle-derived)
+  // by the overflow, tracked via the running arrears_paid_to_date counter —
+  // see the matching comment in the debt branch above.
   if (overflow > 0.005) {
-    billUpdate.opening_arrears = Math.max(0, priorArrears - overflow);
-    billUpdate.arrears_as_of = todayISO();
+    billUpdate.arrears_paid_to_date = Number(bill.arrears_paid_to_date ?? 0) + overflow;
   }
 
   await updateRow("bills", bill.id, billUpdate);
@@ -287,11 +288,13 @@ export async function applyClearedPayment(
 }
 
 /**
- * ADR-076: credit a payment directly against arrears — cycles strictly before
- * the current one — without touching cycle_paid_to_date or the current
- * cycle's own state. `priorArrears` is computed by the caller via
- * `priorCyclesArrears()` (arrears.ts) to avoid a circular import (arrears.ts
- * already imports from this module).
+ * ADR-076/078: credit a payment directly against arrears — cycles strictly
+ * before the current one — without touching cycle_paid_to_date or the
+ * current cycle's own state. Tracked via the running arrears_paid_to_date
+ * counter (ADR-078), not opening_arrears/arrears_as_of — see the matching
+ * comment in applyClearedPayment's overflow handling. `priorArrears` is
+ * computed by the caller via `priorCyclesArrears()` (arrears.ts) to avoid a
+ * circular import (arrears.ts already imports from this module).
  */
 export async function applyArrearsPayment(p: Payable, amount: number, priorArrears: number) {
   if (!(amount > 0.005)) throw new Error("Enter a positive amount");
@@ -300,9 +303,9 @@ export async function applyArrearsPayment(p: Payable, amount: number, priorArrea
       `This exceeds what's owed from before the current cycle (${formatMoney(priorArrears)}) — reduce the amount, or pay the current cycle through Submit/Clear.`,
     );
   }
+  const row = p.kind === "bill" ? p.bill : p.debt;
   await updateRow(table(p.kind), p.id, {
-    opening_arrears: Math.max(0, priorArrears - amount),
-    arrears_as_of: todayISO(),
+    arrears_paid_to_date: Number(row?.arrears_paid_to_date ?? 0) + amount,
   });
 }
 
