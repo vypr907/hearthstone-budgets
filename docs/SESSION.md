@@ -394,5 +394,7 @@
   the Stash - Invest bill row — checked first for FK dependents
   (bill_adjustments, pay_period_allocations: none) before drafting the
   delete. No code changed.
-  - Next step: user runs the SQL migration, then verify live via the
-    read-only MCP (same as SoFi-Invest's confirmation).
+  - SQL migration confirmed run and verified live via the read-only MCP:
+    transfer pair correct (-$5 One Checking - Steven / +$5 Personal
+    Portfolio, both cleared, shared transfer_group_id, linked_bill_id
+    cleared), Stash - Invest bill row gone. Closed.
