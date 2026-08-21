@@ -163,3 +163,25 @@
     becomes current — paying it there too would double-pay it.
   - Next step: user runs the SQL migration, then smoke-tests the exact QA
     scenario (partial arrears payment on an also-overdue current cycle).
+
+- Diagnosed the real Beiers bill (not the seeded test fixture): "Credit now"
+  rejected the actual $108.39 cleared payment. Root cause via the read-only
+  MCP: `cycle_amount_due` was null (falls back to bare `bill.amount`=$88.39,
+  missing an active $20 late-fee `bill_adjustments` row that WAS correctly
+  applied when added — `useAddBillAdjustment` does set `cycle_amount_due`
+  right) and `next_due_date` had drifted to 2026-09-01 instead of the
+  still-open 2026-08-01. Found the likely cause: `useResetCycle`/
+  `useMarkUnpaid` write `cycle_amount_due: null` unconditionally, with no
+  awareness of active adjustments — logged as a real, unfixed bug in TODO.md
+  (separate from anything built this session). Gave the user a one-time SQL
+  fix for the two fields; no code changed for this item.
+  - Also found while investigating: `bills`/`debts.updated_at` has no DB
+    trigger and no app code path sets it on UPDATE — frozen at insert time
+    forever. Undermines `findStrandedBillPayments`/`findStrandedDebtPayments`'s
+    dedup guard and `computeArrears`'s monthly `clearedRecently` check (both
+    fail closed, not unsafe, just non-functional). Became ADR-079.
+
+- Implemented ADR-079 (`set_updated_at()` trigger on `bills`/`debts`), user-
+  approved. Pure DB trigger, no app code changes — the existing checks
+  already read `updated_at`, they'll just start seeing real values once the
+  trigger exists. SQL migration given to the user, not yet run.

@@ -842,3 +842,36 @@ resolve only ever shrinks the raw walk by the current cycle's own amount, which 
 always covered by `cycle_paid_to_date`, never overlapping with what this counter
 tracks. Kept deliberately separate from `opening_arrears`/`arrears_as_of`, which are
 back to meaning only ADR-049's original one-time manual pre-tracking carry-in.
+
+## bills/debts.updated_at trigger (ADR-079)
+
+```sql
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists set_bills_updated_at on public.bills;
+create trigger set_bills_updated_at
+before update on public.bills
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_debts_updated_at on public.debts;
+create trigger set_debts_updated_at
+before update on public.debts
+for each row execute function public.set_updated_at();
+
+notify pgrst, 'reload schema';
+```
+
+`updated_at`'s `default_value: now()` only ever applied on INSERT — no app code path
+set it on UPDATE and no trigger existed, so it was frozen at row-creation time forever.
+This trigger makes it actually reflect the last write, which `findStrandedBillPayments`/
+`findStrandedDebtPayments` (dedup guard) and `computeArrears`'s monthly `clearedRecently`
+check both depend on. No column added — this only changes when `updated_at` gets
+written, not the schema shape.

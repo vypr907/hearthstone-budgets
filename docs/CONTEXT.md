@@ -66,6 +66,7 @@ Private shared household budget and debt-payoff Android application migrated fro
   - ADR-077 complete: "Correct this payment" (`CorrectPaymentButton.tsx`) edits a cleared, linked PARTIAL payment's amount/date/account in place, rejecting anything that would cross a resolve boundary (points at Reverse instead); `StrandedBillRepair`/`StrandedDebtRepair` gained a "Credit now" action alongside "Clean up". No schema change.
   - Bug fix: `computeArrears()` now trusts a monthly debt's `payment_status='cleared'` for its current cycle only when recently touched, closing a false "past due" gap without risking a stale flag hiding real arrears
   - ADR-078 complete (code side): `bills`/`debts.arrears_paid_to_date` (running counter, never reset) replaces ADR-076's original opening_arrears/arrears_as_of routing for arrears-directed credit — fixes the current cycle's own amount vanishing from the past-due total whenever it was itself overdue; `opening_arrears`/`arrears_as_of` are back to ADR-049's original meaning only; pending the manual SQL migration adding the column
+  - ADR-079: `set_updated_at()` DB trigger on `bills`/`debts`, decided 2026-08-22, pending the manual SQL migration — `updated_at` had no trigger and no app code ever set it on UPDATE, so it was frozen at insert time forever
 - Phase 12 not started: Wrap as a Real Android App (Capacitor)
 - Phase 12 not started: Publish to Google Play (Internal Testing)
 - Phase 13 not started: Cutover: Retire the Sheet
