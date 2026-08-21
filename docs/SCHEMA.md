@@ -105,22 +105,29 @@ categories (
     id uuid primary key default gen_random_uuid(),
     household_id uuid references households(id) on delete cascade,
     name text not null,
-    domain text,
-    parent_category uuid references categories(id),
+    domain text,                    -- DB-enforced check, see Domain Values below
+    parent_category text,           -- ADR-067: free text, not a self-referencing FK
     created_at timestamptz default now()
 )
 ```
 
+Also has `icon`/`color` (ADR-029/030, see their own section below).
+
 ## Domain Values
 
-Examples:
+DB-enforced via a `check` constraint (ADR-069):
 
-* bill
-* debt
-* spending
-* institution
+* `bill`
+* `debt`
+* `spending`
+* `income`
 
-The domain is informational only and not enforced as an enum.
+`domain` is the single source of truth for where a category may appear: only
+`spending` categories get budgets or land in budget grids; `income`
+categories are ad-hoc income only, chosen via an explicit Income mode in Add
+Transaction, never inferred from the amount sign (ADR-069). The `income`
+value and its four seed categories (Income, Credit, Refund, Gift) have
+already been migrated in — this isn't pending.
 
 ---
 
