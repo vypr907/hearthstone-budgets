@@ -241,3 +241,9 @@
   TODO.md rather than leaving the user chasing it further. One possible
   exception flagged for a real check: SoFi-Invest, whose transaction (7/29)
   traces as falling just inside the current window, unlike the others.
+
+- SoFi-Invest resolved and confirmed live via the read-only MCP: duplicate
+  $5 debit deleted, remaining debit converted into a real transfer pair
+  (paired +$5 credit into Robo via a shared `transfer_group_id`,
+  `linked_bill_id` cleared), SoFi-Invest bill row deleted. Removed the
+  now-closed item from TODO.md.

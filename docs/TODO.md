@@ -17,28 +17,6 @@
         and status = 'cleared' and resolved_cycle_due_date is null;
       commit;
       ```
-- [x] ~~Household-wide sweep found 2026-08-22~~ — **false alarm, correcting**: the SQL
-      scan that flagged ~15 bills (Aarons Club, Anthropic-Claude, Dave, Flex, Google
-      Play Pass, Kikoff, Planet Fitness x2, Starz, Stash-Invest, UberEats, Hulu/Disney+)
-      only checked "is there a cleared, untagged transaction bigger than
-      `cycle_paid_to_date`" — it didn't replicate `findStrandedBillPayments()`'s actual
-      date-windowing (only transactions inside the bill's current cycle window count).
-      Hand-traced most of them against the real window logic (2026-08-22): their
-      transaction dates land exactly on/before the window's own start boundary, so the
-      app correctly excludes them as belonging to an already-superseded cycle — not
-      stranded. Confirmed by the user: none of these show in the Stranded panel.
-      Trust the app's panel over ad-hoc SQL scans for this going forward.
-      - The one flagged exception was real: **SoFi-Invest** wasn't a mis-modeled bill,
-        it was a mis-modeled *transfer* — a biweekly Savings -> Robo auto-transfer
-        tracked as a Bill, which only ever debits the source account; Robo (the
-        investment account) was never credited. Found a real duplicate too (two
-        identical $5 debits, same date). One-time SQL fix given to the user
-        2026-08-22: delete the duplicate, convert the remaining debit into a real
-        transfer (paired credit into Robo via `transfer_group_id`), delete the
-        SoFi-Invest bill row (confirmed nothing else references it). Going forward,
-        log this and any future auto-transfers via Add Transaction -> Transfer, not
-        as a Bill. Not yet confirmed run.
-
 ## Follow-up work
 
 - [ ] Bug found 2026-08-22, not yet fixed: resetting/undoing a bill's cycle
