@@ -544,6 +544,7 @@ export function TransactionDetail({
   const { data: institutions = [] } = useInstitutions();
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
+  const { data: allTransactions = [] } = useTransactions();
   const upsert = useUpsertTransaction();
   const del = useDeleteTransaction();
   const delTransferPair = useDeleteTransferPair();
@@ -582,6 +583,26 @@ export function TransactionDetail({
   const linkedDebt = debts.find((d) => d.id === transaction.linked_debt_id);
   const isLinked = !!(transaction.linked_bill_id || transaction.linked_debt_id);
   const placeName = institutions.find((i) => i.id === transaction.institution_id)?.name ?? null;
+  // ADR-056: a transfer is two rows sharing transfer_group_id — negative on
+  // the from-account, positive on the to-account. Find the other leg to show
+  // both sides instead of just this row's own account.
+  const transferPair = transaction.transfer_group_id
+    ? allTransactions.find(
+        (t) => t.transfer_group_id === transaction.transfer_group_id && t.id !== transaction.id,
+      )
+    : null;
+  const accountName = (id: string | null | undefined) =>
+    accounts.find((a) => a.id === id)?.name ?? "—";
+  const transferFromAccount = transferPair
+    ? Number(transaction.amount) < 0
+      ? accountName(transaction.account_id)
+      : accountName(transferPair.account_id)
+    : null;
+  const transferToAccount = transferPair
+    ? Number(transaction.amount) < 0
+      ? accountName(transferPair.account_id)
+      : accountName(transaction.account_id)
+    : null;
 
   async function save() {
     try {
@@ -648,18 +669,30 @@ export function TransactionDetail({
               <DetailItem
                 label="Status"
                 value={
-                  <Badge
-                    variant={transaction.status === "cleared" ? "outline" : "secondary"}
-                    className="capitalize"
-                  >
-                    {transaction.status || "pending"}
-                  </Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant={transaction.status === "cleared" ? "outline" : "secondary"}
+                      className="capitalize"
+                    >
+                      {transaction.status || "pending"}
+                    </Badge>
+                    {transaction.transfer_group_id ? (
+                      <Badge variant="outline">Transfer</Badge>
+                    ) : null}
+                  </div>
                 }
               />
-              <DetailItem
-                label="Account"
-                value={accounts.find((a) => a.id === transaction.account_id)?.name ?? "—"}
-              />
+              {transferPair ? (
+                <>
+                  <DetailItem label="From" value={transferFromAccount} />
+                  <DetailItem label="To" value={transferToAccount} />
+                </>
+              ) : (
+                <DetailItem
+                  label="Account"
+                  value={accounts.find((a) => a.id === transaction.account_id)?.name ?? "—"}
+                />
+              )}
               <DetailItem
                 label="Category"
                 value={categories.find((c) => c.id === transaction.category_id)?.name ?? "—"}

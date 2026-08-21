@@ -17,6 +17,7 @@ import { computeBalances } from "@/lib/balances";
 import { groupLedgerRows } from "@/lib/split-groups";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -327,13 +328,18 @@ function RecentActivity({
                   {entry.isSplit ? ` · split (${entry.rows.length})` : ""}
                 </p>
               </div>
-              <p
-                className={`shrink-0 tabular-nums font-medium ${
-                  entry.total < 0 ? "" : "text-primary"
-                } ${t.status === "pending" ? "opacity-60" : ""}`}
-              >
-                {formatMoney(entry.total)}
-              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                {t.transfer_group_id ? (
+                  <Badge variant="outline">Transfer</Badge>
+                ) : null}
+                <p
+                  className={`tabular-nums font-medium ${
+                    entry.total < 0 ? "" : "text-primary"
+                  } ${t.status === "pending" ? "opacity-60" : ""}`}
+                >
+                  {formatMoney(entry.total)}
+                </p>
+              </div>
             </div>
             {entry.isSplit ? (
               <>

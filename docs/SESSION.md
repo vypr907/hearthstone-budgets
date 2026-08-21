@@ -288,9 +288,29 @@
   - Next step: none open on this request — build unverified locally
     (AppLocker, per CLAUDE.md); worth a quick look at both pieces (overdue
     inclusion + status icons) live before considering this fully closed.
+  - User tested live 2026-08-21: both pieces confirmed working correctly.
 
 - Fixed a typecheck error that was breaking the dev preview with an HTTP 500:
   `src/routes/app.paycheck.tsx` had both an import of `todayISO` from
   `@/lib/paycheck-budget` and a local function with the same name (TS2440).
   Removed the duplicate local declaration; preview now serves 307/200 again.
   - Files touched: `src/routes/app.paycheck.tsx`.
+
+- Accounts & Balances' "Recent activity" list (`RecentActivity` in
+  app.accounts.tsx) had no visual marker for transfer legs, and the shared
+  `TransactionDetail` dialog only ever showed one "Account" field (whichever
+  side the row itself was), even for a transfer. Fixed by reusing existing
+  patterns rather than inventing new ones:
+  - Added the same `Badge variant="outline">Transfer</Badge>` that
+    app.transactions.tsx's own list already shows per-row
+    (`t.transfer_group_id`) to Accounts' Recent Activity rows too.
+  - `TransactionDetail` (shared by both screens) now looks up the other leg
+    by `transfer_group_id` and, when found, replaces the single "Account"
+    field with "From"/"To" fields — sign of `amount` decides which (ADR-056:
+    negative = from-account, positive = to-account) — plus a "Transfer"
+    badge next to the Status badge. Non-transfer rows unaffected (still show
+    plain "Account").
+  - Files touched: `src/routes/app.accounts.tsx`,
+    `src/routes/app.transactions.tsx`. No schema change, no ADR (pure reuse
+    of the existing transfer_group_id/badge convention, not a new decision).
+  - Next step: none open — build unverified locally (AppLocker).
