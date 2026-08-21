@@ -1135,3 +1135,89 @@
 ### Notes
 
 * No schema changes.
+
+## 2026-08-20 – ADR-037 Addendum: Bill-Side Stranded Payment Repair
+
+### Completed
+
+* Found a bill-side variant of the ADR-037 stranded-payment bug: the
+  Transactions screen's edit dialog let a linked transaction's amount/status
+  be changed via plain `useUpsertTransaction()`, bypassing
+  `applyClearedPayment()` — flipping a linked row to cleared there (instead of
+  via the bill/debt's Pay actions) left `cycle_paid_to_date` stuck while the
+  ledger showed the money cleared. Confirmed live on the "Beiers" bill.
+* `TransactionDetail`'s edit form (`app.transactions.tsx`) now disables
+  amount/status whenever the transaction is linked, with a note pointing to
+  the bill/debt's own Pay actions or Reverse.
+* New `src/components/StrandedBillRepair.tsx` (`findStrandedBillPayments` /
+  `StrandedBillRepair`) mirrors the existing debt-side repair scan for bills,
+  mounted on the Bills screen — flags a bill whose current-cycle cleared
+  ledger sum exceeds `cycle_paid_to_date` and offers a delete-and-redo repair.
+
+### Notes
+
+* No schema change. Existing desynced bill rows (Beiers confirmed; Rent
+  flagged for review, likely not actually broken) aren't retroactively fixed
+  by the code change — use the new repair panel.
+* Build/tests unverified locally (AppLocker blocks vite/tsc/vitest).
+
+## 2026-08-20 – Bill Detail: Paying Account & Clickable Transaction Detail
+
+### Completed
+
+* Bill detail's "Recent transactions" rows (`RecentBillTransactions`,
+  `app.bills.tsx`) now show a small account icon/label per row (reusing
+  `ObligationIcon` at 16px, keyed off the transaction's `account_id` →
+  account → institution) and are clickable to open the shared
+  `TransactionDetail` dialog (already reused on the Accounts screen).
+  Delete/Reverse buttons stop propagation so they don't also trigger the row
+  click.
+
+### Notes
+
+* No schema change. Build unverified locally (AppLocker).
+
+## 2026-08-20 – ADR-075: Persisted Cycle-Resolution Tag for Late Payments
+
+### Completed
+
+* Investigated a bug on the "Peacock" bill (surfaced after a StrandedBillRepair
+  cleanup + manual re-entry of a late payment): the bill's underlying data was
+  correct (due date rolled forward, `cycle_paid_to_date` 0), but the Bills page
+  showed it "cleared" with a "Reset this cycle" button instead of offering
+  Submit. Root cause: `deriveCycleInfo()` infers which cycle a linked
+  transaction belongs to purely from date windows relative to the current due
+  date — ambiguous for a payment made even one day late, which lands inside
+  the same date range the freshly-rolled next cycle also uses. Two heuristic
+  date-only fixes were explored and rejected (both break legitimate
+  on-time/partial-payment cases).
+* **ADR-075** — added `transactions.resolved_cycle_due_date` (nullable date,
+  manual SQL). `applyClearedPayment` (`payments.ts`) now tags every cleared,
+  linked, still-untagged transaction for a payable with the due date a
+  resolve just advanced past — a bulk tag inside `applyClearedPayment` itself
+  (catches direct-cleared-entry from Add Transaction and any stray earlier
+  partials), plus an explicit tag on the row `useMarkCleared` writes itself
+  (that write happens after `applyClearedPayment` returns). `deriveCycleInfo`
+  now excludes any transaction tagged with a due date earlier than the
+  payable's current due date from the "current cycle" window, regardless of
+  its raw `transaction_date`.
+* Added two regression tests in `ledger-state.test.ts` (tagged-exclusion case,
+  and the untagged/historical-data baseline). `docs/SCHEMA.md` updated with
+  the new column's own subsection.
+
+### Notes
+
+* Scoped fix only — does not touch `computeArrears`/arrears math or ADR-057's
+  payment-allocation order; a bill/debt overdue by multiple cycles still
+  resolves one cycle's due-date advance per payment, unchanged.
+* Fix is forward-only, no backfill — existing untagged transactions (like
+  Peacock's July payment) keep today's behavior until the current cycle's
+  due date naturally passes.
+* **Pending**: user must run `alter table transactions add column
+  resolved_cycle_due_date date;` in the Supabase SQL Editor before this takes
+  effect.
+* Two related gaps found but not fixed, logged in `docs/SCRATCHPAD.md`: the
+  "Total due" pay preset may double-count the current cycle's amount when
+  that cycle is itself already overdue; there's no way to pay arrears only
+  without also crediting the current cycle (by design, ADR-057).
+* Build/tests unverified locally (AppLocker blocks vite/tsc/vitest).

@@ -135,7 +135,26 @@ async function updateRow(
  * advances arrears_as_of to today. Bills cap at cycle_due + opening_arrears —
  * excess is rejected so money isn't silently left unaccounted.
  */
-export async function applyClearedPayment(p: Payable, clearedAmount: number) {
+/**
+ * ADR-075: tag every cleared, linked, still-untagged transaction for this payable
+ * with the due date a resolve just satisfied. `deriveCycleInfo` uses this to stop
+ * misattributing a late payment (dated after the due date it resolved) to the
+ * freshly-rolled next cycle's display window.
+ */
+async function tagResolvedCycle(kind: PayableKind, id: string, oldDueDate: string) {
+  const { error } = await supabase
+    .from("transactions")
+    .update({ resolved_cycle_due_date: oldDueDate })
+    .eq(linkColumn(kind), id)
+    .eq("status", "cleared")
+    .is("resolved_cycle_due_date", null);
+  if (error) throw error;
+}
+
+export async function applyClearedPayment(
+  p: Payable,
+  clearedAmount: number,
+): Promise<{ remaining_owed?: number; next_due_date?: string | null; resolved_due_date?: string }> {
   if (p.kind === "debt") {
     const debt = p.debt!;
     const remaining = Number(debt.remaining_balance ?? 0);
@@ -162,10 +181,14 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
     // Cycle satisfied: reset counters, and roll non-monthly debts forward.
     update.cycle_paid_to_date = 0;
     let nextDue: string | null = null;
+    // ADR-075: only non-monthly, non-one-time debts actually roll a due date
+    // forward — that's the only case a later payment could be misattributed to.
+    let resolvedDueDate: string | null = null;
     if (cycle === "one_time") {
       // ADR-048: a one-time charge never rolls — it closes out when it hits zero.
       update.payment_status = nextBalance === 0 ? "cleared" : "unpaid";
     } else if (cycle !== "monthly") {
+      resolvedDueDate = debt.next_due_date ?? null;
       nextDue = advanceDate(
         debt.next_due_date ?? todayISO(),
         debt.billing_cycle,
@@ -188,7 +211,8 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
     }
 
     await updateRow("debts", p.id, update);
-    return { next_due_date: nextDue };
+    if (resolvedDueDate) await tagResolvedCycle("debt", p.id, resolvedDueDate);
+    return { next_due_date: nextDue, resolved_due_date: resolvedDueDate ?? undefined };
   }
 
   const bill = p.bill!;
@@ -220,6 +244,8 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
   // Cycle satisfied — compute arrears overflow before resetting.
   const cycleCredit = remainingThisCycle;
   const overflow = Math.max(0, clearedAmount - cycleCredit);
+  // ADR-075: the due date this resolve is about to advance past.
+  const resolvedDueDate = bill.next_due_date ?? null;
   const billUpdate: Record<string, unknown> = {
     payment_status: "unpaid",
     next_due_date: advanceDate(bill.next_due_date ?? todayISO(), bill.billing_cycle, bill.cycle_interval_days),
@@ -234,7 +260,11 @@ export async function applyClearedPayment(p: Payable, clearedAmount: number) {
   }
 
   await updateRow("bills", bill.id, billUpdate);
-  return { next_due_date: billUpdate.next_due_date as string };
+  if (resolvedDueDate) await tagResolvedCycle("bill", bill.id, resolvedDueDate);
+  return {
+    next_due_date: billUpdate.next_due_date as string,
+    resolved_due_date: resolvedDueDate ?? undefined,
+  };
 }
 
 async function findLinkedTransaction(p: Payable, status?: string) {
@@ -444,10 +474,16 @@ export function useMarkCleared() {
       // ledger, instead of stranding a cleared transaction with no effect.
       const result = await applyClearedPayment(p, clearedAmount);
 
+      // ADR-075: this write happens after applyClearedPayment already ran, so
+      // it's not caught by that function's own bulk tag — tag it here if this
+      // clear resolved the cycle.
       if (existing) {
         const { error } = await supabase
           .from("transactions")
-          .update({ status: "cleared" })
+          .update({
+            status: "cleared",
+            ...(result.resolved_due_date ? { resolved_cycle_due_date: result.resolved_due_date } : {}),
+          })
           .eq("id", existing.id);
         if (error) throw error;
         // ADR-046: a fee submitted alongside this payment is still pending —
@@ -467,6 +503,7 @@ export function useMarkCleared() {
           transaction_date: date || todayISO(),
           [linkColumn(p.kind)]: p.id,
           split_group_id: groupId,
+          resolved_cycle_due_date: result.resolved_due_date ?? null,
           // ADR-065: default the place from the linked bill's/debt's own institution.
           institution_id: p.institution_id,
         });

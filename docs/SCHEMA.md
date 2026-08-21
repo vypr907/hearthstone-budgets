@@ -664,6 +664,27 @@ rather than a second linked transaction.
 
 ---
 
+## transactions.resolved_cycle_due_date (ADR-075)
+
+```sql
+transactions (
+    ...
+    resolved_cycle_due_date date  -- ADR-075: due date this transaction's clear
+                                    -- resolved, when it resolved one
+)
+```
+
+Nullable, no default, no backfill — existing rows stay untagged. Written by
+`applyClearedPayment` (`src/lib/payments.ts`) at the moment a bill/debt cycle
+resolves: every cleared, linked, still-untagged transaction for that payable
+gets tagged with the due date that just advanced past. `deriveCycleInfo`
+(`src/lib/ledger-state.ts`) excludes a transaction tagged with a due date
+earlier than the payable's current due date from the "current cycle" window,
+regardless of its raw `transaction_date` — fixes a late payment (paid after
+its own due date) from being misattributed to the next, freshly-rolled cycle.
+
+---
+
 ## bill_adjustments (ADR-058)
 
 Bills' counterpart to `debt_adjustments` — a signed, non-payment change to

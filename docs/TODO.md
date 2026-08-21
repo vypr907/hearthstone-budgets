@@ -2,6 +2,9 @@
 
 ## Known issues
 
+- [ ] ADR-075: run `alter table transactions add column resolved_cycle_due_date date;`
+      in the Supabase SQL Editor, then reload schema. Code (payments.ts, ledger-state.ts)
+      is already written and expects this column to exist.
 - [ ] Beiers bill's cycle_paid_to_date is desynced (stranded from the Transactions-edit
       gap closed 2026-08-20, ADR-037 addendum) — open the Bills screen and use the new
       "Stranded bill payments found" panel to clean it up and redo the payment. Also
@@ -16,11 +19,12 @@
 
 - [ ] Add unit tests for `projectOccurrences()` (monthly + biweekly items) alongside the existing arrears tests.
 - [ ] Fix the pre-existing `arrears.test.ts` opening-arrears failure (unrelated to recent work, still red).
-- [ ] Run the suite (blocked locally by AppLocker) to confirm the new `ledger-state.test.ts` ADR-008 netting regression test passes, and verify live: reverse a cleared bill payment, confirm the bill's cycle state drops back to `unpaid`/`partial` instead of staying `cleared`.
+- [ ] Run the suite (blocked locally by AppLocker) to confirm both `ledger-state.test.ts` regression groups pass — the ADR-008 netting test, and the new ADR-075 late-payment tagging tests — and verify live: reverse a cleared bill payment (state should drop back to `unpaid`/`partial`), and pay a bill one day late (the next cycle should show Submit, not Reset, once the SQL migration is run).
 
 ## Follow-up work
 
 - [ ] Revisit Past Due grouping as a true 3-way split now that ADR-068 labels rows Deduction-funded vs HSA-funded — the grouping itself is still binary (`debts.is_paycheck_deduction` only; bills have no equivalent field).
+- [ ] Smoke-test today's UI changes on device/Lovable (build unverified locally, AppLocker): Bills screen shows Beiers under "Stranded bill payments found" and "Clean up" works; Bill detail's Recent Transactions rows show the paying account and open `TransactionDetail` on tap.
 
 ## Standing open items
 

@@ -64,6 +64,18 @@ export function deriveCycleInfo(
         p.kind === "bill" ? p.bill?.cycle_interval_days : p.debt?.cycle_interval_days;
       const openStart = dueDate ? shiftDateSafe(dueDate, cycleName, -1, cycleDays) : monthStart;
 
+      // ADR-075: a transaction tagged with the due date it already resolved
+      // belongs to that (now past) cycle, never to a later one — exclude it
+      // regardless of where its raw transaction_date falls. Untagged
+      // transactions (existing data, or resolves that predate this column)
+      // fall through to the date-window logic below unchanged.
+      const eligible = dueDate
+        ? linked.filter((t) => {
+            const tagged = day(t.resolved_cycle_due_date);
+            return !tagged || tagged >= dueDate;
+          })
+        : linked;
+
       const between = (t: Transaction, start: string, end: string) => {
         const d = day(t.transaction_date);
         return !!d && d > start && d <= end;
@@ -83,20 +95,20 @@ export function deriveCycleInfo(
       // (possibly late) payment toward the still-open current cycle.
       const pastDue = !!dueDate && today > dueDate;
       let cycleTx = oneTime
-        ? linked
+        ? eligible
         : pastDue
-          ? linked.filter((t) => {
+          ? eligible.filter((t) => {
               const d = day(t.transaction_date);
               return !!d && d >= dueDate! && d <= today;
             })
-          : linked.filter((t) => between(t, openStart, today));
+          : eligible.filter((t) => between(t, openStart, today));
       let resolved = false;
 
 
       if (cycleTx.length === 0 && dueDate && today <= openStart) {
         // The cycle covering today may already have been resolved and rolled forward.
         const prevStart = shiftDateSafe(openStart, cycleName, -1, cycleDays);
-        const prev = linked.filter((t) => between(t, prevStart, openStart));
+        const prev = eligible.filter((t) => between(t, prevStart, openStart));
         // ADR-008: net signed amounts rather than summing absolute values, so a
         // correcting/reversal transaction offsets the payment it reverses
         // instead of double-counting alongside it.

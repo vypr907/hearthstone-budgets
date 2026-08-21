@@ -236,6 +236,8 @@ export type Transaction = {
   transfer_group_id?: string | null;
   /** ADR-053: the place this money was spent at (merchant/store). */
   institution_id?: string | null;
+  /** ADR-075: due date this transaction's clear resolved, when it resolved one. */
+  resolved_cycle_due_date?: string | null;
   created_at: string;
   updated_at: string;
 };

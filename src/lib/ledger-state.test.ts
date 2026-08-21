@@ -98,3 +98,40 @@ describe("ADR-036 cycle state (Rent 2, $609 due)", () => {
     expect(i.state).toBe("unpaid");
   });
 });
+
+describe("ADR-075 late-payment cycle tagging", () => {
+  const LATE_TODAY = "2026-08-25";
+
+  const lateTx = (over: Partial<Transaction> = {}): Transaction =>
+    ({
+      id: "late1",
+      amount: -609,
+      status: "cleared",
+      // One day after the 8/22 due date it resolved.
+      transaction_date: "2026-08-23",
+      linked_bill_id: "rent2",
+      linked_debt_id: null,
+      account_id: "acct",
+      resolved_cycle_due_date: "2026-08-22",
+      ...over,
+    }) as unknown as Transaction;
+
+  it("excludes a transaction tagged as resolving an earlier cycle from the new cycle's window", () => {
+    const i = deriveCycleInfo(
+      toPayable("bill", rent({ next_due_date: "2026-09-22" })),
+      [lateTx()],
+      LATE_TODAY,
+    );
+    expect(i.state).toBe("unpaid");
+    expect(i.clearedSum).toBe(0);
+  });
+
+  it("still misattributes an untagged transaction the same way (pre-fix/historical-data baseline)", () => {
+    const i = deriveCycleInfo(
+      toPayable("bill", rent({ next_due_date: "2026-09-22" })),
+      [lateTx({ resolved_cycle_due_date: null })],
+      LATE_TODAY,
+    );
+    expect(i.state).toBe("cleared");
+  });
+});
