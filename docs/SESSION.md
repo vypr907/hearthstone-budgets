@@ -63,3 +63,15 @@
   - Next step: draft and hand off the (now small) Lovable prompt — run the
     test suite, then smoke-test everything listed in TODO.md's "Follow-up
     work" section. Build/tests unverified locally (AppLocker).
+
+- QA pass task 1 (2026-08-21): ran the full test suite in the Lovable
+  sandbox. `src/lib/arrears.test.ts` 13/13 pass, `src/lib/ledger-state.test.ts`
+  10/10 pass (23 tests, 2 files — the only test files in the repo). Build
+  reports OK. No failures, no fixes required.
+  - Known issue (pre-existing, non-blocking, surfaced in typecheck output):
+    `src/lib/monthly-summary.ts:79` and `src/lib/paycheck-budget.ts:281`
+    both report TS2871 "This expression is always nullish". Not a
+    regression from the ADR-075/076/077 work; logged for a later cleanup.
+  - Tasks 2-8 are live smoke tests and are blocked pending a throwaway
+    household login — the sandbox cannot mint a session for the
+    self-managed Supabase project.
