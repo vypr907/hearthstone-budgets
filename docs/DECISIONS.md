@@ -2386,6 +2386,5 @@ overflow handled entirely by the existing arrears mechanism, unchanged.
 
 Extends: ADR-036.
 
-Status: Decided 2026-08-20. Implemented 2026-08-20 — pending the SQL migration being
-run manually in the Supabase SQL Editor (`alter table transactions add column
-resolved_cycle_due_date date;`).
+Status: Decided 2026-08-20. Implemented 2026-08-20. SQL run 2026-08-21 (verified live:
+`transactions.resolved_cycle_due_date` exists, nullable date).

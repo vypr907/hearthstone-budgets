@@ -61,7 +61,7 @@ Private shared household budget and debt-payoff Android application migrated fro
   - Tooling: a read-only Supabase MCP server is connected (project-scoped, `.mcp.json`) for direct schema/data verification — no write access, migrations still go through the manual Supabase SQL Editor
   - ADR-037 addendum complete: a second, UI-side cause of the stranded-payment symptom found on bills (Transactions screen's edit dialog could change a linked transaction's amount/status, bypassing `applyClearedPayment`) — now locked out; new `StrandedBillRepair` mirrors the existing debt-side repair scan, mounted on the Bills screen
   - Bill detail's Recent Transactions rows show the paying account (icon/label) and open the shared `TransactionDetail` dialog on tap
-  - ADR-075 complete (code side): `transactions.resolved_cycle_due_date` tags which cycle a cleared payment resolved, so `deriveCycleInfo()` stops misattributing a late payment to the next, freshly-rolled cycle; pending the manual SQL migration adding the column
+  - ADR-075 complete: `transactions.resolved_cycle_due_date` tags which cycle a cleared payment resolved, so `deriveCycleInfo()` stops misattributing a late payment to the next, freshly-rolled cycle; SQL migration run and verified live 2026-08-21
 - Phase 12 not started: Wrap as a Real Android App (Capacitor)
 - Phase 12 not started: Publish to Google Play (Internal Testing)
 - Phase 13 not started: Cutover: Retire the Sheet

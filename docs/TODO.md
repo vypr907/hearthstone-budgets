@@ -2,9 +2,6 @@
 
 ## Known issues
 
-- [ ] ADR-075: run `alter table transactions add column resolved_cycle_due_date date;`
-      in the Supabase SQL Editor, then reload schema. Code (payments.ts, ledger-state.ts)
-      is already written and expects this column to exist.
 - [ ] Beiers bill's cycle_paid_to_date is desynced (stranded from the Transactions-edit
       gap closed 2026-08-20, ADR-037 addendum) — open the Bills screen and use the new
       "Stranded bill payments found" panel to clean it up and redo the payment. Also
