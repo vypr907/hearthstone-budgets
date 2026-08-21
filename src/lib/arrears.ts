@@ -139,25 +139,23 @@ export function priorCyclesArrears(p: Payable, today = todayISO()): number {
 
 /**
  * ADR-076: the `resolved_cycle_due_date` tag for a payment logged directly
- * against arrears — the oldest missed cycle it's covering, or (when nothing's
- * live-missed, e.g. a manual carry-in only) the current cycle's own opening
- * date. Either way this must be STRICTLY BEFORE the payable's current due
- * date, so `deriveCycleInfo` (ADR-075, `tagged >= dueDate`) excludes it from
- * that cycle's window.
+ * against arrears — always one cycle before the payable's current due date,
+ * so `deriveCycleInfo` (ADR-075, `tagged >= dueDate`) excludes it from the
+ * current cycle's window.
  *
- * Fixed 2026-08-21: when the current cycle is ITSELF overdue, the walk's first
- * iteration makes `oldestMissedDate` equal the current due date, so the tag
- * landed inside the current cycle's window — the arrears payment then showed
- * up as a partial payment of the current cycle AND tripped the stranded-payment
- * repair panel (cleared in the ledger, never credited to cycle_paid_to_date).
- * Any candidate on/after the current due date now falls back to one cycle
- * before it.
+ * Deliberately NOT `computeArrears(...).oldestMissedDate`: that walk always
+ * starts AT the current due date (`payableDueDate(p)` — the same value used
+ * as the walk's own `start`), so whenever it's set at all it's >= the current
+ * due date, never before it. Fixed 2026-08-21: an earlier version returned it
+ * directly, so a payable whose current cycle was ITSELF overdue tagged the
+ * arrears payment with the current due date — landing inside the current
+ * cycle's own window. The payment then read as a partial payment of the
+ * current cycle AND tripped the stranded-payment repair panel (cleared in
+ * the ledger, never credited to cycle_paid_to_date).
  */
 export function arrearsPaymentTag(p: Payable, today = todayISO()): string | null {
-  const a = computeArrears(p, today);
   const dueDate = payableDueDate(p);
-  if (a.oldestMissedDate && dueDate && a.oldestMissedDate < dueDate) return a.oldestMissedDate;
-  if (!dueDate) return a.oldestMissedDate;
+  if (!dueDate) return computeArrears(p, today).oldestMissedDate;
   const row = p.kind === "bill" ? p.bill : p.debt;
   const cycle = (row?.billing_cycle ?? "monthly").toLowerCase();
   const intervalDays = row?.cycle_interval_days;

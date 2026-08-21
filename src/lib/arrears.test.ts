@@ -196,13 +196,15 @@ describe("priorCyclesArrears (ADR-076)", () => {
 });
 
 describe("arrearsPaymentTag (ADR-076)", () => {
-  it("tags with the oldest missed cycle when one exists that predates the current due date", () => {
-    // Due date already rolled to Feb, Jan still missed → Jan is strictly older.
+  it("always lands one cycle before the current due date, even with live-missed cycles present", () => {
+    // The arrears walk starts AT next_due_date, so oldestMissedDate (when
+    // set) is always >= the current due date, never before it — confirms
+    // the tag doesn't leak that value even when cycles are live-missed.
     const tag = arrearsPaymentTag(
       toPayable("bill", bill({ next_due_date: "2026-02-10", opening_arrears: 100 })),
       "2026-03-15",
     );
-    expect(tag).toBe("2026-01-10");
+    expect(tag).toBe("2026-01-10"); // one month before the current (Feb) due date
   });
 
   it("falls back to the current cycle's own opening date when nothing is live-missed", () => {
