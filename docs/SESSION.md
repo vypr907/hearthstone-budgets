@@ -185,3 +185,43 @@
   approved. Pure DB trigger, no app code changes — the existing checks
   already read `updated_at`, they'll just start seeing real values once the
   trigger exists. SQL migration given to the user, not yet run.
+
+- All three pending SQL migrations (ADR-078, ADR-079, the one-time Beiers
+  fix) confirmed run and verified live via the read-only MCP. Beiers'
+  "Credit now" click was confirmed to have succeeded (transaction tagged
+  `resolved_cycle_due_date=2026-08-01`, bill correctly rolled to 9/1) —
+  cleared the stranded panel.
+
+- Walked the user through the same `cycle_amount_due=null` root cause on two
+  more bills (Prose: $59.18 base vs $125.54 actually charged; ATT: $212.33
+  vs $256.38) — same one-time SQL pattern each time (set `cycle_amount_due`
+  to match the real cleared amount, then click "Credit now"). No code
+  changes for these two; genuinely just missing adjustment/overage data,
+  same as Beiers.
+
+- Found and fixed a real bug in "Credit now" while working through the Rent
+  (via Flex) bill: `StrandedBillRepair`/`StrandedDebtRepair`'s `credit`
+  mutation passed the group's full `clearedSum` (every cleared transaction
+  in the bill's current ledger window) to `applyClearedPayment`, which
+  treats its amount as NEW money layered on top of `cycle_paid_to_date` —
+  double-crediting whatever portion of that window was already correctly
+  credited. Only surfaced now because Rent was the first case with a
+  PARTIALLY-credited window ($1,250 of $1,700 already correct, one more
+  $450 transaction stranded) — every earlier case (Beiers, Prose, ATT) had
+  `cycle_paid_to_date=0`, where the bug is invisible (full sum == the delta).
+  Fixed both repair panels to credit `clearedSum - cycle_paid_to_date`
+  instead. Debts can't currently hit this (`findStrandedDebtPayments`
+  requires `cycle_paid_to_date === 0` to flag at all), fixed there too for
+  consistency in case that condition ever loosens.
+  - Gave the user a direct SQL fix for Rent (bypasses the not-yet-deployed
+    code fix): resolves the August cycle correctly (only $450 was actually
+    missing) and tags all 5 of Rent's untagged cleared transactions,
+    including two from July that predate the current window and were
+    already effectively resolved.
+  - Files touched: `src/components/StrandedBillRepair.tsx`,
+    `src/components/StrandedDebtRepair.tsx`. No schema change.
+  - Next step: once redeployed, worth a broader sweep — a SQL scan this
+    session found ~15+ bills household-wide with untagged cleared
+    transactions never credited to `cycle_paid_to_date` (most with
+    `cycle_paid_to_date=0`, where "Credit now" should already work
+    correctly as-is; not yet individually verified).

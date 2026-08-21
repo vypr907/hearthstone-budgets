@@ -79,10 +79,20 @@ export function StrandedBillRepair({ bills }: { bills: Bill[] }) {
   const qc = useQueryClient();
   // ADR-077: apply the stranded amount to the bill via the same crediting
   // path Submit/Clear uses, leaving the transactions themselves untouched.
+  //
+  // Fixed 2026-08-22: must credit clearedSum minus whatever cycle_paid_to_date
+  // ALREADY reflects, not the raw clearedSum. A bill can be flagged with some
+  // of its in-window cleared transactions already correctly credited (e.g.
+  // two of three) and only the rest stranded — applyClearedPayment treats its
+  // amount as NEW money on top of cycle_paid_to_date, so passing the full
+  // window total double-credits the already-correct portion and can throw
+  // ("exceeds what's owed") or overcredit the cycle.
   const credit = useMutation({
     mutationFn: async (g: StrandedBillGroup) => {
       const payable = toPayable("bill", g.bill);
-      await applyClearedPayment(payable, g.clearedSum, priorCyclesArrears(payable));
+      const alreadyCredited = Number(g.bill.cycle_paid_to_date ?? 0);
+      const toCredit = Math.max(0, g.clearedSum - alreadyCredited);
+      await applyClearedPayment(payable, toCredit, priorCyclesArrears(payable));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bills"] });

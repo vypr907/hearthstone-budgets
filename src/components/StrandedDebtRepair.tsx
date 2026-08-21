@@ -90,10 +90,18 @@ export function StrandedDebtRepair({ debts }: { debts: Debt[] }) {
   const qc = useQueryClient();
   // ADR-077: apply the stranded amount to the debt via the same crediting
   // path Submit/Clear uses, leaving the transactions themselves untouched.
+  //
+  // Fixed 2026-08-22 (matches the same StrandedBillRepair fix): credit
+  // clearedSum minus whatever cycle_paid_to_date already reflects, not the
+  // raw clearedSum — findStrandedDebtPayments currently only flags debts
+  // with cycle_paid_to_date === 0, so this is a no-op today, but keeping the
+  // math consistent with the bill side in case that condition ever loosens.
   const credit = useMutation({
     mutationFn: async (g: StrandedGroup) => {
       const payable = toPayable("debt", g.debt);
-      await applyClearedPayment(payable, g.clearedSum, priorCyclesArrears(payable));
+      const alreadyCredited = Number(g.debt.cycle_paid_to_date ?? 0);
+      const toCredit = Math.max(0, g.clearedSum - alreadyCredited);
+      await applyClearedPayment(payable, toCredit, priorCyclesArrears(payable));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["debts"] });
