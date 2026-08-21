@@ -380,3 +380,19 @@
     No schema change (account_type was always free text, still is — just
     a fixed list in the UI, same as institution_type), no ADR.
   - Next step: none — build unverified locally (AppLocker).
+
+- Diagnosed "Stash - Invest" ($5/paycheck, biweekly) via the read-only MCP:
+  same pattern as SoFi-Invest — a Bill single-sided debiting checking, never
+  crediting the destination account. Simpler than SoFi (no duplicate rows,
+  only one cleared payment so far, 8/4). The three Stash accounts the user
+  mentioned needing to add (Personal Portfolio/invest, Smart
+  Portfolio/invest, Roth IRA/retirement) already exist in the DB — nothing
+  to build there. User confirmed the $5 goes to Personal Portfolio. Gave
+  the user a SQL migration (not yet run) that converts the existing cleared
+  debit into a real transfer pair (paired +$5 credit into Personal
+  Portfolio, shared transfer_group_id, linked_bill_id cleared) and deletes
+  the Stash - Invest bill row — checked first for FK dependents
+  (bill_adjustments, pay_period_allocations: none) before drafting the
+  delete. No code changed.
+  - Next step: user runs the SQL migration, then verify live via the
+    read-only MCP (same as SoFi-Invest's confirmation).
