@@ -288,3 +288,9 @@
   - Next step: none open on this request — build unverified locally
     (AppLocker, per CLAUDE.md); worth a quick look at both pieces (overdue
     inclusion + status icons) live before considering this fully closed.
+
+- Fixed a typecheck error that was breaking the dev preview with an HTTP 500:
+  `src/routes/app.paycheck.tsx` had both an import of `todayISO` from
+  `@/lib/paycheck-budget` and a local function with the same name (TS2440).
+  Removed the duplicate local declaration; preview now serves 307/200 again.
+  - Files touched: `src/routes/app.paycheck.tsx`.
