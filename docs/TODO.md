@@ -28,9 +28,16 @@
       app correctly excludes them as belonging to an already-superseded cycle — not
       stranded. Confirmed by the user: none of these show in the Stranded panel.
       Trust the app's panel over ad-hoc SQL scans for this going forward.
-      - One exception worth a real look: **SoFi-Invest** — its transaction (7/29) lands
-        just inside the current window relative to next_due_date (8/27), unlike the
-        others. Worth checking whether it actually shows in Stranded.
+      - The one flagged exception was real: **SoFi-Invest** wasn't a mis-modeled bill,
+        it was a mis-modeled *transfer* — a biweekly Savings -> Robo auto-transfer
+        tracked as a Bill, which only ever debits the source account; Robo (the
+        investment account) was never credited. Found a real duplicate too (two
+        identical $5 debits, same date). One-time SQL fix given to the user
+        2026-08-22: delete the duplicate, convert the remaining debit into a real
+        transfer (paired credit into Robo via `transfer_group_id`), delete the
+        SoFi-Invest bill row (confirmed nothing else references it). Going forward,
+        log this and any future auto-transfers via Add Transaction -> Transfer, not
+        as a Bill. Not yet confirmed run.
 
 ## Follow-up work
 

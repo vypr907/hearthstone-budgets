@@ -1,4 +1,13 @@
 # Features I want
+- [ ] [med] recurring transfers with a due-date reminder — found 2026-08-22 via "SoFi
+      - Invest" (a biweekly Savings -> Robo auto-transfer that had been tracked as a
+      Bill for the reminder/schedule, but Bill payments are single-sided and never
+      credited the destination account, silently under-crediting it). Transfer mode
+      (ADR-056) correctly double-entries the money but has no recurrence/reminder
+      attached — Bills have the reminder but are single-sided. Checked whether ADR-038's
+      envelope "Set Aside" could bridge the two: it can't, it only credits a savings
+      goal, not a bill's own cycle. Real gap, not scoped — needs its own ADR if pursued
+      (how would "due"/"paid" even work for a transfer with no external vendor?).
 - [x] [high] per-paycheck budgeting
 - [x] [med] future budgeting
 - [ ] [med] bill calendar (sync with Google calendar)
