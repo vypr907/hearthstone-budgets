@@ -3,6 +3,7 @@ import {
   supabase,
   type Bill,
   type Debt,
+  type AutoTransfer,
   type DebtAdjustment,
   type BillAdjustment,
   type Account,
@@ -224,6 +225,58 @@ export function useDeleteBill() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bills"] }),
+  });
+}
+
+/** ADR-081: recurring auto-transfers between the household's own accounts. */
+export function useAutoTransfers() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["auto_transfers", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<AutoTransfer[]> => {
+      const { data, error } = await supabase
+        .from("auto_transfers")
+        .select("*")
+        .eq("household_id", householdId!)
+        .order("next_due_date", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as AutoTransfer[];
+    },
+  });
+}
+
+export function useUpsertAutoTransfer() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      at: Partial<AutoTransfer> & {
+        name: string;
+        from_account_id: string;
+        to_account_id: string;
+        amount: number;
+      },
+    ) => {
+      const payload = { ...at, household_id: householdId } as Record<string, unknown>;
+      return saveWithOptionalColumns<AutoTransfer>(payload, async (p) =>
+        at.id
+          ? await supabase.from("auto_transfers").update(p).eq("id", at.id!).select("*").single()
+          : await supabase.from("auto_transfers").insert(p).select("*").single(),
+      );
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["auto_transfers"] }),
+  });
+}
+
+export function useDeleteAutoTransfer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("auto_transfers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["auto_transfers"] }),
   });
 }
 

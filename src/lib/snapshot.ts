@@ -241,7 +241,9 @@ export function buildPeriodProgress(
   debts: Debt[],
   period: { start: string; end: string; label: string },
 ): PeriodProgress {
-  const rows = obligationsInRange(bills, debts, period.start, period.end);
+  // ADR-081: auto-transfers aren't surfaced on this screen — [] keeps this
+  // period-progress figure scoped to bills/debts only, unchanged behavior.
+  const rows = obligationsInRange(bills, debts, [], period.start, period.end);
   const billById = new Map(bills.map((b) => [b.id, b]));
   const debtById = new Map(debts.map((d) => [d.id, d]));
   let total = 0;

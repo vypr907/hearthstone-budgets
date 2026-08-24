@@ -2,6 +2,16 @@
 
 ## Follow-up work
 
+- [ ] ADR-081 (Auto-Transfer tracking) needs a build/browser smoke test before it's
+      considered done — code landed (schema, data layer, Bills screen section,
+      Paycheck Budget, Dashboard card) but Windows AppLocker blocks local
+      `vite`/`tsc`, so it hasn't been compiled or clicked through, and the Supabase
+      MCP is read-only so no test data could be written to trace it end-to-end
+      from this side. User to add a real (or throwaway) auto-transfer in the app,
+      hit "Process transfer," and confirm: the transaction pair lands with the
+      right signs/`transfer_group_id`/`linked_auto_transfer_id`, `next_due_date`
+      advances correctly, and it shows up on Paycheck Budget/Dashboard totals.
+
 - [ ] Bug found 2026-08-21, not yet fixed: resetting/undoing a bill's cycle
       (`useResetCycle`/`useMarkUnpaid`) writes `cycle_amount_due: null` unconditionally,
       with no awareness of any active `bill_adjustments` — silently drops an

@@ -1,4 +1,4 @@
-import type { Bill, Category, Debt, IncomeEvent, IncomeSource, Transaction } from "./supabase";
+import type { AutoTransfer, Bill, Category, Debt, IncomeEvent, IncomeSource, Transaction } from "./supabase";
 import { debtDueDate, shiftDateSafe } from "./format";
 
 export function todayISO() {
@@ -80,7 +80,7 @@ export function inRange(date: string | null | undefined, start: string, end: str
 
 export type Obligation = {
   id: string;
-  kind: "bill" | "debt";
+  kind: "bill" | "debt" | "auto_transfer";
   name: string;
   dueDate: string;
   amount: number;
@@ -146,14 +146,15 @@ function isDueOrOverdueInPeriod(
 }
 
 /**
- * Bills and debts whose effective due date lands inside the pay period, or
- * is still overdue from before it (see `isDueOrOverdueInPeriod`).
- * Paycheck-deducted debts (ADR-032) are excluded — list them separately with
- * `deductedObligationsInRange()`.
+ * Bills, debts and auto-transfers (ADR-081) whose effective due date lands
+ * inside the pay period, or is still overdue from before it (see
+ * `isDueOrOverdueInPeriod`). Paycheck-deducted debts (ADR-032) are excluded —
+ * list them separately with `deductedObligationsInRange()`.
  */
 export function obligationsInRange(
   bills: Bill[],
   debts: Debt[],
+  autoTransfers: AutoTransfer[],
   start: string,
   end: string,
   /** ADR-060: when set, project recurrences forward through this date. */
@@ -205,6 +206,27 @@ export function obligationsInRange(
           name: d.name,
           dueDate: p,
           amount: Number(d.minimum_payment ?? 0),
+          projected: true,
+        });
+      }
+    }
+  }
+  for (const at of autoTransfers) {
+    if (at.is_active === false) continue;
+    const due = at.next_due_date?.slice(0, 10) ?? null;
+    const amount = Number(at.amount ?? 0);
+    if (isDueOrOverdueInPeriod(due, start, end, today)) {
+      rows.push({ id: at.id, kind: "auto_transfer", name: at.name, dueDate: due!, amount });
+    }
+    if (through) {
+      for (const p of projectOccurrences(at, due, through)) {
+        if (!inRange(p, start, end)) continue;
+        rows.push({
+          id: at.id,
+          kind: "auto_transfer",
+          name: at.name,
+          dueDate: p,
+          amount,
           projected: true,
         });
       }

@@ -145,6 +145,25 @@ export type Debt = {
   updated_at: string;
 };
 
+/** ADR-081: a recurring auto-transfer between two of the household's own accounts. */
+export type AutoTransfer = {
+  id: string;
+  household_id: string;
+  name: string;
+  from_account_id: string;
+  to_account_id: string;
+  amount: number;
+  category_id: string | null;
+  next_due_date: string;
+  billing_cycle: BillingCycle;
+  /** ADR-040: interval in days when billing_cycle is "custom". */
+  cycle_interval_days?: number | null;
+  is_active: boolean | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Account = {
   id: string;
   household_id: string;
@@ -238,6 +257,8 @@ export type Transaction = {
   split_group_id?: string | null;
   /** ADR-056: shared by both sides of a transfer or advance deposit. */
   transfer_group_id?: string | null;
+  /** ADR-081: set on the credit leg when a transfer processes a recurring auto-transfer. */
+  linked_auto_transfer_id?: string | null;
   /** ADR-053: the place this money was spent at (merchant/store). */
   institution_id?: string | null;
   /** ADR-075: due date this transaction's clear resolved, when it resolved one. */

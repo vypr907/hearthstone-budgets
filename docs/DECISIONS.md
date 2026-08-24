@@ -2621,3 +2621,65 @@ screens pick it up, and that overdue items should keep appearing "every period u
 it's actually paid" rather than being special-cased to only the current period.
 
 Status: Decided 2026-08-22. Implemented 2026-08-22.
+
+## ADR-081: Auto-Transfer Tracking (Recurring Transfers with Due-Date Reminder)
+Decision:
+New `auto_transfers` table tracks recurring auto-transfers between the household's own
+accounts (e.g. SoFi/Stash biweekly investing sweeps) as their own item type, distinct
+from Bills and from ad-hoc Transfers. Columns mirror `bills`' scheduling fields
+(`next_due_date`, `billing_cycle`, `cycle_interval_days`, `is_active`) plus
+`from_account_id`/`to_account_id`/`amount`/`category_id`, but omit all
+arrears/partial-payment columns (`cycle_amount_due`, `cycle_paid_to_date`,
+`opening_arrears`, etc.) — an auto-transfer either happened this cycle or it didn't,
+there is no partial state.
+
+`transactions` gains `linked_auto_transfer_id uuid references auto_transfers(id)`,
+following the same self-tagging pattern as `linked_bill_id`/`linked_debt_id`. A
+"Process transfer" action writes a normal ADR-056 transfer pair (two cleared
+transactions sharing `transfer_group_id`, debit on `from_account_id`, credit on
+`to_account_id`) but tags **only the credit leg** with `linked_auto_transfer_id`. This
+lets the existing `deriveCycleInfo()` ledger-state machinery (ADR-036) work unmodified —
+it sums cleared amounts linked to the payable, exactly as it does for a bill's
+single-sided payment — so an auto-transfer collapses naturally to two ledger states,
+unpaid ("not yet processed") and cleared ("processed"), reusing the same 4-state
+function without a partial/pending case ever firing.
+
+`PayableKind` extends to `"bill" | "debt" | "auto_transfer"`, and `obligationsInRange()`
+(ADR-060/080) gains a third loop over active auto-transfers so they count toward "due
+this period" on Paycheck Budget and the Dashboard hero, and inherit ADR-080's "stays due
+every period until processed" behavior for free.
+
+Auto-transfers are deliberately kept visually and lexically separate from Bills/Debts
+everywhere they surface (own section on the Bills screen, own Dashboard card, "🔁
+Auto-transfer" kind tag on Paycheck Budget rows) and use softer "check on this" copy
+instead of red past-due/arrears language when overdue, since nothing is actually owed to
+a vendor — the transfer already happened at the bank; the app is just unconfirmed.
+
+Reason:
+Surfaced by the 2026-08-20/21 SoFi-Invest/Stash-Invest cleanup: both had been
+mis-modeled as Bills to get a due-date reminder, but Bill payments are single-sided and
+never credited the destination account, silently under-crediting it. ADR-056's Transfer
+mode correctly double-enters the money but has no recurrence or reminder attached.
+Logged as an unscoped gap in `docs/SCRATCHPAD.md` (2026-08-22) with the open question of
+what "due"/"paid" means for a transfer with no external vendor — resolved here by
+reusing the existing bill-scheduling and ledger-state machinery structurally, while
+keeping the user-facing language honest about there being no vendor and no real
+"overdue" money.
+
+Status: Decided 2026-08-24. Schema migration run and confirmed live via the
+read-only MCP. Code landed (data layer, Bills screen section, Paycheck Budget,
+Dashboard card) — see the implementation note below for one deliberate
+deviation from this decision's original wording. Not yet browser-verified
+(Windows AppLocker blocks local `vite`/`tsc`); see docs/TODO.md.
+
+Implementation note (2026-08-24): rather than extending the existing
+`Payable`/`PayableKind`/`deriveCycleInfo` machinery in `payments.ts`/
+`ledger-state.ts` to a third kind, auto-transfers got a parallel, dedicated
+module (`src/lib/auto-transfers.ts`) instead. That existing machinery turned
+out to be deeply bill/debt-specific (ternaries throughout for arrears/
+partial/pending/fee logic that doesn't apply here), so threading a third kind
+through it would have been a much larger, riskier change than the ADR's
+original wording assumed. The dedicated module still reuses the same
+ledger-state *pattern* (a `CycleInfo`-shaped return, the same due-window/
+resolved-lookback logic, `stateVisual()` for presentation) — just as a
+sibling implementation rather than an inline extension.

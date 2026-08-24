@@ -875,3 +875,51 @@ This trigger makes it actually reflect the last write, which `findStrandedBillPa
 `findStrandedDebtPayments` (dedup guard) and `computeArrears`'s monthly `clearedRecently`
 check both depend on. No column added — this only changes when `updated_at` gets
 written, not the schema shape.
+
+---
+
+## auto_transfers (ADR-081)
+
+```sql
+auto_transfers (
+    id uuid primary key default gen_random_uuid(),
+    household_id uuid references households(id) on delete cascade,
+    name text not null,
+    from_account_id uuid references accounts(id) not null,
+    to_account_id uuid references accounts(id) not null,
+    amount numeric not null,
+    category_id uuid references categories(id),
+    next_due_date date not null,
+    billing_cycle text not null,
+    cycle_interval_days integer,
+    is_active boolean default true,
+    notes text,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+)
+```
+
+New table for recurring auto-transfers between the household's own accounts (e.g.
+SoFi/Stash biweekly investing sweeps — see the 2026-08-20/21 SoFi-Invest/Stash-Invest
+cleanup that surfaced the gap). Deliberately has no arrears/partial-payment columns
+(`cycle_amount_due`, `cycle_paid_to_date`, `opening_arrears`, etc.) — an auto-transfer
+either processed this cycle or it didn't, there's no partial state. `billing_cycle`/
+`cycle_interval_days` reuse the same vocabulary as `bills`/`debts`. Covered by the same
+`set_updated_at()` trigger (ADR-079) as `bills`/`debts`.
+
+## transactions.linked_auto_transfer_id (ADR-081)
+
+```sql
+transactions (
+    ...
+    linked_auto_transfer_id uuid references auto_transfers(id)
+)
+```
+
+"Process transfer" writes a normal ADR-056 transfer pair (two cleared transactions
+sharing `transfer_group_id`) but tags **only the credit (destination) leg** with
+`linked_auto_transfer_id` — mirroring how a single bill payment carries `linked_bill_id`,
+so `deriveCycleInfo`-style ledger-state logic (a stripped-down version lives in
+`src/lib/auto-transfers.ts`'s `deriveAutoTransferState`) can find it and compare against
+the auto-transfer's due amount, the same way it does for a bill's single-sided payment.
+The debit (source) leg stays a plain, unlinked transfer leg like any other transfer.

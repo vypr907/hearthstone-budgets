@@ -8,6 +8,7 @@ import {
   categoryDomain,
   useAccounts,
   useAllAccountBalances,
+  useAutoTransfers,
   useBills,
   useCategories,
   useDebts,
@@ -15,6 +16,7 @@ import {
   useSpendingBudgets,
   useTransactions,
 } from "@/lib/data-hooks";
+import { deriveAutoTransferState, isAutoTransferOverdue } from "@/lib/auto-transfers";
 import { formatMoney, isDateOverdue, debtDueDate } from "@/lib/format";
 import {
   accountTypeIs,
@@ -41,7 +43,7 @@ import {
   obligationsInRange,
   periodRange,
 } from "@/lib/paycheck-budget";
-import { categoryVisual } from "@/lib/visual-meta";
+import { categoryVisual, AUTO_TRANSFER_ICON } from "@/lib/visual-meta";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 import { EmojiIcon, ItemBar, ProgressRing, emojiFor, itemColor } from "@/components/viz";
@@ -94,6 +96,7 @@ export const Route = createFileRoute("/app/")({
 function Dashboard() {
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
+  const { data: autoTransfers = [] } = useAutoTransfers();
   const { data: accounts = [] } = useAccounts();
   const { data: latest = {} } = useLatestBalances();
   const { data: transactions = [] } = useTransactions();
@@ -309,20 +312,27 @@ function Dashboard() {
     return { start, end, label: "month" as const };
   }, [sources, events]);
 
-  /** Bills and debts due inside the period (paycheck-deducted debts excluded). */
+  /** Bills, debts and auto-transfers due inside the period (paycheck-deducted debts excluded). */
   const periodObligations = useMemo(
-    () => obligationsInRange(bills, debts, period.start, period.end),
-    [bills, debts, period],
+    () => obligationsInRange(bills, debts, autoTransfers, period.start, period.end),
+    [bills, debts, autoTransfers, period],
   );
 
   const periodTotals = useMemo(() => {
     let billTotal = 0;
     let debtTotal = 0;
+    let autoTransferTotal = 0;
     for (const o of periodObligations) {
       if (o.kind === "bill") billTotal += o.amount;
-      else debtTotal += o.amount;
+      else if (o.kind === "debt") debtTotal += o.amount;
+      else autoTransferTotal += o.amount;
     }
-    return { bills: billTotal, debts: debtTotal, total: billTotal + debtTotal };
+    return {
+      bills: billTotal,
+      debts: debtTotal,
+      autoTransfers: autoTransferTotal,
+      total: billTotal + debtTotal + autoTransferTotal,
+    };
   }, [periodObligations]);
 
   /**
@@ -428,7 +438,15 @@ function Dashboard() {
           items: [] as Item[],
         };
       g.total += amount;
-      g.items.push({ id: o.id, kind: o.kind, name: o.name, dueDate: o.dueDate, amount });
+      // Safe: auto_transfer rows never reach here — `row` only resolves for
+      // bill/debt ids above, so a miss (undefined row) already `continue`d.
+      g.items.push({
+        id: o.id,
+        kind: o.kind as "bill" | "debt",
+        name: o.name,
+        dueDate: o.dueDate,
+        amount,
+      });
       groups.set(key, g);
       total += amount;
     }
@@ -483,6 +501,41 @@ function Dashboard() {
     .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
   const overdueTotal = overdue.reduce((sum, o) => sum + o.amount, 0);
+
+  /**
+   * ADR-081: auto-transfers not yet processed this cycle, deliberately kept
+   * off the "Past due" list above — there's no vendor and nothing is
+   * actually owed, so overdue ones get a soft "check on this" flag instead
+   * of red arrears money. Anything already processed this cycle drops off
+   * the list; there's nothing left to remind about.
+   */
+  const AUTO_TRANSFER_REMINDER_DAYS = 3;
+  const autoTransferReminders = useMemo(() => {
+    const today = todayISO();
+    // Same UTC-component date-diff as snapshot.ts's daysBetween — never
+    // `new Date(dateString)`, which parses a date-only string as UTC
+    // midnight and reads a day early in negative-UTC-offset timezones.
+    const daysUntil = (dateStr: string) => {
+      const [ay, am, ad] = today.split("-").map(Number);
+      const [by, bm, bd] = dateStr.split("-").map(Number);
+      return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+    };
+    return autoTransfers
+      .filter((a) => a.is_active !== false)
+      .map((a) => {
+        const info = deriveAutoTransferState(a, transactions, today);
+        const overdueFlag = isAutoTransferOverdue(a, info, today);
+        const daysUntilDue = daysUntil(a.next_due_date);
+        return {
+          at: a,
+          state: info.state,
+          overdue: overdueFlag,
+          dueSoon: !overdueFlag && info.state === "unpaid" && daysUntilDue <= AUTO_TRANSFER_REMINDER_DAYS,
+        };
+      })
+      .filter((r) => r.state === "unpaid")
+      .sort((a, b) => a.at.next_due_date.localeCompare(b.at.next_due_date));
+  }, [autoTransfers, transactions]);
 
   /** ADR-032: payroll/HSA-deducted debts read differently from ordinary arrears. */
   const deductionDebtIds = new Set(
@@ -550,11 +603,12 @@ function Dashboard() {
               <span className="inline-flex items-center gap-1">
                 {formatMoney(periodTotals.total)} due this {period.label}
                 <HelpButton>
-                  Every bill and minimum debt payment due inside this{" "}
-                  {period.label} — the full amount owed on each, not what's
-                  already been paid this {period.label} and not money set
-                  aside anywhere. "Still owed this {period.label}" below is
-                  what's actually left to pay.
+                  Every bill, minimum debt payment, and auto-transfer due
+                  inside this {period.label} — the full amount owed/scheduled
+                  on each, not what's already been paid this {period.label}
+                  and not money set aside anywhere. "Still owed this{" "}
+                  {period.label}" below is what's actually left to pay
+                  (bills/debts only — auto-transfers have their own card).
                 </HelpButton>
               </span>
               <span aria-hidden>·</span>
@@ -566,7 +620,7 @@ function Dashboard() {
                 </HelpButton>
               </span>
             </p>
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-3 gap-3">
               <div className="rounded-[12px] bg-brand-foreground/15 p-3">
                 <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest opacity-80">
                   Bills this {period.label}
@@ -591,6 +645,20 @@ function Dashboard() {
                 </p>
                 <p className="text-xl font-bold tabular-nums">
                   {formatMoney(periodTotals.debts)}
+                </p>
+              </div>
+              <div className="rounded-[12px] bg-brand-foreground/15 p-3">
+                <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                  {AUTO_TRANSFER_ICON} this {period.label}
+                  <HelpButton>
+                    Recurring auto-transfers due this {period.label} (ADR-081)
+                    — money the bank moves automatically between your own
+                    accounts. Nothing is owed to anyone; this just counts
+                    toward what the paycheck needs to cover.
+                  </HelpButton>
+                </p>
+                <p className="text-xl font-bold tabular-nums">
+                  {formatMoney(periodTotals.autoTransfers)}
                 </p>
               </div>
             </div>
@@ -889,6 +957,52 @@ function Dashboard() {
             </div>
           )}
         </div>
+
+        {/* ADR-081: kept separate from Bills/Debts — no vendor, nothing owed,
+            just a reminder to confirm an auto-transfer actually landed. */}
+        {autoTransferReminders.length > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <span aria-hidden>{AUTO_TRANSFER_ICON}</span>
+                <h2 className="inline-flex items-center gap-1 text-sm font-semibold uppercase tracking-wide">
+                  Auto-Transfers
+                  <HelpButton>
+                    Recurring transfers the bank makes automatically between
+                    your own accounts. There's no vendor and nothing is
+                    actually owed — "Check on this" just means the due date
+                    passed and the app hasn't been told it happened yet.
+                  </HelpButton>
+                </h2>
+              </div>
+              <div className="space-y-2">
+                {autoTransferReminders.map((r) => (
+                  <div key={r.at.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate">{r.at.name}</span>
+                    {r.overdue ? (
+                      <span className="rounded-full bg-state-pending/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-pending">
+                        Check on this
+                      </span>
+                    ) : (
+                      <span
+                        className={
+                          r.dueSoon
+                            ? "text-xs font-medium text-state-pending"
+                            : "text-xs text-muted-foreground"
+                        }
+                      >
+                        Due {r.at.next_due_date}
+                      </span>
+                    )}
+                    <span className="shrink-0 font-medium tabular-nums">
+                      {formatMoney(Number(r.at.amount))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {monthlySummary.length > 0 && (
           <Card>

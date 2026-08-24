@@ -56,8 +56,9 @@ import {
   shiftMonth,
 } from "@/lib/data-hooks";
 import { buildActualResolver } from "@/lib/spending-actuals";
-import { useBills, useDebts } from "@/lib/data-hooks";
+import { useBills, useDebts, useAutoTransfers } from "@/lib/data-hooks";
 import { deriveCycleInfo, type CycleInfo } from "@/lib/ledger-state";
+import { deriveAutoTransferState } from "@/lib/auto-transfers";
 import { toPayable } from "@/lib/payments";
 import {
   useDeleteIncomeEvent,
@@ -140,6 +141,7 @@ function PaycheckPage() {
   const { data: categories = [] } = useCategories();
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
+  const { data: autoTransfers = [] } = useAutoTransfers();
 
   const primarySource = sources.find((s) => s.is_primary) ?? null;
   const primaryEvents = useMemo(
@@ -225,6 +227,7 @@ function PaycheckPage() {
                     primarySourceId={primarySource.id}
                     bills={bills}
                     debts={debts}
+                    autoTransfers={autoTransfers}
                     categories={categories}
                     allocations={allocations}
                   />
@@ -307,13 +310,16 @@ function ObligationStatusIcon({ info }: { info: CycleInfo }) {
 
 /** One "Due this period" row — shared by the flat Due-date list and each Category group. */
 function ObligationRow({ o, status }: { o: ObligationRowItem; status?: CycleInfo }) {
+  // ADR-081: auto-transfers get a distinct kind label so they read as a
+  // different kind of line item, even though they add to the same total.
+  const kindLabel = o.kind === "auto_transfer" ? "🔁 Auto-transfer" : o.kind;
   return (
     <div className="flex items-center justify-between gap-2 py-1 text-sm">
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="flex-1">
           {o.name}
           <span className="ml-2 text-xs text-muted-foreground">
-            {o.kind} · {o.dueDate}
+            {kindLabel} · {o.dueDate}
           </span>
           {o.projected ? (
             <span className="ml-2 inline-flex items-center gap-1">
@@ -344,6 +350,7 @@ function PeriodBudget({
   primarySourceId,
   bills,
   debts,
+  autoTransfers,
   categories,
   allocations,
 }: {
@@ -354,6 +361,7 @@ function PeriodBudget({
   primarySourceId: string;
   bills: import("@/lib/supabase").Bill[];
   debts: import("@/lib/supabase").Debt[];
+  autoTransfers: import("@/lib/supabase").AutoTransfer[];
   categories: Cat[];
   allocations: import("@/lib/supabase").PayPeriodAllocation[];
 }) {
@@ -387,8 +395,8 @@ function PeriodBudget({
   const obligations = useMemo(
     // ADR-060: project recurrences forward through the end of this period so
     // future pay periods show what will come due, marked as projected.
-    () => obligationsInRange(bills, debts, start, end, end),
-    [bills, debts, start, end],
+    () => obligationsInRange(bills, debts, autoTransfers, start, end, end),
+    [bills, debts, autoTransfers, start, end],
   );
   // ADR-080 follow-up: status icons only make sense for the period covering
   // today — a future period's bills can't have been paid yet, and a past
@@ -403,22 +411,35 @@ function PeriodBudget({
     const today = todayISO();
     const billsById = new Map(bills.map((b) => [b.id, b]));
     const debtsById = new Map(debts.map((d) => [d.id, d]));
+    const autoTransfersById = new Map(autoTransfers.map((a) => [a.id, a]));
     for (const o of obligations) {
       if (o.projected) continue; // no ledger state for a forecast, not a real cycle
+      if (o.kind === "auto_transfer") {
+        const at = autoTransfersById.get(o.id);
+        if (!at) continue;
+        map.set(obligationRowKey(o), deriveAutoTransferState(at, allTransactions, today));
+        continue;
+      }
       const item = o.kind === "bill" ? billsById.get(o.id) : debtsById.get(o.id);
       if (!item) continue;
       map.set(obligationRowKey(o), deriveCycleInfo(toPayable(o.kind, item), allTransactions, today));
     }
     return map;
-  }, [obligations, isCurrentPeriod, allTransactions, bills, debts]);
+  }, [obligations, isCurrentPeriod, allTransactions, bills, debts, autoTransfers]);
   /** "Due this period" can group by Category or Account alongside its Due Date default. */
   const [obligationsGroupBy, setObligationsGroupBy] = useState<"due" | "category" | "account">("due");
   const obligationsByCategory = useMemo(() => {
     const billCategoryId = new Map(bills.map((b) => [b.id, b.category_id]));
     const debtCategoryId = new Map(debts.map((d) => [d.id, d.category_id]));
+    const atCategoryId = new Map(autoTransfers.map((a) => [a.id, a.category_id]));
     const categoryName = new Map(categories.map((c) => [c.id, c.name]));
     const groups = groupRows(obligations, (o) => {
-      const catId = o.kind === "bill" ? billCategoryId.get(o.id) : debtCategoryId.get(o.id);
+      const catId =
+        o.kind === "bill"
+          ? billCategoryId.get(o.id)
+          : o.kind === "debt"
+            ? debtCategoryId.get(o.id)
+            : atCategoryId.get(o.id);
       return catId ?? "__none__";
     });
     return groups
@@ -429,14 +450,20 @@ function PeriodBudget({
         total: sum(rows.map((o) => o.amount)),
       }))
       .sort((a, b) => b.total - a.total);
-  }, [obligations, bills, debts, categories]);
-  /** ADR-074: which account each bill/debt is usually paid from — subtotals show what needs to be in each account. */
+  }, [obligations, bills, debts, autoTransfers, categories]);
+  /** ADR-074: which account each bill/debt is usually paid from — subtotals show what needs to be in each account. Auto-transfers use their from-account (ADR-081). */
   const obligationsByAccount = useMemo(() => {
     const billAccountId = new Map(bills.map((b) => [b.id, b.usual_payment_account_id]));
     const debtAccountId = new Map(debts.map((d) => [d.id, d.usual_payment_account_id]));
+    const atAccountId = new Map(autoTransfers.map((a) => [a.id, a.from_account_id]));
     const accountName = new Map(accounts.map((a) => [a.id, a.name]));
     const groups = groupRows(obligations, (o) => {
-      const acctId = o.kind === "bill" ? billAccountId.get(o.id) : debtAccountId.get(o.id);
+      const acctId =
+        o.kind === "bill"
+          ? billAccountId.get(o.id)
+          : o.kind === "debt"
+            ? debtAccountId.get(o.id)
+            : atAccountId.get(o.id);
       return acctId ?? "__none__";
     });
     return groups
@@ -447,7 +474,7 @@ function PeriodBudget({
         total: sum(rows.map((o) => o.amount)),
       }))
       .sort((a, b) => b.total - a.total);
-  }, [obligations, bills, debts, accounts]);
+  }, [obligations, bills, debts, autoTransfers, accounts]);
   // ADR-071: bill/debt ids with a manually planned row for this period —
   // excluded from the total below so Left-to-allocate doesn't double-
   // subtract the same payment. "Due this period"'s own list is unaffected.

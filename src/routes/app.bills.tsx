@@ -14,8 +14,18 @@ import {
   useBillAdjustments,
   useAddBillAdjustment,
   useDeleteBillAdjustment,
+  useAutoTransfers,
+  useUpsertAutoTransfer,
+  useDeleteAutoTransfer,
 } from "@/lib/data-hooks";
+import {
+  useProcessAutoTransfer,
+  useUndoAutoTransferProcess,
+  deriveAutoTransferState,
+  isAutoTransferOverdue,
+} from "@/lib/auto-transfers";
 import { formatMoney, accountLabel } from "@/lib/format";
+import { todayISO } from "@/lib/snapshot";
 import { useHouseholdDeductions } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,7 +51,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Account, Bill, BillingCycle, Transaction } from "@/lib/supabase";
+import type { Account, AutoTransfer, Bill, BillingCycle, Transaction } from "@/lib/supabase";
+import { HelpButton } from "@/components/HelpButton";
 import { TransactionDetail } from "@/routes/app.transactions";
 import { DetailGrid, DetailItem, DetailMoney, DetailText, StatusBadge } from "@/components/detail";
 import { ListControls, groupRows } from "@/components/ListControls";
@@ -53,9 +64,9 @@ import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
 import { PastDueBadge } from "@/components/PastDueBadge";
 import { PastDueEditor } from "@/components/PastDueEditor";
 import { StrandedBillRepair } from "@/components/StrandedBillRepair";
-import { ItemBar, itemColor } from "@/components/viz";
+import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
-import { formatTypeLabel } from "@/lib/visual-meta";
+import { AUTO_TRANSFER_ICON, formatTypeLabel } from "@/lib/visual-meta";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 import { format } from "date-fns";
 const ADD_INSTITUTION = "__add_institution__";
@@ -106,9 +117,11 @@ function BillsPage() {
   const { data: bills = [], isLoading } = useBills();
   const { data: categories = [] } = useCategories();
   const { data: allInstitutions = [] } = useInstitutions();
+  const { data: autoTransfers = [] } = useAutoTransfers();
   const institutionById = useInstitutionIndex(allInstitutions);
   const [editing, setEditing] = useState<Partial<Bill> | null>(null);
   const [detail, setDetail] = useState<Bill | null>(null);
+  const [editingAT, setEditingAT] = useState<Partial<AutoTransfer> | null>(null);
   const infoOf = useCycleState();
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("due");
@@ -258,8 +271,44 @@ function BillsPage() {
             </div>
           ))}
         </div>
+
+        {/* ADR-081: kept visually separate from Bills — no vendor, nothing
+            "due" to anyone, just a recurring transfer between the
+            household's own accounts. */}
+        <div className="pt-2">
+          <div className="mb-2 flex items-center gap-2">
+            <SectionLabel>{AUTO_TRANSFER_ICON} Auto-Transfers</SectionLabel>
+            <HelpButton>
+              Recurring transfers the bank makes automatically between your
+              own accounts (like a biweekly investing sweep). There's no
+              vendor and nothing is owed — "Process transfer" logs it in the
+              ledger so both accounts stay accurate.
+            </HelpButton>
+          </div>
+          <Button
+            variant="outline"
+            className="h-11 w-full"
+            onClick={() => setEditingAT({})}
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add auto-transfer
+          </Button>
+          {autoTransfers.length === 0 ? (
+            <Card className="mt-2">
+              <CardContent className="p-0">
+                <EmptyState>No auto-transfers tracked yet.</EmptyState>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="mt-2 space-y-2">
+              {autoTransfers.map((at) => (
+                <AutoTransferRow key={at.id} autoTransfer={at} onEdit={() => setEditingAT(at)} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <BillDialog bill={editing} onClose={() => setEditing(null)} />
+      <AutoTransferDialog autoTransfer={editingAT} onClose={() => setEditingAT(null)} />
       <BillDetailDialog
         bill={detail}
         onClose={() => setDetail(null)}
@@ -941,6 +990,336 @@ function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: ()
           onClose={() => setInstitutionDialogOpen(false)}
           onSaved={(id) => setInstitutionId(id)}
         />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** ADR-081: one row in the Bills screen's Auto-Transfers section. */
+function AutoTransferRow({
+  autoTransfer: at,
+  onEdit,
+}: {
+  autoTransfer: AutoTransfer;
+  onEdit: () => void;
+}) {
+  const { data: accounts = [] } = useAccounts();
+  const { data: transactions = [] } = useTransactions();
+  const processTransfer = useProcessAutoTransfer();
+  const undo = useUndoAutoTransferProcess();
+  const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "—";
+  const today = todayISO();
+  const info = useMemo(
+    () => deriveAutoTransferState(at, transactions, today),
+    [at, transactions, today],
+  );
+  const overdue = isAutoTransferOverdue(at, info, today);
+  return (
+    <Card>
+      <CardContent className="p-3">
+        <div className="flex items-start gap-3">
+          <EmojiIcon name="" fallback={AUTO_TRANSFER_ICON} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{at.name}</p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                {accountName(at.from_account_id)} → {accountName(at.to_account_id)}
+              </span>
+              <span>· {at.billing_cycle}</span>
+              <span>· Next {at.next_due_date}</span>
+              {overdue ? (
+                <span className="rounded-full bg-state-pending/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-pending">
+                  Check on this
+                </span>
+              ) : (
+                <StatusBadge status={info.state} />
+              )}
+            </div>
+          </div>
+          <p className="shrink-0 text-lg font-extrabold tabular-nums">
+            {formatMoney(Number(at.amount))}
+          </p>
+          <Button size="icon" variant="ghost" onClick={onEdit} aria-label="Edit">
+            <Pencil className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-2">
+          {info.state === "cleared" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 w-full"
+              disabled={undo.isPending}
+              onClick={async () => {
+                try {
+                  await undo.mutateAsync(at);
+                  toast.success("Undone");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                }
+              }}
+            >
+              Processed ✓ · Undo
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="h-9 w-full"
+              disabled={processTransfer.isPending}
+              onClick={async () => {
+                try {
+                  await processTransfer.mutateAsync(at);
+                  toast.success("Transfer processed");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                }
+              }}
+            >
+              Process transfer
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** ADR-081: add/edit an auto-transfer. Mirrors BillDialog, trimmed to what applies. */
+function AutoTransferDialog({
+  autoTransfer,
+  onClose,
+}: {
+  autoTransfer: Partial<AutoTransfer> | null;
+  onClose: () => void;
+}) {
+  const upsert = useUpsertAutoTransfer();
+  const del = useDeleteAutoTransfer();
+  const { data: categories = [] } = useCategories();
+  const { data: accounts = [] } = useAccounts();
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [fromAccountId, setFromAccountId] = useState("none");
+  const [toAccountId, setToAccountId] = useState("none");
+  const [nextDueDate, setNextDueDate] = useState("");
+  const [cycle, setCycle] = useState<BillingCycle>("biweekly");
+  const [categoryId, setCategoryId] = useState("none");
+  const [notes, setNotes] = useState("");
+  const [active, setActive] = useState(true);
+  const [cycleCount, setCycleCount] = useState("");
+  const [cycleUnit, setCycleUnit] = useState<CycleUnit>("days");
+  const open = autoTransfer !== null;
+  const isEdit = !!autoTransfer?.id;
+  const key = autoTransfer?.id ?? "new";
+  const [lastKey, setLastKey] = useState<string>("");
+  if (open && key !== lastKey) {
+    setLastKey(key);
+    setName(autoTransfer?.name ?? "");
+    setAmount(autoTransfer?.amount != null ? String(autoTransfer.amount) : "");
+    setFromAccountId(autoTransfer?.from_account_id ?? "none");
+    setToAccountId(autoTransfer?.to_account_id ?? "none");
+    setNextDueDate(autoTransfer?.next_due_date ?? "");
+    setCycle((autoTransfer?.billing_cycle as BillingCycle) ?? "biweekly");
+    setCategoryId(autoTransfer?.category_id ?? "none");
+    setNotes(autoTransfer?.notes ?? "");
+    setActive(autoTransfer?.is_active !== false);
+    const derived = deriveCustomInterval(autoTransfer?.cycle_interval_days);
+    setCycleCount(derived.count);
+    setCycleUnit(derived.unit);
+  }
+  if (!open && lastKey !== "") setLastKey("");
+
+  async function save() {
+    if (!name.trim() || !amount) {
+      toast.error("Name and amount are required");
+      return;
+    }
+    if (fromAccountId === "none" || toAccountId === "none") {
+      toast.error("Pick a from and to account");
+      return;
+    }
+    if (fromAccountId === toAccountId) {
+      toast.error("From and to accounts must be different");
+      return;
+    }
+    if (!nextDueDate) {
+      toast.error("Next due date is required");
+      return;
+    }
+    const intervalDays = cycle === "custom" ? toIntervalDays(cycleCount, cycleUnit) : null;
+    if (cycle === "custom" && !intervalDays) {
+      toast.error("Enter how often this repeats");
+      return;
+    }
+    try {
+      await upsert.mutateAsync({
+        id: autoTransfer?.id,
+        name: name.trim(),
+        amount: Number(amount),
+        from_account_id: fromAccountId,
+        to_account_id: toAccountId,
+        next_due_date: nextDueDate,
+        billing_cycle: cycle.trim().toLowerCase() as BillingCycle,
+        cycle_interval_days: intervalDays,
+        category_id: categoryId === "none" ? null : categoryId,
+        notes: notes || null,
+        is_active: active,
+      });
+      toast.success(isEdit ? "Auto-transfer updated" : "Auto-transfer added");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+  async function handleDelete() {
+    if (!autoTransfer?.id) return;
+    if (!confirm("Delete this auto-transfer?")) return;
+    try {
+      await del.mutateAsync(autoTransfer.id);
+      toast.success("Auto-transfer deleted");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit auto-transfer" : "Add auto-transfer"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="at-name">Name</Label>
+            <Input
+              id="at-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-11"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="at-amt">Amount</Label>
+              <Input
+                id="at-amt"
+                type="number"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="at-day">Next due date</Label>
+              <Input
+                id="at-day"
+                type="date"
+                value={nextDueDate}
+                onChange={(e) => setNextDueDate(e.target.value)}
+                className="h-11"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>From account</Label>
+              <Select value={fromAccountId} onValueChange={setFromAccountId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select an account</SelectItem>
+                  {accounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {accountLabel(a)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>To account</Label>
+              <Select value={toAccountId} onValueChange={setToAccountId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select an account</SelectItem>
+                  {accounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {accountLabel(a)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div>
+            <Label>Billing cycle</Label>
+            <Select value={cycle} onValueChange={(v) => setCycle(v as BillingCycle)}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CYCLES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {formatTypeLabel(c)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {cycle === "custom" ? (
+            <CustomCycleFields
+              count={cycleCount}
+              unit={cycleUnit}
+              onCountChange={setCycleCount}
+              onUnitChange={setCycleUnit}
+            />
+          ) : null}
+          <div>
+            <Label>Category</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Uncategorized</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="pr-3">
+              <Label htmlFor="at-active">Active</Label>
+              <p className="text-xs text-muted-foreground">
+                Inactive auto-transfers stop counting toward paycheck obligations and
+                reminders.
+              </p>
+            </div>
+            <Switch id="at-active" checked={active} onCheckedChange={setActive} />
+          </div>
+          <div>
+            <Label htmlFor="at-notes">Notes</Label>
+            <Textarea id="at-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:justify-between">
+          {isEdit ? (
+            <Button variant="destructive" onClick={handleDelete} className="h-11">
+              <Trash2 className="mr-2 h-4 w-4" /> Delete
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button onClick={save} disabled={upsert.isPending} className="h-11">
+            {isEdit ? "Save" : "Add"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
