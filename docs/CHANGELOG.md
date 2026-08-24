@@ -1469,3 +1469,109 @@
   `src/lib/spending-actuals.ts`, `src/components/AccountDialog.tsx`,
   `src/lib/visual-meta.ts`, `src/lib/balances.ts`, `src/lib/snapshot.ts`.
 * Build/tests unverified locally (AppLocker).
+
+## 2026-08-24 – Auto-Transfer Tracking (ADR-081)
+
+### Completed
+
+* New `auto_transfers` table tracks recurring auto-transfers between the
+  household's own accounts (e.g. SoFi/Stash biweekly investing sweeps) as
+  their own item type, distinct from Bills and from ad-hoc Transfers.
+  Mirrors `bills`' scheduling fields (`next_due_date`, `billing_cycle`,
+  `cycle_interval_days`, `is_active`) plus `from_account_id`/
+  `to_account_id`/`amount`/`category_id`, but has no arrears/partial-payment
+  columns — an auto-transfer either processed this cycle or it didn't.
+  `transactions.linked_auto_transfer_id` tags only the credit (destination)
+  leg of the transfer pair a "Process transfer" action writes, letting the
+  existing ledger-state pattern work the same way it does for a bill's
+  single-sided payment. SQL migration run and verified live 2026-08-24.
+* New `src/lib/auto-transfers.ts`: `deriveAutoTransferState` (a stripped-down
+  `deriveCycleInfo` producing only unpaid/cleared — no partial/pending),
+  `useProcessAutoTransfer`/`useUndoAutoTransferProcess` (writes/undoes an
+  ADR-056 transfer pair), `isAutoTransferOverdue`. Deliberately a parallel,
+  dedicated module rather than a 3rd `PayableKind` threaded through
+  `payments.ts`/`ledger-state.ts` — that machinery turned out to be deeply
+  bill/debt-specific (ternaries throughout for arrears/partial/pending/fee
+  logic that doesn't apply here), so a sibling module was the smaller,
+  safer change.
+* `src/lib/data-hooks.ts` gained `useAutoTransfers`/`useUpsertAutoTransfer`/
+  `useDeleteAutoTransfer` CRUD hooks, mirroring the existing bill hooks.
+* `src/lib/paycheck-budget.ts`: `Obligation.kind` gained `"auto_transfer"`;
+  `obligationsInRange()` gained an `autoTransfers` parameter and a loop
+  reusing the existing due/overdue-window and forward-projection logic
+  unchanged, so auto-transfers inherit ADR-080's "stays due every period
+  until processed" behavior and ADR-060's forward projection for free.
+* Bills screen (`app.bills.tsx`) gained a new "🔁 Auto-Transfers" section
+  below the Bills list: a two-state Process/Undo button (no amount prompt,
+  fixed amount only) and an Add/Edit dialog. Overdue auto-transfers show a
+  soft amber "Check on this" badge instead of the red past-due-money styling
+  bills/debts use, since nothing is actually owed to a vendor — the transfer
+  already happened at the bank, the app is just unconfirmed.
+* Paycheck Budget (`app.paycheck.tsx`) picks up auto-transfer obligations in
+  "Due this period" (all three group modes — due/category/account), tagged
+  "🔁 Auto-transfer" in the row subline.
+* Dashboard (`app.index.tsx`) hero card gained a third "🔁 this {period}"
+  tile, and a new standalone "Auto-Transfers" card (kept separate from
+  Bills/Debts "Still owed"/"Past due" language) lists unprocessed
+  auto-transfers with a 3-day "due soon" highlight and the same soft
+  "Check on this" flag when overdue.
+
+### Notes
+
+* Scoped from last week's SoFi-Invest/Stash-Invest cleanup, which converted
+  the existing mis-modeled Bill rows into one-off Transfer pairs but left no
+  ongoing way to track the recurring transfers going forward (logged as an
+  unscoped idea in `docs/SCRATCHPAD.md`, now removed as scoped/implemented).
+* Not yet build-verified or end-to-end tested (Windows AppLocker blocks
+  local `vite`/`tsc`; the Supabase MCP is read-only so no test data could be
+  written from this side) — flagged in `docs/TODO.md` for the user to
+  smoke-test in the browser.
+
+## 2026-08-24 – Dashboard Overdue Bug & OnePay Advance Data Fix
+
+### Fixed
+
+* Dashboard's "Past due" section listed debts that were actually paid off
+  (Student Loan 1 and Student Loan 2, confirmed live via the read-only MCP).
+  Root cause: the `overdue` array's `isDateOverdue(...) ? debtRemainingOwed(d)
+  : 0` fallback only checked `payment_status`, not `remaining_balance` —
+  `computeArrears()`'s primary path already excludes a paid-off debt, but a
+  debt paid off with a stale `payment_status: "unpaid"` still fell through
+  the `||` into the fallback and reported its full minimum payment as
+  overdue. Added the same `remaining_balance <= 0` guard `computeArrears()`
+  already uses (`src/routes/app.index.tsx`).
+* `applyClearedPayment()` (`src/lib/payments.ts`) set `date_paid_off =
+  todayISO()` — today's real date — whenever a payment zeroed a debt's
+  balance, instead of using that payment's own (possibly backdated) date.
+  Found while diagnosing why "OnePay Advance" showed as paid off with
+  `date_paid_off` stamped today even though the payment that triggered it
+  was dated over a week earlier. Added an optional `date` parameter
+  (defaults to today, backward compatible), threaded through from
+  `useMarkCleared()` and `AddTransactionFab.tsx`'s direct-clear path.
+
+### Completed
+
+* Added a non-blocking warning (`src/routes/app.debts.tsx`'s
+  `DebtAdjustments` component) when a new debt adjustment or advance's date
+  is older than that debt's most recent existing entry — `confirm()`
+  dialog, same convention as other confirm-before-proceeding actions in
+  this codebase. Guards against the underlying cause of the OnePay Advance
+  incident: every debt-balance mutation applies against the live balance at
+  click-time, not a chronological replay, so backfilling history out of
+  date-order silently produces a wrong balance.
+* Data correction (read-only MCP diagnosis + user-run SQL, no schema
+  change): `OnePay Advance` had drifted to `remaining_balance: 0.00`,
+  `date_paid_off` stamped today, from exactly this out-of-order-backfill
+  issue. Confirmed with the user an advance-type debt can never have more
+  than one open advance at a time (must pay one off before requesting
+  another), so the single-running-balance model is correct as-is — no
+  schema/architecture change needed, just a data fix. Corrected to
+  `remaining_balance = 231.75`, `minimum_payment = 231.75`,
+  `date_paid_off = null`; confirmed live via the read-only MCP.
+
+### Notes
+
+* No ADR for any item in this entry — bug fixes, not new decisions future
+  devs need to be told about (the data correction is one-off cleanup, same
+  pattern as the SoFi-Invest/Stash-Invest cleanup).
+* Not yet build-verified locally (AppLocker).
