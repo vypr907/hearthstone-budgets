@@ -1209,6 +1209,7 @@ function RecentDebtTransactions({ debt }: { debt: Debt }) {
  */
 function DebtAdjustments({ debt }: { debt: Debt }) {
   const { data: allAdjustments = [] } = useDebtAdjustments();
+  const { data: allTransactions = [] } = useTransactions();
   const { data: accounts = [] } = useAccounts();
   const adjustments = useMemo(
     () => allAdjustments.filter((a) => a.debt_id === debt.id && a.adjustment_type !== "advance"),
@@ -1222,6 +1223,30 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   const remove = useDeleteDebtAdjustment();
   const createAdvance = useCreateAdvance();
   const deleteAdvance = useDeleteAdvance();
+
+  /**
+   * Every debt-balance mutation applies against whatever the balance
+   * currently is at click-time, not a chronological replay — so backfilling
+   * an advance/adjustment/payment dated earlier than this debt's existing
+   * history silently produces a wrong balance (found via the OnePay Advance
+   * incident, 2026-08-24). This warns (doesn't block) before that happens.
+   */
+  const mostRecentEntryDate = useMemo(() => {
+    const dates = [
+      ...allAdjustments.filter((a) => a.debt_id === debt.id).map((a) => a.adjustment_date),
+      ...allTransactions
+        .filter((t) => t.linked_debt_id === debt.id)
+        .map((t) => t.transaction_date),
+    ].filter((d): d is string => !!d);
+    return dates.length ? dates.reduce((max, d) => (d > max ? d : max)) : null;
+  }, [allAdjustments, allTransactions, debt.id]);
+
+  function confirmIfBackdated(newDate: string): boolean {
+    if (!mostRecentEntryDate || newDate >= mostRecentEntryDate) return true;
+    return confirm(
+      `This date (${newDate}) is older than ${debt.name}'s most recent entry (${mostRecentEntryDate}). Backfilling out of order can produce a wrong balance — continue anyway?`,
+    );
+  }
 
   // --- Adjustment dialog state ---
   const [open, setOpen] = useState(false);
@@ -1243,6 +1268,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       toast.error("Enter a non-zero amount");
       return;
     }
+    if (!confirmIfBackdated(date)) return;
     try {
       await add.mutateAsync({
         debt,
@@ -1272,6 +1298,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       toast.error("Pick a destination account");
       return;
     }
+    if (!confirmIfBackdated(advanceDate)) return;
     try {
       await createAdvance.mutateAsync({
         debt,

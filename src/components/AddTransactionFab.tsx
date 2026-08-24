@@ -286,7 +286,7 @@ export function AddTransactionFab() {
       });
       if ((bill || debt) && status === "cleared") {
         const payable = bill ? toPayable("bill", bill) : toPayable("debt", debt!);
-        await applyClearedPayment(payable, Math.abs(n), priorCyclesArrears(payable));
+        await applyClearedPayment(payable, Math.abs(n), priorCyclesArrears(payable), txDate);
         qc.invalidateQueries({ queryKey: ["bills"] });
         qc.invalidateQueries({ queryKey: ["debts"] });
       }

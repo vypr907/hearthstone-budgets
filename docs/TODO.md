@@ -2,6 +2,16 @@
 
 ## Follow-up work
 
+- [ ] Run the OnePay Advance data-correction SQL in the Supabase SQL Editor
+      (`remaining_balance = 231.75`, `minimum_payment = 231.75`,
+      `date_paid_off = null` for `id = 'a1581069-a274-4ef5-91a5-690943fed672'`)
+      — see docs/SESSION.md 2026-08-24 entry for the full diagnosis.
+- [ ] 2026-08-24 fixes (Dashboard overdue guard, `applyClearedPayment` date
+      threading, out-of-order backfill warning on debt adjustments/advances)
+      need a build/browser smoke test — same AppLocker constraint as below.
+      Confirm: Student Loan 1/2 drop off Dashboard "Past due"; OnePay Advance
+      shows an open $231.75 balance after the SQL fix runs; backdating a
+      debt adjustment/advance before existing history triggers the warning.
 - [ ] ADR-081 (Auto-Transfer tracking) needs a build/browser smoke test before it's
       considered done — code landed (schema, data layer, Bills screen section,
       Paycheck Budget, Dashboard card) but Windows AppLocker blocks local

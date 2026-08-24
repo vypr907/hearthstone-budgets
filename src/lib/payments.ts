@@ -170,6 +170,8 @@ export async function applyClearedPayment(
   p: Payable,
   clearedAmount: number,
   priorArrears: number,
+  /** The payment's own date — used for date_paid_off, not real "today", so a backdated payment doesn't record today's date as the payoff date. */
+  date: string = todayISO(),
 ): Promise<{ remaining_owed?: number; next_due_date?: string | null; resolved_due_date?: string }> {
   if (p.kind === "debt") {
     const debt = p.debt!;
@@ -184,7 +186,7 @@ export async function applyClearedPayment(
       remaining_balance: nextBalance,
       ...advanceMinimumPaymentPatch(debt, nextBalance),
     };
-    if (nextBalance === 0 && !debt.date_paid_off) update.date_paid_off = todayISO();
+    if (nextBalance === 0 && !debt.date_paid_off) update.date_paid_off = date;
 
     if (target > 0 && paid + 0.005 < target) {
       // Shortfall: stay pending in the same cycle so a follow-up can be submitted.
@@ -569,7 +571,7 @@ export function useMarkCleared() {
 
       // Update the bill/debt FIRST: if that fails we bail out before touching the
       // ledger, instead of stranding a cleared transaction with no effect.
-      const result = await applyClearedPayment(p, clearedAmount, priorArrears ?? 0);
+      const result = await applyClearedPayment(p, clearedAmount, priorArrears ?? 0, date || todayISO());
 
       // ADR-075: this write happens after applyClearedPayment already ran, so
       // it's not caught by that function's own bulk tag — tag it here if this

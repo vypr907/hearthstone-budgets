@@ -54,3 +54,41 @@
   be written from this side to trace the process/undo flow. Needs the user to add a
   real auto-transfer in the app, hit "Process transfer," and confirm the transaction
   pair, `next_due_date` advance, and Paycheck Budget/Dashboard totals are correct.
+
+## 2026-08-24 — Dashboard overdue bug, OnePay Advance data fix
+
+- Fixed `src/routes/app.index.tsx`'s Dashboard "Past due" section listing
+  paid-off debts as still overdue: the `overdue` array's `isDateOverdue(...)
+  ? debtRemainingOwed(d) : 0` fallback only checked `payment_status`, not
+  `remaining_balance` — so a debt paid off with a stale `payment_status:
+  "unpaid"` (Student Loan 1 and Student Loan 2, confirmed live via the
+  read-only MCP) kept showing its full minimum payment as past due. Added a
+  `remaining_balance <= 0` guard matching `computeArrears()`'s own paid-off
+  check. Pure bug fix, no ADR.
+- Diagnosed and fixed the OnePay Advance corruption the user hit while
+  backfilling a historical advance + its payment: confirmed live (MCP) the
+  debt had drifted to `remaining_balance: 0.00`, `date_paid_off:
+  2026-08-24` when it should still show an open $231.75 balance. Root cause:
+  every debt-balance mutation applies against the *current* live balance at
+  click-time, not a chronological replay, so backfilling out of date-order
+  silently corrupts the running balance — confirmed with the user this is a
+  data-entry-order issue, not a schema gap (an advance-type debt can never
+  have more than one open advance at a time, so the single-`remaining_balance`
+  model is correct as-is).
+  - Fixed a genuine, more general bug found along the way:
+    `applyClearedPayment()` (`src/lib/payments.ts`) set `date_paid_off =
+    todayISO()` (today's real date) whenever a payment zeroed a balance,
+    instead of using that payment's own (possibly backdated) date — added a
+    `date` parameter (defaults to today, backward compatible), threaded
+    through from `useMarkCleared()` and `AddTransactionFab.tsx`'s
+    direct-clear path.
+  - Added a non-blocking warning (`src/routes/app.debts.tsx`'s
+    `DebtAdjustments` component) when a new debt adjustment/advance's date
+    is older than that debt's most recent existing entry — `confirm()`
+    dialog, same convention as other destructive-action confirms in this
+    codebase.
+  - Data correction handed to the user to run manually (SQL Editor):
+    `OnePay Advance` (`id: a1581069-a274-4ef5-91a5-690943fed672`) →
+    `remaining_balance = 231.75`, `minimum_payment = 231.75`,
+    `date_paid_off = null`.
+- Not yet build-verified (same Windows AppLocker constraint as above).

@@ -486,10 +486,15 @@ function Dashboard() {
     }),
     ...debts.map((d) => {
       const arrears = computeArrears(toPayable("debt", d));
+      // A paid-off debt (remaining_balance <= 0) must never fall through to
+      // the isDateOverdue fallback below — that check only looks at
+      // payment_status, which can be stale ("unpaid") on a debt that's
+      // actually been paid off, making it wrongly reappear as past due.
+      const paidOff = Number(d.remaining_balance ?? 0) <= 0;
       return {
         id: `debt-${d.id}`,
         name: d.name,
-        amount: arrears.amountOverdue || (isDateOverdue(debtDueDate(d), d.payment_status) ? debtRemainingOwed(d) : 0),
+        amount: arrears.amountOverdue || (!paidOff && isDateOverdue(debtDueDate(d), d.payment_status) ? debtRemainingOwed(d) : 0),
         cycles: arrears.cyclesMissed,
         due_date: arrears.oldestMissedDate ?? debtDueDate(d) ?? "",
         kind: "Debt" as const,
