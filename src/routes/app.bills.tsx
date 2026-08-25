@@ -263,11 +263,14 @@ function BillsPage() {
                               </span>
                             ) : null}
                             {b.is_variable_amount ? <span>· variable</span> : null}
+                          </div>
+                          {/* Status chips always on their own line for scannable consistency. */}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                             <StatusBadge status={info.state} />
                             {/* ADR-049: how far behind, in money. */}
                             <PastDueBadge payable={toPayable("bill", b)} />
                             {info.clearedSum > 0 && info.remaining > 0 ? (
-                              <span className="font-medium text-destructive">
+                              <span className="text-[11px] font-medium text-destructive">
                                 {formatMoney(info.remaining)} still owed this cycle
                               </span>
                             ) : null}
