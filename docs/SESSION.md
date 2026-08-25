@@ -61,3 +61,8 @@
   destructive/orange when over or when spend exists with no budget. Applied to
   Dashboard budget tiles, Monthly Summary tiles, and Spending category rows.
   Presentation only; no schema/ADR change.
+  - Follow-up: the group-level ring used the same zero denominator (a fully
+    paid bill leaves the "due this period" scan), so a category whose only
+    activity was a paid bill rendered orange/100%. `budgetChart` now floors
+    each category's bills/debts expected amount at the amount actually paid,
+    so paid-in-full reads blue (exactly 100%).
