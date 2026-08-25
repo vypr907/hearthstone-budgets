@@ -40,6 +40,9 @@
   to reload on their Android device and confirm the FAB no longer covers the
   last row/button on any screen, Dashboard category names show in full, and
   labels read larger.
-- Dashboard hero tiles: 4-digit amounts (e.g. $2,009.60) overflowed the
-  3-column tile boundary on a 393px phone. Tiles now `min-w-0` with `p-2.5`
-  and the amount is `text-base sm:text-xl truncate`. CSS-only, no ADR.
+- Fixed zero-budget category label on Dashboard "Budget vs actual" tiles and
+  Spending category rows: when `budgeted === 0` and actual spend is positive,
+  the label now reads "$X spent" (destructive color) instead of the confusing
+  "$-X left". Updated `src/routes/app.index.tsx` and
+  `src/routes/app.spending.tsx`.
+- Not yet build-verified (Windows AppLocker blocks local `vite`/`tsc`).
