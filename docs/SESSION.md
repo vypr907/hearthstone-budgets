@@ -86,3 +86,4 @@
   Files: `src/routes/app.index.tsx`, `src/components/BudgetSplitLines.tsx`.
   Also fixed a typecheck error on the optional `pendingValue` in `ItemBar`
   (`src/components/viz.tsx`).
+- Dashboard budget tiles: ring is now a status indicator — includes deduction-funded (payroll/HSA) obligations in the paid/due math, and `ProgressRing` gained a `pendingValue` amber arc so pending shows as partial progress. Budget labels below the ring are unchanged.
