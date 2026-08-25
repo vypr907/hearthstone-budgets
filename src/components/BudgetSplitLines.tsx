@@ -115,7 +115,8 @@ function SplitRow({
 }) {
   const [open, setOpen] = useState(false);
   const over = spent > total;
-  const pct = total > 0 ? Math.min(100, (spent / total) * 100) : spent > 0 ? 100 : 0;
+  const pct = total > 0 ? (spent / total) * 100 : spent > 0 ? 100 : 0;
+  const pendingPct = total > 0 && pending ? (pending / total) * 100 : 0;
   const remaining = Math.max(0, total - spent);
   return (
     <div
@@ -143,7 +144,12 @@ function SplitRow({
           {formatMoney(spent)} / {formatMoney(total)}
         </span>
       </div>
-      <ItemBar className="mt-1" value={pct} color={budgetRingColor(spent, total)} />
+      <ItemBar
+        className="mt-1"
+        value={pct}
+        pendingValue={pendingPct}
+        color={budgetRingColor(spent, total)}
+      />
       {open ? (
         <dl className="mt-1.5 space-y-0.5 rounded-lg bg-muted/50 p-2 text-[11px] tabular-nums text-muted-foreground">
           <Line term={`Total ${totalWord} this period`} value={total} />
