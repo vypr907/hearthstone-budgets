@@ -109,6 +109,9 @@
   --state-pending: oklch(0.75 0.15 85);
   --state-partial: oklch(0.68 0.17 55);
   --state-cleared: oklch(0.6 0.15 152);
+  /* Budget exactly used up (100%, not over) — theme-independent blue. */
+  --budget-complete: oklch(0.62 0.16 240);
+
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.984 0.003 247.858);
   --border: oklch(0.929 0.013 255.508);
