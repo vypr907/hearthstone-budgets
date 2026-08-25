@@ -46,7 +46,7 @@ import {
 import { categoryVisual, AUTO_TRANSFER_ICON } from "@/lib/visual-meta";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
-import { EmojiIcon, ItemBar, ProgressRing, emojiFor, itemColor } from "@/components/viz";
+import { EmojiIcon, ItemBar, ProgressRing, budgetRingColor, emojiFor, itemColor } from "@/components/viz";
 import { BudgetSplitLines } from "@/components/BudgetSplitLines";
 import { HelpButton } from "@/components/HelpButton";
 
@@ -1322,7 +1322,7 @@ function MonthlySummaryTile({ group: g, index: i }: { group: MonthlySummaryGroup
       ? 100
       : 0;
   const over = g.budgetTarget > 0 && g.actual > g.budgetTarget;
-  const color = over ? "var(--destructive)" : itemColor(i);
+  const color = budgetRingColor(g.actual, g.budgetTarget);
   const vsAverage = g.actual - g.trailingAverage;
   return (
     <button

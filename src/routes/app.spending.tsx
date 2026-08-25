@@ -34,7 +34,7 @@ import {
 import { CalendarPlus, ChevronLeft, ChevronRight, HelpCircle, PencilLine, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { ItemBar, ProgressRing, itemColor, DonutChart } from "@/components/viz";
+import { ItemBar, ProgressRing, budgetRingColor, itemColor, DonutChart } from "@/components/viz";
 import { BudgetSplitLines } from "@/components/BudgetSplitLines";
 import { categoryVisual } from "@/lib/visual-meta";
 import { setTxPreFilter } from "@/lib/tx-filter-store";
@@ -750,7 +750,7 @@ function SpendingRow({
         : 0;
   const over = totalBudget > 0 && r.actual > totalBudget;
   const spentNoBudget = totalBudget === 0 && r.actual > 0;
-  const color = over || spentNoBudget ? "var(--destructive)" : (r.color ?? itemColor(i));
+  const color = budgetRingColor(r.actual, r.budgeted);
   return (
     <div className="border-l-4 px-2 py-2" style={{ borderColor: r.color }}>
       <button
