@@ -626,7 +626,7 @@ function Dashboard() {
               </span>
             </p>
             <div className="mt-4 grid grid-cols-3 gap-3">
-              <div className="rounded-[12px] bg-brand-foreground/15 p-3">
+              <div className="min-w-0 rounded-[12px] bg-brand-foreground/15 p-2.5">
                 <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest opacity-80">
                   Bills this {period.label}
                   <HelpButton>
@@ -635,11 +635,11 @@ function Dashboard() {
                     {" "}{period.label}.
                   </HelpButton>
                 </p>
-                <p className="text-xl font-bold tabular-nums">
+                <p className="truncate text-base font-bold tabular-nums sm:text-xl">
                   {formatMoney(periodTotals.bills)}
                 </p>
               </div>
-              <div className="rounded-[12px] bg-brand-foreground/15 p-3">
+              <div className="min-w-0 rounded-[12px] bg-brand-foreground/15 p-2.5">
                 <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest opacity-80">
                   Debts this {period.label}
                   <HelpButton>
@@ -648,11 +648,11 @@ function Dashboard() {
                     paid this {period.label}.
                   </HelpButton>
                 </p>
-                <p className="text-xl font-bold tabular-nums">
+                <p className="truncate text-base font-bold tabular-nums sm:text-xl">
                   {formatMoney(periodTotals.debts)}
                 </p>
               </div>
-              <div className="rounded-[12px] bg-brand-foreground/15 p-3">
+              <div className="min-w-0 rounded-[12px] bg-brand-foreground/15 p-2.5">
                 <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest opacity-80">
                   {AUTO_TRANSFER_ICON} this {period.label}
                   <HelpButton>
@@ -662,7 +662,7 @@ function Dashboard() {
                     toward what the paycheck needs to cover.
                   </HelpButton>
                 </p>
-                <p className="text-xl font-bold tabular-nums">
+                <p className="truncate text-base font-bold tabular-nums sm:text-xl">
                   {formatMoney(periodTotals.autoTransfers)}
                 </p>
               </div>
