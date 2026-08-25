@@ -167,6 +167,8 @@
   --state-pending: oklch(0.82 0.15 88);
   --state-partial: oklch(0.76 0.17 55);
   --state-cleared: oklch(0.74 0.15 152);
+  --budget-complete: oklch(0.72 0.15 240);
+
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.984 0.003 247.858);
   --border: oklch(1 0 0 / 10%);
