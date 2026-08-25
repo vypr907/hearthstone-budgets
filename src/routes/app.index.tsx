@@ -357,8 +357,18 @@ function Dashboard() {
       const map = o.kind === "bill" ? periodBillsByCategory : periodDebtsByCategory;
       map.set(categoryId, (map.get(categoryId) ?? 0) + o.amount);
     }
+    // Spent = cleared money only; pending is reported as its own figure so
+    // the split-line detail can show both without double-counting.
     const actualByCategory = actualByCategoryInRange(
-      transactions,
+      transactions.filter((t) => (t.status ?? "cleared") !== "pending"),
+      bills,
+      debts,
+      categories,
+      period.start,
+      period.end,
+    );
+    const pendingByCategory = actualByCategoryInRange(
+      transactions.filter((t) => (t.status ?? "cleared") === "pending"),
       bills,
       debts,
       categories,
@@ -385,11 +395,15 @@ function Dashboard() {
         spendingSpent: 0,
         billsSpent: 0,
         debtsSpent: 0,
+        spendingPending: 0,
+        billsPending: 0,
+        debtsPending: 0,
       };
       const spendingBudget = Number(b.budgeted_amount || 0);
       const billBudget = periodBillsByCategory.get(b.category_id) ?? 0;
       const debtBudget = periodDebtsByCategory.get(b.category_id) ?? 0;
       const current = actualByCategory.get(b.category_id);
+      const pending = pendingByCategory.get(b.category_id);
       g.spendingBudgeted += spendingBudget;
       g.billsBudgeted += billBudget;
       g.debtsBudgeted += debtBudget;
@@ -399,6 +413,11 @@ function Dashboard() {
         g.spendingSpent += current.spendingSpent;
         g.billsSpent += current.billsSpent;
         g.debtsSpent += current.debtsSpent;
+      }
+      if (pending) {
+        g.spendingPending += pending.spendingSpent;
+        g.billsPending += pending.billsSpent;
+        g.debtsPending += pending.debtsSpent;
       }
       groups.set(key, g);
     }
