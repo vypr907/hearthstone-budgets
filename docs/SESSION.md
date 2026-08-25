@@ -89,3 +89,4 @@
 - Dashboard budget tiles: ring is now a status indicator — includes deduction-funded (payroll/HSA) obligations in the paid/due math, and `ProgressRing` gained a `pendingValue` amber arc so pending shows as partial progress. Budget labels below the ring are unchanged.
 
 - Bills list card redesign: category shown as a coloured icon chip, billing cycle removed from the row (still on detail view), amount moved inline with the name, tighter icon/padding for better use of narrow screens. Files: src/routes/app.bills.tsx.
+- Bills list status chips (Pending/Unpaid/Cleared) now always render on their own dedicated line below the due-date/category metadata, so status is scannable in a consistent location on every card. Files: src/routes/app.bills.tsx.
