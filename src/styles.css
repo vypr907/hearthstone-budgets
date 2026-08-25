@@ -45,6 +45,8 @@
   --color-state-pending: var(--state-pending);
   --color-state-partial: var(--state-partial);
   --color-state-cleared: var(--state-cleared);
+  --color-budget-complete: var(--budget-complete);
+
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -109,6 +111,9 @@
   --state-pending: oklch(0.75 0.15 85);
   --state-partial: oklch(0.68 0.17 55);
   --state-cleared: oklch(0.6 0.15 152);
+  /* Budget exactly used up (100%, not over) — theme-independent blue. */
+  --budget-complete: oklch(0.62 0.16 240);
+
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.984 0.003 247.858);
   --border: oklch(0.929 0.013 255.508);
@@ -162,6 +167,8 @@
   --state-pending: oklch(0.82 0.15 88);
   --state-partial: oklch(0.76 0.17 55);
   --state-cleared: oklch(0.74 0.15 152);
+  --budget-complete: oklch(0.72 0.15 240);
+
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.984 0.003 247.858);
   --border: oklch(1 0 0 / 10%);

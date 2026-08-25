@@ -46,7 +46,7 @@ import {
 import { categoryVisual, AUTO_TRANSFER_ICON } from "@/lib/visual-meta";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
-import { EmojiIcon, ItemBar, ProgressRing, emojiFor, itemColor } from "@/components/viz";
+import { EmojiIcon, ItemBar, ProgressRing, budgetRingColor, emojiFor, itemColor } from "@/components/viz";
 import { BudgetSplitLines } from "@/components/BudgetSplitLines";
 import { HelpButton } from "@/components/HelpButton";
 
@@ -357,8 +357,18 @@ function Dashboard() {
       const map = o.kind === "bill" ? periodBillsByCategory : periodDebtsByCategory;
       map.set(categoryId, (map.get(categoryId) ?? 0) + o.amount);
     }
+    // Spent = cleared money only; pending is reported as its own figure so
+    // the split-line detail can show both without double-counting.
     const actualByCategory = actualByCategoryInRange(
-      transactions,
+      transactions.filter((t) => (t.status ?? "cleared") !== "pending"),
+      bills,
+      debts,
+      categories,
+      period.start,
+      period.end,
+    );
+    const pendingByCategory = actualByCategoryInRange(
+      transactions.filter((t) => (t.status ?? "cleared") === "pending"),
       bills,
       debts,
       categories,
@@ -385,11 +395,15 @@ function Dashboard() {
         spendingSpent: 0,
         billsSpent: 0,
         debtsSpent: 0,
+        spendingPending: 0,
+        billsPending: 0,
+        debtsPending: 0,
       };
       const spendingBudget = Number(b.budgeted_amount || 0);
       const billBudget = periodBillsByCategory.get(b.category_id) ?? 0;
       const debtBudget = periodDebtsByCategory.get(b.category_id) ?? 0;
       const current = actualByCategory.get(b.category_id);
+      const pending = pendingByCategory.get(b.category_id);
       g.spendingBudgeted += spendingBudget;
       g.billsBudgeted += billBudget;
       g.debtsBudgeted += debtBudget;
@@ -399,6 +413,11 @@ function Dashboard() {
         g.spendingSpent += current.spendingSpent;
         g.billsSpent += current.billsSpent;
         g.debtsSpent += current.debtsSpent;
+      }
+      if (pending) {
+        g.spendingPending += pending.spendingSpent;
+        g.billsPending += pending.billsSpent;
+        g.debtsPending += pending.debtsSpent;
       }
       groups.set(key, g);
     }
@@ -1117,6 +1136,10 @@ type BudgetGroup = {
   spendingSpent: number;
   billsSpent: number;
   debtsSpent: number;
+  spendingPending: number;
+  billsPending: number;
+  debtsPending: number;
+
 };
 
 /** Single headline bar for the whole month's budget load. */
@@ -1192,7 +1215,8 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
       : 0;
   const over = g.budgeted > 0 && g.actual > g.budgeted;
   const spentNoBudget = g.budgeted === 0 && g.actual > 0;
-  const color = over || spentNoBudget ? "var(--destructive)" : itemColor(i);
+  const color = budgetRingColor(g.actual, g.budgeted);
+
   return (
     <button
       type="button"
@@ -1231,6 +1255,9 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
             spendingSpent={g.spendingSpent}
             billsSpent={g.billsSpent}
             debtsSpent={g.debtsSpent}
+            spendingPending={g.spendingPending}
+            billsPending={g.billsPending}
+            debtsPending={g.debtsPending}
           />
         </div>
       ) : null}
@@ -1295,7 +1322,7 @@ function MonthlySummaryTile({ group: g, index: i }: { group: MonthlySummaryGroup
       ? 100
       : 0;
   const over = g.budgetTarget > 0 && g.actual > g.budgetTarget;
-  const color = over ? "var(--destructive)" : itemColor(i);
+  const color = budgetRingColor(g.actual, g.budgetTarget);
   const vsAverage = g.actual - g.trailingAverage;
   return (
     <button

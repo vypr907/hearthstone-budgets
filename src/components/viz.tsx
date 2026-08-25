@@ -17,6 +17,21 @@ export function itemColor(index: number) {
   return ITEM_COLORS[index % ITEM_COLORS.length];
 }
 
+/**
+ * Budget progress colour: green while comfortably under, amber as the budget
+ * runs low, blue once it's exactly used up, and destructive/orange when over
+ * (or when money was spent against no budget at all).
+ */
+export function budgetRingColor(spent: number, budgeted: number) {
+  if (budgeted <= 0) return spent > 0 ? "var(--destructive)" : "var(--muted-foreground)";
+  if (spent > budgeted) return "var(--destructive)";
+  const pct = (spent / budgeted) * 100;
+  if (pct >= 100) return "var(--budget-complete)";
+  if (pct >= 80) return "var(--state-pending)";
+  return "var(--state-cleared)";
+}
+
+
 /** Stable colour for a named row (so a category keeps its colour). */
 export function colorForKey(key: string) {
   let h = 0;
