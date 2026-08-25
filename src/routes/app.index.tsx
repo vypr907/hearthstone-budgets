@@ -1267,17 +1267,28 @@ function OverdueRow({ item: o }: { item: OverdueItem }) {
   );
 }
 
-/** Compact tile per parent category — ring first, numbers on tap. */
+/** Compact tile per parent category — ring first, numbers on tap.
+ *  The ring is a STATUS indicator: it includes deduction-funded obligations
+ *  (payroll/HSA, ADR-032/068) and shows pending as an amber arc, even though
+ *  those amounts stay out of the budgeting labels below. */
 function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number }) {
   const [open, setOpen] = useState(false);
-  const pct = g.budgeted
-    ? Math.min(100, (g.actual / g.budgeted) * 100)
-    : g.actual > 0
+  const statusPaid = g.actual + (g.deductedSpent ?? 0);
+  const statusPending = (g.spendingPending ?? 0) + (g.billsPending ?? 0) +
+    (g.debtsPending ?? 0) + (g.deductedPending ?? 0);
+  const statusTotal = Math.max(
+    g.budgeted + (g.deductedBudgeted ?? 0),
+    statusPaid,
+  );
+  const pct = statusTotal
+    ? Math.min(100, (statusPaid / statusTotal) * 100)
+    : statusPaid > 0
       ? 100
       : 0;
+  const pendingPct = statusTotal ? (statusPending / statusTotal) * 100 : 0;
   const over = g.budgeted > 0 && g.actual > g.budgeted;
   const spentNoBudget = g.budgeted === 0 && g.actual > 0;
-  const color = budgetRingColor(g.actual, g.budgeted);
+  const color = budgetRingColor(statusPaid, statusTotal);
 
   return (
     <button
@@ -1287,7 +1298,8 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
       aria-expanded={open}
     >
       <div className="flex items-center gap-2">
-        <ProgressRing value={pct} color={color} size={44} />
+        <ProgressRing value={pct} pendingValue={pendingPct} color={color} size={44} />
+
         <div className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-1 text-sm font-medium">
             <span aria-hidden>{emojiFor(g.name)}</span>
