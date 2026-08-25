@@ -66,7 +66,12 @@ import { PastDueEditor } from "@/components/PastDueEditor";
 import { StrandedBillRepair } from "@/components/StrandedBillRepair";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
-import { AUTO_TRANSFER_ICON, formatTypeLabel } from "@/lib/visual-meta";
+import {
+  AUTO_TRANSFER_ICON,
+  DEFAULT_CATEGORY_COLOR,
+  DEFAULT_CATEGORY_ICON,
+  formatTypeLabel,
+} from "@/lib/visual-meta";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 import { format } from "date-fns";
 const ADD_INSTITUTION = "__add_institution__";
