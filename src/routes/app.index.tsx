@@ -400,10 +400,19 @@ function Dashboard() {
         debtsPending: 0,
       };
       const spendingBudget = Number(b.budgeted_amount || 0);
-      const billBudget = periodBillsByCategory.get(b.category_id) ?? 0;
-      const debtBudget = periodDebtsByCategory.get(b.category_id) ?? 0;
       const current = actualByCategory.get(b.category_id);
       const pending = pendingByCategory.get(b.category_id);
+      // A bill/debt already paid this period drops off the "due" scan, so its
+      // expected amount would read $0 against real spend. Floor the expected
+      // figure at what was actually paid — mirrors BudgetSplitLines.
+      const billBudget = Math.max(
+        periodBillsByCategory.get(b.category_id) ?? 0,
+        current?.billsSpent ?? 0,
+      );
+      const debtBudget = Math.max(
+        periodDebtsByCategory.get(b.category_id) ?? 0,
+        current?.debtsSpent ?? 0,
+      );
       g.spendingBudgeted += spendingBudget;
       g.billsBudgeted += billBudget;
       g.debtsBudgeted += debtBudget;
