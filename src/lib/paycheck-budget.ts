@@ -331,7 +331,7 @@ export function actualByCategoryInRange(
     const linkedDebtId = t.linked_debt_id ?? null;
     if (linkedDebtId && deductedDebtIds.has(linkedDebtId)) continue; // ADR-032
     const categoryId =
-      t.category_id ??
+      (t.category_id as string | null) ??
       (linkedBillId ? billCategory.get(linkedBillId) ?? null : null) ??
       (linkedDebtId ? debtCategory.get(linkedDebtId) ?? null : null);
     if (!categoryId) continue;
