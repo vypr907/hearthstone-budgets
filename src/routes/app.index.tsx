@@ -357,6 +357,44 @@ function Dashboard() {
       const map = o.kind === "bill" ? periodBillsByCategory : periodDebtsByCategory;
       map.set(categoryId, (map.get(categoryId) ?? 0) + o.amount);
     }
+    // ADR-032/068: payroll- and HSA-funded debts sit outside budgeting math,
+    // but the household still wants to see what's due / paid / pending on
+    // them. Tracked as a separate line that never feeds `budgeted`/`actual`.
+    const deductedDebts = debts.filter((d) => d.is_paycheck_deduction === true);
+    const deductedIds = new Set(deductedDebts.map((d) => d.id));
+    const deductedDueByCategory = new Map<string, number>();
+    for (const o of obligationsInRange(
+      [],
+      deductedDebts.map((d) => ({ ...d, is_paycheck_deduction: false })),
+      [],
+      period.start,
+      period.end,
+    )) {
+      const categoryId = debtCategory.get(o.id);
+      if (!categoryId) continue;
+      deductedDueByCategory.set(
+        categoryId,
+        (deductedDueByCategory.get(categoryId) ?? 0) + o.amount,
+      );
+    }
+    const deductedPaidByCategory = new Map<string, number>();
+    const deductedPendingByCategory = new Map<string, number>();
+    for (const t of transactions) {
+      const debtId = t.linked_debt_id ?? null;
+      if (!debtId || !deductedIds.has(debtId)) continue;
+      const date = (t.transaction_date ?? "").slice(0, 10);
+      if (!(date >= period.start && date < period.end)) continue;
+      const amount = Number(t.amount || 0);
+      if (amount >= 0) continue;
+      const categoryId =
+        (t as { category_id?: string | null }).category_id ?? debtCategory.get(debtId) ?? null;
+      if (!categoryId) continue;
+      const map =
+        (t.status ?? "cleared") === "pending"
+          ? deductedPendingByCategory
+          : deductedPaidByCategory;
+      map.set(categoryId, (map.get(categoryId) ?? 0) + Math.abs(amount));
+    }
     // Spent = cleared money only; pending is reported as its own figure so
     // the split-line detail can show both without double-counting.
     const actualByCategory = actualByCategoryInRange(
