@@ -79,11 +79,9 @@ export function combinedActualByCategory(
     const linkedBillId = t.linked_bill_id ?? null;
     const linkedDebtId = t.linked_debt_id ?? null;
     if (linkedDebtId && deductedDebtIds.has(linkedDebtId)) continue; // ADR-032: never spendable cash
-    const txCategoryId: string | null = (t as { category_id?: string | null }).category_id ?? null;
-    const categoryId =
-      txCategoryId ??
-      (linkedBillId ? billCategory.get(linkedBillId) ?? null : null) ??
-      (linkedDebtId ? debtCategory.get(linkedDebtId) ?? null : null);
+    let categoryId: string | null = (t as { category_id?: string | null }).category_id ?? null;
+    if (!categoryId && linkedBillId) categoryId = billCategory.get(linkedBillId) ?? null;
+    if (!categoryId && linkedDebtId) categoryId = debtCategory.get(linkedDebtId) ?? null;
     if (!categoryId) continue;
     if (income.has(categoryId)) continue; // ADR-069
     if (linkedDebtId) bump(categoryId, "debtsSpent", Math.abs(amount));
