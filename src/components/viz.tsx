@@ -39,21 +39,26 @@ export function colorForKey(key: string) {
   return itemColor(h);
 }
 
-/** Small circular progress ring, ~48px, with the percentage in the middle. */
+/** Small circular progress ring, ~48px, with the percentage in the middle.
+ *  `pendingValue` draws an amber arc after the cleared arc. */
 export function ProgressRing({
   value,
+  pendingValue,
   color,
   size = 48,
   label,
   className,
 }: {
   value: number;
+  pendingValue?: number;
   color?: string;
   size?: number;
   label?: string;
   className?: string;
 }) {
   const pct = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+  const pendingRaw = Math.max(0, Number.isFinite(pendingValue) ? (pendingValue as number) : 0);
+  const pendingPct = Math.max(0, Math.min(100 - pct, pendingRaw));
   const stroke = 5;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -72,6 +77,19 @@ export function ProgressRing({
           stroke="var(--muted)"
           strokeWidth={stroke}
         />
+        {pendingPct > 0 ? (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="var(--state-pending)"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={c - (c * (pct + pendingPct)) / 100}
+          />
+        ) : null}
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -90,6 +108,7 @@ export function ProgressRing({
     </span>
   );
 }
+
 
 /** Horizontal bar with a per-item colour. Optionally shows a pending segment
  *  in yellow/amber at the end of the filled portion. */
