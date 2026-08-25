@@ -1197,6 +1197,10 @@ type BudgetGroup = {
   spendingPending: number;
   billsPending: number;
   debtsPending: number;
+  /** ADR-032/068: payroll/HSA-funded debts — shown, never budgeted. */
+  deductedBudgeted: number;
+  deductedSpent: number;
+  deductedPending: number;
 
 };
 
