@@ -749,7 +749,8 @@ function SpendingRow({
         ? 100
         : 0;
   const over = totalBudget > 0 && r.actual > totalBudget;
-  const color = over ? "var(--destructive)" : (r.color ?? itemColor(i));
+  const spentNoBudget = totalBudget === 0 && r.actual > 0;
+  const color = over || spentNoBudget ? "var(--destructive)" : (r.color ?? itemColor(i));
   return (
     <div className="border-l-4 px-2 py-2" style={{ borderColor: r.color }}>
       <button
@@ -766,14 +767,16 @@ function SpendingRow({
           </span>
           <span
             className={
-              over
+              over || spentNoBudget
                 ? "text-[11px] uppercase tracking-widest text-destructive"
                 : "text-[11px] uppercase tracking-widest text-muted-foreground"
             }
           >
             {over
               ? `${formatMoney(r.actual - totalBudget)} over`
-              : `${formatMoney(totalBudget - r.actual)} left`}
+              : spentNoBudget
+                ? `${formatMoney(r.actual)} spent`
+                : `${formatMoney(totalBudget - r.actual)} left`}
           </span>
         </span>
         <span className="shrink-0 text-right text-sm tabular-nums">
