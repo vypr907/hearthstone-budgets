@@ -1191,7 +1191,8 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
       ? 100
       : 0;
   const over = g.budgeted > 0 && g.actual > g.budgeted;
-  const color = over ? "var(--destructive)" : itemColor(i);
+  const spentNoBudget = g.budgeted === 0 && g.actual > 0;
+  const color = over || spentNoBudget ? "var(--destructive)" : itemColor(i);
   return (
     <button
       type="button"
@@ -1208,14 +1209,16 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
           </span>
           <span
             className={
-              over
+              over || spentNoBudget
                 ? "text-xs uppercase tracking-widest text-destructive"
                 : "text-xs uppercase tracking-widest text-muted-foreground"
             }
           >
             {over
               ? `${formatMoney(g.actual - g.budgeted)} over`
-              : `${formatMoney(g.budgeted - g.actual)} left`}
+              : spentNoBudget
+                ? `${formatMoney(g.actual)} spent`
+                : `${formatMoney(g.budgeted - g.actual)} left`}
           </span>
         </div>
       </div>
