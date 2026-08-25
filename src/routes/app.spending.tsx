@@ -750,7 +750,7 @@ function SpendingRow({
         : 0;
   const over = totalBudget > 0 && r.actual > totalBudget;
   const spentNoBudget = totalBudget === 0 && r.actual > 0;
-  const color = budgetRingColor(r.actual, r.budgeted);
+  const color = budgetRingColor(r.actual, totalBudget);
   return (
     <div className="border-l-4 px-2 py-2" style={{ borderColor: r.color }}>
       <button
