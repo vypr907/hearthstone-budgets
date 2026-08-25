@@ -1192,7 +1192,8 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
       : 0;
   const over = g.budgeted > 0 && g.actual > g.budgeted;
   const spentNoBudget = g.budgeted === 0 && g.actual > 0;
-  const color = over || spentNoBudget ? "var(--destructive)" : itemColor(i);
+  const color = budgetRingColor(g.actual, g.budgeted);
+
   return (
     <button
       type="button"
