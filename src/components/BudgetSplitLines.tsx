@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ItemBar } from "@/components/viz";
+import { ItemBar, budgetRingColor } from "@/components/viz";
 import { formatMoney } from "@/lib/format";
 
 /**
@@ -143,7 +143,7 @@ function SplitRow({
           {formatMoney(spent)} / {formatMoney(total)}
         </span>
       </div>
-      <ItemBar className="mt-1" value={pct} color={over ? "var(--destructive)" : undefined} />
+      <ItemBar className="mt-1" value={pct} color={budgetRingColor(spent, total)} />
       {open ? (
         <dl className="mt-1.5 space-y-0.5 rounded-lg bg-muted/50 p-2 text-[11px] tabular-nums text-muted-foreground">
           <Line term={`Total ${totalWord} this period`} value={total} />
