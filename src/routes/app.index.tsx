@@ -436,6 +436,9 @@ function Dashboard() {
         spendingPending: 0,
         billsPending: 0,
         debtsPending: 0,
+        deductedBudgeted: 0,
+        deductedSpent: 0,
+        deductedPending: 0,
       };
       const spendingBudget = Number(b.budgeted_amount || 0);
       const current = actualByCategory.get(b.category_id);
