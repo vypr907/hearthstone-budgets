@@ -1117,6 +1117,10 @@ type BudgetGroup = {
   spendingSpent: number;
   billsSpent: number;
   debtsSpent: number;
+  spendingPending: number;
+  billsPending: number;
+  debtsPending: number;
+
 };
 
 /** Single headline bar for the whole month's budget load. */
