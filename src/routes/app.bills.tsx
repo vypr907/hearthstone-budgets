@@ -132,6 +132,12 @@ function BillsPage() {
     for (const c of categories) m[c.id] = c.name;
     return m;
   }, [categories]);
+  const categoryById = useMemo(() => {
+    const m: Record<string, (typeof categories)[number]> = {};
+    for (const c of categories) m[c.id] = c;
+    return m;
+  }, [categories]);
+
   const rows = useMemo(() => {
     let out = bills;
     if (cats.length) {
