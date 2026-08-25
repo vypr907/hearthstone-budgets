@@ -34,7 +34,7 @@ import {
 import { CalendarPlus, ChevronLeft, ChevronRight, HelpCircle, PencilLine, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { ItemBar, ProgressRing, budgetRingColor, itemColor, DonutChart } from "@/components/viz";
+import { ItemBar, ProgressRing, budgetRingColor, DonutChart } from "@/components/viz";
 import { BudgetSplitLines } from "@/components/BudgetSplitLines";
 import { categoryVisual } from "@/lib/visual-meta";
 import { setTxPreFilter } from "@/lib/tx-filter-store";
