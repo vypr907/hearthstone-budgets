@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ItemBar } from "@/components/viz";
+import { ItemBar, budgetRingColor } from "@/components/viz";
 import { formatMoney } from "@/lib/format";
 
 /**
@@ -114,7 +114,7 @@ function SplitRow({
   remainingWord: string;
 }) {
   const [open, setOpen] = useState(false);
-  const over = total > 0 && spent > total;
+  const over = spent > total;
   const pct = total > 0 ? Math.min(100, (spent / total) * 100) : spent > 0 ? 100 : 0;
   const remaining = Math.max(0, total - spent);
   return (
@@ -143,7 +143,7 @@ function SplitRow({
           {formatMoney(spent)} / {formatMoney(total)}
         </span>
       </div>
-      <ItemBar className="mt-1" value={pct} color={over ? "var(--destructive)" : undefined} />
+      <ItemBar className="mt-1" value={pct} color={budgetRingColor(spent, total)} />
       {open ? (
         <dl className="mt-1.5 space-y-0.5 rounded-lg bg-muted/50 p-2 text-[11px] tabular-nums text-muted-foreground">
           <Line term={`Total ${totalWord} this period`} value={total} />
