@@ -1575,3 +1575,117 @@
   devs need to be told about (the data correction is one-off cleanup, same
   pattern as the SoFi-Invest/Stash-Invest cleanup).
 * Not yet build-verified locally (AppLocker).
+
+## 2026-08-25 – Mobile Layout Fixes
+
+### Fixed
+
+* The floating "+" Add button covered real content (the last row or button)
+  on nearly every screen — Bills, Debts, Institutions, Transactions,
+  Dashboard — confirmed from 8 real-Android-phone screenshots traced back
+  to actual layout code (the viewport meta tag was already correct, so this
+  wasn't the classic missing-viewport bug). Root cause: `src/routes/app.tsx`'s
+  `AppLayout` only reserved 6rem of bottom padding — enough for `BottomNav`
+  — but the FAB sits 6rem up and is itself 3.5rem tall, so its footprint ran
+  6rem-9.5rem up, outside the reserved padding. Bumped to
+  `pb-[calc(10rem+env(safe-area-inset-bottom))]`. One line, fixes it
+  everywhere at once since the FAB/nav are mounted once in the shared layout.
+* Dashboard's "Budget vs actual" and "Monthly summary" category tiles
+  truncated long names ("Finan...", "Entert...", "Busin...") — the
+  `grid-cols-2` tile layout only left ~66px for text after the 44px
+  `ProgressRing`. Per the user's choice (keep the ring, drop the 2-column
+  grid), switched both to single-column full-width rows (`space-y-2`
+  instead of `grid grid-cols-2`), adding `w-full` to the tile buttons since
+  they'd relied on CSS grid's implicit stretch.
+
+### Completed
+
+* Small uppercase "eyebrow" labels bumped up one notch app-wide
+  (`text-[10px]`→`text-[11px]`, `text-[11px]`→`text-xs`) for legibility on a
+  real device — `src/components/SectionLabel.tsx` plus 62 other occurrences
+  across 12 route/component files, done as targeted substring replacements
+  rather than reviewing every line, since it's a pure font-size swap.
+  Deliberately skipped non-uppercase small text (tabular-nums detail rows,
+  badge chips, a fixed-width ring number, the dev-only ThemeTokenPreview
+  screen) where bumping risked new overflow instead of fixing legibility.
+* Debt Strategy's 4-column scenario table (Scenario/Avalanche/Snowball/
+  Custom) was already correctly wrapped in `overflow-x-auto` — the "Custom"
+  column is reachable by swiping, just wasn't discoverable. Added a "Swipe
+  the table left to see the Custom column →" caption.
+
+### Notes
+
+* No ADR — pure CSS-class/layout fixes, no schema/logic change.
+* Not yet build-verified locally (AppLocker); needs a real-phone re-check.
+
+## 2026-08-25 – Budget Visualization Overhaul
+
+### Completed
+
+* Zero-budget category label fixed: when `budgeted === 0` and actual spend
+  is positive, Dashboard "Budget vs actual" tiles and Spending category rows
+  now read "$X spent" (destructive color) instead of the confusing "$-X left".
+* Budget split lines (Dashboard "Budget vs actual" + Monthly Summary,
+  Spending screen) now label themselves: a "Paid / due · tap a line for
+  detail" caption, bills/debts rows read paid/due with the denominator
+  floored at the paid amount (a fully-paid bill no longer shows "$7.33 /
+  $0.00"), and each row is tappable to reveal total due/budgeted, total
+  paid/spent, remaining/available, and pending for the pay period
+  (`src/components/BudgetSplitLines.tsx`).
+* Pay-period budget math now separates cleared from pending: `budgetChart`
+  in `src/routes/app.index.tsx` computes actuals from cleared transactions
+  only and carries pending per split (spending/bills/debts) for the new
+  detail rows.
+* New shared `budgetRingColor()` (`src/components/viz.tsx`) replaces the
+  rotating palette on every budget ring: green under 80%, amber 80-99%,
+  blue at exactly 100% (new `--budget-complete` token in `src/styles.css`,
+  light+dark), destructive/orange when over budget or when spend exists
+  with no budget at all. Applied to Dashboard budget tiles, Monthly Summary
+  tiles, and Spending category rows — presentation only, no schema/ADR.
+  * Follow-up: the group-level ring used the same zero-denominator quirk (a
+    fully-paid bill leaves the "due this period" scan), so a category whose
+    only activity was a paid bill rendered orange/100%. `budgetChart` now
+    floors each category's bills/debts expected amount at the amount
+    actually paid, so paid-in-full correctly reads blue (exactly 100%).
+* Split-line bars now use the same `budgetRingColor()` instead of a flat
+  brand blue, so an over-spent line reads orange and a partly-paid line
+  reads green/amber rather than "complete" blue; over-detection also covers
+  the zero-denominator (spend-with-no-budget) case.
+* Budget split-line progress bars render pending amounts as a yellow/amber
+  segment at the end of the filled bar (`ItemBar` in `src/components/viz.tsx`)
+  — cleared spending/bills/debts use the budget-state color, any pending
+  portion shows in `var(--state-pending)` so it's visible without tapping
+  the detail row.
+* Deduction-funded obligations (payroll/HSA, ADR-032/068) were rendering as
+  $0.00 rows on the Dashboard budget breakdown despite being excluded from
+  budgeting math. Now computed separately and shown as a "Deducted (payroll
+  / HSA)" split line — informational only, the figures never feed
+  `budgeted`/`actual`, so ring percentages are unchanged
+  (`src/routes/app.index.tsx`, `src/components/BudgetSplitLines.tsx`).
+* Dashboard budget tile rings are now a fuller status indicator: include
+  deduction-funded obligations in the paid/due math, and `ProgressRing`
+  gained a `pendingValue` amber arc so pending shows as partial progress
+  (budget labels below the ring unchanged).
+
+### Notes
+
+* Presentation/derivation-logic only — no schema or ADR change; also fixed
+  a typecheck error on `ItemBar`'s optional `pendingValue`.
+* Not yet build-verified locally (AppLocker).
+
+## 2026-08-25 – Bills List Card Redesign
+
+### Completed
+
+* Bills list card redesign (`src/routes/app.bills.tsx`): category shown as
+  a colored icon chip, billing cycle removed from the row (still on the
+  detail view), amount moved inline with the name, tighter icon/padding for
+  better use of narrow screens.
+* Bills list status chips (Pending/Unpaid/Cleared) now always render on
+  their own dedicated line below the due-date/category metadata, so status
+  is scannable in a consistent location on every card.
+
+### Notes
+
+* Presentation only — no schema or ADR change.
+* Not yet build-verified locally (AppLocker).

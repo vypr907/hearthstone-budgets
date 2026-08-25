@@ -2,12 +2,16 @@
 
 ## Follow-up work
 
-- [ ] Mobile layout fixes (2026-08-25 — FAB overlap padding, Dashboard tile
-      truncation, app-wide small-label size bump, Debt Strategy scroll hint)
-      need a real-phone re-check — same AppLocker constraint as below, can't
-      build locally. Confirm on the actual Android device: the floating "+"
-      no longer covers the last row/button on any screen, "Budget vs actual"/
-      "Monthly summary" show full category names, and labels read larger.
+- [ ] 2026-08-25 budget visualization overhaul (ring color rules via
+      `budgetRingColor()`, pending-amount amber bar segments, tappable
+      split-line detail rows, deduction-funded split line, zero-budget
+      "$X spent" label fix) and the Bills list card redesign need a
+      build/browser (or real-phone) check — same AppLocker constraint as
+      below. This landed after the FAB-overlap/tile-truncation mobile fixes,
+      which appear to have already been iterated on and fixed directly
+      (see "Fixed debt detail overflow"/"Fixed amount tile overflow" in git
+      log) — no need to re-verify those specifically unless new overlap
+      issues show up.
 - [ ] 2026-08-24 fixes (Dashboard overdue guard, `applyClearedPayment` date
       threading, out-of-order backfill warning on debt adjustments/advances)
       need a build/browser smoke test — same AppLocker constraint as below.
