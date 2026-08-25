@@ -66,3 +66,8 @@
     activity was a paid bill rendered orange/100%. `budgetChart` now floors
     each category's bills/debts expected amount at the amount actually paid,
     so paid-in-full reads blue (exactly 100%).
+- Split-line bars now use the shared `budgetRingColor()` (green/amber/blue/orange)
+  instead of a flat brand blue, so an over-spent line reads orange and a partly
+  paid line reads green/amber rather than "complete" blue. Over-detection also
+  covers the zero-denominator case (spend with no budget). Presentation only;
+  `src/components/BudgetSplitLines.tsx`.
