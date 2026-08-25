@@ -121,17 +121,17 @@ export function ItemBar({
       <div className="flex h-full rounded-full transition-[width]" style={{ width: `${totalPct}%` }}>
         {clearedWidth > 0 ? (
           <div
-            className="h-full rounded-l-full transition-[width]"
+            className={cn("h-full transition-[width]", pendingWidth > 0 ? "rounded-l-full" : "rounded-full")}
             style={{ width: `${clearedWidth}%`, background: color ?? "var(--brand)" }}
           />
         ) : null}
         {pendingWidth > 0 ? (
           <div
             className={cn(
-              "h-full bg-state-pending transition-[width]",
+              "h-full transition-[width]",
               clearedWidth > 0 ? "rounded-r-full" : "rounded-full",
             )}
-            style={{ width: `${pendingWidth}%` }}
+            style={{ width: `${pendingWidth}%`, background: "var(--state-pending)" }}
           />
         ) : null}
       </div>
