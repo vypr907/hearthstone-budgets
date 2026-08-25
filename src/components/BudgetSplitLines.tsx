@@ -26,6 +26,9 @@ export function BudgetSplitLines({
   spendingPending,
   billsPending,
   debtsPending,
+  deductedBudgeted,
+  deductedSpent,
+  deductedPending,
   extra,
 }: {
   spendingBudgeted: number;
@@ -39,6 +42,14 @@ export function BudgetSplitLines({
   spendingPending?: number;
   billsPending?: number;
   debtsPending?: number;
+  /**
+   * ADR-032/068: payroll- or HSA-funded obligations. Excluded from budgeting
+   * math everywhere else, but still surfaced here so the due/paid/pending
+   * numbers are visible.
+   */
+  deductedBudgeted?: number;
+  deductedSpent?: number;
+  deductedPending?: number;
   extra?: { label: string; value: number };
 }) {
   const rows = [
@@ -70,6 +81,22 @@ export function BudgetSplitLines({
             spent: debtsSpent ?? 0,
             total: Math.max(debtsBudgeted ?? 0, debtsSpent ?? 0),
             pending: debtsPending,
+            spentWord: "paid",
+            totalWord: "due",
+            remainingWord: "remaining",
+          },
+        ]
+      : []),
+    ...((deductedBudgeted ?? 0) > 0 ||
+    (deductedSpent ?? 0) > 0 ||
+    (deductedPending ?? 0) > 0
+      ? [
+          {
+            icon: "💊",
+            label: "Deducted (payroll / HSA)",
+            spent: deductedSpent ?? 0,
+            total: Math.max(deductedBudgeted ?? 0, deductedSpent ?? 0),
+            pending: deductedPending,
             spentWord: "paid",
             totalWord: "due",
             remainingWord: "remaining",

@@ -78,3 +78,11 @@
   tapping the detail row. `src/components/BudgetSplitLines.tsx` wires pending
   percentages into each split row.
 
+- Deduction-funded obligations (payroll/HSA, ADR-032/068) are excluded from
+  budgeting math but were rendering as $0.00 rows (e.g. Medical). The Dashboard
+  budget breakdown now computes their period due/paid/pending separately and
+  shows a "Deducted (payroll / HSA)" split line. Informational only — the
+  figures never feed `budgeted`/`actual`, so ring percentages are unchanged.
+  Files: `src/routes/app.index.tsx`, `src/components/BudgetSplitLines.tsx`.
+  Also fixed a typecheck error on the optional `pendingValue` in `ItemBar`
+  (`src/components/viz.tsx`).

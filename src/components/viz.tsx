@@ -105,7 +105,7 @@ export function ItemBar({
   className?: string;
 }) {
   const clearedPct = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
-  const pendingPct = Math.max(0, Number.isFinite(pendingValue) ? pendingValue : 0);
+  const pendingPct = Math.max(0, Number.isFinite(pendingValue) ? (pendingValue as number) : 0);
   const committedRaw = clearedPct + pendingPct;
   const totalPct = Math.min(100, committedRaw);
 
