@@ -307,8 +307,8 @@ export function actualByCategoryInRange(
   const income = new Set(
     categories.filter((c) => (c.domain ?? "").toLowerCase() === "income").map((c) => c.id),
   );
-  const billCategory = new Map(bills.map((b) => [b.id, b.category_id]));
-  const debtCategory = new Map(debts.map((d) => [d.id, d.category_id]));
+  const billCategory = new Map<string, string | null>(bills.map((b) => [b.id, (b.category_id as string | null) ?? null]));
+  const debtCategory = new Map<string, string | null>(debts.map((d) => [d.id, (d.category_id as string | null) ?? null]));
   const deductedDebtIds = new Set(debts.filter(isPaycheckDeducted).map((d) => d.id));
   const out = new Map<string, CategoryActual>();
 
