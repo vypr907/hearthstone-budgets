@@ -45,6 +45,8 @@
   --color-state-pending: var(--state-pending);
   --color-state-partial: var(--state-partial);
   --color-state-cleared: var(--state-cleared);
+  --color-budget-complete: var(--budget-complete);
+
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
