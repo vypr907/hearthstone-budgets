@@ -69,5 +69,12 @@
 - Split-line bars now use the shared `budgetRingColor()` (green/amber/blue/orange)
   instead of a flat brand blue, so an over-spent line reads orange and a partly
   paid line reads green/amber rather than "complete" blue. Over-detection also
-  covers the zero-denominator case (spend with no budget). Presentation only;
-  `src/components/BudgetSplitLines.tsx`.
+   covers the zero-denominator case (spend with no budget). Presentation only;
+   `src/components/BudgetSplitLines.tsx`.
+- Budget split-line progress bars now render pending amounts as a yellow/amber
+  segment at the end of the filled bar (`ItemBar` in `src/components/viz.tsx`).
+  Cleared spending/bills/debts use the existing budget-state colour, while any
+  pending portion is shown in `var(--state-pending)` so it is visible without
+  tapping the detail row. `src/components/BudgetSplitLines.tsx` wires pending
+  percentages into each split row.
+

@@ -91,23 +91,50 @@ export function ProgressRing({
   );
 }
 
-/** Horizontal bar with a per-item colour. */
+/** Horizontal bar with a per-item colour. Optionally shows a pending segment
+ *  in yellow/amber at the end of the filled portion. */
 export function ItemBar({
   value,
+  pendingValue,
   color,
   className,
 }: {
   value: number;
+  pendingValue?: number;
   color?: string;
   className?: string;
 }) {
-  const pct = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+  const clearedPct = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+  const pendingPct = Math.max(0, Number.isFinite(pendingValue) ? pendingValue : 0);
+  const committedRaw = clearedPct + pendingPct;
+  const totalPct = Math.min(100, committedRaw);
+
+  let clearedWidth = 0;
+  let pendingWidth = 0;
+  if (committedRaw > 0) {
+    clearedWidth = (clearedPct / committedRaw) * totalPct;
+    pendingWidth = (pendingPct / committedRaw) * totalPct;
+  }
+
   return (
     <div className={cn("h-2 w-full overflow-hidden rounded-full bg-muted", className)}>
-      <div
-        className="h-full rounded-full transition-[width]"
-        style={{ width: `${pct}%`, background: color ?? "var(--brand)" }}
-      />
+      <div className="flex h-full rounded-full transition-[width]" style={{ width: `${totalPct}%` }}>
+        {clearedWidth > 0 ? (
+          <div
+            className={cn("h-full transition-[width]", pendingWidth > 0 ? "rounded-l-full" : "rounded-full")}
+            style={{ width: `${clearedWidth}%`, background: color ?? "var(--brand)" }}
+          />
+        ) : null}
+        {pendingWidth > 0 ? (
+          <div
+            className={cn(
+              "h-full transition-[width]",
+              clearedWidth > 0 ? "rounded-r-full" : "rounded-full",
+            )}
+            style={{ width: `${pendingWidth}%`, background: "var(--state-pending)" }}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
