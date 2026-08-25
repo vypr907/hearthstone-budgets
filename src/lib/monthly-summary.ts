@@ -52,8 +52,8 @@ export function combinedActualByCategory(
   month: string,
 ): Map<string, CategoryActual> {
   const income = incomeCategoryIds(categories);
-  const billCategory = new Map(bills.map((b) => [b.id, b.category_id ?? null]));
-  const debtCategory = new Map(debts.map((d) => [d.id, d.category_id ?? null]));
+  const billCategory = new Map<string, string | null>(bills.map((b) => [b.id, (b.category_id as string | null) ?? null]));
+  const debtCategory = new Map<string, string | null>(debts.map((d) => [d.id, (d.category_id as string | null) ?? null]));
   const deductedDebtIds = new Set(debts.filter(isPaycheckDeducted).map((d) => d.id));
   const out = new Map<string, CategoryActual>();
 
