@@ -87,3 +87,5 @@
   Also fixed a typecheck error on the optional `pendingValue` in `ItemBar`
   (`src/components/viz.tsx`).
 - Dashboard budget tiles: ring is now a status indicator — includes deduction-funded (payroll/HSA) obligations in the paid/due math, and `ProgressRing` gained a `pendingValue` amber arc so pending shows as partial progress. Budget labels below the ring are unchanged.
+
+- Bills list card redesign: category shown as a coloured icon chip, billing cycle removed from the row (still on detail view), amount moved inline with the name, tighter icon/padding for better use of narrow screens. Files: src/routes/app.bills.tsx.

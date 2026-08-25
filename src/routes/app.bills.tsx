@@ -66,7 +66,12 @@ import { PastDueEditor } from "@/components/PastDueEditor";
 import { StrandedBillRepair } from "@/components/StrandedBillRepair";
 import { EmojiIcon, ItemBar, itemColor } from "@/components/viz";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
-import { AUTO_TRANSFER_ICON, formatTypeLabel } from "@/lib/visual-meta";
+import {
+  AUTO_TRANSFER_ICON,
+  DEFAULT_CATEGORY_COLOR,
+  DEFAULT_CATEGORY_ICON,
+  formatTypeLabel,
+} from "@/lib/visual-meta";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 import { format } from "date-fns";
 const ADD_INSTITUTION = "__add_institution__";
@@ -132,6 +137,12 @@ function BillsPage() {
     for (const c of categories) m[c.id] = c.name;
     return m;
   }, [categories]);
+  const categoryById = useMemo(() => {
+    const m: Record<string, (typeof categories)[number]> = {};
+    for (const c of categories) m[c.id] = c;
+    return m;
+  }, [categories]);
+
   const rows = useMemo(() => {
     let out = bills;
     if (cats.length) {
@@ -214,21 +225,42 @@ function BillsPage() {
                 return (
                   <Card key={b.id} className="cursor-pointer" onClick={() => setDetail(b)}>
                     <CardContent className="p-3">
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-2.5">
                         <ObligationIcon
                           institution={institutionById[b.institution_id ?? ""]}
                           name={`${b.name} ${(b.category_id && categoryName[b.category_id]) || ""}`}
                           fallback="🧾"
+                          size={32}
+                          className="h-8 w-8 text-base"
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">{b.name}</p>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                            <span>
+                          <div className="flex items-baseline gap-2">
+                            <p className="min-w-0 flex-1 truncate font-semibold leading-tight">
+                              {b.name}
+                            </p>
+                            <p className="shrink-0 text-base font-extrabold tabular-nums">
+                              {formatMoney(Number(b.amount))}
+                            </p>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <span className="tabular-nums">
                               {b.next_due_date ? `Due ${b.next_due_date}` : "No due date"}
                             </span>
-                            {b.billing_cycle ? <span>· {b.billing_cycle}</span> : null}
-                            {b.category_id && categoryName[b.category_id] ? (
-                              <span>· {categoryName[b.category_id]}</span>
+                            {b.category_id && categoryById[b.category_id] ? (
+                              <span
+                                className="inline-flex max-w-[45%] items-center gap-1 truncate rounded-full px-1.5 py-0.5"
+                                style={{
+                                  background: `color-mix(in oklab, ${
+                                    categoryById[b.category_id]?.color || DEFAULT_CATEGORY_COLOR
+                                  } 18%, transparent)`,
+                                }}
+                                title={categoryName[b.category_id]}
+                              >
+                                <span aria-hidden>
+                                  {categoryById[b.category_id]?.icon || DEFAULT_CATEGORY_ICON}
+                                </span>
+                                <span className="truncate">{categoryName[b.category_id]}</span>
+                              </span>
                             ) : null}
                             {b.is_variable_amount ? <span>· variable</span> : null}
                             <StatusBadge status={info.state} />
@@ -242,12 +274,10 @@ function BillsPage() {
                             <span className="sr-only">{stateLabel}</span>
                           </div>
                         </div>
-                        <p className="shrink-0 text-lg font-extrabold tabular-nums">
-                          {formatMoney(Number(b.amount))}
-                        </p>
                         <Button
                           size="icon"
                           variant="ghost"
+                          className="-mr-1 h-7 w-7 shrink-0"
                           onClick={(e) => {
                             e.stopPropagation();
                             setEditing(b);
@@ -257,6 +287,7 @@ function BillsPage() {
                           <Pencil className="h-4 w-4" />
                         </Button>
                       </div>
+
                       {paid > 0 ? (
                         <ItemBar className="mt-2" value={pct} color={itemColor(i)} />
                       ) : null}
