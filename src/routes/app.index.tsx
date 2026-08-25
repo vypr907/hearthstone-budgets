@@ -1320,6 +1320,9 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
             spendingPending={g.spendingPending}
             billsPending={g.billsPending}
             debtsPending={g.debtsPending}
+            deductedBudgeted={g.deductedBudgeted}
+            deductedSpent={g.deductedSpent}
+            deductedPending={g.deductedPending}
           />
         </div>
       ) : null}
