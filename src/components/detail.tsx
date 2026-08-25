@@ -53,9 +53,10 @@ export function DetailMoney({
 
 export function DetailText({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 whitespace-pre-wrap text-sm">{value || "—"}</p>
+      <p className="mt-1 break-words whitespace-pre-wrap text-sm">{value || "—"}</p>
     </div>
   );
 }
+
