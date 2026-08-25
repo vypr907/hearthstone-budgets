@@ -469,6 +469,14 @@ function Dashboard() {
         g.billsPending += pending.billsSpent;
         g.debtsPending += pending.debtsSpent;
       }
+      // Informational only — deliberately not added to budgeted/actual.
+      const deductedPaid = deductedPaidByCategory.get(b.category_id) ?? 0;
+      g.deductedSpent += deductedPaid;
+      g.deductedPending += deductedPendingByCategory.get(b.category_id) ?? 0;
+      g.deductedBudgeted += Math.max(
+        deductedDueByCategory.get(b.category_id) ?? 0,
+        deductedPaid,
+      );
       groups.set(key, g);
     }
     return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
