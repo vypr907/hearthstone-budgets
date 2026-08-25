@@ -61,7 +61,7 @@ function SettingsPage() {
         <Card>
           <CardContent className="space-y-3 p-4">
             <div>
-              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Theme
               </Label>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -97,7 +97,7 @@ function SettingsPage() {
         <Card>
           <CardContent className="space-y-3 p-4">
             <div>
-              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Snapshot export format
               </Label>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -122,7 +122,7 @@ function SettingsPage() {
         <Card>
           <CardContent className="p-4">
             <details>
-              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Theme token reference
               </summary>
               <div className="mt-3">

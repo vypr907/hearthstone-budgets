@@ -1028,7 +1028,7 @@ function AutoTransferRow({
               <span>· {at.billing_cycle}</span>
               <span>· Next {at.next_due_date}</span>
               {overdue ? (
-                <span className="rounded-full bg-state-pending/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-pending">
+                <span className="rounded-full bg-state-pending/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-state-pending">
                   Check on this
                 </span>
               ) : (

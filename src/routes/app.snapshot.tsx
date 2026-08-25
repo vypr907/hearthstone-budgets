@@ -66,7 +66,7 @@ function Row({ row, index, accent }: { row: SnapshotRow; index: number; accent?:
       />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{row.name}</p>
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {accent
             ? `${days} day${days === 1 ? "" : "s"} overdue`
             : `${formatDayLabel(row.dueDate)} · in ${days} day${days === 1 ? "" : "s"}`}
@@ -90,7 +90,7 @@ function MoreNote({ count, tone }: { count: number; tone: "overdue" | "upcoming"
   if (count <= 0) return null;
   return (
     <p
-      className={`pt-2 text-[11px] font-semibold uppercase tracking-wide ${
+      className={`pt-2 text-xs font-semibold uppercase tracking-wide ${
         tone === "overdue" ? "text-destructive" : "text-muted-foreground"
       }`}
     >
@@ -219,7 +219,7 @@ function SnapshotPage() {
           >
             <CardContent className="flex items-center gap-4 p-5">
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
                   Status Snapshot
                 </p>
                 <h2 className="truncate text-2xl font-bold tracking-tight">
@@ -234,7 +234,7 @@ function SnapshotPage() {
                 <p className="mt-2 text-3xl font-bold tabular-nums">
                   {formatMoney(snap.overdueTotal + snap.upcomingTotal)}
                 </p>
-                <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
                   Due now + next 14 days
                 </p>
               </div>
@@ -254,7 +254,7 @@ function SnapshotPage() {
             >
               <CardContent className="p-4">
                 <div className="flex items-baseline justify-between gap-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-destructive">
                     Overdue
                   </p>
                   <p className="text-2xl font-bold tabular-nums text-destructive">
@@ -278,7 +278,7 @@ function SnapshotPage() {
           <Card style={{ boxShadow: "var(--shadow-card)" }}>
             <CardContent className="p-4">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Next 14 days · {snap.upcoming.length}
                 </p>
                 <p className="text-2xl font-bold tabular-nums">
@@ -306,14 +306,14 @@ function SnapshotPage() {
           <Card style={{ boxShadow: "var(--shadow-card)" }}>
             <CardContent className="p-4">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Balances
                 </p>
                 <p className="text-2xl font-bold tabular-nums text-primary">
                   {formatMoney(balanceSummary.spendableTotal)}
                 </p>
               </div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Combined spendable
               </p>
               {balanceSummary.rows.length === 0 ? (
@@ -334,7 +334,7 @@ function SnapshotPage() {
           <Card style={{ boxShadow: "var(--shadow-card)" }}>
             <CardContent className="p-4">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   This {progress.label}
                 </p>
                 <p className="text-sm font-bold tabular-nums">
@@ -355,7 +355,7 @@ function SnapshotPage() {
 
           <Card style={{ boxShadow: "var(--shadow-card)" }}>
             <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Summary
               </p>
               <p className="mt-1 text-sm leading-relaxed">{summary}</p>
@@ -364,7 +364,7 @@ function SnapshotPage() {
 
           <Card>
             <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Next paycheck
               </p>
               {nextPaycheck ? (

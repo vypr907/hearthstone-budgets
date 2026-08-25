@@ -132,7 +132,7 @@ function InstitutionsPage() {
           {groups.map((g) => (
             <div key={g.key} className="space-y-2">
               {g.label ? (
-                <p className="px-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <p className="px-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   {g.label}
                 </p>
               ) : null}

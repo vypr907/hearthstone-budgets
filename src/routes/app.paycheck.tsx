@@ -323,7 +323,7 @@ function ObligationRow({ o, status }: { o: ObligationRowItem; status?: CycleInfo
           </span>
           {o.projected ? (
             <span className="ml-2 inline-flex items-center gap-1">
-              <span className="rounded border border-dashed px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span className="rounded border border-dashed px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                 Projected
               </span>
               <HelpButton>
@@ -708,7 +708,7 @@ function PeriodBudget({
           </div>
           {deducted.length > 0 ? (
             <div className="space-y-1 rounded-md bg-muted/40 p-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {PAYCHECK_DEDUCTION_ICON} Paycheck-deducted (not counted)
               </p>
               {deducted.map((o) => (
@@ -795,7 +795,7 @@ function PeriodBudget({
           <h2 className="text-base font-semibold">Allocations</h2>
           {catGroups.map(([parent, rows]) => (
             <div key={parent} className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 {parent}
               </p>
               {rows.map((c) => {
@@ -867,7 +867,7 @@ function PeriodBudget({
           ))}
           {goals.length > 0 ? (
             <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 Savings goals
               </p>
               {goals.map((g) => {

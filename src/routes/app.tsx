@@ -27,7 +27,7 @@ function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-[calc(6rem+env(safe-area-inset-bottom))]">
+    <div className="min-h-screen bg-background pb-[calc(10rem+env(safe-area-inset-bottom))]">
       <div className="mx-auto max-w-lg">
         <Outlet />
       </div>

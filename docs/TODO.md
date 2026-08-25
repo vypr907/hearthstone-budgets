@@ -2,6 +2,12 @@
 
 ## Follow-up work
 
+- [ ] Mobile layout fixes (2026-08-25 — FAB overlap padding, Dashboard tile
+      truncation, app-wide small-label size bump, Debt Strategy scroll hint)
+      need a real-phone re-check — same AppLocker constraint as below, can't
+      build locally. Confirm on the actual Android device: the floating "+"
+      no longer covers the last row/button on any screen, "Budget vs actual"/
+      "Monthly summary" show full category names, and labels read larger.
 - [ ] 2026-08-24 fixes (Dashboard overdue guard, `applyClearedPayment` date
       threading, out-of-order backfill warning on debt adjustments/advances)
       need a build/browser smoke test — same AppLocker constraint as below.

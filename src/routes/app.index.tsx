@@ -593,7 +593,7 @@ function Dashboard() {
           style={{ backgroundImage: "var(--gradient-brand)" }}
         >
           <div className="p-5">
-            <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest opacity-80">
+            <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-widest opacity-80">
               Combined spendable
               <HelpButton>
                 Checking and credit-card accounts only. Credit cards add their
@@ -627,7 +627,7 @@ function Dashboard() {
             </p>
             <div className="mt-4 grid grid-cols-3 gap-3">
               <div className="rounded-[12px] bg-brand-foreground/15 p-3">
-                <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest opacity-80">
                   Bills this {period.label}
                   <HelpButton>
                     Every bill due this {period.label}, at its full due-date
@@ -640,7 +640,7 @@ function Dashboard() {
                 </p>
               </div>
               <div className="rounded-[12px] bg-brand-foreground/15 p-3">
-                <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest opacity-80">
                   Debts this {period.label}
                   <HelpButton>
                     Every debt's minimum payment due this {period.label}, at
@@ -653,7 +653,7 @@ function Dashboard() {
                 </p>
               </div>
               <div className="rounded-[12px] bg-brand-foreground/15 p-3">
-                <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest opacity-80">
                   {AUTO_TRANSFER_ICON} this {period.label}
                   <HelpButton>
                     Recurring auto-transfers due this {period.label} (ADR-081)
@@ -690,7 +690,7 @@ function Dashboard() {
 
         <Card>
           <CardContent className="p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Spendable breakdown
             </p>
             <div className="mt-3 space-y-1 text-sm">
@@ -736,7 +736,7 @@ function Dashboard() {
         {budgetChart.length > 0 && (
           <Card>
             <CardContent className="p-4">
-              <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 Budget vs actual · this pay period
                 <HelpButton>
                   Your budgeted amount per category, compared against bills,
@@ -750,12 +750,12 @@ function Dashboard() {
                 </HelpButton>
               </p>
               <BudgetTotals rows={budgetChart} />
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="mt-3 space-y-2">
                 {budgetChart.map((g, i) => (
                   <BudgetTile key={g.name} group={g} index={i} />
                 ))}
               </div>
-              <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+              <p className="mt-2 text-[11px] uppercase tracking-widest text-muted-foreground">
                 Tap a category for the spending / bills / debts split
               </p>
             </CardContent>
@@ -769,7 +769,7 @@ function Dashboard() {
         {spendingByCategory.rows.length > 0 && (
           <Card>
             <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 Spending by category · this month
               </p>
               <p className="mt-1 text-3xl font-extrabold tabular-nums">
@@ -805,7 +805,7 @@ function Dashboard() {
 
         <Card>
           <CardContent className="p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Still owed this {period.label}
             </p>
             <p className="mt-1 text-3xl font-extrabold tabular-nums">
@@ -863,7 +863,7 @@ function Dashboard() {
                 aria-expanded={payoffOpen}
                 className="flex w-full items-center justify-between gap-2"
               >
-                <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   Payoff progress
                 </span>
                 {payoffOpen ? (
@@ -886,7 +886,7 @@ function Dashboard() {
                         </span>
                       </div>
                       <ItemBar className="mt-1" value={d.pct} color={itemColor(i)} />
-                      <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                      <p className="mt-1 text-[11px] uppercase tracking-widest text-muted-foreground">
                         {Math.round(d.pct)}% paid off
                       </p>
                     </div>
@@ -932,7 +932,7 @@ function Dashboard() {
                     aria-expanded={overdueDeductionsOpen}
                     className="flex w-full items-center justify-between gap-2"
                   >
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                       Paycheck / HSA deduction · {overdueDeductions.length}
                       {" "}· {formatMoney(overdueDeductionsTotal)}
                     </span>
@@ -950,7 +950,7 @@ function Dashboard() {
               {overdueRest.length > 0 ? (
                 <div className="space-y-2">
                   {overdueDeductions.length > 0 ? (
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                       Other
                     </p>
                   ) : null}
@@ -985,7 +985,7 @@ function Dashboard() {
                   <div key={r.at.id} className="flex items-center justify-between gap-2 text-sm">
                     <span className="min-w-0 flex-1 truncate">{r.at.name}</span>
                     {r.overdue ? (
-                      <span className="rounded-full bg-state-pending/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-pending">
+                      <span className="rounded-full bg-state-pending/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-state-pending">
                         Check on this
                       </span>
                     ) : (
@@ -1012,7 +1012,7 @@ function Dashboard() {
         {monthlySummary.length > 0 && (
           <Card>
             <CardContent className="p-4">
-              <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 Monthly summary
                 <HelpButton>
                   Bills, debt minimum payments, and spending combined, by
@@ -1023,12 +1023,12 @@ function Dashboard() {
                 </HelpButton>
               </p>
               <MonthlySummaryTotals groups={monthlySummary} />
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="mt-3 space-y-2">
                 {monthlySummary.map((g, i) => (
                   <MonthlySummaryTile key={g.name} group={g} index={i} />
                 ))}
               </div>
-              <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+              <p className="mt-2 text-[11px] uppercase tracking-widest text-muted-foreground">
                 Tap a category for the spending / bills / debts split
               </p>
             </CardContent>
@@ -1038,7 +1038,7 @@ function Dashboard() {
         {netWorthData.length > 1 && (
           <Card>
             <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 Net worth trend
               </p>
               <p className="mt-1 text-3xl font-extrabold tabular-nums">
@@ -1163,12 +1163,12 @@ function OverdueRow({ item: o }: { item: OverdueItem }) {
           <p className="flex items-center gap-2 truncate font-medium">
             <span className="truncate">{o.name}</span>
             {o.funding ? (
-              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {o.funding}
               </span>
             ) : null}
           </p>
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
             {o.kind}
             {o.cycles > 1 ? ` · ${o.cycles} cycles behind` : ""}
             {o.due_date ? ` · since ${o.due_date}` : ""}
@@ -1196,7 +1196,7 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
     <button
       type="button"
       onClick={() => setOpen((v) => !v)}
-      className="rounded-[14px] bg-muted/40 p-3 text-left active:bg-muted"
+      className="w-full rounded-[14px] bg-muted/40 p-3 text-left active:bg-muted"
       aria-expanded={open}
     >
       <div className="flex items-center gap-2">
@@ -1298,7 +1298,7 @@ function MonthlySummaryTile({ group: g, index: i }: { group: MonthlySummaryGroup
     <button
       type="button"
       onClick={() => setOpen((v) => !v)}
-      className="rounded-[14px] bg-muted/40 p-3 text-left active:bg-muted"
+      className="w-full rounded-[14px] bg-muted/40 p-3 text-left active:bg-muted"
       aria-expanded={open}
     >
       <div className="flex items-center gap-2">

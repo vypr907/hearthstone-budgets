@@ -414,7 +414,7 @@ function SpendingPage() {
             return (
               <Card key={g.name}>
                 <CardContent className="p-2">
-                  <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  <p className="px-2 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                     {g.name}
                   </p>
                   {g.rows.map((r, i) => (
@@ -443,7 +443,7 @@ function SpendingPage() {
                     />
                   ))}
                   <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-2 text-xs">
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                       Subtotal
                     </span>
                     <span className="tabular-nums">
@@ -683,7 +683,7 @@ function SpendingSummary({
   return (
     <Card>
       <CardContent className="p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Spent this month
         </p>
         <div className="mt-1 flex items-baseline justify-between gap-2">
@@ -707,7 +707,7 @@ function SpendingSummary({
           ].map((s) => (
             <div key={s.label} className="rounded-[12px] bg-muted/40 p-2">
               <p className="text-sm font-bold tabular-nums">{formatMoney(s.value)}</p>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
                 {s.label}
               </p>
             </div>
@@ -715,7 +715,7 @@ function SpendingSummary({
         </div>
         {categorySlices && categorySlices.length > 0 ? (
           <div className="mt-4 border-t border-border/60 pt-4">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Share of spending
             </p>
             <DonutChart slices={categorySlices} size={120} thickness={18} />
@@ -767,8 +767,8 @@ function SpendingRow({
           <span
             className={
               over
-                ? "text-[10px] uppercase tracking-widest text-destructive"
-                : "text-[10px] uppercase tracking-widest text-muted-foreground"
+                ? "text-[11px] uppercase tracking-widest text-destructive"
+                : "text-[11px] uppercase tracking-widest text-muted-foreground"
             }
           >
             {over

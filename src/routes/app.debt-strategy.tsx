@@ -184,6 +184,9 @@ function DebtStrategyPage() {
                 </div>
               </CardContent>
             </Card>
+            <p className="px-1 text-xs text-muted-foreground">
+              Swipe the table left to see the Custom column →
+            </p>
 
             <p className="px-1 text-xs text-muted-foreground">
               Baseline: minimums only — {formatMonths(comparison.minimumsOnly.months)},{" "}

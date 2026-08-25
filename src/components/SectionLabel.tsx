@@ -18,8 +18,8 @@ export function SectionLabel({
     <p
       className={
         (size === "sub"
-          ? "text-[10px] font-semibold uppercase tracking-widest"
-          : "text-[11px] font-semibold uppercase tracking-widest") +
+          ? "text-[11px] font-semibold uppercase tracking-widest"
+          : "text-xs font-semibold uppercase tracking-widest") +
         " text-muted-foreground" +
         (className ? ` ${className}` : "")
       }

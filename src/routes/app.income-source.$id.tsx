@@ -243,7 +243,7 @@ function IncomeSourceDetailPage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[12px] bg-muted/50 p-2">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-sm font-semibold">{value}</p>
     </div>
   );
