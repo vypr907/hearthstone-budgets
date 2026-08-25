@@ -114,7 +114,7 @@ function SplitRow({
   remainingWord: string;
 }) {
   const [open, setOpen] = useState(false);
-  const over = total > 0 && spent > total;
+  const over = spent > total;
   const pct = total > 0 ? Math.min(100, (spent / total) * 100) : spent > 0 ? 100 : 0;
   const remaining = Math.max(0, total - spent);
   return (
