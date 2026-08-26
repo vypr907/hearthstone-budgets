@@ -525,16 +525,46 @@ function DebtDetailDialog({
                   <Badge variant={statusVariant(cycle.state)} className="capitalize">
                     {cycle.state}
                   </Badge>
-                  {(debt.payment_status || "unpaid") !== cycle.state ? (
-                    <div className="text-xs text-muted-foreground">
-                      stored: {debt.payment_status || "unpaid"}
+                  {storedDiffers ? (
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">
+                        stored: {debt.payment_status || "unpaid"}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        disabled={syncStatus.isPending}
+                        onClick={() =>
+                          syncStatus.mutate({
+                            p: toPayable("debt", debt),
+                            state: cycle.state,
+                            clearedSum: cycle.clearedSum,
+                          })
+                        }
+                      >
+                        Sync stored status
+                      </Button>
                     </div>
                   ) : null}
                 </div>
               }
             />
-            <DetailItem label="Cycle window" value={formatWindow(cycle.windowStart, cycle.windowEnd)} />
+            <DetailItem
+              label="Cycle window"
+              value={
+                <div>
+                  <div>{formatWindow(billingWindow?.start ?? null, billingWindow?.end ?? null)}</div>
+                  {cycle.windowStart && cycle.windowEnd ? (
+                    <div className="text-xs text-muted-foreground">
+                      counting {formatWindow(cycle.windowStart, cycle.windowEnd)}
+                    </div>
+                  ) : null}
+                </div>
+              }
+            />
             <DetailItem label="Pay period" value={payPeriod ? formatWindow(payPeriod.start, payPeriod.end) : "—"} />
+
 
             <DetailItem
               label="On payment plan"
