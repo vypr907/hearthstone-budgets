@@ -116,15 +116,29 @@ describe("ADR-075 late-payment cycle tagging", () => {
       ...over,
     }) as unknown as Transaction;
 
-  it("excludes a transaction tagged as resolving an earlier cycle from the new cycle's window", () => {
+  // ADR-086 supersedes the original expectation here: a monthly cycle is the
+  // calendar month, so an 8/23 payment tagged with the 8/22 due date still
+  // belongs to August and August reads CLEARED. Only a tag from an *earlier
+  // month* is excluded.
+  it("keeps a same-month tagged late payment on this month's cycle", () => {
     const i = deriveCycleInfo(
       toPayable("bill", rent({ next_due_date: "2026-09-22" })),
       [lateTx()],
       LATE_TODAY,
     );
+    expect(i.state).toBe("cleared");
+  });
+
+  it("excludes a payment tagged as resolving a previous month's cycle", () => {
+    const i = deriveCycleInfo(
+      toPayable("bill", rent({ next_due_date: "2026-09-22" })),
+      [lateTx({ transaction_date: "2026-08-02", resolved_cycle_due_date: "2026-07-22" })],
+      LATE_TODAY,
+    );
     expect(i.state).toBe("unpaid");
     expect(i.clearedSum).toBe(0);
   });
+
 
   it("still misattributes an untagged transaction the same way (pre-fix/historical-data baseline)", () => {
     const i = deriveCycleInfo(
