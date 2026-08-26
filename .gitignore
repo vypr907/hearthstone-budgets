@@ -20,6 +20,9 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Test-DB credentials (ADR-083) — never commit
+.env.test
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
