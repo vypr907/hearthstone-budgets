@@ -200,6 +200,15 @@ export function deriveCycleInfo(
         state = "cleared";
       }
 
+      // ADR-086: a monthly cycle counted inside its own calendar month, so the
+      // lookback above never runs — but the cycle still "resolved" (rolled the
+      // due date into a later month) once it cleared. Callers that repair
+      // stranded payments / reverse a roll rely on this flag.
+      if (monthly && !oneTime && dueDate && dueDate > monthEnd && state === "cleared") {
+        resolved = true;
+      }
+
+
       return {
         state,
         due,
