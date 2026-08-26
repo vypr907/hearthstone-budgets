@@ -377,7 +377,43 @@ function DebtsPage() {
   );
 }
 
+/** "Jul 21 – Aug 21, 2026" — the date range a cycle/pay period covers. */
+function formatWindow(start: string | null, end: string | null): string {
+  if (!start || !end) return "—";
+  const fmt = (iso: string, withYear: boolean) => {
+    const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      ...(withYear ? { year: "numeric" } : {}),
+    });
+  };
+  return `${fmt(start, start.slice(0, 4) !== end.slice(0, 4))} – ${fmt(end, true)}`;
+}
+
+/**
+ * The primary-paycheck pay period the debt's due date falls into (ADR-059/060
+ * periods), or null when there's no primary source / no covering paycheck.
+ */
+function payPeriodFor(
+  debt: Debt,
+  sources: { id: string; is_primary?: boolean | null }[],
+  events: Parameters<typeof periodRange>[1],
+): { start: string; end: string } | null {
+  const due = debtDueDate(debt) ?? (debt.next_due_date ? debt.next_due_date.slice(0, 10) : null);
+  if (!due) return null;
+  const primary = sources.find((s) => s.is_primary);
+  if (!primary) return null;
+  const primaryEvents = events.filter((e) => e.income_source_id === primary.id);
+  for (const e of primaryEvents) {
+    const range = periodRange(e, primaryEvents);
+    if (range && inRange(due, range.start, range.end)) return range;
+  }
+  return null;
+}
+
 function DebtDetailDialog({
+
   debt,
   onClose,
   onEdit,
