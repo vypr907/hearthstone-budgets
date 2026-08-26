@@ -58,6 +58,7 @@ import {
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
+import { LogDebtPaymentDialog } from "@/components/LogDebtPaymentDialog";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
@@ -504,6 +505,7 @@ function DebtDetailDialog({
 
           <DetailText label="Notes" value={debt.notes} />
           <PayActions payable={toPayable("debt", debt)} />
+          <LogDebtPaymentDialog debt={debt} />
           <PastDueEditor debt={debt} />
 
           <RecentDebtTransactions debt={debt} />
