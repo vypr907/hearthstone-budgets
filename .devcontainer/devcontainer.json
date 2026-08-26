@@ -1,0 +1,11 @@
+{
+  "name": "Hearthstone Budgets",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && npm install"
+}
+
+"features": {
+  "ghcr.io/devcontainers/features/node:1": {
+    "version": "22"
+  }
+}
