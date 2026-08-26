@@ -19,7 +19,11 @@ export type CycleInfo = {
   pending: Transaction | null;
   /** True when the cycle already rolled forward (due date advanced on clear). */
   resolved: boolean;
+  /** Inclusive-ish date window the cycle math counted (null for one-time items). */
+  windowStart: string | null;
+  windowEnd: string | null;
 };
+
 
 function todayISO() {
   const n = new Date();
