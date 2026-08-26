@@ -483,14 +483,21 @@ function DebtDetailDialog({
             <DetailItem
               label="Payment status"
               value={
-                <Badge
-                  variant={statusVariant(debt.payment_status)}
-                  className="capitalize"
-                >
-                  {debt.payment_status || "unpaid"}
-                </Badge>
+                <div className="space-y-1">
+                  <Badge variant={statusVariant(cycle.state)} className="capitalize">
+                    {cycle.state}
+                  </Badge>
+                  {(debt.payment_status || "unpaid") !== cycle.state ? (
+                    <div className="text-xs text-muted-foreground">
+                      stored: {debt.payment_status || "unpaid"}
+                    </div>
+                  ) : null}
+                </div>
               }
             />
+            <DetailItem label="Cycle window" value={formatWindow(cycle.windowStart, cycle.windowEnd)} />
+            <DetailItem label="Pay period" value={payPeriod ? formatWindow(payPeriod.start, payPeriod.end) : "—"} />
+
             <DetailItem
               label="On payment plan"
               value={
