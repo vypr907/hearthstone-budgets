@@ -22,7 +22,7 @@ import { PayActions } from "@/components/PayActions";
 import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
 
 import { useCycleState } from "@/lib/ledger-state";
-import { toPayable } from "@/lib/payments";
+import { toPayable, useSyncStoredStatus } from "@/lib/payments";
 import { nextPayDate, periodRange, inRange } from "@/lib/paycheck-budget";
 
 import { todayISO } from "@/lib/snapshot";
@@ -34,7 +34,7 @@ import {
   StatusBadge,
   statusVariant,
 } from "@/components/detail";
-import { formatMoney, debtDueDate, accountLabel } from "@/lib/format";
+import { formatMoney, debtDueDate, accountLabel, shiftDateSafe } from "@/lib/format";
 import { useHouseholdDeductions, useIncomeSources, useIncomeEvents } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -413,6 +413,21 @@ function payPeriodFor(
   return null;
 }
 
+/**
+ * The debt's actual billing period: one billing cycle back from its effective
+ * due date, up to that due date (e.g. a monthly debt due the 21st → Jul 21 –
+ * Aug 21). This is the human-readable cycle; the derivation's counting window
+ * can be narrower (it ignores payments that already resolved an older cycle).
+ */
+function billingPeriodFor(debt: Debt): { start: string; end: string } | null {
+  const end = debtDueDate(debt) ?? (debt.next_due_date ? debt.next_due_date.slice(0, 10) : null);
+  if (!end) return null;
+  const start = shiftDateSafe(end, debt.billing_cycle ?? "monthly", -1, debt.cycle_interval_days);
+  if (!start || start >= end) return null;
+  return { start, end };
+}
+
+
 function DebtDetailDialog({
 
   debt,
@@ -436,9 +451,17 @@ function DebtDetailDialog({
   // otherwise reads as "nothing paid, still owed".
   const cycle = debt ? infoOf(toPayable("debt", debt)) : null;
   const payPeriod = debt ? payPeriodFor(debt, incomeSources, incomeEvents) : null;
+  // The billing period itself (one cycle up to the due date) — what a person
+  // means by "the cycle", as opposed to the narrower window the derivation
+  // happens to count transactions in.
+  const billingWindow = debt ? billingPeriodFor(debt) : null;
+  const syncStatus = useSyncStoredStatus();
+  const storedDiffers =
+    !!debt && !!cycle && (debt.payment_status || "unpaid") !== cycle.state;
 
   const open = debt !== null;
   if (!debt || !cycle) return null;
+
 
 
   return (
@@ -525,16 +548,46 @@ function DebtDetailDialog({
                   <Badge variant={statusVariant(cycle.state)} className="capitalize">
                     {cycle.state}
                   </Badge>
-                  {(debt.payment_status || "unpaid") !== cycle.state ? (
-                    <div className="text-xs text-muted-foreground">
-                      stored: {debt.payment_status || "unpaid"}
+                  {storedDiffers ? (
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">
+                        stored: {debt.payment_status || "unpaid"}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        disabled={syncStatus.isPending}
+                        onClick={() =>
+                          syncStatus.mutate({
+                            p: toPayable("debt", debt),
+                            state: cycle.state,
+                            clearedSum: cycle.clearedSum,
+                          })
+                        }
+                      >
+                        Sync stored status
+                      </Button>
                     </div>
                   ) : null}
                 </div>
               }
             />
-            <DetailItem label="Cycle window" value={formatWindow(cycle.windowStart, cycle.windowEnd)} />
+            <DetailItem
+              label="Cycle window"
+              value={
+                <div>
+                  <div>{formatWindow(billingWindow?.start ?? null, billingWindow?.end ?? null)}</div>
+                  {cycle.windowStart && cycle.windowEnd ? (
+                    <div className="text-xs text-muted-foreground">
+                      counting {formatWindow(cycle.windowStart, cycle.windowEnd)}
+                    </div>
+                  ) : null}
+                </div>
+              }
+            />
             <DetailItem label="Pay period" value={payPeriod ? formatWindow(payPeriod.start, payPeriod.end) : "—"} />
+
 
             <DetailItem
               label="On payment plan"

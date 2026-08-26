@@ -1162,3 +1162,36 @@ export function useLogDebtPayment() {
     onSuccess: done,
   });
 }
+
+/* ------------------------------------------------------------------------ */
+/* Sync stored status columns to the ledger-derived state                    */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * The stored `payment_status` / `cycle_paid_to_date` columns can drift from the
+ * ADR-036 ledger derivation (e.g. a historical/backdated payment writes the
+ * balance but leaves an old "pending" behind). This writes the derived state
+ * back onto the row so every screen reading the raw columns agrees again.
+ * Derivation stays the source of truth — this never invents state.
+ */
+export function useSyncStoredStatus() {
+  const done = useAfterPayment();
+  return useMutation({
+    mutationFn: async ({
+      p,
+      state,
+      clearedSum,
+    }: {
+      p: Payable;
+      state: "unpaid" | "pending" | "partial" | "cleared";
+      clearedSum: number;
+    }) => {
+      await updateRow(table(p.kind), p.id, {
+        // 'partial' isn't a stored value — the columns only carry the tap state.
+        payment_status: state === "partial" ? "unpaid" : state,
+        cycle_paid_to_date: state === "cleared" ? 0 : Math.max(0, clearedSum),
+      });
+    },
+    onSuccess: done,
+  });
+}
