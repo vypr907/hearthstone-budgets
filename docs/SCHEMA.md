@@ -457,7 +457,24 @@ is_household_member(household_id)
 
 Exceptions:
 
-* `account_balances` inherits security through `accounts`.
+* `account_balances` inherits security through `accounts` (policy joins to
+  `accounts` and checks `is_household_member(accounts.household_id)`).
+* `income_source_splits` and `institution_categories` likewise join to their
+  parent (`income_sources` / `institutions`).
+* `households` and `household_members` have SELECT-only policies
+  (`is_household_member(id)` / `(household_id)`), plus a self-UPDATE policy on
+  `household_members` (`user_id = auth.uid()`, ADR-061 follow-up).
+
+`is_household_member(hid)` is `STABLE SECURITY DEFINER`, owned by `postgres`:
+`select exists (select 1 from household_members where household_id = hid and
+user_id = auth.uid())`.
+
+2026-08-26 (ADR-083): every public data table now also has `force row level
+security` (belt-and-suspenders — near-no-op while all tables are owned by
+`postgres`, which has BYPASSRLS). `auto_transfers` shipped in ADR-081 with RLS
+DISABLED — fixed the same day: `enable row level security` + the standard
+`household access` policy. All 24 public data tables now have
+`relrowsecurity = true` and a policy.
 
 ---
 

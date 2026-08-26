@@ -35,6 +35,22 @@ At session end, summarize docs/SESSION.md into docs/CHANGELOG.md, then clear it.
 Windows AppLocker/SRP blocks node_modules\.bin\* binaries (vite, tsc, likely
 Gradle). Cannot verify builds locally — do not attempt, do not suggest running
 vite/tsc directly. Flag if a task needs build verification.
+(A GitHub Codespace lifts this — `npm run build` / `tsc --noEmit` / `vitest`
+all work there.)
+
+## Testing against the database (ADR-083 — HARD boundary)
+- Automated/E2E tests may create and mutate data ONLY in "TEST Household —
+  Lovable QA" (`e79216a0-b5f9-4987-a675-c52783bddab7`). NEVER "Our Household".
+- All DB writes for tests go through `scripts/test-db.mjs` → `testClient()`
+  (signs in as the RLS-bound test user, verifies it can reach only the test
+  household, then returns the client). Enforced by Postgres RLS, not convention.
+- The Supabase MCP stays read-only. Never accept or use the `service_role` key
+  or a direct `postgres` connection string — they bypass RLS.
+- Before a writing test session, run `scripts/test-db-preflight.sql` via the MCP;
+  every check must pass. Never add the test user to "Our Household"; never put
+  real users' creds in `.env.test`.
+- To drive the app (dev server, browser): `npm run dev` serves on :8080; log in
+  with the `.env.test` creds. Playwright browser lives in `~/.cache/ms-playwright`.
 
 ## Doc hierarchy
 Current conversation > existing code > existing schema > docs/DECISIONS.md >
