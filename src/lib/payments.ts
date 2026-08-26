@@ -453,6 +453,30 @@ function hasFee(fee: number | undefined): boolean {
 }
 
 /**
+ * ADR-046: fees land in the household's "Fees" category. Auto-create it if it
+ * doesn't exist so fee rows are always categorised.
+ */
+async function feeCategoryId(householdId: string | null | undefined) {
+  let feeCatId = (await supabase
+    .from("categories")
+    .select("id")
+    .eq("household_id", householdId!)
+    .ilike("name", "fees")
+    .limit(1)).data?.[0]?.id;
+  if (!feeCatId && householdId) {
+    const { data: created, error: catErr } = await supabase
+      .from("categories")
+      .insert({ household_id: householdId, name: "Fees" })
+      .select("id")
+      .single();
+    if (catErr) throw catErr;
+    feeCatId = created?.id ?? null;
+  }
+  return feeCatId ?? null;
+}
+
+
+/**
  * ADR-046: fees ride alongside a payment as their own ledger row so they hit the
  * account balance without ever counting toward the bill/debt cycle.
  *
@@ -474,23 +498,7 @@ async function insertFeeTransaction(
 ) {
   if (!hasFee(fee)) return;
   const amt = Math.abs(Number(fee) || 0);
-  // ADR-046: fees land in the household's "Fees" category. Auto-create it if it
-  // doesn't exist so fee rows are always categorised.
-  let feeCatId = (await supabase
-    .from("categories")
-    .select("id")
-    .eq("household_id", householdId!)
-    .ilike("name", "fees")
-    .limit(1)).data?.[0]?.id;
-  if (!feeCatId && householdId) {
-    const { data: created, error: catErr } = await supabase
-      .from("categories")
-      .insert({ household_id: householdId, name: "Fees" })
-      .select("id")
-      .single();
-    if (catErr) throw catErr;
-    feeCatId = created?.id ?? null;
-  }
+  const feeCatId = await feeCategoryId(householdId);
   const { error } = await supabase.from("transactions").insert({
     household_id: householdId,
     account_id: accountId,
@@ -1014,6 +1022,142 @@ export function useCorrectPayment() {
         })
         .eq("id", transaction.id);
       if (error) throw error;
+    },
+    onSuccess: done,
+  });
+}
+
+/* ------------------------------------------------------------------------ */
+/* Log a debt payment (historical or current cycle) — ADR-084                */
+/* ------------------------------------------------------------------------ */
+
+/** One fee/interest/charge line entered alongside a logged debt payment. */
+export type DebtPaymentLine = {
+  /** e.g. "fee", "interest", "late_fee" — free-form label used in the description. */
+  type: string;
+  amount: number;
+  note?: string | null;
+};
+
+export type LogDebtPaymentInput = {
+  debt: Debt;
+  accountId: string;
+  /** Principal portion — the only part that moves the debt balance. */
+  principal: number;
+  /** Payment date (YYYY-MM-DD). Decides in-cycle vs historical handling. */
+  date: string;
+  status: "pending" | "cleared";
+  lines: DebtPaymentLine[];
+  /** priorCyclesArrears(payable) from arrears.ts — only used for the in-cycle path. */
+  priorArrears: number;
+};
+
+/**
+ * Start of the debt's current cycle window: one cycle back from its current
+ * due date. Falls back to the first of the current month when the debt has no
+ * due date (plain monthly debts).
+ */
+export function debtCycleWindowStart(debt: Debt, today = todayISO()): string {
+  const due = debt.next_due_date ? String(debt.next_due_date).slice(0, 10) : null;
+  if (!due) return `${today.slice(0, 7)}-01`;
+  return shiftDateSafe(due, debt.billing_cycle ?? "monthly", -1, debt.cycle_interval_days);
+}
+
+/**
+ * ADR-084: a logged payment dated inside the current cycle window behaves like
+ * a normal payment (cycle counters, status, due-date roll). Anything earlier is
+ * a historical backfill — ledger + balance only.
+ */
+export function isWithinCurrentCycle(debt: Debt, date: string, today = todayISO()): boolean {
+  return date >= debtCycleWindowStart(debt, today);
+}
+
+/**
+ * ADR-084: one form, one write — a (possibly backdated) debt payment plus any
+ * number of fee/interest lines. Only the principal touches remaining_balance;
+ * every extra line is its own ledger row against the same account so the
+ * account balance is right, but the debt balance is untouched (fees/interest
+ * are ledger-only until a real interest engine exists).
+ */
+export function useLogDebtPayment() {
+  const { householdId } = useAuth();
+  const done = useAfterPayment();
+  return useMutation({
+    mutationFn: async ({
+      debt,
+      accountId,
+      principal,
+      date,
+      status,
+      lines,
+      priorArrears,
+    }: LogDebtPaymentInput) => {
+      const p = toPayable("debt", debt);
+      const amt = Math.abs(Number(principal) || 0);
+      const extras = (lines ?? []).filter((l) => Math.abs(Number(l.amount) || 0) >= 0.005);
+      const groupId = extras.length > 0 ? crypto.randomUUID() : null;
+      const inCycle = isWithinCurrentCycle(debt, date);
+
+      let resolvedDueDate: string | null = null;
+
+      // Payable-first (ADR-037): the debt row moves before any ledger row exists.
+      if (amt > 0.005) {
+        if (status === "cleared") {
+          if (inCycle) {
+            const res = await applyClearedPayment(p, amt, priorArrears ?? 0, date);
+            resolvedDueDate = res.resolved_due_date ?? null;
+          } else {
+            // Historical: balance only. Cycle counters, status and due date stay put.
+            const remaining = Number(debt.remaining_balance ?? 0);
+            const nextBalance = Math.max(0, remaining - amt);
+            await updateRow("debts", debt.id, {
+              remaining_balance: nextBalance,
+              ...advanceMinimumPaymentPatch(debt, nextBalance),
+              ...(nextBalance === 0 && !debt.date_paid_off ? { date_paid_off: date } : {}),
+            });
+          }
+        } else if (inCycle) {
+          await updateRow("debts", debt.id, { payment_status: "pending" });
+        }
+      }
+
+      if (amt > 0.005) {
+        const { error } = await supabase.from("transactions").insert({
+          household_id: householdId,
+          account_id: accountId,
+          category_id: p.category_id,
+          amount: -amt,
+          status,
+          description: `Debt payment · ${debt.name}`,
+          transaction_date: date,
+          linked_debt_id: debt.id,
+          split_group_id: groupId,
+          resolved_cycle_due_date: resolvedDueDate,
+          institution_id: p.institution_id,
+        });
+        if (error) throw error;
+      }
+
+      if (extras.length > 0) {
+        const feeCatId = await feeCategoryId(householdId);
+        const rows = extras.map((l) => ({
+          household_id: householdId,
+          account_id: accountId,
+          category_id: feeCatId,
+          amount: -Math.abs(Number(l.amount) || 0),
+          status,
+          // "Fee:" prefix keeps these rows inside the ADR-046 paired-fee helpers
+          // (clearPairedFees / deletePairedFees) so they follow the payment.
+          description: `Fee: ${debt.name} · ${l.type}${l.note ? ` — ${l.note}` : ""}`,
+          transaction_date: date,
+          split_group_id: groupId,
+          institution_id: p.institution_id,
+        }));
+        const { error } = await supabase.from("transactions").insert(rows);
+        if (error) throw error;
+      }
+
+      return { inCycle };
     },
     onSuccess: done,
   });

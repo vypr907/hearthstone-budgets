@@ -22,3 +22,15 @@
     a direct `postgres` connection string.
   tsc + 87 tests green. Pending: user runs the migration (Part 1) + rotates the
   `letmein` throwaway password.
+
+- 2026-08-26 — ADR-084: "Log a payment to this debt" on Debt detail.
+  - New `useLogDebtPayment()` + `isWithinCurrentCycle()`/`debtCycleWindowStart()`
+    in `src/lib/payments.ts`; extracted the shared `feeCategoryId()` helper out
+    of `insertFeeTransaction`.
+  - New `src/components/LogDebtPaymentDialog.tsx`, rendered under `PayActions`
+    in `src/routes/app.debts.tsx`.
+  - Date-driven: in-cycle → normal payment path; earlier → balance + ledger only
+    (form shows which mode it's in). Fee/interest lines post their own
+    transactions against the paying account and never move the debt balance.
+  - Files: src/lib/payments.ts, src/components/LogDebtPaymentDialog.tsx,
+    src/routes/app.debts.tsx, docs/DECISIONS.md.
