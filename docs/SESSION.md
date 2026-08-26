@@ -47,3 +47,11 @@
     paycheck period the due date falls into (`periodRange`/`inRange`).
   - Files: src/lib/ledger-state.ts, src/lib/auto-transfers.ts,
     src/routes/app.debts.tsx, docs/DECISIONS.md.
+- Debt detail cycle-window clarity + stored-status repair (ADR-085 addendum).
+  - "Cycle window" now shows the real billing period (one cycle back from the
+    effective due date to that due date, e.g. Jul 21 – Aug 21); the narrower
+    derivation range is shown beneath it as a "counting …" sub-line.
+  - When the stored `payment_status` disagrees with the ledger-derived state, a
+    "Sync stored status" button writes the derived state (and cycle_paid_to_date)
+    back onto the debt row via the new `useSyncStoredStatus()` hook.
+  - Files: src/lib/payments.ts, src/routes/app.debts.tsx, docs/DECISIONS.md.

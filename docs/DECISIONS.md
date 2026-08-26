@@ -2953,3 +2953,15 @@ still owed" the day after a full on-time payment — contradicting the list, Eve
 and Dashboard screens, which all use the ledger machine. Exposing the window makes
 the cycle math auditable instead of implicit.
 Status: Decided 2026-08-26. Implemented.
+
+### ADR-085 addendum (2026-08-26): billing-period window + stored-status sync
+Decision: The "Cycle window" field shows the debt's billing period (one billing
+cycle back from its effective due date, to that due date), with the derivation's
+narrower counting range as a secondary line. Where the stored `payment_status`
+diverges from the ADR-036 derived state, the detail panel offers a "Sync stored
+status" action (`useSyncStoredStatus()`) that writes the derived state and
+`cycle_paid_to_date` back onto the row.
+Reason: The raw derivation window (e.g. "Aug 18 – Aug 26") is an implementation
+detail and read as nonsense; and a backdated payment can leave a stale
+"pending" on the row that no screen could repair.
+Status: Decided 2026-08-26. Implemented.
