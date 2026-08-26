@@ -103,6 +103,11 @@ export function deriveCycleInfo(
             })
           : eligible.filter((t) => between(t, openStart, today));
       let resolved = false;
+      // The exact date range this derivation counted transactions in — surfaced
+      // so a detail screen can show which window the math used.
+      let windowStart: string | null = oneTime ? null : pastDue ? dueDate! : openStart;
+      let windowEnd: string | null = oneTime ? null : pastDue ? today : dueDate || today;
+
 
 
       if (cycleTx.length === 0 && dueDate && today <= openStart) {
