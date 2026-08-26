@@ -23,7 +23,8 @@ import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
 
 import { useCycleState } from "@/lib/ledger-state";
 import { toPayable, debtRemainingOwed } from "@/lib/payments";
-import { nextPayDate } from "@/lib/paycheck-budget";
+import { nextPayDate, periodRange, inRange } from "@/lib/paycheck-budget";
+
 import { todayISO } from "@/lib/snapshot";
 import {
   DetailGrid,
