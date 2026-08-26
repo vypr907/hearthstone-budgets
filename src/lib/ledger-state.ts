@@ -126,8 +126,11 @@ export function deriveCycleInfo(
         if (prev.length > 0 && due > 0 && clearedPrev + 0.005 >= due) {
           cycleTx = prev;
           resolved = true;
+          windowStart = prevStart;
+          windowEnd = openStart;
         }
       }
+
 
       const pending =
         cycleTx.filter((t) => t.status === "pending").sort((a, b) =>
