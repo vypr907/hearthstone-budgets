@@ -19,7 +19,11 @@ export type CycleInfo = {
   pending: Transaction | null;
   /** True when the cycle already rolled forward (due date advanced on clear). */
   resolved: boolean;
+  /** Inclusive-ish date window the cycle math counted (null for one-time items). */
+  windowStart: string | null;
+  windowEnd: string | null;
 };
+
 
 function todayISO() {
   const n = new Date();
@@ -103,6 +107,11 @@ export function deriveCycleInfo(
             })
           : eligible.filter((t) => between(t, openStart, today));
       let resolved = false;
+      // The exact date range this derivation counted transactions in — surfaced
+      // so a detail screen can show which window the math used.
+      let windowStart: string | null = oneTime ? null : pastDue ? dueDate! : openStart;
+      let windowEnd: string | null = oneTime ? null : pastDue ? today : dueDate || today;
+
 
 
       if (cycleTx.length === 0 && dueDate && today <= openStart) {
@@ -121,8 +130,11 @@ export function deriveCycleInfo(
         if (prev.length > 0 && due > 0 && clearedPrev + 0.005 >= due) {
           cycleTx = prev;
           resolved = true;
+          windowStart = prevStart;
+          windowEnd = openStart;
         }
       }
+
 
       const pending =
         cycleTx.filter((t) => t.status === "pending").sort((a, b) =>
@@ -160,7 +172,10 @@ export function deriveCycleInfo(
         transactions: cycleTx,
         pending,
         resolved,
+        windowStart,
+        windowEnd,
       };
+
     }
   }
 }

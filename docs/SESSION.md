@@ -34,3 +34,16 @@
     transactions against the paying account and never move the debt balance.
   - Files: src/lib/payments.ts, src/components/LogDebtPaymentDialog.tsx,
     src/routes/app.debts.tsx, docs/DECISIONS.md.
+
+- 2026-08-26 — ADR-085: Debt detail reports the ledger-derived cycle + shows its window.
+  - Detail's "Payment status", "Paid this cycle" and "Still owed this cycle" now
+    come from `deriveCycleInfo` (ADR-036) instead of the raw `payment_status` /
+    `cycle_paid_to_date` columns, which read as "pending, $0 paid, $106.30 owed"
+    right after a monthly cycle is fully paid (monthly clears reset
+    `cycle_paid_to_date` to 0 and nothing rewrites a stale `payment_status`).
+    A stored value that disagrees is shown as a small "stored: …" note.
+  - `CycleInfo` gained `windowStart`/`windowEnd`; new "Cycle window" field shows
+    the exact date range the math counted, and "Pay period" shows which primary
+    paycheck period the due date falls into (`periodRange`/`inRange`).
+  - Files: src/lib/ledger-state.ts, src/lib/auto-transfers.ts,
+    src/routes/app.debts.tsx, docs/DECISIONS.md.

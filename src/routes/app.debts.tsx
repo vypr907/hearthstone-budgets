@@ -22,8 +22,9 @@ import { PayActions } from "@/components/PayActions";
 import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
 
 import { useCycleState } from "@/lib/ledger-state";
-import { toPayable, debtRemainingOwed } from "@/lib/payments";
-import { nextPayDate } from "@/lib/paycheck-budget";
+import { toPayable } from "@/lib/payments";
+import { nextPayDate, periodRange, inRange } from "@/lib/paycheck-budget";
+
 import { todayISO } from "@/lib/snapshot";
 import {
   DetailGrid,
@@ -377,7 +378,43 @@ function DebtsPage() {
   );
 }
 
+/** "Jul 21 – Aug 21, 2026" — the date range a cycle/pay period covers. */
+function formatWindow(start: string | null, end: string | null): string {
+  if (!start || !end) return "—";
+  const fmt = (iso: string, withYear: boolean) => {
+    const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      ...(withYear ? { year: "numeric" } : {}),
+    });
+  };
+  return `${fmt(start, start.slice(0, 4) !== end.slice(0, 4))} – ${fmt(end, true)}`;
+}
+
+/**
+ * The primary-paycheck pay period the debt's due date falls into (ADR-059/060
+ * periods), or null when there's no primary source / no covering paycheck.
+ */
+function payPeriodFor(
+  debt: Debt,
+  sources: { id: string; is_primary?: boolean | null }[],
+  events: Parameters<typeof periodRange>[1],
+): { start: string; end: string } | null {
+  const due = debtDueDate(debt) ?? (debt.next_due_date ? debt.next_due_date.slice(0, 10) : null);
+  if (!due) return null;
+  const primary = sources.find((s) => s.is_primary);
+  if (!primary) return null;
+  const primaryEvents = events.filter((e) => e.income_source_id === primary.id);
+  for (const e of primaryEvents) {
+    const range = periodRange(e, primaryEvents);
+    if (range && inRange(due, range.start, range.end)) return range;
+  }
+  return null;
+}
+
 function DebtDetailDialog({
+
   debt,
   onClose,
   onEdit,
@@ -388,11 +425,21 @@ function DebtDetailDialog({
 }) {
   const { data: categories = [] } = useCategories();
   const { data: accounts = [] } = useAccounts();
+  const { data: incomeSources = [] } = useIncomeSources();
+  const { data: incomeEvents = [] } = useIncomeEvents();
+  const infoOf = useCycleState();
   const category = categories.find((c) => c.id === debt?.category_id);
   const account = accounts.find((a) => a.institution_id === debt?.institution_id);
 
+  // ADR-036: the detail panel reports the ledger-derived cycle, not the stored
+  // columns — a fully-paid monthly cycle resets cycle_paid_to_date to 0, which
+  // otherwise reads as "nothing paid, still owed".
+  const cycle = debt ? infoOf(toPayable("debt", debt)) : null;
+  const payPeriod = debt ? payPeriodFor(debt, incomeSources, incomeEvents) : null;
+
   const open = debt !== null;
-  if (!debt) return null;
+  if (!debt || !cycle) return null;
+
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -412,8 +459,9 @@ function DebtDetailDialog({
             />
             <DetailMoney label="Remaining balance" value={debt.remaining_balance} />
             <DetailMoney label="Minimum payment" value={debt.minimum_payment} />
-            <DetailMoney label="Paid this cycle" value={Number(debt.cycle_paid_to_date ?? 0)} />
-            <DetailMoney label="Still owed this cycle" value={debtRemainingOwed(debt)} />
+            <DetailMoney label="Paid this cycle" value={cycle.clearedSum} />
+            <DetailMoney label="Still owed this cycle" value={cycle.remaining} />
+
             {/* ADR-048: payment-plan shape, only meaningful when one is set. */}
             {debt.plan_payment_count != null ? (
               <DetailItem
@@ -473,14 +521,21 @@ function DebtDetailDialog({
             <DetailItem
               label="Payment status"
               value={
-                <Badge
-                  variant={statusVariant(debt.payment_status)}
-                  className="capitalize"
-                >
-                  {debt.payment_status || "unpaid"}
-                </Badge>
+                <div className="space-y-1">
+                  <Badge variant={statusVariant(cycle.state)} className="capitalize">
+                    {cycle.state}
+                  </Badge>
+                  {(debt.payment_status || "unpaid") !== cycle.state ? (
+                    <div className="text-xs text-muted-foreground">
+                      stored: {debt.payment_status || "unpaid"}
+                    </div>
+                  ) : null}
+                </div>
               }
             />
+            <DetailItem label="Cycle window" value={formatWindow(cycle.windowStart, cycle.windowEnd)} />
+            <DetailItem label="Pay period" value={payPeriod ? formatWindow(payPeriod.start, payPeriod.end) : "—"} />
+
             <DetailItem
               label="On payment plan"
               value={

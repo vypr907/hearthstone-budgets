@@ -87,6 +87,9 @@ export function deriveAutoTransferState(
     transactions: cycleTx,
     pending: null,
     resolved,
+    windowStart: openStart,
+    windowEnd: dueDate || today,
+
   };
 }
 
