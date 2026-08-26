@@ -2913,3 +2913,28 @@ Status: Decided 2026-08-26. Implemented 2026-08-26 (`scripts/test-db.mjs`,
 `scripts/test-db-preflight.sql`, `.env.test` gitignored, CLAUDE.md rules).
 Pending the user running `scripts/migrations/2026-08-26-rls-hardening.sql`
 (Part 1 required).
+
+## ADR-084: Log a Debt Payment (Historical Backfill + Fee/Interest Lines)
+Decision:
+Debt detail gains a "Log a payment to this debt" button opening a single form:
+date, paying account, principal amount, status (cleared/pending), and any
+number of fee/interest lines (type, amount, note). The payment date decides the
+behaviour — a date inside the current cycle window (from one cycle before
+`next_due_date` up to today/future) runs the normal `applyClearedPayment()`
+path (cycle counters, payment_status, due-date roll, arrears overflow); an
+earlier date is a historical backfill that only reduces `remaining_balance` and
+writes the ledger row, leaving all cycle fields alone. Only the principal moves
+the debt balance. Each fee/interest line posts its own transaction against the
+same account (so account balances stay correct) but never touches
+`remaining_balance` — no interest engine exists yet. All rows share one
+`split_group_id` and every extra line's description is prefixed "Fee: " so the
+existing ADR-046 paired-fee helpers (clear/delete) keep the group atomic.
+Payable-first write ordering (ADR-037) is preserved, and the same out-of-order
+backdating confirmation used by the Adjustments section applies.
+Reason:
+Backfilling old debt payments previously required the live pay flow, which
+always applied the payment to the current cycle and rolled due dates for
+payments made months earlier. Splitting principal from fees/interest in one
+form matches how real statements arrive, and keeping fees ledger-only avoids
+faking interest accrual against the balance.
+Status: Decided 2026-08-26. Implemented.
