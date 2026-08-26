@@ -436,9 +436,17 @@ function DebtDetailDialog({
   // otherwise reads as "nothing paid, still owed".
   const cycle = debt ? infoOf(toPayable("debt", debt)) : null;
   const payPeriod = debt ? payPeriodFor(debt, incomeSources, incomeEvents) : null;
+  // The billing period itself (one cycle up to the due date) — what a person
+  // means by "the cycle", as opposed to the narrower window the derivation
+  // happens to count transactions in.
+  const billingWindow = debt ? billingPeriodFor(debt) : null;
+  const syncStatus = useSyncStoredStatus();
+  const storedDiffers =
+    !!debt && !!cycle && (debt.payment_status || "unpaid") !== cycle.state;
 
   const open = debt !== null;
   if (!debt || !cycle) return null;
+
 
 
   return (
