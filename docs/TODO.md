@@ -16,12 +16,14 @@
       Remaining: click-test the out-of-order backfill warning UX (backdate a debt
       adjustment/advance before existing history → confirm the non-blocking
       warning appears).
-- [ ] ADR-081 (Auto-Transfer tracking): compiles + code-reviewed 2026-08-26
-      (findings addressed — write-order fix landed). Still needs an end-to-end
-      run: add a real (or throwaway) auto-transfer, hit "Process transfer," and
-      confirm the transaction pair lands with the right
-      signs/`transfer_group_id`/`linked_auto_transfer_id`, `next_due_date`
-      advances, and it shows on Paycheck Budget/Dashboard totals.
+- [ ] ADR-081 (Auto-Transfer tracking): compiles + code-reviewed 2026-08-26,
+      findings 2/4/5/6 fixed (see DECISIONS.md addendum; `auto-transfers.test.ts`
+      added). Still needs an end-to-end run: add a real (or throwaway)
+      auto-transfer, hit "Process transfer," and confirm — the transfer pair
+      lands with the right signs / `transfer_group_id` / `linked_auto_transfer_id`,
+      `next_due_date` advances, the row shows "Processed ✓ · Undo" until the new
+      due date, Undo cleanly reverses both, and a paused auto-transfer shows no
+      Process button.
 
 - [ ] 2026-08-26 reset-vs-adjustments fix (`rebuiltCycleAmountDue`, ADR-058
       addendum) is unit-tested but wants one end-to-end check: add a +$ bill

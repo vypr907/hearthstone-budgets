@@ -2733,6 +2733,42 @@ advance now leaves a complete, correctly-tagged pair that
 on a failed credit leg is unchanged and still matches `useSaveTransfer`. No
 schema change.
 
+2026-08-26 addendum — code-review follow-ups (findings 2, 4, 5, 6):
+
+- **"Processed / Undo" never appeared (finding 6, the real bug).** Processing
+  advances `next_due_date` and tags the credit leg with the cycle it closed
+  (one interval back). `deriveAutoTransferState`'s `eligible` filter drops any
+  leg tagged earlier than the current due date, so a just-processed transfer
+  flipped straight back to "unpaid" and lost its Undo affordance — and the user
+  could immediately re-process, advancing the date again. Fixed: the
+  resolved-cycle lookback now fires whenever `today < next_due_date` (was
+  `today <= next_due_date - 1 interval`) and matches the credit leg's exact
+  `resolved_cycle_due_date` tag against `linked` (not the filtered `eligible`).
+  A processed cycle now reads "cleared" until its (advanced) due date arrives,
+  then correctly returns to "unpaid" for the next cycle. Surfaced by the first
+  unit tests for this module (`src/lib/auto-transfers.test.ts`).
+- **Server-side double-process guard (finding 2).** Before writing,
+  `useProcessAutoTransfer` queries for a cleared leg already tagged
+  `resolved_cycle_due_date = at.next_due_date` and refuses if one exists —
+  backstop for the same-cycle race the UI's client-only "hide button when
+  cleared" doesn't cover.
+- **Deterministic undo (finding 5).** `useUndoAutoTransferProcess` targets the
+  leg tagged to the cycle `next_due_date` was just advanced past
+  (`resolved_cycle_due_date = reverseDate(next_due_date)`), falling back to
+  most-recent-by-date only for legs written before the tag existed. Two cycles
+  processed the same day now undo in the right order.
+- **Paused auto-transfers (finding 4).** The Bills-screen list rendered
+  `is_active = false` rows with a live "Process transfer" button. They now show
+  a dimmed card with a "Paused" pill and no action button (still editable to
+  reactivate). `obligationsInRange` and the Dashboard reminders already
+  excluded them.
+- Not changed (finding 3): the processed transaction is still dated "today".
+  Dating it at the (past) due date instead would fall outside
+  `deriveAutoTransferState`'s half-open `d > openStart` window and break state
+  detection — the today-date is load-bearing.
+
+No schema change.
+
 ## ADR-082: Explicit Deduction Kind; Three-Way Past Due Grouping
 
 Decision:

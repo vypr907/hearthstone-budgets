@@ -60,11 +60,16 @@ export function deriveAutoTransferState(
     : eligible.filter((t) => between(t, openStart, today));
   let resolved = false;
 
-  if (cycleTx.length === 0 && dueDate && today <= openStart) {
-    // Processing immediately rolls next_due_date forward, so a transfer that
-    // already resolved the cycle covering today sits in the *previous* window.
-    const prevStart = shiftDateSafe(openStart, cycleName, -1, cycleDays);
-    const prev = eligible.filter((t) => between(t, prevStart, openStart));
+  if (cycleTx.length === 0 && dueDate && today < dueDate) {
+    // Processing rolls next_due_date forward and tags the credit leg with the
+    // cycle it just closed (one interval back). That tag is < the new
+    // next_due_date, so `eligible` filters it out — without this, a
+    // just-processed transfer would flip straight back to "unpaid" and lose
+    // its "Processed / Undo" affordance. Show it as cleared until the new due
+    // date actually arrives. Match the tag exactly against `linked` (not
+    // `eligible`), since `eligible` is what dropped it.
+    const justClosed = shiftDateSafe(dueDate, cycleName, -1, cycleDays);
+    const prev = linked.filter((t) => day(t.resolved_cycle_due_date) === justClosed);
     if (prev.length > 0) {
       cycleTx = prev;
       resolved = true;
@@ -108,6 +113,21 @@ export function useProcessAutoTransfer() {
     mutationFn: async (at: AutoTransfer) => {
       const resolvedDueDate = at.next_due_date;
       const nextDue = advanceDate(at.next_due_date, at.billing_cycle, at.cycle_interval_days);
+
+      // Idempotency: a cleared leg already tagged to this exact cycle means it
+      // was processed (double-tap, a second household member, a stale render).
+      // The UI hides the button once state is "cleared", but that's client-only
+      // and races; this is the server-side backstop.
+      const { data: existing, error: checkErr } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("linked_auto_transfer_id", at.id)
+        .eq("resolved_cycle_due_date", resolvedDueDate)
+        .limit(1);
+      if (checkErr) throw checkErr;
+      if (existing && existing.length > 0) {
+        throw new Error("This auto-transfer's current cycle has already been processed.");
+      }
 
       const groupId = crypto.randomUUID();
       const base = {
@@ -160,19 +180,39 @@ export function useProcessAutoTransfer() {
  * ADR-081: undo a processed cycle — delete the transfer pair (by
  * transfer_group_id, same as useDeleteTransferPair) and reverse
  * next_due_date by the same interval processing advanced it.
+ *
+ * Targets the leg for the cycle `next_due_date` was just advanced past
+ * (`resolved_cycle_due_date` = one interval back), so two cycles processed on
+ * the same day are still undone in the right order. Falls back to the most
+ * recent leg by date for rows written before the tag existed.
  */
 export function useUndoAutoTransferProcess() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (at: AutoTransfer) => {
-      const { data, error } = await supabase
+      const undoneCycle = reverseDate(
+        at.next_due_date,
+        at.billing_cycle,
+        at.cycle_interval_days,
+      );
+      const tagged = await supabase
         .from("transactions")
         .select("*")
         .eq("linked_auto_transfer_id", at.id)
-        .order("transaction_date", { ascending: false })
+        .eq("resolved_cycle_due_date", undoneCycle)
         .limit(1);
-      if (error) throw error;
-      const tx = ((data ?? [])[0] as Transaction | undefined) ?? null;
+      if (tagged.error) throw tagged.error;
+      let tx = ((tagged.data ?? [])[0] as Transaction | undefined) ?? null;
+      if (!tx) {
+        const { data, error } = await supabase
+          .from("transactions")
+          .select("*")
+          .eq("linked_auto_transfer_id", at.id)
+          .order("transaction_date", { ascending: false })
+          .limit(1);
+        if (error) throw error;
+        tx = ((data ?? [])[0] as Transaction | undefined) ?? null;
+      }
       if (!tx?.transfer_group_id) {
         throw new Error("No processed transfer found to undo.");
       }
