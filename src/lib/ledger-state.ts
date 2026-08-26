@@ -150,7 +150,7 @@ export function deriveCycleInfo(
 
 
 
-      if (cycleTx.length === 0 && dueDate && today <= openStart) {
+      if (!monthly && cycleTx.length === 0 && dueDate && today <= openStart) {
         // The cycle covering today may already have been resolved and rolled forward.
         const prevStart = shiftDateSafe(openStart, cycleName, -1, cycleDays);
         const prev = eligible.filter((t) => between(t, prevStart, openStart));
