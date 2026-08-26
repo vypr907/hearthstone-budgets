@@ -1028,7 +1028,7 @@ export function useCorrectPayment() {
 }
 
 /* ------------------------------------------------------------------------ */
-/* Log a debt payment (historical or current cycle) — ADR-079                */
+/* Log a debt payment (historical or current cycle) — ADR-084                */
 /* ------------------------------------------------------------------------ */
 
 /** One fee/interest/charge line entered alongside a logged debt payment. */
@@ -1064,7 +1064,7 @@ export function debtCycleWindowStart(debt: Debt, today = todayISO()): string {
 }
 
 /**
- * ADR-079: a logged payment dated inside the current cycle window behaves like
+ * ADR-084: a logged payment dated inside the current cycle window behaves like
  * a normal payment (cycle counters, status, due-date roll). Anything earlier is
  * a historical backfill — ledger + balance only.
  */
@@ -1073,7 +1073,7 @@ export function isWithinCurrentCycle(debt: Debt, date: string, today = todayISO(
 }
 
 /**
- * ADR-079: one form, one write — a (possibly backdated) debt payment plus any
+ * ADR-084: one form, one write — a (possibly backdated) debt payment plus any
  * number of fee/interest lines. Only the principal touches remaining_balance;
  * every extra line is its own ledger row against the same account so the
  * account balance is right, but the debt balance is untouched (fees/interest
