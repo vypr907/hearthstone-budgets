@@ -413,6 +413,21 @@ function payPeriodFor(
   return null;
 }
 
+/**
+ * The debt's actual billing period: one billing cycle back from its effective
+ * due date, up to that due date (e.g. a monthly debt due the 21st → Jul 21 –
+ * Aug 21). This is the human-readable cycle; the derivation's counting window
+ * can be narrower (it ignores payments that already resolved an older cycle).
+ */
+function billingPeriodFor(debt: Debt): { start: string; end: string } | null {
+  const end = debtDueDate(debt) ?? (debt.next_due_date ? debt.next_due_date.slice(0, 10) : null);
+  if (!end) return null;
+  const start = shiftDateSafe(end, debt.billing_cycle ?? "monthly", -1, debt.cycle_interval_days);
+  if (!start || start >= end) return null;
+  return { start, end };
+}
+
+
 function DebtDetailDialog({
 
   debt,
