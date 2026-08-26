@@ -22,7 +22,7 @@ import { PayActions } from "@/components/PayActions";
 import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
 
 import { useCycleState } from "@/lib/ledger-state";
-import { toPayable } from "@/lib/payments";
+import { toPayable, useSyncStoredStatus } from "@/lib/payments";
 import { nextPayDate, periodRange, inRange } from "@/lib/paycheck-budget";
 
 import { todayISO } from "@/lib/snapshot";
@@ -34,7 +34,7 @@ import {
   StatusBadge,
   statusVariant,
 } from "@/components/detail";
-import { formatMoney, debtDueDate, accountLabel } from "@/lib/format";
+import { formatMoney, debtDueDate, accountLabel, shiftDateSafe } from "@/lib/format";
 import { useHouseholdDeductions, useIncomeSources, useIncomeEvents } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
