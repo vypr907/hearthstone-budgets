@@ -1766,6 +1766,24 @@ First session with working build/test verification (GitHub Codespace — `tsc`,
   `funding_deduction_id`, ADR-068) now group with the deductions instead of
   falling into "Other".
 
+### ADR-081 auto-transfer code-review follow-ups (findings 2, 4, 5, 6)
+
+* **"Processed / Undo" never appeared after processing (finding 6, the real
+  bug).** Processing tags the credit leg with the cycle it closed (one interval
+  back); `deriveAutoTransferState`'s `eligible` filter drops any leg tagged
+  earlier than the current due date, so a just-processed transfer flipped
+  straight back to "unpaid" and could be re-processed. Fixed the resolved-cycle
+  lookback: fires while `today < next_due_date`, matches the exact tag against
+  `linked`. Surfaced by the first unit tests for the module
+  (`src/lib/auto-transfers.test.ts`, 10 tests).
+* **Server-side double-process guard (finding 2)** — `useProcessAutoTransfer`
+  rejects if a cleared leg already tags this exact cycle.
+* **Deterministic undo (finding 5)** — `useUndoAutoTransferProcess` targets the
+  leg for the cycle `next_due_date` was advanced past, not most-recent-by-date.
+* **Paused auto-transfers (finding 4)** — `is_active = false` rows show a
+  dimmed "Paused" card with no Process button in the Bills list.
+* Suite 77 → 87. ADR-081 2026-08-26 addendum. No schema change.
+
 ### Verified (no code change)
 
 * 2026-08-24 fixes checked against live data via the read-only MCP: the
@@ -1778,6 +1796,11 @@ First session with working build/test verification (GitHub Codespace — `tsc`,
 
 * `npm run lint` still fails (~489 errors on `main` too) — all pre-existing
   `prettier/prettier` formatting on Lovable-generated code. A repo-wide
-  `npm run format` pass is planned as its own separate PR.
+  `npm run format` pass was deferred (needs a `.prettierignore` scoping it to
+  `src/` first — a bare `prettier --write .` also reformats the skill/agent
+  docs).
+* `.devcontainer/devcontainer.json` was malformed JSON (the `features` block
+  sat outside the object), so Codespaces silently fell back to its default
+  image. Fixed — kept the working default (node 24), dropped the broken pins.
 * Nothing on this branch has been clicked through in a real browser yet;
-  verification is typecheck + 77 unit tests + code review.
+  verification is typecheck + 87 unit tests + code review.
