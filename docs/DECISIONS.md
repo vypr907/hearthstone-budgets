@@ -2938,3 +2938,18 @@ payments made months earlier. Splitting principal from fees/interest in one
 form matches how real statements arrive, and keeping fees ledger-only avoids
 faking interest accrual against the balance.
 Status: Decided 2026-08-26. Implemented.
+
+## ADR-085: Debt Detail Reads Ledger-Derived Cycle State; Cycle Window + Pay Period Fields
+Decision: The Debt detail panel derives "Payment status", "Paid this cycle" and
+"Still owed this cycle" from `deriveCycleInfo` (ADR-036) rather than the stored
+`payment_status` / `cycle_paid_to_date` columns; a stored `payment_status` that
+disagrees is shown only as a secondary "stored: …" note. `CycleInfo` now carries
+`windowStart`/`windowEnd`, surfaced as a "Cycle window" field, and a "Pay period"
+field shows the primary-paycheck period (ADR-059/060 `periodRange`) containing the
+debt's due date.
+Reason: A fully-paid monthly debt resets `cycle_paid_to_date` to 0 and has no
+`next_due_date` to roll, so the raw columns showed "Pending / $0.00 paid / $106.30
+still owed" the day after a full on-time payment — contradicting the list, Everything
+and Dashboard screens, which all use the ledger machine. Exposing the window makes
+the cycle math auditable instead of implicit.
+Status: Decided 2026-08-26. Implemented.
