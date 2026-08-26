@@ -168,7 +168,10 @@ export function deriveCycleInfo(
         transactions: cycleTx,
         pending,
         resolved,
+        windowStart,
+        windowEnd,
       };
+
     }
   }
 }
