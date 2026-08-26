@@ -1,73 +1,109 @@
 # Hearthstone
 
-*A private, shared household budget & debt-payoff tracker — migrated from a Google Sheets workbook to a native Android app.*
+A private budget & debt-payoff tracker for a two-person household, migrated from
+a Google Sheets workbook. Both people log in separately and see the same
+household's data.
 
-> "Ledger" and the `com.yourhousehold.ledger` package ID are placeholders from the build plan — rename both to whatever you actually want to call it.
+## What it does
 
-## What this is
+- **Bills & debts** with a ledger-derived payment cycle (`unpaid → pending →
+  partial → cleared`), universal partial payments, payment reversals, and
+  fees.
+- **Past due is money, not a flag** — missed cycles plus manual carry-in,
+  computed from the ledger (`src/lib/arrears.ts`).
+- **Paycheck budgeting** — per-pay-period planning, allocation to categories /
+  goals / specific bills, recurrence projection for forward periods.
+- **Savings goals & bill envelopes**, invoices with payment plans, income
+  sources with deposit splits and pre/post-tax deductions.
+- **Deduction-funded** bills/debts settle automatically when a paycheck is
+  marked received; **auto-transfers** track recurring money movement between the
+  household's own accounts.
+- Split transactions, transfers, cash advances, per-user color themes, spending
+  by place, a one-page status-snapshot export, a 12-month payment schedule, and
+  a net-worth trend.
 
-A budget/debt app shared by 2 people who each log in separately but see the same household's data. It covers:
-
-- Bills & debts, with real `unpaid → pending → cleared` payment status
-- Spendable balance vs. current balance, per account
-- Quick manual transaction entry for everyday spending (no bank connection — yet)
-- Monthly budget vs. actual spending by category
-- A debt payoff strategy calculator (Avalanche / Snowball / Custom)
-- Net worth tracking over time
-
-## Tech stack
+## Stack
 
 | Layer | Tool |
 |---|---|
-| App / UI | [Lovable](https://lovable.dev) (React + Vite) |
-| Database & Auth | [Supabase](https://supabase.com) (Postgres + Row-Level Security) |
-| Native Android shell | [Capacitor](https://capacitorjs.com) |
-| Distribution | Google Play (Internal Testing) |
+| App | React 19 · Vite 8 · TanStack Start (SSR) + Router + Query · Tailwind v4 · Radix UI · Recharts |
+| Backend | Self-managed [Supabase](https://supabase.com) — Postgres + Auth + Row-Level Security |
+| Build / deploy | nitro → Cloudflare (`.output/`) |
+| Android shell | [Capacitor](https://capacitorjs.com) — *planned (Phase 12), not started* |
 
-## Status
+Supabase's URL and **publishable** key are hard-coded in `src/lib/supabase.ts`
+(safe in the client — RLS enforces access). **The app needs no `.env` file.**
 
-**Current phase:** Phase 2 — Import your Real Data
+## Repo layout
 
-Full phase-by-phase build plan, database schema, and the actual Lovable prompts used at each step live in [`PLAN.md`](./PLAN.md).
+```
+src/routes/       file-based routes (TanStack Router)
+src/lib/          domain logic — payments.ts, ledger-state.ts, arrears.ts,
+                  paycheck-budget.ts, balances.ts, deduction-funding.ts, …
+src/components/    shared UI (Radix-based primitives under ui/)
+scripts/          test harness + hand-run SQL migrations
+docs/             see below
+```
 
-## Data model
+`src/lib/*.ts` files are the single source of truth for each money formula;
+`docs/ARCHITECTURE.md` maps which screens consume which module.
 
-Every table is scoped to a `household_id`, with Supabase Row-Level Security restricting each household to its own members — this is built for exactly 2 shared logins seeing identical data, not two separate personal accounts.
+## Docs
 
-Core tables: `households`, `household_members`, `categories`, `accounts`, `account_balances`, `transactions`, `bills`, `debts`, `debt_strategy_settings`, `spending_budgets`, `spending_actuals`. Full column-level schema and the RLS policies are in `PLAN.md`.
+| File | What |
+|---|---|
+| `CLAUDE.md` | agent working rules — **start here** |
+| `docs/CONTEXT.md` | compact current-state briefing (phase list, locked decisions, rules) |
+| `docs/DECISIONS.md` | every ADR (001–083+) |
+| `docs/SCHEMA.md` | full schema + RLS policies |
+| `docs/ARCHITECTURE.md` | module → screen map |
+| `docs/CHANGELOG.md` | dated history |
+| `docs/PLAN.md` | the original sequential build plan — historical |
 
-## Getting started
+Open work lives in **GitHub Issues** (labels `verification`, `tech-debt`, …);
+phase progress is tracked with **Milestones**. `docs/TODO.md` keeps only
+known-by-design limitations. The older `docs/AI_CONTEXT.md`, `AI Manual.md`,
+`Claude Instructions.md`, and `CONTEXT_1.0.md` are superseded by `CLAUDE.md` +
+`docs/CONTEXT.md`.
 
-Day-to-day changes to this app happen in the Lovable editor, not by hand-editing this repo. To run a local copy:
+## Develop
+
+Built to run in a **GitHub Codespace** (the devcontainer runs `npm ci`).
 
 ```bash
-git clone <this-repo-url>
-cd <repo-folder>
-npm install
-npm run dev
+npm run dev         # dev server on http://localhost:8080
+npm run build       # production build (.output/)
+npm test            # vitest — 87 tests
+npm run typecheck   # tsc --noEmit
 ```
 
-You'll need a local `.env` (never commit this file):
+Log in at `/auth`. Real household credentials are personal — for local work use
+the test account (below).
 
-```
-VITE_SUPABASE_URL=<your-supabase-project-url>
-VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>
-```
+### Database changes
 
-## Building for Android
+Schema and data writes are run **by hand** in the Supabase SQL Editor (there is
+no CLI/migration runner) — see the workflow loop in `CLAUDE.md`. A read-only
+Supabase MCP server is wired for verification. Migration SQL is checked in under
+`scripts/migrations/`.
 
-```bash
-npm run build
-npx cap sync android
-npx cap open android
-```
+### Testing against the database
 
-Full Capacitor setup and Google Play publishing steps are in `PLAN.md`, Phases 7–8.
+Automated tests create and mutate data in **only** the "TEST Household — Lovable
+QA" household — the boundary is Postgres RLS, not a code convention (see
+**ADR-083**). All test DB access goes through `scripts/test-db.mjs`
+(`testClient()`), which signs in as an RLS-bound test user and refuses to
+proceed if it can reach anything else. Credentials live in a gitignored
+`.env.test` at the repo root (`SMOKE_EMAIL` / `SMOKE_PASSWORD`).
+
+Browser smoke tests: see `scripts/smoke/README.md`.
+
+## Android / Google Play
+
+Not started (Phases 12–13). Capacitor wrap, then Internal Testing.
 
 ## Privacy
 
-This repo — and the data behind it — is private household financial information. Keep the repo set to **Private** on GitHub, and never commit real account numbers, passwords, or `.env` files.
-
-## License
-
-Personal/household project — not licensed for reuse or redistribution.
+This repo is **private**. Real financial data lives only in Supabase, behind
+Row-Level Security — never in the repo. `.env*` files are gitignored. Don't
+commit account numbers, passwords, or the `service_role` key.

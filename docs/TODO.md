@@ -1,47 +1,22 @@
-# Open items
+# TODO
 
-## Follow-up work
+Actionable open work is tracked in **GitHub Issues**, not here (ADR-087):
 
-- [ ] 2026-08-25 budget visualization overhaul (ring color rules via
-      `budgetRingColor()`, pending-amount amber bar segments, tappable
-      split-line detail rows, deduction-funded split line, zero-budget
-      "$X spent" label fix) and the Bills list card redesign need a
-      build/browser (or real-phone) check — same AppLocker constraint as
-      below. This landed after the FAB-overlap/tile-truncation mobile fixes,
-      which appear to have already been iterated on and fixed directly
-      (see "Fixed debt detail overflow"/"Fixed amount tile overflow" in git
-      log) — no need to re-verify those specifically unless new overlap
-      issues show up.
-- [ ] 2026-08-24 fixes: verified 2026-08-26 via MCP + code trace (see CHANGELOG).
-      Remaining: click-test the out-of-order backfill warning UX (backdate a debt
-      adjustment/advance before existing history → confirm the non-blocking
-      warning appears).
-- [ ] ADR-081 (Auto-Transfer tracking): compiles + code-reviewed 2026-08-26,
-      findings 2/4/5/6 fixed (see DECISIONS.md addendum; `auto-transfers.test.ts`
-      added). Still needs an end-to-end run: add a real (or throwaway)
-      auto-transfer, hit "Process transfer," and confirm — the transfer pair
-      lands with the right signs / `transfer_group_id` / `linked_auto_transfer_id`,
-      `next_due_date` advances, the row shows "Processed ✓ · Undo" until the new
-      due date, Undo cleanly reverses both, and a paused auto-transfer shows no
-      Process button.
+- Things needing a browser/device check → label `verification`
+- Cleanup / backfills / formatting → label `tech-debt`
+- Phase progress → **Milestones** (`Phase 12 …`, `Phase 13 …`, `Phase 14 …`)
+- `gh issue list` / the repo's Issues tab
 
-- [ ] 2026-08-26 reset-vs-adjustments fix (`rebuiltCycleAmountDue`, ADR-058
-      addendum) is unit-tested but wants one end-to-end check: add a +$ bill
-      adjustment, pay the cycle, undo it, confirm `cycle_amount_due` still
-      reflects the adjustment (not just `bills.amount`).
-- [ ] ADR-082 (3-way Past Due grouping + `income_source_deductions.kind`):
-      migration run + implemented 2026-08-26. Remaining: eyeball the Dashboard
-      Past due section on device — confirm the "Auto-handled off paycheck"
-      collapsible shows "Paycheck deduction" + "HSA / FSA" sub-lists and that
-      HSA/LPFSA-funded items land in the right bucket. Optional follow-up:
-      surface `kind` on the deduction list rows (currently only in the dialog).
+This file now holds only **known limitations that are working as designed** —
+not tasks:
 
-- [ ] Repo-wide `npm run format` (prettier --write) as its own PR — `npm run
-      lint` fails with ~489 pre-existing `prettier/prettier` errors across
-      Lovable-generated code (fails on `main` too). Keep it off feature branches.
-
-## Standing open items
-
-- [ ] Re-tag older transactions with a place (`institution_id`) so Spending by place totals are complete — can be done from TransactionDetail edit mode.
-- [ ] Accounts and Institutions detail dialogs remain screen-specific (investigated 2026-08-11, no shared component warranted — closed as designed).
-- [ ] Payment Schedule: past months show no per-debt breakdown by design; check-off only.
+- **Accounts vs. Institutions detail dialogs stay screen-specific.** Investigated
+  2026-08-11; they share too little at the detail level (institution → linked
+  accounts/bills/debts; account → recent transactions) to warrant a shared
+  component. Only the add/edit *forms* are shared.
+- **Payment Schedule past months show no per-debt breakdown.** By design —
+  balances have moved on, so a past month is history (check-off only), not a
+  simulation. Ledger status badges appear on the current month only.
+- **No guard against two Set Aside entries for the same bill in one month** was
+  the state before 2026-08-26; now resolved as *warn-and-allow* (ADR-038
+  addendum). Kept here as a pointer.
