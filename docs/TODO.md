@@ -12,36 +12,30 @@
       (see "Fixed debt detail overflow"/"Fixed amount tile overflow" in git
       log) — no need to re-verify those specifically unless new overlap
       issues show up.
-- [ ] 2026-08-24 fixes (Dashboard overdue guard, `applyClearedPayment` date
-      threading, out-of-order backfill warning on debt adjustments/advances)
-      need a build/browser smoke test — same AppLocker constraint as below.
-      Confirm: Student Loan 1/2 drop off Dashboard "Past due"; OnePay Advance
-      shows its open $231.75 balance (data fix already run and confirmed
-      live via MCP); backdating a debt adjustment/advance before existing
-      history triggers the warning.
-- [ ] ADR-081 (Auto-Transfer tracking) needs a build/browser smoke test before it's
-      considered done — code landed (schema, data layer, Bills screen section,
-      Paycheck Budget, Dashboard card) but Windows AppLocker blocks local
-      `vite`/`tsc`, so it hasn't been compiled or clicked through, and the Supabase
-      MCP is read-only so no test data could be written to trace it end-to-end
-      from this side. User to add a real (or throwaway) auto-transfer in the app,
-      hit "Process transfer," and confirm: the transaction pair lands with the
-      right signs/`transfer_group_id`/`linked_auto_transfer_id`, `next_due_date`
-      advances correctly, and it shows up on Paycheck Budget/Dashboard totals.
+- [ ] 2026-08-24 fixes: verified 2026-08-26 via MCP + code trace (see CHANGELOG).
+      Remaining: click-test the out-of-order backfill warning UX (backdate a debt
+      adjustment/advance before existing history → confirm the non-blocking
+      warning appears).
+- [ ] ADR-081 (Auto-Transfer tracking): compiles + code-reviewed 2026-08-26
+      (findings addressed — write-order fix landed). Still needs an end-to-end
+      run: add a real (or throwaway) auto-transfer, hit "Process transfer," and
+      confirm the transaction pair lands with the right
+      signs/`transfer_group_id`/`linked_auto_transfer_id`, `next_due_date`
+      advances, and it shows on Paycheck Budget/Dashboard totals.
 
-- [ ] Bug found 2026-08-21, not yet fixed: resetting/undoing a bill's cycle
-      (`useResetCycle`/`useMarkUnpaid`) writes `cycle_amount_due: null` unconditionally,
-      with no awareness of any active `bill_adjustments` — silently drops an
-      adjustment's effect on what's actually due (this is how Beiers got into its
-      "Credit now" bug). Needs its own look at how adjustments should survive a
-      reset — recompute from adjustments on reset, or block reset while one is active?
-- [ ] Revisit Past Due grouping as a true 3-way split now that ADR-068 labels rows Deduction-funded vs HSA-funded — the grouping itself is still binary (`debts.is_paycheck_deduction` only; bills have no equivalent field).
-- [ ] Cosmetic: an advance debt reactivated by a new advance (ADR-066, confirmed does NOT reproduce as a real bug 2026-08-21) keeps a stale "Cleared" chip / "% paid off" until the next status write.
-- [ ] Add unit tests for `projectOccurrences()` (monthly + biweekly items) alongside the existing arrears tests.
+- [ ] 2026-08-26 reset-vs-adjustments fix (`rebuiltCycleAmountDue`, ADR-058
+      addendum) is unit-tested but wants one end-to-end check: add a +$ bill
+      adjustment, pay the cycle, undo it, confirm `cycle_amount_due` still
+      reflects the adjustment (not just `bills.amount`).
+- [ ] ADR-082 (3-way Past Due grouping + `income_source_deductions.kind`):
+      approved + drafted 2026-08-26. BLOCKED on the user running the migration
+      (SQL block in the ADR). Once run: add the "Kind" picker to the
+      income-source deduction dialog, replace `fundingLabel()`'s regex with the
+      column, and make the Dashboard Past Due grouping three-way
+      (`src/lib/deduction-funding.ts` helper + `app.index.tsx`).
 
 ## Standing open items
 
 - [ ] Re-tag older transactions with a place (`institution_id`) so Spending by place totals are complete — can be done from TransactionDetail edit mode.
-- [ ] No guard against two Set Aside entries for the same bill in the same month (ADR-038 known gap).
 - [ ] Accounts and Institutions detail dialogs remain screen-specific (investigated 2026-08-11, no shared component warranted — closed as designed).
 - [ ] Payment Schedule: past months show no per-debt breakdown by design; check-off only.

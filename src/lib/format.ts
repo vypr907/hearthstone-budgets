@@ -214,6 +214,39 @@ export function needsEnvelope(cycle: string | null | undefined): boolean {
   );
 }
 
+/**
+ * ADR-038 addendum: the credit leg (if any) of a Set Aside already made for
+ * this bill's envelope in the calendar month of `today`. Matches what
+ * SetAsideAction writes — linked to the envelope goal, description prefixed
+ * "Set aside: <bill name> ->". Used to warn (never block) before a second
+ * same-month set-aside; a top-up or correction is legitimate.
+ */
+export function priorSetAsideThisMonth(
+  transactions: {
+    linked_goal_id?: string | null;
+    description?: string | null;
+    transaction_date?: string | null;
+    amount?: number | null;
+  }[],
+  billName: string,
+  goalId: string,
+  today: string,
+): { date: string; amount: number } | null {
+  const month = today.slice(0, 7);
+  const prefix = `Set aside: ${billName} ->`;
+  const hit = transactions.find(
+    (t) =>
+      t.linked_goal_id === goalId &&
+      (t.description ?? "").startsWith(prefix) &&
+      (t.transaction_date ?? "").slice(0, 7) === month,
+  );
+  if (!hit) return null;
+  return {
+    date: (hit.transaction_date ?? "").slice(0, 10),
+    amount: Math.abs(Number(hit.amount ?? 0)),
+  };
+}
+
 /** Last 4 digits of an account number, or null when none is stored. */
 export function accountLast4(accountNumber: string | null | undefined): string | null {
   const digits = (accountNumber ?? "").replace(/\D/g, "");

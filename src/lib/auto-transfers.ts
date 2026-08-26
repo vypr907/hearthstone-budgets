@@ -88,10 +88,18 @@ export function deriveAutoTransferState(
 /**
  * ADR-081: "Process transfer" — writes a normal ADR-056 transfer pair (two
  * cleared transactions sharing transfer_group_id) and advances the
- * auto-transfer's next_due_date, mirroring applyClearedPayment's ADR-037
- * write order (payable row first, then the ledger). The credit (destination)
- * leg carries linked_auto_transfer_id so deriveAutoTransferState can find it;
- * the debit leg stays a plain transfer leg like any other transfer.
+ * auto-transfer's next_due_date.
+ *
+ * Write order (2026-08-26): both ledger legs first, the next_due_date advance
+ * LAST — the opposite of applyClearedPayment's ADR-037 "payable first" rule,
+ * and deliberately so. Here the "payable" write is only a scheduling-date bump,
+ * not a balance, so ADR-037's orphan-transaction concern doesn't apply; what
+ * matters more is that a failure between the legs and the date advance must not
+ * skip the cycle. If the date update fails now, deriveAutoTransferState still
+ * reads the (un-advanced) cycle as "cleared" off the credit leg's
+ * resolved_cycle_due_date tag, and the user can retry/undo. The credit
+ * (destination) leg carries linked_auto_transfer_id so deriveAutoTransferState
+ * can find it; the debit leg stays a plain transfer leg like any other.
  */
 export function useProcessAutoTransfer() {
   const { householdId } = useAuth();
@@ -100,15 +108,6 @@ export function useProcessAutoTransfer() {
     mutationFn: async (at: AutoTransfer) => {
       const resolvedDueDate = at.next_due_date;
       const nextDue = advanceDate(at.next_due_date, at.billing_cycle, at.cycle_interval_days);
-      const { data, error: updErr } = await supabase
-        .from("auto_transfers")
-        .update({ next_due_date: nextDue })
-        .eq("id", at.id)
-        .select("id");
-      if (updErr) throw updErr;
-      if (!data || data.length === 0) {
-        throw new Error("Could not update this auto-transfer — no row was changed.");
-      }
 
       const groupId = crypto.randomUUID();
       const base = {
@@ -136,6 +135,18 @@ export function useProcessAutoTransfer() {
         resolved_cycle_due_date: resolvedDueDate,
       });
       if (e2) throw e2;
+
+      // Date advance LAST: a failure here leaves a complete, correctly-tagged
+      // transfer pair and a stale due date — not a silently-skipped cycle.
+      const { data, error: updErr } = await supabase
+        .from("auto_transfers")
+        .update({ next_due_date: nextDue })
+        .eq("id", at.id)
+        .select("id");
+      if (updErr) throw updErr;
+      if (!data || data.length === 0) {
+        throw new Error("Could not advance this auto-transfer's due date — no row was changed.");
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["auto_transfers"] });
