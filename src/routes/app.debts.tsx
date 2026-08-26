@@ -577,15 +577,23 @@ function DebtDetailDialog({
               label="Cycle window"
               value={
                 <div>
-                  <div>{formatWindow(billingWindow?.start ?? null, billingWindow?.end ?? null)}</div>
-                  {cycle.windowStart && cycle.windowEnd ? (
+                  <div>
+                    {cycle.windowStart && cycle.windowEnd
+                      ? formatWindow(cycle.windowStart, cycle.windowEnd)
+                      : formatWindow(billingWindow?.start ?? null, billingWindow?.end ?? null)}
+                  </div>
+                  {/* ADR-086: monthly cycles are the calendar month, so the
+                      counted range is the cycle. Only non-monthly items have a
+                      separate billing period worth showing. */}
+                  {!isMonthlyCycle(debt) && billingWindow ? (
                     <div className="text-xs text-muted-foreground">
-                      counting {formatWindow(cycle.windowStart, cycle.windowEnd)}
+                      billing period {formatWindow(billingWindow.start, billingWindow.end)}
                     </div>
                   ) : null}
                 </div>
               }
             />
+
             <DetailItem label="Pay period" value={payPeriod ? formatWindow(payPeriod.start, payPeriod.end) : "—"} />
 
 
