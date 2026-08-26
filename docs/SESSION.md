@@ -55,3 +55,16 @@
     "Sync stored status" button writes the derived state (and cycle_paid_to_date)
     back onto the debt row via the new `useSyncStoredStatus()` hook.
   - Files: src/lib/payments.ts, src/routes/app.debts.tsx, docs/DECISIONS.md.
+- 2026-08-26 — ADR-086: monthly cycles = the calendar month.
+  - Drift check (via the app's read path, 42 debts): 4 rows with `next_due_date`
+    off `due_day` — Aarons - Dresser (21 → Aug 18), Alpine Medical - Stephanie
+    (18 → Jul 29), GTC and FM Jewelry (biweekly). `bills` has no `due_day`
+    column, so due-day anchoring was not viable; calendar month chosen instead.
+  - `deriveCycleInfo` counts monthly items over `YYYY-MM-01 … month end`;
+    ADR-075 tag exclusion compares by month for monthly; non-monthly logic and
+    the resolved-lookback branch untouched. `resolved` still set when a cleared
+    monthly cycle's `next_due_date` sits past the month end.
+  - Debt detail "Cycle window" shows the counted month; billing period is now
+    the secondary line and only for non-monthly cycles.
+  - Files: src/lib/ledger-state.ts, src/lib/ledger-state.test.ts,
+    src/routes/app.debts.tsx, docs/DECISIONS.md. 88 tests green.

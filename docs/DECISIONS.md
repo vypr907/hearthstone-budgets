@@ -2965,3 +2965,25 @@ Reason: The raw derivation window (e.g. "Aug 18 – Aug 26") is an implementatio
 detail and read as nonsense; and a backdated payment can leave a stale
 "pending" on the row that no screen could repair.
 Status: Decided 2026-08-26. Implemented.
+
+## ADR-086: Monthly cycles are the calendar month
+Decision: In `deriveCycleInfo` (ADR-036), a monthly bill/debt's cycle is the
+calendar month containing today — every linked transaction dated in that month
+counts toward that cycle, early or late, and the cycle resets on the 1st. The
+ADR-075 `resolved_cycle_due_date` tag is compared by month for monthly items
+(only a tag from a *previous* month excludes a transaction). Non-monthly cycles
+(biweekly / weekly / custom interval / one-time) keep the existing
+`next_due_date`-anchored rolling window unchanged. `CycleInfo.resolved` is still
+set for a cleared monthly cycle whose `next_due_date` has already rolled past
+the month end, so the stranded-payment repair and reversal paths behave as
+before. Debt detail's "Cycle window" now shows this counted range directly (e.g.
+Aug 1 – Aug 31); non-monthly items additionally show their billing period.
+Reason: The window hung off `next_due_date` drifts with the stored row. A drift
+check across 42 debts found 4 rows whose `next_due_date` day no longer matches
+`due_day` (Aarons - Dresser 21→Aug 18, Alpine Medical - Stephanie 18→Jul 29, and
+two biweekly rows), producing nonsense windows like "Aug 18 – Aug 26" and a
+cleared on-time payment reading as unpaid. Anchoring by `due_day` was rejected
+because `bills` has no `due_day` column at all — the calendar month is the one
+rule both tables can express, and it matches how the household actually thinks
+about a monthly bill.
+Status: Decided 2026-08-26. Implemented.
