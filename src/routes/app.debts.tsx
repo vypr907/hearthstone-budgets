@@ -419,6 +419,10 @@ function payPeriodFor(
  * Aug 21). This is the human-readable cycle; the derivation's counting window
  * can be narrower (it ignores payments that already resolved an older cycle).
  */
+function isMonthlyCycle(debt: Debt) {
+  return (debt.billing_cycle ?? "monthly").toLowerCase().replace(/[\s_-]/g, "") === "monthly";
+}
+
 function billingPeriodFor(debt: Debt): { start: string; end: string } | null {
   const end = debtDueDate(debt) ?? (debt.next_due_date ? debt.next_due_date.slice(0, 10) : null);
   if (!end) return null;
@@ -426,6 +430,7 @@ function billingPeriodFor(debt: Debt): { start: string; end: string } | null {
   if (!start || start >= end) return null;
   return { start, end };
 }
+
 
 
 function DebtDetailDialog({
