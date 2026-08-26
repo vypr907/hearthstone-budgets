@@ -388,11 +388,21 @@ function DebtDetailDialog({
 }) {
   const { data: categories = [] } = useCategories();
   const { data: accounts = [] } = useAccounts();
+  const { data: incomeSources = [] } = useIncomeSources();
+  const { data: incomeEvents = [] } = useIncomeEvents();
+  const infoOf = useCycleState();
   const category = categories.find((c) => c.id === debt?.category_id);
   const account = accounts.find((a) => a.institution_id === debt?.institution_id);
 
+  // ADR-036: the detail panel reports the ledger-derived cycle, not the stored
+  // columns — a fully-paid monthly cycle resets cycle_paid_to_date to 0, which
+  // otherwise reads as "nothing paid, still owed".
+  const cycle = debt ? infoOf(toPayable("debt", debt)) : null;
+  const payPeriod = debt ? payPeriodFor(debt, incomeSources, incomeEvents) : null;
+
   const open = debt !== null;
-  if (!debt) return null;
+  if (!debt || !cycle) return null;
+
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
