@@ -2,12 +2,58 @@ import {
   supabase,
   type Bill,
   type Debt,
+  type DeductionKind,
   type IncomeSourceDeduction,
   type Transaction,
 } from "./supabase";
 import { deriveCycleInfo } from "./ledger-state";
 import { applyClearedPayment, billCycleDue, debtCycleDue, toPayable } from "./payments";
 import { priorCyclesArrears } from "./arrears";
+
+/**
+ * ADR-082: the Dashboard "Past due" section splits three ways —
+ * `paycheck_deduction` and `hsa_fsa` items are settled automatically off a
+ * paycheck (no action needed), `other` is an ordinary bill/debt the household
+ * has to pay.
+ */
+export type PastDueGroup = "paycheck_deduction" | "hsa_fsa" | "other";
+
+/**
+ * Which Past Due group a bill/debt belongs to. A deduction-funded item (ADR-068
+ * `funding_deduction_id`, present on bills AND debts) is classified by the
+ * funding deduction's `kind`: hsa/fsa → `hsa_fsa`, anything else → the paycheck
+ * bucket. A legacy `debts.is_paycheck_deduction` debt with no funding link
+ * defaults to the paycheck bucket (the flag historically meant "payroll or HSA
+ * deduction" with no way to tell which). Everything else is `other`.
+ */
+export function pastDueGroup(
+  item: {
+    funding_deduction_id?: string | null;
+    is_paycheck_deduction?: boolean | null;
+  },
+  deductions: { id: string; kind?: DeductionKind | null }[],
+): PastDueGroup {
+  const fundingId = item.funding_deduction_id ?? null;
+  if (fundingId) {
+    const kind = deductions.find((d) => d.id === fundingId)?.kind ?? "payroll";
+    return kind === "hsa" || kind === "fsa" ? "hsa_fsa" : "paycheck_deduction";
+  }
+  if (item.is_paycheck_deduction === true) return "paycheck_deduction";
+  return "other";
+}
+
+/** ADR-082: short row label for a deduction-funded past-due item. */
+export function deductionFundingLabel(
+  fundingDeductionId: string | null | undefined,
+  deductions: { id: string; kind?: DeductionKind | null }[],
+): string | null {
+  if (!fundingDeductionId) return null;
+  const kind = deductions.find((d) => d.id === fundingDeductionId)?.kind;
+  if (!kind) return null;
+  if (kind === "hsa") return "HSA-funded";
+  if (kind === "fsa") return "FSA-funded";
+  return "Deduction-funded";
+}
 
 /**
  * ADR-068 (extends ADR-055): a deduction that lands in a real account can also

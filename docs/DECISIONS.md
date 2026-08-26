@@ -940,6 +940,16 @@ unrestricted for now; revisit if double set-asides become a real problem in prac
 Status: Decided 2026-08-05. Implemented 2026-08-05 (`src/components/SetAsideAction.tsx`,
 rendered on the bill detail view when a linked envelope goal exists).
 
+2026-08-26 addendum — warn on a repeat same-month Set Aside:
+The "no guard" open item above is resolved as warn-and-allow, not a hard block.
+Before writing the transfer pair, `SetAsideAction` checks for an existing cleared
+credit transaction with `linked_goal_id` = this envelope whose description begins
+"Set aside: <bill name>" dated in the current calendar month. If one exists, a
+confirm() warns ("You already set aside $X for <bill> this month on <date> — set
+aside again anyway?") and proceeds only on OK. A top-up or correction is legitimate,
+so the action is never prevented — just made deliberate. No schema change.
+Implemented 2026-08-26.
+
 ## ADR-039: Savings Goals in Pay Period Allocations (Resolves ADR-024 Open Question)
 
 Decision:
@@ -1583,6 +1593,29 @@ alter table debt_adjustments add column if not exists affects_balance boolean no
 ```
 
 Status: Decided 2026-08-11. SQL run and verified (affects_balance confirmed present).
+
+**2026-08-26 addendum — bill adjustments survive a cycle reset:**
+`useResetCycle` and `useMarkUnpaid` (`src/lib/payments.ts`) previously wrote
+`cycle_amount_due: null` unconditionally when undoing a fixed bill's cycle, with
+no awareness of an active `bill_adjustments` row — silently dropping that
+adjustment's effect on what's owed (this is the mechanism behind the Beiers
+"Credit now" bug).
+
+Decision: on reset/undo, rebuild `cycle_amount_due` instead of blanking it, via
+the pure `rebuiltCycleAmountDue(bill, adjustments, dueDate)`. It returns
+`bill.amount` + the sum of `affects_balance` adjustments whose `adjustment_date`
+falls in the restored current cycle — a one-interval band around the due date
+(`> shiftDateSafe(due, cycle, -1)`, `<= shiftDateSafe(due, cycle, +1)`), matching
+`deriveCycleInfo`'s half-open window. Returns `null` (→ same as the old
+behavior) when there is no such adjustment, for a variable bill (its
+`cycle_amount_due` is a user-entered figure, not derivable from `amount`), or
+when the `bill_adjustments` read fails (degrade, never block the undo). For the
+"resolved" reset case the band is anchored on the *reversed* due date, since
+that's the cycle the bill is being returned to. No schema change.
+
+Status: Decided 2026-08-26. Implemented 2026-08-26 (`rebuiltCycleAmountDue` +
+`fetchBillAdjustments` in payments.ts, wired into both reset paths; 12 unit
+tests in `payments.test.ts`).
 
 ## ADR-059: Manual Bill/Debt Allocation in Pay Periods (Resolves ADR-024's Known Limitation)
 
@@ -2683,3 +2716,130 @@ original wording assumed. The dedicated module still reuses the same
 ledger-state *pattern* (a `CycleInfo`-shaped return, the same due-window/
 resolved-lookback logic, `stateVisual()` for presentation) — just as a
 sibling implementation rather than an inline extension.
+
+2026-08-26 addendum — "Process transfer" write order:
+`useProcessAutoTransfer` originally advanced `auto_transfers.next_due_date`
+first (mirroring ADR-037's "payable row before ledger"), then wrote the two
+transfer legs. A failure on the credit-leg insert then left the due date
+already advanced + an orphan debit + no `linked_auto_transfer_id` row, so the
+cycle read as unpaid for the *next* period and the current one was silently
+skipped. Reordered: both legs first, the `next_due_date` advance last. ADR-037's
+rule is about not stranding an orphan transaction against an untouched balance;
+here the "payable" write is a scheduling-date bump with no balance, so that
+concern doesn't apply, and not skipping the cycle matters more. A failed date
+advance now leaves a complete, correctly-tagged pair that
+`deriveAutoTransferState` still reads as "cleared" (off the credit leg's
+`resolved_cycle_due_date` tag) against the un-advanced date. Orphan-debit risk
+on a failed credit leg is unchanged and still matches `useSaveTransfer`. No
+schema change.
+
+2026-08-26 addendum — code-review follow-ups (findings 2, 4, 5, 6):
+
+- **"Processed / Undo" never appeared (finding 6, the real bug).** Processing
+  advances `next_due_date` and tags the credit leg with the cycle it closed
+  (one interval back). `deriveAutoTransferState`'s `eligible` filter drops any
+  leg tagged earlier than the current due date, so a just-processed transfer
+  flipped straight back to "unpaid" and lost its Undo affordance — and the user
+  could immediately re-process, advancing the date again. Fixed: the
+  resolved-cycle lookback now fires whenever `today < next_due_date` (was
+  `today <= next_due_date - 1 interval`) and matches the credit leg's exact
+  `resolved_cycle_due_date` tag against `linked` (not the filtered `eligible`).
+  A processed cycle now reads "cleared" until its (advanced) due date arrives,
+  then correctly returns to "unpaid" for the next cycle. Surfaced by the first
+  unit tests for this module (`src/lib/auto-transfers.test.ts`).
+- **Server-side double-process guard (finding 2).** Before writing,
+  `useProcessAutoTransfer` queries for a cleared leg already tagged
+  `resolved_cycle_due_date = at.next_due_date` and refuses if one exists —
+  backstop for the same-cycle race the UI's client-only "hide button when
+  cleared" doesn't cover.
+- **Deterministic undo (finding 5).** `useUndoAutoTransferProcess` targets the
+  leg tagged to the cycle `next_due_date` was just advanced past
+  (`resolved_cycle_due_date = reverseDate(next_due_date)`), falling back to
+  most-recent-by-date only for legs written before the tag existed. Two cycles
+  processed the same day now undo in the right order.
+- **Paused auto-transfers (finding 4).** The Bills-screen list rendered
+  `is_active = false` rows with a live "Process transfer" button. They now show
+  a dimmed card with a "Paused" pill and no action button (still editable to
+  reactivate). `obligationsInRange` and the Dashboard reminders already
+  excluded them.
+- Not changed (finding 3): the processed transaction is still dated "today".
+  Dating it at the (past) due date instead would fall outside
+  `deriveAutoTransferState`'s half-open `d > openStart` window and break state
+  detection — the today-date is load-bearing.
+
+No schema change.
+
+## ADR-082: Explicit Deduction Kind; Three-Way Past Due Grouping
+
+Decision:
+Add `income_source_deductions.kind text not null default 'payroll'`, CHECK-constrained
+to ('payroll','hsa','fsa','other'). This becomes the single source of truth for
+classifying a deduction, replacing the `fundingLabel()` heuristic in `app.index.tsx`
+that regex-matches /hsa|fsa/ against the destination account's name/type.
+
+The Dashboard "Past due" section's grouping changes from binary
+(`debts.is_paycheck_deduction` only, debts only) to three-way:
+- Payroll deduction — items funded by a kind='payroll' deduction, plus legacy
+  `debts.is_paycheck_deduction=true` debts with no `funding_deduction_id`.
+- HSA / FSA — items funded by a kind IN ('hsa','fsa') deduction.
+- Other — ordinary bills/debts.
+
+An overdue item counts as deduction-funded if it has a `funding_deduction_id` (bill OR
+debt — ADR-068 already gave bills this column, so deduction-funded bills now group
+correctly instead of falling into "Other"), or, for debts only, the legacy
+`is_paycheck_deduction` flag. Classification lives in a pure helper in
+`src/lib/deduction-funding.ts`; the Dashboard is this ADR's only consumer.
+
+`debts.is_paycheck_deduction` is unchanged in meaning and keeps its ADR-032 role
+(exclude the debt from obligation/budget math). `kind` is purely additive — a debt may
+carry both. The income-source detail deduction dialog gains a "Kind" picker
+(Payroll / HSA / FSA / Other), defaulting to Payroll.
+
+Migration backfills `kind` from the existing heuristic one final time (hsa where the
+destination account name/type matches /hsa/i, fsa where /fsa/i, else payroll); after
+that the column is authoritative and the heuristic is deleted.
+
+Schema:
+    alter table income_source_deductions
+      add column if not exists kind text not null default 'payroll';
+    alter table income_source_deductions
+      add constraint income_source_deductions_kind_check
+      check (kind in ('payroll','hsa','fsa','other'));
+
+    update income_source_deductions d
+    set kind = case
+      when a.account_type ilike '%hsa%' or a.name ilike '%hsa%' then 'hsa'
+      when a.account_type ilike '%fsa%' or a.name ilike '%fsa%' then 'fsa'
+      else 'payroll'
+    end
+    from accounts a
+    where d.destination_account_id = a.id;
+
+    notify pgrst, 'reload schema';
+
+Reason:
+The row-level "HSA-funded" vs "Deduction-funded" label (ADR-068) already exists, but
+it's derived by regex on an account name — fragile, and invisible to the Past Due
+grouping, which still keys off `debts.is_paycheck_deduction` alone. That flag doesn't
+exist on bills, so a deduction-funded bill (ADR-068) that goes past due shows up mixed
+into "Other" instead of with the other automatically-handled items. An explicit `kind`
+column fixes both the fragility and the bill/debt asymmetry, and gives a real 3-way
+split without overloading `is_paycheck_deduction` (which has a separate, load-bearing
+budgeting-exclusion job).
+
+Status: Decided 2026-08-26. SQL migration run and verified live via the read-only MCP
+(column `kind text not null default 'payroll'`, CHECK against the 4 values; backfill
+put HSA → hsa, LPFSA → fsa, the other 22 → payroll). Implemented 2026-08-26:
+- `DeductionKind` type + `IncomeSourceDeduction.kind` (`src/lib/supabase.ts`).
+- `pastDueGroup()` + `deductionFundingLabel()` pure helpers in
+  `src/lib/deduction-funding.ts` (11 unit tests).
+- "Kind" picker on the income-source deduction dialog
+  (`src/routes/app.income-source.$id.tsx`); `useUpsertIncomeSourceDeduction` passes it
+  straight through.
+- Dashboard "Past due" (`src/routes/app.index.tsx`) is now three-way: one collapsible
+  "Auto-handled off paycheck" section with "Paycheck deduction" and "HSA / FSA"
+  sub-lists, plus the ordinary "Other" list. The old `fundingLabel()` regex is deleted.
+
+UI note: the two deduction groups share one collapse toggle (both are "no action
+needed" awareness items) rather than collapsing independently — the classification is
+three-way, the display keeps the dashboard compact.

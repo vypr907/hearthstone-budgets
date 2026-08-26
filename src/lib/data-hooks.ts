@@ -21,7 +21,7 @@ import {
 } from "./supabase";
 import { advanceDate, needsEnvelope } from "./format";
 import { useAuth } from "./auth-context";
-import { advanceMinimumPaymentPatch } from "./payments";
+import { advanceMinimumPaymentPatch, advanceReactivationPatch } from "./payments";
 import { nextPayDate } from "./paycheck-budget";
 import { useIncomeSources, useIncomeEvents } from "./income-hooks";
 
@@ -976,7 +976,9 @@ export function useCreateAdvance() {
       const next = Math.max(0, Number(args.debt.remaining_balance ?? 0) + args.amount);
       // ADR-066: an advance against a paid-off advance-type debt reactivates
       // it in the same write, rather than staying "paid off" and hidden.
-      const reactivate = args.debt.debt_type === "advance" && !!args.debt.date_paid_off;
+      // advanceReactivationPatch also resets the stale payment_status /
+      // cycle_paid_to_date from the last payoff (fresh cycle).
+      const reactivation = advanceReactivationPatch(args.debt);
       // ADR-056 addendum: a one-time smart default, same as the debt form —
       // an advance against a biweekly advance-type debt with no due date yet
       // fills it from the household's next paycheck. Never overwrites a due
@@ -991,7 +993,7 @@ export function useCreateAdvance() {
         .update({
           remaining_balance: next,
           ...advanceMinimumPaymentPatch(args.debt, next),
-          ...(reactivate ? { date_paid_off: null } : {}),
+          ...reactivation,
           ...(nextDue ? { next_due_date: nextDue } : {}),
         })
         .eq("id", args.debt.id);

@@ -21,10 +21,16 @@ import {
 import {
   useAccounts,
   useSavingsGoals,
+  useTransactions,
   useUpsertSavingsGoal,
   useUpsertTransaction,
 } from "@/lib/data-hooks";
-import { accountLast4, formatMoney, monthlyEquivalent } from "@/lib/format";
+import {
+  accountLast4,
+  formatMoney,
+  monthlyEquivalent,
+  priorSetAsideThisMonth,
+} from "@/lib/format";
 import type { Bill } from "@/lib/supabase";
 
 function todayISO() {
@@ -51,6 +57,7 @@ export function SetAsideAction({
 }) {
   const { data: goals = [] } = useSavingsGoals();
   const { data: accounts = [] } = useAccounts();
+  const { data: transactions = [] } = useTransactions();
   const upsertGoal = useUpsertSavingsGoal();
   const upsertTx = useUpsertTransaction();
 
@@ -88,6 +95,18 @@ export function SetAsideAction({
     if (!amt) return toast.error("Enter an amount");
     const destination = goal.account_id ?? destId;
     if (!destination) return toast.error("Pick where this envelope's money lives");
+
+    // ADR-038 addendum: warn (don't block) on a repeat set-aside this month —
+    // a top-up or correction is legitimate, but a duplicate usually isn't.
+    const prior = priorSetAsideThisMonth(transactions, bill.name, goal.id, todayISO());
+    if (
+      prior &&
+      !window.confirm(
+        `You already set aside ${formatMoney(prior.amount)} for ${bill.name} this month on ${prior.date} — set aside again anyway?`,
+      )
+    ) {
+      return;
+    }
 
     setBusy(true);
     try {

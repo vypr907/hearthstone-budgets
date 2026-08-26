@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Bill, type Debt, type Transaction } from "./supabase";
-import { advanceDate, reverseDate, formatMoney } from "./format";
+import { supabase, type Bill, type BillAdjustment, type Debt, type Transaction } from "./supabase";
+import { advanceDate, reverseDate, shiftDateSafe, formatMoney } from "./format";
 import { useAuth } from "./auth-context";
 
 function todayISO() {
@@ -101,10 +101,86 @@ export function advanceMinimumPaymentPatch(debt: Debt, newRemainingBalance: numb
   return debt.debt_type === "advance" ? { minimum_payment: newRemainingBalance } : {};
 }
 
+/**
+ * ADR-066: recording a new advance against a paid-off advance-type debt
+ * reactivates it in place. Beyond clearing `date_paid_off`, that also starts a
+ * fresh cycle — so the stale `payment_status`/`cycle_paid_to_date` left from the
+ * last payoff must be reset too, or the Debts list keeps showing a "cleared"
+ * chip on a debt that now owes money until the next status write. Returns an
+ * empty patch for any debt that isn't a paid-off advance.
+ */
+export function advanceReactivationPatch(debt: Debt) {
+  const isPaidOffAdvance = debt.debt_type === "advance" && !!debt.date_paid_off;
+  return isPaidOffAdvance
+    ? { date_paid_off: null, payment_status: "unpaid", cycle_paid_to_date: 0 }
+    : {};
+}
+
 /** Still owed toward this debt's current cycle minimum (0 when settled). */
 export function debtRemainingOwed(debt: Debt) {
   const paid = Number(debt.cycle_paid_to_date ?? 0);
   return Math.max(0, debtCycleDue(debt) - paid);
+}
+
+/**
+ * ADR-058 addendum: rebuild `cycle_amount_due` for a fixed bill whose cycle is
+ * being reset/undone. Nulling it unconditionally silently drops the effect of
+ * an active `bill_adjustments` row on what's owed (this is how Beiers got into
+ * its "Credit now" bug). This recomputes `bill.amount` plus the sum of
+ * `affects_balance` adjustments dated within the (restored) current cycle — a
+ * one-interval band around `dueDate`, matching `deriveCycleInfo`'s half-open
+ * window (`> start`, `<= end`). Returns `null` when there is no such
+ * adjustment, or for a variable bill (whose `cycle_amount_due` is a
+ * user-entered figure, not derivable from `amount`) — so those cases reset
+ * exactly as they did before.
+ */
+export function rebuiltCycleAmountDue(
+  bill: Pick<
+    Bill,
+    "id" | "amount" | "billing_cycle" | "cycle_interval_days" | "is_variable_amount"
+  >,
+  adjustments: Pick<
+    BillAdjustment,
+    "bill_id" | "amount" | "affects_balance" | "adjustment_date"
+  >[],
+  dueDate: string | null | undefined,
+): number | null {
+  const due = dueDate?.slice(0, 10);
+  if (!due || bill.is_variable_amount) return null;
+  const start = shiftDateSafe(due, bill.billing_cycle, -1, bill.cycle_interval_days);
+  const end = shiftDateSafe(due, bill.billing_cycle, 1, bill.cycle_interval_days);
+  const active = adjustments.filter((a) => {
+    const d = a.adjustment_date?.slice(0, 10);
+    return (
+      a.bill_id === bill.id &&
+      a.affects_balance !== false &&
+      !!d &&
+      d > start &&
+      d <= end
+    );
+  });
+  if (active.length === 0) return null;
+  const delta = active.reduce((s, a) => s + Number(a.amount ?? 0), 0);
+  return Math.max(0, Math.round((Number(bill.amount ?? 0) + delta) * 100) / 100);
+}
+
+/**
+ * Read a bill's adjustment rows for a reset recompute. Degrades to `[]` on any
+ * read error so a reset never fails outright — the caller then falls back to
+ * the old null-ing behavior rather than blocking the undo.
+ */
+async function fetchBillAdjustments(billId: string): Promise<BillAdjustment[]> {
+  try {
+    const { data, error } = await supabase
+      .from("bill_adjustments")
+      .select("*")
+      .eq("bill_id", billId);
+    if (error) throw error;
+    return (data ?? []) as BillAdjustment[];
+  } catch (e) {
+    console.warn("[rebuiltCycleAmountDue] bill_adjustments read failed, resetting flat", e);
+    return [];
+  }
 }
 
 /** Remaining owed this cycle for either kind of payable. */
@@ -665,23 +741,36 @@ export function useMarkUnpaid() {
 
       const bill = p.bill;
       const update: Record<string, unknown> = { payment_status: "unpaid" };
-      if (wasCleared) {
+      if (wasCleared && bill) {
         const amount = Math.abs(Number(tx?.amount ?? p.amount));
-        const paid = Number(bill?.cycle_paid_to_date ?? 0);
+        const paid = Number(bill.cycle_paid_to_date ?? 0);
         if (paid > 0) {
           // Reversing a partial payment: stay in the same cycle, just take it back off.
           const next = Math.max(0, paid - amount);
           update.cycle_paid_to_date = next;
-          if (next === 0 && !bill?.is_variable_amount) update.cycle_amount_due = null;
-        } else if (bill?.next_due_date) {
+          if (next === 0 && !bill.is_variable_amount) {
+            // ADR-058 addendum: rebuild from any active adjustment rather than
+            // blanking — a null here silently drops the adjustment's effect.
+            update.cycle_amount_due = rebuiltCycleAmountDue(
+              bill,
+              await fetchBillAdjustments(bill.id),
+              bill.next_due_date,
+            );
+          }
+        } else if (bill.next_due_date) {
           // The clear rolled the bill into its next cycle — undo that roll-forward.
-          update.next_due_date = reverseDate(
+          const revertedDue = reverseDate(
             bill.next_due_date,
             bill.billing_cycle,
             bill.cycle_interval_days,
           );
+          update.next_due_date = revertedDue;
           update.cycle_paid_to_date = 0;
-          update.cycle_amount_due = null;
+          update.cycle_amount_due = rebuiltCycleAmountDue(
+            bill,
+            await fetchBillAdjustments(bill.id),
+            revertedDue,
+          );
         }
       }
       const { error } = await supabase.from("bills").update(update).eq("id", p.id);
@@ -740,17 +829,27 @@ export function useResetCycle() {
       }
 
       const bill = payable.bill!;
+      // The cycle we're returning the bill to: the reversed due date when the
+      // clear had already rolled it forward, otherwise the current one.
+      const restoredDue =
+        resolved && bill.next_due_date
+          ? reverseDate(bill.next_due_date, bill.billing_cycle, bill.cycle_interval_days)
+          : bill.next_due_date;
+      // ADR-058 addendum: rebuild cycle_amount_due from any active adjustment
+      // for that cycle instead of blanking it (returns null when there is
+      // none, so a plain bill resets exactly as before).
+      const rebuiltDue = rebuiltCycleAmountDue(
+        bill,
+        await fetchBillAdjustments(bill.id),
+        restoredDue,
+      );
       const update: Record<string, unknown> = {
         payment_status: "unpaid",
         cycle_paid_to_date: 0,
-        cycle_amount_due: null,
+        cycle_amount_due: rebuiltDue,
       };
       if (resolved && bill.next_due_date) {
-        update.next_due_date = reverseDate(
-          bill.next_due_date,
-          bill.billing_cycle,
-          bill.cycle_interval_days,
-        );
+        update.next_due_date = restoredDue;
       }
       const { error } = await supabase.from("bills").update(update).eq("id", payable.id);
       if (error) throw error;

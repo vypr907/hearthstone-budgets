@@ -1689,3 +1689,118 @@
 
 * Presentation only — no schema or ADR change.
 * Not yet build-verified locally (AppLocker).
+
+## 2026-08-26 – Codespace Verification, TODO Batch, ADR-082
+
+First session with working build/test verification (GitHub Codespace — `tsc`,
+`vite build`, `vitest` all runnable). Worked through the TODO backlog.
+
+### Tooling / environment
+
+* Established a green baseline: `npx tsc --noEmit` clean, `npm run build`
+  succeeds, `npx vitest run` all green. Test suite grew 28 → 77.
+* `.devcontainer` `postCreateCommand` changed `npm install` → `npm ci`. Root
+  cause of the vitest "cannot find native binding" failure was npm's
+  optional-deps bug (npm/cli#4828) running `npm install` against a
+  pre-populated `node_modules` and skipping `@rolldown/binding-linux-x64-gnu`;
+  the lockfile itself was already correct, and `npm ci` (clean tree) installs
+  it fine.
+* Regenerated `src/routeTree.gen.ts` with the current `@tanstack/router-plugin`
+  and committed it — the tracked copy predated any environment that could run
+  vite, so every build re-sorted its route declarations. Pure reordering.
+
+### Added
+
+* `src/lib/paycheck-budget.test.ts` — 13 tests for `projectOccurrences()`
+  (ADR-060): monthly + biweekly, never-returns-stored-due-date, throughDate
+  inclusivity, empty-window, unset-cycle→monthly, one-time skip, missing
+  from-date, time-component slicing, custom-by-interval, custom-without-interval
+  → empty, quarterly, and a month-end-clamp characterization test.
+
+### Fixed
+
+* **Re-advanced advance debt kept a stale "Cleared" chip** (ADR-066). New pure
+  `advanceReactivationPatch(debt)` in `src/lib/payments.ts` resets
+  `payment_status`/`cycle_paid_to_date` alongside `date_paid_off` when a
+  paid-off advance-type debt is reactivated; wired into `useCreateAdvance`.
+  Covered by `src/lib/payments.test.ts` (also backfills tests for the
+  previously-untested `advanceMinimumPaymentPatch`).
+* **Cycle reset silently dropped bill adjustments** — the Beiers "Credit now"
+  bug (ADR-058 2026-08-26 addendum). `useResetCycle` and `useMarkUnpaid` wrote
+  `cycle_amount_due: null` unconditionally. New pure
+  `rebuiltCycleAmountDue(bill, adjustments, dueDate)` + `fetchBillAdjustments()`
+  in `src/lib/payments.ts` rebuild it from `bill.amount` + the sum of
+  `affects_balance` adjustments dated within the restored cycle (one-interval
+  band around the due date, `deriveCycleInfo`-style half-open window). Returns
+  `null` (→ old behavior) for a plain bill / variable bill / read failure.
+  "Resolved" resets anchor the band on the reversed due date. No schema change.
+  12 unit tests.
+* **Auto-transfer "Process transfer" write order** (ADR-081 2026-08-26
+  addendum). `useProcessAutoTransfer` now writes both transfer legs before
+  advancing `next_due_date` (was: date first) — a failed date advance leaves a
+  complete, correctly-tagged pair that reads as "cleared" instead of a
+  silently-skipped cycle plus an orphan debit.
+
+### Changed
+
+* **ADR-038 addendum — warn on a repeat same-month Set Aside.** New pure
+  `priorSetAsideThisMonth()` in `src/lib/format.ts`; `SetAsideAction` shows a
+  `confirm()` before writing when this bill's envelope already got a Set Aside
+  this calendar month. Never blocks — a top-up/correction is legitimate. 8
+  tests. No schema change.
+
+### ADR-082 — Explicit Deduction Kind; Three-Way Past Due Grouping
+
+* Migration run + verified live: `income_source_deductions.kind text not null
+  default 'payroll'`, CHECK `('payroll','hsa','fsa','other')`; backfill from the
+  old name heuristic (HSA → hsa, LPFSA → fsa, the other 22 → payroll).
+* `DeductionKind` type + `IncomeSourceDeduction.kind` in `src/lib/supabase.ts`.
+* `pastDueGroup()` + `deductionFundingLabel()` pure helpers in
+  `src/lib/deduction-funding.ts` (11 tests) — `kind` is now the single source
+  of truth, replacing a `/hsa|fsa/` regex on the destination account name.
+* "Kind" picker (Payroll / HSA / FSA / Other) on the income-source deduction
+  dialog (`src/routes/app.income-source.$id.tsx`).
+* Dashboard "Past due" is now three-way: one collapsible "Auto-handled off
+  paycheck" section with "Paycheck deduction" and "HSA / FSA" sub-lists, plus
+  the ordinary "Other" list. Deduction-funded *bills* (via
+  `funding_deduction_id`, ADR-068) now group with the deductions instead of
+  falling into "Other".
+
+### ADR-081 auto-transfer code-review follow-ups (findings 2, 4, 5, 6)
+
+* **"Processed / Undo" never appeared after processing (finding 6, the real
+  bug).** Processing tags the credit leg with the cycle it closed (one interval
+  back); `deriveAutoTransferState`'s `eligible` filter drops any leg tagged
+  earlier than the current due date, so a just-processed transfer flipped
+  straight back to "unpaid" and could be re-processed. Fixed the resolved-cycle
+  lookback: fires while `today < next_due_date`, matches the exact tag against
+  `linked`. Surfaced by the first unit tests for the module
+  (`src/lib/auto-transfers.test.ts`, 10 tests).
+* **Server-side double-process guard (finding 2)** — `useProcessAutoTransfer`
+  rejects if a cleared leg already tags this exact cycle.
+* **Deterministic undo (finding 5)** — `useUndoAutoTransferProcess` targets the
+  leg for the cycle `next_due_date` was advanced past, not most-recent-by-date.
+* **Paused auto-transfers (finding 4)** — `is_active = false` rows show a
+  dimmed "Paused" card with no Process button in the Bills list.
+* Suite 77 → 87. ADR-081 2026-08-26 addendum. No schema change.
+
+### Verified (no code change)
+
+* 2026-08-24 fixes checked against live data via the read-only MCP: the
+  Dashboard overdue `!paidOff` guard correctly zeroes Student Loan 1 & 2 (each
+  would otherwise show $50); OnePay Advance shows its open $231.75; the
+  `applyClearedPayment` date threading and the out-of-order backfill warning are
+  present and wired.
+
+### Notes
+
+* `npm run lint` still fails (~489 errors on `main` too) — all pre-existing
+  `prettier/prettier` formatting on Lovable-generated code. A repo-wide
+  `npm run format` pass was deferred (needs a `.prettierignore` scoping it to
+  `src/` first — a bare `prettier --write .` also reformats the skill/agent
+  docs).
+* `.devcontainer/devcontainer.json` was malformed JSON (the `features` block
+  sat outside the object), so Codespaces silently fell back to its default
+  image. Fixed — kept the working default (node 24), dropped the broken pins.
+* Nothing on this branch has been clicked through in a real browser yet;
+  verification is typecheck + 87 unit tests + code review.

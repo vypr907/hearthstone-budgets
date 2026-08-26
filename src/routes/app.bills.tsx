@@ -1048,8 +1048,9 @@ function AutoTransferRow({
     [at, transactions, today],
   );
   const overdue = isAutoTransferOverdue(at, info, today);
+  const paused = at.is_active === false;
   return (
-    <Card>
+    <Card className={paused ? "opacity-60" : undefined}>
       <CardContent className="p-3">
         <div className="flex items-start gap-3">
           <EmojiIcon name="" fallback={AUTO_TRANSFER_ICON} />
@@ -1061,7 +1062,11 @@ function AutoTransferRow({
               </span>
               <span>· {at.billing_cycle}</span>
               <span>· Next {at.next_due_date}</span>
-              {overdue ? (
+              {paused ? (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Paused
+                </span>
+              ) : overdue ? (
                 <span className="rounded-full bg-state-pending/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-state-pending">
                   Check on this
                 </span>
@@ -1078,7 +1083,11 @@ function AutoTransferRow({
           </Button>
         </div>
         <div className="mt-2">
-          {info.state === "cleared" ? (
+          {paused ? (
+            <p className="text-center text-xs text-muted-foreground">
+              Paused — edit to reactivate
+            </p>
+          ) : info.state === "cleared" ? (
             <Button
               size="sm"
               variant="outline"

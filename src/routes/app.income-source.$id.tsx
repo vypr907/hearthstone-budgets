@@ -38,7 +38,15 @@ import {
 } from "@/lib/income-hooks";
 import { eventAmount, eventDate, isReceived } from "@/lib/paycheck-budget";
 import { formatMoney } from "@/lib/format";
-import type { IncomeSourceDeduction, IncomeSourceSplit } from "@/lib/supabase";
+import type { DeductionKind, IncomeSourceDeduction, IncomeSourceSplit } from "@/lib/supabase";
+
+/** ADR-082: labels for the deduction Kind picker. */
+const DEDUCTION_KINDS: { value: DeductionKind; label: string }[] = [
+  { value: "payroll", label: "Payroll (taxes, insurance, 401k…)" },
+  { value: "hsa", label: "HSA" },
+  { value: "fsa", label: "FSA" },
+  { value: "other", label: "Other" },
+];
 
 /** Short, local-safe date label: 2026-08-12 → Aug 12, 2026. */
 function formatDate(d: string | null | undefined): string {
@@ -640,6 +648,7 @@ function DeductionDialog({
   const [value, setValue] = useState("");
   const [destAccountId, setDestAccountId] = useState("none");
   const [preTax, setPreTax] = useState(false);
+  const [kind, setKind] = useState<DeductionKind>("payroll");
 
   const key = deduction?.id ?? (deduction ? "new" : "");
   const [lastKey, setLastKey] = useState("");
@@ -657,6 +666,7 @@ function DeductionDialog({
     // Radix Select forbids empty string — use "none" as the sentinel for null.
     setDestAccountId(deduction.destination_account_id ?? "none");
     setPreTax(deduction.is_pre_tax === true);
+    setKind((deduction.kind as DeductionKind) ?? "payroll");
   }
   if (!deduction && lastKey !== "") setLastKey("");
 
@@ -674,6 +684,7 @@ function DeductionDialog({
       // Map sentinel "none" back to null — Radix forbids empty string values.
       destination_account_id: destAccountId === "none" || !destAccountId ? null : destAccountId,
       is_pre_tax: preTax,
+      kind,
     });
   }
 
@@ -692,6 +703,24 @@ function DeductionDialog({
               placeholder="e.g. 401k, HSA"
               className="h-11"
             />
+          </div>
+          <div>
+            <Label>Kind</Label>
+            <Select value={kind} onValueChange={(v) => setKind(v as DeductionKind)}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DEDUCTION_KINDS.map((k) => (
+                  <SelectItem key={k.value} value={k.value}>
+                    {k.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Groups this item under Payroll or HSA / FSA on the Dashboard's Past due list.
+            </p>
           </div>
           <div>
             <Label>Type</Label>

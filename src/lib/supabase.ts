@@ -339,8 +339,13 @@ export type IncomeSourceDeduction = {
   /** Optional account the deduction deposits into. If null, row is reporting-only. */
   destination_account_id: string | null;
   is_pre_tax: boolean | null;
+  /** ADR-082: how this deduction is classified for Past Due grouping / labels. */
+  kind?: DeductionKind | null;
   created_at?: string | null;
 };
+
+/** ADR-082: deduction classification. `payroll` covers taxes, insurance, 401k/TSP etc. */
+export type DeductionKind = "payroll" | "hsa" | "fsa" | "other";
 
 /**
  * ADR-068: audit trail for deduction-funded payments — either the posted
