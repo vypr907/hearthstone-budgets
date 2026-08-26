@@ -422,8 +422,9 @@ function DebtDetailDialog({
             />
             <DetailMoney label="Remaining balance" value={debt.remaining_balance} />
             <DetailMoney label="Minimum payment" value={debt.minimum_payment} />
-            <DetailMoney label="Paid this cycle" value={Number(debt.cycle_paid_to_date ?? 0)} />
-            <DetailMoney label="Still owed this cycle" value={debtRemainingOwed(debt)} />
+            <DetailMoney label="Paid this cycle" value={cycle.clearedSum} />
+            <DetailMoney label="Still owed this cycle" value={cycle.remaining} />
+
             {/* ADR-048: payment-plan shape, only meaningful when one is set. */}
             {debt.plan_payment_count != null ? (
               <DetailItem
