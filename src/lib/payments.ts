@@ -1060,10 +1060,7 @@ export type LogDebtPaymentInput = {
 export function debtCycleWindowStart(debt: Debt, today = todayISO()): string {
   const due = debt.next_due_date ? String(debt.next_due_date).slice(0, 10) : null;
   if (!due) return `${today.slice(0, 7)}-01`;
-  return (
-    shiftDateSafe(due, debt.billing_cycle ?? "monthly", -1, debt.cycle_interval_days) ??
-    `${today.slice(0, 7)}-01`
-  );
+  return shiftDateSafe(due, debt.billing_cycle ?? "monthly", -1, debt.cycle_interval_days);
 }
 
 /**
