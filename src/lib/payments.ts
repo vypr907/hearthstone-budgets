@@ -453,6 +453,30 @@ function hasFee(fee: number | undefined): boolean {
 }
 
 /**
+ * ADR-046: fees land in the household's "Fees" category. Auto-create it if it
+ * doesn't exist so fee rows are always categorised.
+ */
+async function feeCategoryId(householdId: string | null | undefined) {
+  let feeCatId = (await supabase
+    .from("categories")
+    .select("id")
+    .eq("household_id", householdId!)
+    .ilike("name", "fees")
+    .limit(1)).data?.[0]?.id;
+  if (!feeCatId && householdId) {
+    const { data: created, error: catErr } = await supabase
+      .from("categories")
+      .insert({ household_id: householdId, name: "Fees" })
+      .select("id")
+      .single();
+    if (catErr) throw catErr;
+    feeCatId = created?.id ?? null;
+  }
+  return feeCatId ?? null;
+}
+
+
+/**
  * ADR-046: fees ride alongside a payment as their own ledger row so they hit the
  * account balance without ever counting toward the bill/debt cycle.
  *
