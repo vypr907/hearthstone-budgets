@@ -419,6 +419,10 @@ function payPeriodFor(
  * Aug 21). This is the human-readable cycle; the derivation's counting window
  * can be narrower (it ignores payments that already resolved an older cycle).
  */
+function isMonthlyCycle(debt: Debt) {
+  return (debt.billing_cycle ?? "monthly").toLowerCase().replace(/[\s_-]/g, "") === "monthly";
+}
+
 function billingPeriodFor(debt: Debt): { start: string; end: string } | null {
   const end = debtDueDate(debt) ?? (debt.next_due_date ? debt.next_due_date.slice(0, 10) : null);
   if (!end) return null;
@@ -426,6 +430,7 @@ function billingPeriodFor(debt: Debt): { start: string; end: string } | null {
   if (!start || start >= end) return null;
   return { start, end };
 }
+
 
 
 function DebtDetailDialog({
@@ -577,15 +582,23 @@ function DebtDetailDialog({
               label="Cycle window"
               value={
                 <div>
-                  <div>{formatWindow(billingWindow?.start ?? null, billingWindow?.end ?? null)}</div>
-                  {cycle.windowStart && cycle.windowEnd ? (
+                  <div>
+                    {cycle.windowStart && cycle.windowEnd
+                      ? formatWindow(cycle.windowStart, cycle.windowEnd)
+                      : formatWindow(billingWindow?.start ?? null, billingWindow?.end ?? null)}
+                  </div>
+                  {/* ADR-086: monthly cycles are the calendar month, so the
+                      counted range is the cycle. Only non-monthly items have a
+                      separate billing period worth showing. */}
+                  {!isMonthlyCycle(debt) && billingWindow ? (
                     <div className="text-xs text-muted-foreground">
-                      counting {formatWindow(cycle.windowStart, cycle.windowEnd)}
+                      billing period {formatWindow(billingWindow.start, billingWindow.end)}
                     </div>
                   ) : null}
                 </div>
               }
             />
+
             <DetailItem label="Pay period" value={payPeriod ? formatWindow(payPeriod.start, payPeriod.end) : "—"} />
 
 

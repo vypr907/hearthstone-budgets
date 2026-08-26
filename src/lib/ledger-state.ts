@@ -68,21 +68,41 @@ export function deriveCycleInfo(
         p.kind === "bill" ? p.bill?.cycle_interval_days : p.debt?.cycle_interval_days;
       const openStart = dueDate ? shiftDateSafe(dueDate, cycleName, -1, cycleDays) : monthStart;
 
+      // ADR-086: a monthly item's cycle is the calendar month, not a window
+      // hung off next_due_date. A bill due the 21st belongs to that whole
+      // month, so an early (the 3rd) or late (the 30th) payment both land on
+      // the same cycle, and the cycle resets on the 1st.
+      const monthly = (cycleName ?? "monthly").toLowerCase().replace(/[\s_-]/g, "") === "monthly";
+      const monthEnd = (() => {
+        const [y, m] = today.split("-").map(Number);
+        const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+        return `${today.slice(0, 7)}-${String(last).padStart(2, "0")}`;
+      })();
+
       // ADR-075: a transaction tagged with the due date it already resolved
       // belongs to that (now past) cycle, never to a later one — exclude it
       // regardless of where its raw transaction_date falls. Untagged
       // transactions (existing data, or resolves that predate this column)
       // fall through to the date-window logic below unchanged.
+      // Under ADR-086 the monthly comparison is by month, not by due date: a
+      // payment tagged with this month's due date still belongs to this month
+      // even after clearing rolled next_due_date into the next one.
       const eligible = dueDate
         ? linked.filter((t) => {
             const tagged = day(t.resolved_cycle_due_date);
-            return !tagged || tagged >= dueDate;
+            if (!tagged) return true;
+            return monthly ? tagged >= monthStart : tagged >= dueDate;
           })
         : linked;
 
       const between = (t: Transaction, start: string, end: string) => {
         const d = day(t.transaction_date);
         return !!d && d > start && d <= end;
+      };
+
+      const inMonth = (t: Transaction) => {
+        const d = day(t.transaction_date);
+        return !!d && d >= monthStart && d <= monthEnd;
       };
 
       // ADR-048: a one-time charge (invoice) has no rolling window — every
@@ -97,24 +117,40 @@ export function deriveCycleInfo(
       // dueDate belong to the already-resolved previous cycle and must not be
       // recounted — only a transaction dated on/after dueDate can be a genuine
       // (possibly late) payment toward the still-open current cycle.
+      // (Non-monthly cycles only — monthly uses the calendar month above.)
       const pastDue = !!dueDate && today > dueDate;
       let cycleTx = oneTime
         ? eligible
-        : pastDue
-          ? eligible.filter((t) => {
-              const d = day(t.transaction_date);
-              return !!d && d >= dueDate! && d <= today;
-            })
-          : eligible.filter((t) => between(t, openStart, today));
+        : monthly
+          ? eligible.filter(inMonth)
+          : pastDue
+            ? eligible.filter((t) => {
+                const d = day(t.transaction_date);
+                return !!d && d >= dueDate! && d <= today;
+              })
+            : eligible.filter((t) => between(t, openStart, today));
       let resolved = false;
       // The exact date range this derivation counted transactions in — surfaced
       // so a detail screen can show which window the math used.
-      let windowStart: string | null = oneTime ? null : pastDue ? dueDate! : openStart;
-      let windowEnd: string | null = oneTime ? null : pastDue ? today : dueDate || today;
+      let windowStart: string | null = oneTime
+        ? null
+        : monthly
+          ? monthStart
+          : pastDue
+            ? dueDate!
+            : openStart;
+      let windowEnd: string | null = oneTime
+        ? null
+        : monthly
+          ? monthEnd
+          : pastDue
+            ? today
+            : dueDate || today;
 
 
 
-      if (cycleTx.length === 0 && dueDate && today <= openStart) {
+
+      if (!monthly && cycleTx.length === 0 && dueDate && today <= openStart) {
         // The cycle covering today may already have been resolved and rolled forward.
         const prevStart = shiftDateSafe(openStart, cycleName, -1, cycleDays);
         const prev = eligible.filter((t) => between(t, prevStart, openStart));
@@ -163,6 +199,15 @@ export function deriveCycleInfo(
       if (p.kind === "debt" && Number(p.debt?.remaining_balance ?? 0) <= 0) {
         state = "cleared";
       }
+
+      // ADR-086: a monthly cycle counted inside its own calendar month, so the
+      // lookback above never runs — but the cycle still "resolved" (rolled the
+      // due date into a later month) once it cleared. Callers that repair
+      // stranded payments / reverse a roll rely on this flag.
+      if (monthly && !oneTime && dueDate && dueDate > monthEnd && state === "cleared") {
+        resolved = true;
+      }
+
 
       return {
         state,
