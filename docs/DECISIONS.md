@@ -2791,4 +2791,19 @@ column fixes both the fragility and the bill/debt asymmetry, and gives a real 3-
 split without overloading `is_paycheck_deduction` (which has a separate, load-bearing
 budgeting-exclusion job).
 
-Status: Decided 2026-08-26. Not implemented.
+Status: Decided 2026-08-26. SQL migration run and verified live via the read-only MCP
+(column `kind text not null default 'payroll'`, CHECK against the 4 values; backfill
+put HSA → hsa, LPFSA → fsa, the other 22 → payroll). Implemented 2026-08-26:
+- `DeductionKind` type + `IncomeSourceDeduction.kind` (`src/lib/supabase.ts`).
+- `pastDueGroup()` + `deductionFundingLabel()` pure helpers in
+  `src/lib/deduction-funding.ts` (11 unit tests).
+- "Kind" picker on the income-source deduction dialog
+  (`src/routes/app.income-source.$id.tsx`); `useUpsertIncomeSourceDeduction` passes it
+  straight through.
+- Dashboard "Past due" (`src/routes/app.index.tsx`) is now three-way: one collapsible
+  "Auto-handled off paycheck" section with "Paycheck deduction" and "HSA / FSA"
+  sub-lists, plus the ordinary "Other" list. The old `fundingLabel()` regex is deleted.
+
+UI note: the two deduction groups share one collapse toggle (both are "no action
+needed" awareness items) rather than collapsing independently — the classification is
+three-way, the display keeps the dashboard compact.

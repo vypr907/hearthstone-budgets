@@ -93,10 +93,20 @@
   Findings 2-5 (double-process guard, backdate, inactive-list filter, same-day
   undo) left for the user to prioritise. tsc + tests green.
 
-- 2026-08-26 — ADR-082 drafted (new, `docs/DECISIONS.md`): explicit
-  `income_source_deductions.kind` enum (payroll/hsa/fsa/other) + 3-way Dashboard
-  Past Due grouping. Status "Not implemented" — needs the migration run first
-  (SQL is in the ADR).
+- 2026-08-26 — ADR-082 drafted, migration run by the user, and implemented.
+  Verified live via MCP: `income_source_deductions.kind text not null default
+  'payroll'` + CHECK(payroll|hsa|fsa|other); backfill correct (HSA→hsa,
+  LPFSA→fsa, other 22→payroll). Code:
+  - `DeductionKind` type + `IncomeSourceDeduction.kind` (`supabase.ts`).
+  - `pastDueGroup()` + `deductionFundingLabel()` pure helpers in
+    `deduction-funding.ts` — new `deduction-funding.test.ts` (11 tests).
+  - "Kind" picker added to the income-source deduction dialog
+    (`app.income-source.$id.tsx`).
+  - Dashboard "Past due" (`app.index.tsx`) now 3-way: one collapsible
+    "Auto-handled off paycheck" section with "Paycheck deduction" + "HSA / FSA"
+    sub-lists, plus "Other". Deleted the `fundingLabel()` /hsa|fsa/ regex.
+  Suite 66 → 77. SCHEMA.md + DECISIONS.md (status → Implemented) + TODO.md
+  updated. tsc + build + tests green.
 
 - 2026-08-26 — ADR-038 addendum implemented (warn-and-allow on a repeat
   same-month Set Aside). New pure `priorSetAsideThisMonth(transactions,

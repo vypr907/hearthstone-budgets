@@ -612,12 +612,23 @@ income_source_deductions (
     percent numeric(6,3),
     destination_account_id uuid references accounts(id),
     is_pre_tax boolean default false,
+    kind text not null default 'payroll',   -- ADR-082: payroll | hsa | fsa | other
     created_at timestamptz default now()
 )
+-- ADR-082 (applied 2026-08-26):
+alter table income_source_deductions add column if not exists kind text not null default 'payroll';
+alter table income_source_deductions add constraint income_source_deductions_kind_check
+  check (kind in ('payroll','hsa','fsa','other'));
 ```
 
 Percent-type deductions compute against the income event's `actual_amount`
 (net), not a derived gross figure — resolved 2026-08-12, see ADR-055.
+
+`kind` (ADR-082) is the single source of truth for classifying a deduction —
+it replaced a name/type regex heuristic. It drives the Dashboard "Past due"
+three-way grouping (Paycheck deduction / HSA · FSA / Other) and the row-level
+"HSA-funded"/"FSA-funded"/"Deduction-funded" label. Independent of
+`debts.is_paycheck_deduction`, which keeps its ADR-032 budgeting-exclusion job.
 
 Deductions with `destination_account_id` set get a real deposit transaction
 when the pay event is marked received (ADR-047), sharing that event's

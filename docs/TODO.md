@@ -28,11 +28,11 @@
       adjustment, pay the cycle, undo it, confirm `cycle_amount_due` still
       reflects the adjustment (not just `bills.amount`).
 - [ ] ADR-082 (3-way Past Due grouping + `income_source_deductions.kind`):
-      approved + drafted 2026-08-26. BLOCKED on the user running the migration
-      (SQL block in the ADR). Once run: add the "Kind" picker to the
-      income-source deduction dialog, replace `fundingLabel()`'s regex with the
-      column, and make the Dashboard Past Due grouping three-way
-      (`src/lib/deduction-funding.ts` helper + `app.index.tsx`).
+      migration run + implemented 2026-08-26. Remaining: eyeball the Dashboard
+      Past due section on device — confirm the "Auto-handled off paycheck"
+      collapsible shows "Paycheck deduction" + "HSA / FSA" sub-lists and that
+      HSA/LPFSA-funded items land in the right bucket. Optional follow-up:
+      surface `kind` on the deduction list rows (currently only in the dialog).
 
 ## Standing open items
 

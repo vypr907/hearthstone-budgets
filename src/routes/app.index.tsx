@@ -34,6 +34,7 @@ import {
 import { todayISO } from "@/lib/snapshot";
 import { billRemainingOwed, debtRemainingOwed, toPayable } from "@/lib/payments";
 import { computeArrears } from "@/lib/arrears";
+import { deductionFundingLabel, pastDueGroup, type PastDueGroup } from "@/lib/deduction-funding";
 import { useHouseholdDeductions } from "@/lib/income-hooks";
 
 import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
@@ -533,21 +534,10 @@ function Dashboard() {
     };
   }, [periodObligations, bills, debts, categories]);
 
-  /**
-   * ADR-068: a past-due item funded by a paycheck deduction reads differently —
-   * the money comes off the paycheck, not out of a spending account.
-   */
-  const fundingLabel = (fundingDeductionId: string | null | undefined) => {
-    if (!fundingDeductionId) return null;
-    const d = householdDeductions.find((x) => x.id === fundingDeductionId);
-    if (!d?.destination_account_id) return null;
-    const acct = accounts.find((a) => a.id === d.destination_account_id);
-    const hint = `${acct?.account_type ?? ""} ${acct?.name ?? ""}`.toLowerCase();
-    return /hsa|fsa/.test(hint) ? "HSA-funded" : "Deduction-funded";
-  };
-
   // ADR-049: overdue is a money figure — missed cycles plus carried-in arrears —
   // so an item months behind reads as more than one cycle's amount.
+  // ADR-082: `group` is the Past Due bucket — paycheck_deduction / hsa_fsa
+  // (auto-settled off a paycheck) or other (an ordinary bill/debt to pay).
   const overdue = [
     ...bills.map((b) => {
       const arrears = computeArrears(toPayable("bill", b));
@@ -558,7 +548,8 @@ function Dashboard() {
         cycles: arrears.cyclesMissed,
         due_date: arrears.oldestMissedDate ?? b.next_due_date?.slice(0, 10) ?? "",
         kind: "Bill" as const,
-        funding: fundingLabel(b.funding_deduction_id),
+        funding: deductionFundingLabel(b.funding_deduction_id, householdDeductions),
+        group: pastDueGroup(b, householdDeductions),
       };
     }),
     ...debts.map((d) => {
@@ -575,7 +566,8 @@ function Dashboard() {
         cycles: arrears.cyclesMissed,
         due_date: arrears.oldestMissedDate ?? debtDueDate(d) ?? "",
         kind: "Debt" as const,
-        funding: fundingLabel(d.funding_deduction_id),
+        funding: deductionFundingLabel(d.funding_deduction_id, householdDeductions),
+        group: pastDueGroup(d, householdDeductions),
       };
     }),
   ]
@@ -619,16 +611,18 @@ function Dashboard() {
       .sort((a, b) => a.at.next_due_date.localeCompare(b.at.next_due_date));
   }, [autoTransfers, transactions]);
 
-  /** ADR-032: payroll/HSA-deducted debts read differently from ordinary arrears. */
-  const deductionDebtIds = new Set(
-    debts.filter((d) => d.is_paycheck_deduction === true).map((d) => d.id),
-  );
-  const isDeductionOverdue = (id: string) =>
-    deductionDebtIds.has(id.replace(/^(debt|bill)-/, ""));
-  const overdueDeductions = overdue.filter((o) => isDeductionOverdue(o.id));
-  const overdueRest = overdue.filter((o) => !isDeductionOverdue(o.id));
-  const overdueDeductionsTotal = overdueDeductions.reduce((sum, o) => sum + o.amount, 0);
-  /** Deduction/HSA past-due items are already handled automatically — collapsed by default. */
+  /**
+   * ADR-082: Past Due splits three ways. Paycheck-deduction and HSA/FSA items
+   * are settled automatically off a paycheck — shown for awareness, collapsed
+   * by default (one shared toggle), and never mixed in with ordinary bills the
+   * household actually has to go pay.
+   */
+  const overduePaycheck = overdue.filter((o) => o.group === "paycheck_deduction");
+  const overdueHsaFsa = overdue.filter((o) => o.group === "hsa_fsa");
+  const overdueRest = overdue.filter((o) => o.group === "other");
+  const overduePaycheckTotal = overduePaycheck.reduce((sum, o) => sum + o.amount, 0);
+  const overdueHsaFsaTotal = overdueHsaFsa.reduce((sum, o) => sum + o.amount, 0);
+  const hasAutoHandledOverdue = overduePaycheck.length > 0 || overdueHsaFsa.length > 0;
   const [overdueDeductionsOpen, setOverdueDeductionsOpen] = useState(false);
 
   /** Payoff progress is collapsed by default to keep the dashboard short. */
@@ -1001,7 +995,7 @@ function Dashboard() {
             </Card>
           ) : (
             <div className="space-y-3">
-              {overdueDeductions.length > 0 ? (
+              {hasAutoHandledOverdue ? (
                 <div className="space-y-2">
                   <button
                     type="button"
@@ -1010,8 +1004,9 @@ function Dashboard() {
                     className="flex w-full items-center justify-between gap-2"
                   >
                     <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      Paycheck / HSA deduction · {overdueDeductions.length}
-                      {" "}· {formatMoney(overdueDeductionsTotal)}
+                      Auto-handled off paycheck ·{" "}
+                      {overduePaycheck.length + overdueHsaFsa.length} ·{" "}
+                      {formatMoney(overduePaycheckTotal + overdueHsaFsaTotal)}
                     </span>
                     {overdueDeductionsOpen ? (
                       <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -1019,14 +1014,35 @@ function Dashboard() {
                       <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     )}
                   </button>
-                  {overdueDeductionsOpen
-                    ? overdueDeductions.map((o) => <OverdueRow key={o.id} item={o} />)
-                    : null}
+                  {overdueDeductionsOpen ? (
+                    <div className="space-y-3">
+                      {overduePaycheck.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                            Paycheck deduction · {formatMoney(overduePaycheckTotal)}
+                          </p>
+                          {overduePaycheck.map((o) => (
+                            <OverdueRow key={o.id} item={o} />
+                          ))}
+                        </div>
+                      ) : null}
+                      {overdueHsaFsa.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                            HSA / FSA · {formatMoney(overdueHsaFsaTotal)}
+                          </p>
+                          {overdueHsaFsa.map((o) => (
+                            <OverdueRow key={o.id} item={o} />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {overdueRest.length > 0 ? (
                 <div className="space-y-2">
-                  {overdueDeductions.length > 0 ? (
+                  {hasAutoHandledOverdue ? (
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                       Other
                     </p>
@@ -1236,6 +1252,8 @@ type OverdueItem = {
   kind: "Bill" | "Debt";
   /** ADR-068: set when a paycheck deduction covers this item. */
   funding?: string | null;
+  /** ADR-082: which Past Due bucket this row sorts into. */
+  group?: PastDueGroup;
 };
 
 /** One past-due row (ADR-049: past due is a money figure). */
