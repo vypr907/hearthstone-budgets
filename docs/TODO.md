@@ -34,6 +34,10 @@
       HSA/LPFSA-funded items land in the right bucket. Optional follow-up:
       surface `kind` on the deduction list rows (currently only in the dialog).
 
+- [ ] Repo-wide `npm run format` (prettier --write) as its own PR — `npm run
+      lint` fails with ~489 pre-existing `prettier/prettier` errors across
+      Lovable-generated code (fails on `main` too). Keep it off feature branches.
+
 ## Standing open items
 
 - [ ] Re-tag older transactions with a place (`institution_id`) so Spending by place totals are complete — can be done from TransactionDetail edit mode.
