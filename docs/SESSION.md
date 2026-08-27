@@ -101,8 +101,12 @@
       unchanged.
     * Accounts screen: owner chip on each card + an "Owner" filter.
     * `docs/SCHEMA.md` "Never Add" rule amended.
-  tsc + build + 96 tests green. NEXT: Steven runs the migration (below), then
-  browser-verify in the TEST household + commit/PR.
   Files: src/lib/supabase.ts, src/lib/household.ts (new), src/lib/balances.ts,
   src/lib/net-worth.ts, src/components/AccountDialog.tsx, src/routes/app.index.tsx,
   src/routes/app.snapshot.tsx, src/routes/app.accounts.tsx, docs/*.
+  - Migration run by Steven. Browser-verified in the TEST household (dashboard /
+    accounts / snapshot load clean, "Belongs to" hidden for a 1-member
+    household, "Include in net worth" round-trips). Owner-scoping (2-member)
+    path covered by `src/lib/balances.test.ts` (5 new tests, 101 total).
+    "Belongs to" marks the signed-in member "(me)". PR #39, Closes #36.
+    Live 2-member check happens when it reaches "Our Household".

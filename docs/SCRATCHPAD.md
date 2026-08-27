@@ -52,9 +52,10 @@ Show me the diffs for all three files before finalizing.
 
 # Things to work on
 - ~~no way to denote an account as mine vs my wife's; her accounts inflate
-  checking/spendable~~ IN PROGRESS 2026-08-27 (ADR-088, Issue #36) — code done
-  (`accounts.owner_member_id`, "Belongs to" picker, per-viewer spendable +
-  net-worth scoping). Migration below still to run, then browser-test + PR.
+  checking/spendable~~ DONE 2026-08-27 (ADR-088, Issue #36, PR #39) —
+  `accounts.owner_member_id` + "Belongs to" picker; a personal account drops
+  out of the other member's spendable + net-worth totals. Migration run.
+  Ledger stays whole-household.
 - ~~card/account number on accounts~~ DONE 2026-08-27 (ADR-021 addendum) —
   "Account / card number" field added to AccountDialog; `accounts.account_number`
   already existed. No `cards` table (an account still stands in for its card).
