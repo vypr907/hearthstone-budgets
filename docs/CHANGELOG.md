@@ -1804,3 +1804,128 @@ First session with working build/test verification (GitHub Codespace — `tsc`,
   image. Fixed — kept the working default (node 24), dropped the broken pins.
 * Nothing on this branch has been clicked through in a real browser yet;
   verification is typecheck + 87 unit tests + code review.
+
+## 2026-08-26 – ADR-083: RLS-Bounded Test-Database Writes
+
+Automated/E2E tests may now create and mutate data, but only inside "TEST
+Household — Lovable QA" — enforced by Postgres RLS, not convention.
+
+### Added
+
+* `scripts/test-db.mjs` — `testClient()` signs in as the RLS-bound
+  `+lovabletest` user, asserts it belongs to exactly one household and that the
+  real household is invisible, then returns the client. `inTestHousehold()`
+  stamps/asserts `household_id`.
+* `scripts/test-db-preflight.sql` — MCP checks to run before any writing test
+  session.
+* `scripts/migrations/2026-08-26-rls-hardening.sql` — Part 1 enables RLS on
+  `auto_transfers` (shipped in ADR-081 with RLS *disabled* — a live bug);
+  Part 2 sets `force row level security` on all 24 public tables.
+* `.env.test` (gitignored) holds the test-user creds.
+
+### Changed
+
+* CLAUDE.md gained a "Testing against the database" hard-rule section.
+  Load-bearing rule: Claude must never be given the `service_role` key or a
+  direct `postgres` connection string (both bypass RLS).
+* Docs: ADR-083, ADR-081 addendum (auto_transfers RLS), SCHEMA.md RLS section.
+
+### Verified
+
+* Boundary proven live: INSERT into "Our Household" → `42501` RLS rejection;
+  UPDATE → 0 rows. `authenticated` has `rolbypassrls = false`.
+* Migration run + re-verified: 0 tables without RLS, 0 without FORCE,
+  `auto_transfers` policy present, `is_household_member` SECURITY DEFINER still
+  resolves under FORCE.
+* The `+lovabletest` password was rotated off a value that had appeared in a
+  transcript (`updateUser({currentPassword})` with the anon key; new 32-char
+  random into `.env.test`; old value now rejected).
+
+## 2026-08-26 – ADR-084/085/086: Debt Payment Logging & Debt-Detail Cycle Accuracy
+
+Done in Lovable; recorded here for continuity.
+
+### ADR-084 — Log a payment to this debt
+
+* New `useLogDebtPayment()` + `isWithinCurrentCycle()` /
+  `debtCycleWindowStart()` in `src/lib/payments.ts`; `feeCategoryId()` helper
+  extracted from `insertFeeTransaction`.
+* New `src/components/LogDebtPaymentDialog.tsx`, rendered under `PayActions` on
+  `src/routes/app.debts.tsx`. One form: date, paying account, principal,
+  status, and any number of fee/interest lines.
+* Date-driven: a date inside the current cycle → normal `applyClearedPayment()`
+  path; an earlier date → historical backfill that only reduces
+  `remaining_balance` and writes the ledger row. Only principal moves the debt
+  balance; each fee/interest line posts its own transaction against the paying
+  account (no interest engine). No schema change.
+
+### ADR-085 — Debt detail reads ledger-derived cycle state
+
+* "Payment status", "Paid this cycle" and "Still owed this cycle" now come from
+  `deriveCycleInfo` (ADR-036) rather than the raw `payment_status` /
+  `cycle_paid_to_date` columns, which showed "pending / $0 paid / $106.30 owed"
+  the day after a monthly cycle was fully paid. A disagreeing stored value
+  shows as a small "stored: …" note.
+* `CycleInfo` gained `windowStart` / `windowEnd`; new "Cycle window" and "Pay
+  period" fields on the detail panel.
+* Addendum: "Cycle window" shows the real billing period (one cycle back from
+  the effective due date), with the narrower derivation range as a sub-line. A
+  "Sync stored status" button (`useSyncStoredStatus()`) writes the derived
+  state back onto the debt row when it disagrees.
+* Files: `src/lib/ledger-state.ts`, `src/lib/auto-transfers.ts`,
+  `src/lib/payments.ts`, `src/routes/app.debts.tsx`.
+
+### ADR-086 — Monthly cycles are the calendar month
+
+* In `deriveCycleInfo`, a monthly bill/debt's cycle is the calendar month
+  containing today — every linked transaction dated in that month counts, early
+  or late, and the cycle resets on the 1st. The ADR-075
+  `resolved_cycle_due_date` tag is compared by month for monthly items.
+* Non-monthly cycles (biweekly / weekly / custom / one-time) keep the existing
+  `next_due_date`-anchored rolling window unchanged. `CycleInfo.resolved` is
+  still set for a cleared monthly cycle whose `next_due_date` has rolled past
+  month-end.
+* Rationale: a drift check across 42 debts found 4 rows whose `next_due_date`
+  day no longer matched `due_day`, producing nonsense windows and cleared
+  on-time payments reading as unpaid. `bills` has no `due_day` column, so the
+  calendar month is the one rule both tables can express.
+* Files: `src/lib/ledger-state.ts`, `src/lib/ledger-state.test.ts`,
+  `src/routes/app.debts.tsx`. 88 tests green. No schema change.
+
+## 2026-08-27 – ADR-087: Hybrid Task Tracking; README Rewrite; Test Tooling
+
+### ADR-087 — Hybrid task tracking (GitHub Issues/Milestones + docs/)
+
+* Drafted as ADR-084, renumbered after `main` landed its own ADR-084/085/086.
+* Open, actionable work → GitHub Issues; phases → Milestones; small label set
+  (`schema`, `ledger`, `mobile`, `verification`, `tech-debt`). `docs/` stays
+  the source of truth for ADRs / context / schema / architecture / changelog.
+* Created: labels, Milestones Phase 12–14, Issues #4–#10 migrated from the old
+  `docs/TODO.md`. `docs/TODO.md` repurposed to working-as-designed limitations
+  only. `CLAUDE.md` updated (tasks → Issues, phases → Milestones, `Closes #N`
+  in PRs).
+
+### README rewrite
+
+* Full rewrite — the old one claimed "Phase 2", said changes happen "in the
+  Lovable editor, not by hand-editing this repo", and documented `.env` vars
+  the code no longer uses. Now: current feature summary, real stack, the
+  Codespace dev flow, a docs table, the ADR-083 testing note, a private-repo
+  privacy section.
+* Repo visibility flipped to **private** by the user.
+
+### Test tooling
+
+* `package.json`: added `test` / `test:watch` / `typecheck` scripts (`npm test`
+  → `vitest run`).
+* `vitest.config.ts` added — Vitest had no `include`, so `vitest run` globbed
+  the whole tree (including the `.trunk/` plugin cache) and reported ~190 bogus
+  failed test files. Now scoped to `src/**/*.test.ts`, node env, native
+  `resolve.tsconfigPaths` for the `@/` alias. `npm test`: 7 files / 88 tests,
+  ~3s (was ~37s).
+
+### Notes
+
+* PR #12 (`vitest.config.ts`) merged into the feature branch a minute after
+  PR #11 had already merged that branch to `main`, so it missed `main`;
+  re-landed via PR #13.
