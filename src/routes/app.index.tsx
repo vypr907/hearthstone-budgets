@@ -270,6 +270,8 @@ function Dashboard() {
         spendingSpent: number;
         billsSpent: number;
         debtsSpent: number;
+        categoryIds: string[];
+        month: string;
       }
     >();
     for (const id of ids) {
@@ -289,7 +291,10 @@ function Dashboard() {
         spendingSpent: 0,
         billsSpent: 0,
         debtsSpent: 0,
+        categoryIds: [],
+        month,
       };
+      g.categoryIds.push(id);
       const spending = spendingBudget.get(id) ?? 0;
       const billsB = billsBudget.get(id) ?? 0;
       const debtsB = debtsBudget.get(id) ?? 0;
@@ -461,7 +466,11 @@ function Dashboard() {
         deductedBudgeted: 0,
         deductedSpent: 0,
         deductedPending: 0,
+        categoryIds: [],
+        periodStart: period.start,
+        periodEnd: period.end,
       };
+      g.categoryIds.push(b.category_id);
       const spendingBudget = Number(b.budgeted_amount || 0);
       const current = actualByCategory.get(b.category_id);
       const pending = pendingByCategory.get(b.category_id);
@@ -1252,7 +1261,10 @@ type BudgetGroup = {
   deductedBudgeted: number;
   deductedSpent: number;
   deductedPending: number;
-
+  /** Categories rolled into this tile — used for transaction drill-down. */
+  categoryIds: string[];
+  periodStart: string;
+  periodEnd: string;
 };
 
 /** Single headline bar for the whole month's budget load. */
@@ -1388,6 +1400,12 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
             deductedBudgeted={g.deductedBudgeted}
             deductedSpent={g.deductedSpent}
             deductedPending={g.deductedPending}
+            drill={{
+              categoryIds: g.categoryIds,
+              label: g.name,
+              dateFrom: g.periodStart,
+              dateTo: g.periodEnd,
+            }}
           />
         </div>
       ) : null}
@@ -1407,6 +1425,9 @@ type MonthlySummaryGroup = {
   spendingSpent: number;
   billsSpent: number;
   debtsSpent: number;
+  categoryIds: string[];
+  /** YYYY-MM the figures cover. */
+  month: string;
 };
 
 /** Headline bar: actual so far vs. budget target, with the trailing average as a reference line. */
@@ -1496,6 +1517,12 @@ function MonthlySummaryTile({ group: g, index: i }: { group: MonthlySummaryGroup
             billsSpent={g.billsSpent}
             debtsSpent={g.debtsSpent}
             extra={{ label: "6-mo average", value: g.trailingAverage }}
+            drill={{
+              categoryIds: g.categoryIds,
+              label: g.name,
+              dateFrom: `${g.month}-01`,
+              dateTo: `${g.month}-31`,
+            }}
           />
         </div>
       ) : null}
