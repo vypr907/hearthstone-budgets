@@ -5,6 +5,12 @@
  */
 export type TxPreFilter = {
   categoryId?: string;
+  /** Drill-down from a parent-category tile: match any of these categories. */
+  categoryIds?: string[];
+  /** Narrow to bill/debt payments ("linked") or plain spending ("unlinked"). */
+  linked?: "linked" | "unlinked";
+  dateFrom?: string;
+  dateTo?: string;
   label?: string;
 };
 
