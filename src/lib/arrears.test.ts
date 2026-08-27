@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { computeArrears, priorCyclesArrears, arrearsPaymentTag } from "./arrears";
+import {
+  computeArrears,
+  priorCyclesArrears,
+  priorArrearsSummary,
+  arrearsPaymentTag,
+} from "./arrears";
 import { toPayable } from "./payments";
 import type { Bill, Debt } from "./supabase";
 
@@ -250,6 +255,88 @@ describe("priorCyclesArrears (ADR-076)", () => {
       "2026-02-15", // before the due date — nothing live-missed
     );
     expect(a).toBe(250);
+  });
+});
+
+describe("priorArrearsSummary (ADR-049 addendum) — prior-month arrears only", () => {
+  it("drops the current calendar month's cycle so it isn't double-counted with 'due this period'", () => {
+    // Monthly bill due the 10th, unpaid since Jan, viewed Mar 15.
+    // computeArrears (full) counts Jan+Feb+Mar = $300. The Mar cycle also shows
+    // under "due this period" (ADR-080), so the Past Due card must show Jan+Feb only.
+    const p = toPayable("bill", bill({ next_due_date: "2026-01-10" }));
+    expect(computeArrears(p, "2026-03-15").amountOverdue).toBe(300);
+    const s = priorArrearsSummary(p, "2026-03-15");
+    expect(s.amount).toBe(200); // Jan + Feb
+    expect(s.cycles).toBe(2);
+    expect(s.oldestMissedDate).toBe("2026-01-10");
+  });
+
+  it("is zero when only the current month's cycle is behind", () => {
+    const p = toPayable("bill", bill({ next_due_date: "2026-03-10" }));
+    const s = priorArrearsSummary(p, "2026-03-15");
+    expect(s.amount).toBe(0);
+    expect(s.cycles).toBe(0);
+  });
+
+  it("passes an opening-arrears carry-in straight through", () => {
+    const p = toPayable(
+      "bill",
+      bill({ opening_arrears: 250, next_due_date: "2026-05-10" }),
+    );
+    // due date not passed, so nothing live-missed — the carry-in is all prior.
+    expect(priorArrearsSummary(p, "2026-03-15").amount).toBe(250);
+  });
+});
+
+describe("arrearsWalkStart (ADR-049 addendum) — monthly-debt one-month lookback", () => {
+  it("recovers a monthly debt missed last month when this month's due day is still ahead", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-05T12:00:00Z"));
+    try {
+      const d = debt({
+        billing_cycle: "monthly",
+        due_day: 10,
+        minimum_payment: 75,
+        remaining_balance: 500,
+        payment_status: "unpaid",
+        cycle_paid_to_date: 0,
+      });
+      // debtDueDate → Sep 10 (future), so the plain walk sees nothing.
+      const a = computeArrears(toPayable("debt", d), "2026-09-05");
+      expect(a.cyclesMissed).toBe(1); // Aug 10 recovered
+      expect(a.amountOverdue).toBe(75);
+      expect(a.oldestMissedDate).toBe("2026-08-10");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does NOT look back when the current cycle is settled", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-05T12:00:00Z"));
+    try {
+      const d = debt({
+        billing_cycle: "monthly",
+        due_day: 10,
+        minimum_payment: 75,
+        remaining_balance: 500,
+        payment_status: "cleared",
+        cycle_paid_to_date: 0,
+      });
+      const a = computeArrears(toPayable("debt", d), "2026-09-05");
+      expect(a.cyclesMissed).toBe(0);
+      expect(a.amountOverdue).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves bills untouched (real next_due_date already points at the earliest cycle)", () => {
+    const a = computeArrears(
+      toPayable("bill", bill({ next_due_date: "2026-03-10" })),
+      "2026-03-05",
+    );
+    expect(a.cyclesMissed).toBe(0); // due date not passed, no phantom lookback
   });
 });
 

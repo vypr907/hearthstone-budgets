@@ -52,6 +52,38 @@ export function payableDueDate(p: Payable): string | null {
 }
 
 /**
+ * Where the arrears walk starts.
+ *
+ * Bills and non-monthly debts: their `next_due_date` is a real stored pointer
+ * that stays put until a payment rolls it, so `payableDueDate` already points
+ * at the earliest unresolved cycle — use it unchanged.
+ *
+ * Monthly debts are the exception: `debtDueDate()` recomputes `due_day` inside
+ * the *current* calendar month and never looks back, so a cycle missed last
+ * month leaves no due-date signal and the walk (which only counts dates before
+ * `today`) never sees it — the miss silently vanishes from arrears until this
+ * month's due day passes. When this month's due day is still ahead and the
+ * current cycle isn't settled, step the start back one month so a single
+ * just-missed prior cycle is recovered. (One month only: the debt row carries
+ * no per-cycle history — a deeper miss needs the linked ledger, tracked
+ * separately. See ADR-049 addendum / docs/TODO.md.)
+ */
+function arrearsWalkStart(p: Payable, today: string): string | null {
+  const base = payableDueDate(p);
+  if (!base || p.kind !== "debt") return base;
+  const row = p.debt!;
+  const cycle = (row.billing_cycle ?? "monthly").toLowerCase();
+  if (cycle !== "monthly") return base;
+  if (base < today) return base; // this month's due day already passed — walk sees it
+  const settledThisCycle =
+    row.payment_status === "cleared" ||
+    Math.max(0, Number(row.cycle_paid_to_date ?? 0)) + 0.005 >= debtCycleDue(row);
+  if (settledThisCycle) return base;
+  const prev = shiftDateSafe(base, cycle, -1, row.cycle_interval_days);
+  return prev < today ? prev : base;
+}
+
+/**
  * Walk from the current due date forward until today, counting each due date
  * that has already passed. The first (current) cycle only counts what is still
  * owed on it; earlier-rolled cycles are already reflected by the due date, so
@@ -77,7 +109,7 @@ export function computeArrears(p: Payable, today = todayISO()): Arrears {
   const paidThisCycle = Math.max(0, Number(row.cycle_paid_to_date ?? 0));
   const cycle = (row.billing_cycle ?? "monthly").toLowerCase();
   const intervalDays = row.cycle_interval_days;
-  const start = payableDueDate(p);
+  const start = arrearsWalkStart(p, today);
 
   let cyclesMissed = 0;
   let missedAmount = 0;
@@ -186,4 +218,42 @@ export function arrearsLabel(a: Arrears, money: (n: number) => string): string |
   const cycles =
     a.cyclesMissed > 0 ? `${a.cyclesMissed} cycle${a.cyclesMissed === 1 ? "" : "s"} · ` : "";
   return `${cycles}${money(a.amountOverdue)} past due`;
+}
+
+/**
+ * ADR-049 addendum (2026-08-27): the "past due" *display* figure — arrears from
+ * cycles that belong to a month strictly before the current calendar one.
+ *
+ * `computeArrears().amountOverdue` is the "total to get fully current" figure: it
+ * folds the current cycle's own remainder in once its due date has passed, which
+ * is right for a payoff/repair amount but double-counts on a dashboard that also
+ * shows the current cycle under "due this period" (ADR-080). Clamping the walk's
+ * reference date to the first of this month drops the current cycle cleanly and
+ * gives a stable count of genuinely-behind cycles.
+ *
+ * Non-monthly items don't line up with calendar months; "before the 1st" is a
+ * deliberate approximation there (they rarely carry multi-cycle arrears).
+ */
+export function priorArrearsSummary(
+  p: Payable,
+  today = todayISO(),
+): { amount: number; cycles: number; oldestMissedDate: string | null } {
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const a = computeArrears(p, monthStart);
+  return {
+    amount: a.amountOverdue,
+    cycles: a.cyclesMissed,
+    oldestMissedDate: a.oldestMissedDate,
+  };
+}
+
+/** Badge copy for `priorArrearsSummary`, mirroring `arrearsLabel`. */
+export function priorArrearsLabel(
+  s: { amount: number; cycles: number },
+  money: (n: number) => string,
+): string | null {
+  if (s.amount <= 0.005) return null;
+  const cycles =
+    s.cycles > 0 ? `${s.cycles} cycle${s.cycles === 1 ? "" : "s"} · ` : "";
+  return `${cycles}${money(s.amount)} past due`;
 }
