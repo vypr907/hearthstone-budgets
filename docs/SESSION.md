@@ -118,3 +118,5 @@
   `src/routes/app.transactions.tsx` (multi-category + linked/date pre-filter),
   `src/routes/app.index.tsx`, `src/routes/app.spending.tsx`. UI-only, no schema
   change. Typecheck clean.
+
+- Debt detail: "Total owed" is now capped at the debt's remaining_balance so past-due arrears can't roll the figure above what is actually outstanding (Alpine Medical - Steven showed $76 against a $38 balance). Presentation-only change in `src/routes/app.debts.tsx`; bills (no balance column) unchanged.
