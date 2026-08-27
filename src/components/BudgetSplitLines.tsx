@@ -43,6 +43,7 @@ export function BudgetSplitLines({
   deductedSpent,
   deductedPending,
   extra,
+  drill,
 }: {
   spendingBudgeted: number;
   billsBudgeted: number;
@@ -64,6 +65,8 @@ export function BudgetSplitLines({
   deductedSpent?: number;
   deductedPending?: number;
   extra?: { label: string; value: number };
+  /** When set, each line gets an icon that opens the matching Transactions view. */
+  drill?: SplitDrill;
 }) {
   const rows = [
     {
@@ -75,6 +78,7 @@ export function BudgetSplitLines({
       spentWord: "spent",
       totalWord: "budgeted",
       remainingWord: "available",
+      linked: "unlinked" as const,
     },
     {
       icon: "🧾",
@@ -85,6 +89,7 @@ export function BudgetSplitLines({
       spentWord: "paid",
       totalWord: "due",
       remainingWord: "remaining",
+      linked: "linked" as const,
     },
     ...(debtsBudgeted != null || debtsSpent != null
       ? [
@@ -97,6 +102,7 @@ export function BudgetSplitLines({
             spentWord: "paid",
             totalWord: "due",
             remainingWord: "remaining",
+            linked: "linked" as const,
           },
         ]
       : []),
@@ -113,6 +119,7 @@ export function BudgetSplitLines({
             spentWord: "paid",
             totalWord: "due",
             remainingWord: "remaining",
+            linked: "linked" as const,
           },
         ]
       : []),
@@ -123,7 +130,7 @@ export function BudgetSplitLines({
         Paid / due · tap a line for detail
       </p>
       {rows.map((r) => (
-        <SplitRow key={r.label} {...r} />
+        <SplitRow key={r.label} {...r} drill={drill} />
       ))}
       {extra ? (
         <p className="text-[11px] tabular-nums text-muted-foreground">
@@ -143,6 +150,8 @@ function SplitRow({
   spentWord,
   totalWord,
   remainingWord,
+  linked,
+  drill,
 }: {
   icon: string;
   label: string;
@@ -152,7 +161,10 @@ function SplitRow({
   spentWord: string;
   totalWord: string;
   remainingWord: string;
+  linked: "linked" | "unlinked";
+  drill?: SplitDrill;
 }) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const over = spent > total;
   const pct = total > 0 ? (spent / total) * 100 : spent > 0 ? 100 : 0;
@@ -177,8 +189,31 @@ function SplitRow({
       className="rounded-lg py-0.5"
     >
       <div className="flex items-center justify-between gap-2 text-[11px] tabular-nums text-muted-foreground">
-        <span>
-          {icon} {label}
+        <span className="flex items-center gap-1">
+          <span>
+            {icon} {label}
+          </span>
+          {drill ? (
+            <button
+              type="button"
+              aria-label={`View ${label.toLowerCase()} transactions`}
+              className="-m-1 rounded p-1 text-muted-foreground active:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTxPreFilter({
+                  categoryIds: drill.categoryIds,
+                  linked,
+                  dateFrom: drill.dateFrom,
+                  dateTo: drill.dateTo,
+                  label: `${drill.label} · ${label}`,
+                });
+                void navigate({ to: "/app/transactions" });
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <Receipt className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
         </span>
         <span className={over ? "font-bold text-destructive" : "font-bold text-foreground"}>
           {formatMoney(spent)} / {formatMoney(total)}
