@@ -1,6 +1,19 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { Receipt } from "lucide-react";
 import { ItemBar, budgetRingColor } from "@/components/viz";
 import { formatMoney } from "@/lib/format";
+import { setTxPreFilter } from "@/lib/tx-filter-store";
+
+/** Where a split line's transactions live, for the drill-down icon. */
+export type SplitDrill = {
+  /** Categories rolled into this tile. */
+  categoryIds: string[];
+  /** Shown as the filter chip label on Transactions. */
+  label: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
 
 /**
  * Expanded budget breakdown: one labelled progress bar per split
