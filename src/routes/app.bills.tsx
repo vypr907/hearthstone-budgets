@@ -17,6 +17,7 @@ import {
   useAutoTransfers,
   useUpsertAutoTransfer,
   useDeleteAutoTransfer,
+  shiftMonth,
 } from "@/lib/data-hooks";
 import {
   useProcessAutoTransfer,
@@ -24,7 +25,9 @@ import {
   deriveAutoTransferState,
   isAutoTransferOverdue,
 } from "@/lib/auto-transfers";
-import { formatMoney, accountLabel } from "@/lib/format";
+import { formatMoney, accountLabel, formatWindow, monthLabel } from "@/lib/format";
+import { priorArrearsSummary } from "@/lib/arrears";
+import { CycleMonthStepper } from "@/components/CycleMonthStepper";
 import { todayISO } from "@/lib/snapshot";
 import { useHouseholdDeductions } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,7 +45,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   Select,
@@ -60,7 +63,7 @@ import { PayActions } from "@/components/PayActions";
 import { SetAsideAction } from "@/components/SetAsideAction";
 import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
-import { billCycleDue, billRemainingOwed, toPayable } from "@/lib/payments";
+import { billCycleDue, toPayable } from "@/lib/payments";
 import { PastDueBadge } from "@/components/PastDueBadge";
 import { PastDueEditor } from "@/components/PastDueEditor";
 import { StrandedBillRepair } from "@/components/StrandedBillRepair";
@@ -365,11 +368,31 @@ function BillDetailDialog({
 }) {
   const { data: categories = [] } = useCategories();
   const { data: institutions = [] } = useInstitutions();
-  if (!bill) return null;
+
+  // ADR-085 addendum: month stepper to inspect a prior cycle. Monthly items only.
+  const [monthOffset, setMonthOffset] = useState(0);
+  useEffect(() => setMonthOffset(0), [bill?.id]);
+  const monthly =
+    (bill?.billing_cycle ?? "monthly").toLowerCase().replace(/[\s_-]/g, "") === "monthly";
+  const isCurrentView = monthOffset === 0;
+  // shiftMonth returns "YYYY-MM-01"; the stepper works in "YYYY-MM".
+  const targetMonthKey = shiftMonth(todayISO().slice(0, 7), monthOffset).slice(0, 7);
+  const refDate = !isCurrentView && monthly ? `${targetMonthKey}-15` : undefined;
+  const infoOf = useCycleState(refDate);
+
+  const info = bill ? infoOf(toPayable("bill", bill)) : null;
+  // ADR-085: report the ledger-derived cycle, not the raw payment_status column
+  // (a fully-paid monthly cycle resets cycle_paid_to_date to 0 and never rewrites
+  // a stale status). Bills detail had been showing the raw columns — this brings
+  // it to parity with the Debts detail panel.
+  const storedDiffers =
+    isCurrentView && !!bill && !!info && (bill.payment_status || "unpaid") !== info.state;
+  const prior = bill ? priorArrearsSummary(toPayable("bill", bill)) : { amount: 0 };
+  const showRollup = isCurrentView && !!info && prior.amount > 0.005;
+
+  if (!bill || !info) return null;
   const category = categories.find((c) => c.id === bill.category_id);
   const institution = institutions.find((i) => i.id === bill.institution_id);
-  // Only surface cycle figures when they add information beyond bills.amount.
-  const showCycle = Number(bill.cycle_paid_to_date ?? 0) > 0 || bill.cycle_amount_due != null;
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -377,6 +400,17 @@ function BillDetailDialog({
           <DialogTitle>{bill.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {monthly ? (
+            <CycleMonthStepper
+              monthOffset={monthOffset}
+              onChange={setMonthOffset}
+              targetMonthKey={targetMonthKey}
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Historical cycle view isn't available for non-monthly items.
+            </p>
+          )}
           <DetailGrid>
             <DetailItem label="Category" value={category?.name ?? "—"} />
             <DetailItem label="Institution / account" value={institution?.name ?? "—"} />
@@ -385,7 +419,16 @@ function BillDetailDialog({
             <DetailItem label="Billing cycle" value={bill.billing_cycle ?? "—"} />
             <DetailItem
               label="Payment status"
-              value={<StatusBadge status={bill.payment_status} />}
+              value={
+                <div className="space-y-1">
+                  <StatusBadge status={info.state} />
+                  {storedDiffers ? (
+                    <div className="text-xs text-muted-foreground">
+                      stored: {bill.payment_status || "unpaid"}
+                    </div>
+                  ) : null}
+                </div>
+              }
             />
             <DetailItem label="Manual or auto" value={bill.manual_or_auto ?? "—"} />
             <DetailItem label="Variable amount" value={bill.is_variable_amount ? "Yes" : "No"} />
@@ -393,21 +436,37 @@ function BillDetailDialog({
               label="Active"
               value={bill.is_active === null ? "—" : bill.is_active ? "Yes" : "No"}
             />
-            {showCycle ? (
+            <DetailMoney label="Due this cycle" value={info.due} />
+            <DetailMoney label="Paid this cycle" value={info.clearedSum} />
+            <DetailMoney label="Still owed this cycle" value={info.remaining} />
+            {showRollup ? (
               <>
-                <DetailMoney label="Due this cycle" value={billCycleDue(bill)} />
-                <DetailMoney label="Paid this cycle" value={Number(bill.cycle_paid_to_date ?? 0)} />
-                <DetailMoney label="Remaining owed" value={billRemainingOwed(bill)} />
+                <DetailMoney label="Past due (earlier cycles)" value={prior.amount} />
+                <DetailMoney label="Total owed" value={info.remaining + prior.amount} />
               </>
             ) : null}
+            <DetailItem
+              label="Cycle window"
+              value={formatWindow(info.windowStart, info.windowEnd)}
+            />
           </DetailGrid>
           <DetailText label="Notes" value={bill.notes} />
-          <PayActions payable={toPayable("bill", bill)} />
+          {isCurrentView ? (
+            <PayActions payable={toPayable("bill", bill)} />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Submit / Clear apply to the current cycle. To change a payment in{" "}
+              {monthLabel(targetMonthKey)}, use its Correct or Reverse action below.
+            </p>
+          )}
           <PastDueEditor bill={bill} />
-          <SetAsideAction bill={bill} />
+          {isCurrentView ? <SetAsideAction bill={bill} /> : null}
           {/* ADR-058: bill adjustments section */}
           <BillAdjustments bill={bill} />
-          <RecentBillTransactions bill={bill} />
+          <RecentBillTransactions
+            bill={bill}
+            month={isCurrentView ? undefined : targetMonthKey}
+          />
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onEdit(bill)} className="h-11">
@@ -596,8 +655,12 @@ function BillAdjustments({ bill }: { bill: Bill }) {
   );
 }
 
-/** Last 10 ledger rows linked to this bill, newest first (ADR-035). */
-function RecentBillTransactions({ bill }: { bill: Bill }) {
+/**
+ * Ledger rows linked to this bill, newest first (ADR-035). Default: last 10
+ * ("Recent"). `month` ("YYYY-MM", ADR-085 addendum): scope to that calendar
+ * month, for correcting a payment while the detail panel views a prior cycle.
+ */
+function RecentBillTransactions({ bill, month }: { bill: Bill; month?: string }) {
   const billId = bill.id;
   const { data: transactions = [] } = useTransactions();
   const { data: accounts = [] } = useAccounts();
@@ -610,19 +673,22 @@ function RecentBillTransactions({ bill }: { bill: Bill }) {
     for (const a of accounts) m[a.id] = a;
     return m;
   }, [accounts]);
-  const rows = useMemo(
-    () =>
-      transactions
-        .filter((t) => t.linked_bill_id === billId)
-        .sort((a, b) => (b.transaction_date ?? "").localeCompare(a.transaction_date ?? ""))
-        .slice(0, 10),
-    [transactions, billId],
-  );
+  const rows = useMemo(() => {
+    const linked = transactions
+      .filter((t) => t.linked_bill_id === billId)
+      .sort((a, b) => (b.transaction_date ?? "").localeCompare(a.transaction_date ?? ""));
+    if (month) return linked.filter((t) => (t.transaction_date ?? "").slice(0, 7) === month);
+    return linked.slice(0, 10);
+  }, [transactions, billId, month]);
   return (
     <div>
-      <SectionLabel>Recent transactions</SectionLabel>
+      <SectionLabel>
+        {month ? `Transactions · ${monthLabel(month)}` : "Recent transactions"}
+      </SectionLabel>
       {rows.length === 0 ? (
-        <EmptyState className="mt-1 py-2 text-left">No payments logged yet.</EmptyState>
+        <EmptyState className="mt-1 py-2 text-left">
+          {month ? "No transactions this month." : "No payments logged yet."}
+        </EmptyState>
       ) : (
         <div className="mt-1 divide-y divide-border/50">
           {rows.map((t) => {
