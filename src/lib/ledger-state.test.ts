@@ -178,3 +178,41 @@ describe("ADR-085 addendum: reference date reconstructs a prior month's cycle", 
     expect(jul.clearedSum).toBe(0);
   });
 });
+
+describe("ADR-068 addendum: deduction-funded payments post as positive deposits", () => {
+  const funded = (over: Partial<Bill> = {}) =>
+    rent({ cycle_amount_due: 609, funding_deduction_id: "ded1", ...over } as Partial<Bill>);
+  const deposit = (amount: number, id: string): Transaction =>
+    ({
+      id,
+      amount,
+      status: "cleared",
+      transaction_date: TODAY,
+      description: "Deduction: TSP Loan 1",
+      linked_bill_id: "rent2",
+      linked_debt_id: null,
+      account_id: "tsp",
+    }) as unknown as Transaction;
+
+  it("clears the cycle from a full positive deduction deposit", () => {
+    const i = info(funded(), [deposit(609, "d1")]);
+    expect(i.state).toBe("cleared");
+    expect(i.clearedSum).toBe(609);
+  });
+
+  it("is PARTIAL when the deduction posts short", () => {
+    const i = info(funded(), [deposit(400, "d1")]);
+    expect(i.state).toBe("partial");
+    expect(i.clearedSum).toBe(400);
+  });
+
+  it("still lets a positive reversal cancel an ordinary payment", () => {
+    const reversal: Transaction = {
+      ...tx(-609, "cleared", "rev"),
+      description: "Reversed: Rent 2 payment",
+    } as Transaction;
+    const i = info(funded(), [tx(609, "cleared", "t1"), reversal]);
+    expect(i.clearedSum).toBe(0);
+    expect(i.state).toBe("unpaid");
+  });
+});
