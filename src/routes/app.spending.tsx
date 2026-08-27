@@ -312,7 +312,7 @@ function SpendingPage() {
         categoryIds: groups.flatMap((g) => g.rows.map((r) => r.categoryId)),
       });
       setSelectedMonth(next);
-      toast.success(`${monthLabel(ledgerMonth)} locked in · now on ${monthLabel(next)}`);
+      toast.success(`Now budgeting ${monthLabel(next)} · earlier months stay editable`);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -616,8 +616,9 @@ function SpendingPage() {
             <DialogTitle>Override the transaction total?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This category has logged transactions this month — manually editing will
-            use your total instead of the transaction sum going forward.
+            This category has logged transactions this month — saving a manual amount
+            overrides the transaction total for this month only. You can switch back to
+            the transaction total anytime with the pencil control.
           </p>
           <DialogFooter className="gap-2">
             <Button
