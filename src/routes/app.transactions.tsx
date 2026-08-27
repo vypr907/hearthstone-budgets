@@ -40,7 +40,12 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Transaction } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
-import { groupLedgerRows } from "@/lib/split-groups";
+import {
+  groupLedgerRows,
+  classifyLedgerGroup,
+  isCategorySplitGroup,
+} from "@/lib/split-groups";
+import { useIncomeEvents } from "@/lib/income-hooks";
 import {
   SplitLinesEditor,
   emptySplitRow,
@@ -77,6 +82,13 @@ function TransactionsPage() {
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
   const { data: institutions = [] } = useInstitutions();
+  const { data: incomeEvents = [] } = useIncomeEvents();
+  // ADR-047 addendum: a split_group_id that IS an income_events.id is a
+  // paycheck deposit group, not an ADR-044 category split.
+  const incomeEventIds = useMemo(
+    () => new Set(incomeEvents.map((e) => e.id)),
+    [incomeEvents],
+  );
 
   // --- Filter state ---
   const [account, setAccount] = useState("all");
@@ -454,11 +466,28 @@ function TransactionsPage() {
             ) : null}
             {items.map((entry) => {
               const t = entry.head;
+              // ADR-047 addendum: only a genuine category split opens the
+              // whole-group editor; a paycheck / multi-account group opens its
+              // per-row breakdown so a single deposit can be corrected.
+              const kind = entry.isSplit
+                ? classifyLedgerGroup(entry.rows, entry.key, incomeEventIds)
+                : null;
+              const perRow = kind === "paycheck" || kind === "linked-or-multi";
+              const splitBadge =
+                kind === "paycheck"
+                  ? `Paycheck · ${entry.rows.length} deposit${entry.rows.length === 1 ? "" : "s"}`
+                  : kind === "linked-or-multi"
+                    ? `Split · ${entry.rows.length} rows`
+                    : `Split · ${entry.rows.length} categories`;
               return (
                 <Card
                   key={entry.key}
                   className="cursor-pointer"
-                  onClick={() => setDetail(t)}
+                  onClick={() =>
+                    perRow
+                      ? setExpanded((prev) => ({ ...prev, [entry.key]: true }))
+                      : setDetail(t)
+                  }
                 >
                   <CardContent className="flex items-start gap-3 p-3">
                     <div className="min-w-0 flex-1">
@@ -470,7 +499,7 @@ function TransactionsPage() {
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                         <span>{t.transaction_date}</span>
-                        {t.account_id && accountName[t.account_id] ? (
+                        {!perRow && t.account_id && accountName[t.account_id] ? (
                           <span>· {accountName[t.account_id]}</span>
                         ) : null}
                         {!entry.isSplit && t.category_id && categoryName[t.category_id] ? (
@@ -480,9 +509,7 @@ function TransactionsPage() {
                           <span>· 🏪 {institutionName[t.institution_id]}</span>
                         ) : null}
                         {entry.isSplit ? (
-                          <Badge variant="secondary">
-                            Split · {entry.rows.length} categories
-                          </Badge>
+                          <Badge variant="secondary">{splitBadge}</Badge>
                         ) : null}
                         {t.transfer_group_id ? (
                           <Badge variant="outline">Transfer</Badge>
@@ -510,20 +537,41 @@ function TransactionsPage() {
                       ) : null}
                       {entry.isSplit && expanded[entry.key] ? (
                         <div className="mt-1 divide-y divide-border/50 rounded-md border">
-                          {entry.rows.map((line) => (
-                            <div
-                              key={line.id}
-                              className="flex items-center justify-between px-2 py-1 text-xs"
-                            >
-                              <span className="truncate">
-                                {(line.category_id && categoryName[line.category_id]) ||
-                                  "No category"}
-                              </span>
-                              <span className="tabular-nums">
-                                {formatMoney(Number(line.amount))}
-                              </span>
-                            </div>
-                          ))}
+                          {entry.rows.map((line) => {
+                            const label = perRow
+                              ? line.description ||
+                                (line.account_id && accountName[line.account_id]) ||
+                                "Deposit"
+                              : (line.category_id && categoryName[line.category_id]) ||
+                                "No category";
+                            const inner = (
+                              <>
+                                <span className="truncate text-left">{label}</span>
+                                <span className="tabular-nums">
+                                  {formatMoney(Number(line.amount))}
+                                </span>
+                              </>
+                            );
+                            return perRow ? (
+                              <button
+                                key={line.id}
+                                className="flex w-full items-center justify-between px-2 py-1.5 text-xs hover:bg-muted/50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDetail(line);
+                                }}
+                              >
+                                {inner}
+                              </button>
+                            ) : (
+                              <div
+                                key={line.id}
+                                className="flex items-center justify-between px-2 py-1 text-xs"
+                              >
+                                {inner}
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : null}
                     </div>
@@ -558,9 +606,22 @@ export function TransactionDetail({
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
   const { data: allTransactions = [] } = useTransactions();
+  const { data: incomeEvents = [] } = useIncomeEvents();
   const upsert = useUpsertTransaction();
   const del = useDeleteTransaction();
   const delTransferPair = useDeleteTransferPair();
+
+  const incomeEventIds = useMemo(
+    () => new Set(incomeEvents.map((e) => e.id)),
+    [incomeEvents],
+  );
+  const groupRows = useMemo(
+    () =>
+      transaction?.split_group_id
+        ? allTransactions.filter((t) => t.split_group_id === transaction.split_group_id)
+        : [],
+    [allTransactions, transaction?.split_group_id],
+  );
 
   const [edit, setEdit] = useState(false);
   const [amount, setAmount] = useState("");
@@ -588,9 +649,24 @@ export function TransactionDetail({
   if (!transaction && lastKey !== "") setLastKey("");
 
   if (!transaction) return null;
-  // ADR-044: a split entry is edited as a whole group, never line by line.
-  if (transaction.split_group_id)
+  // ADR-044 / ADR-047 addendum: the whole-group editor is only safe for a
+  // genuine category split (one account, N category lines, not a paycheck).
+  // A paycheck / deduction / multi-account group is edited one row at a time
+  // through the normal single-row path below.
+  if (
+    transaction.split_group_id &&
+    groupRows.length > 0 &&
+    isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds)
+  )
     return <SplitTransactionDetail transaction={transaction} onClose={onClose} />;
+
+  const isPaycheckDeposit =
+    !!transaction.split_group_id &&
+    groupRows.length > 0 &&
+    !isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds);
+  const depositAccountCount = isPaycheckDeposit
+    ? new Set(groupRows.map((r) => r.account_id ?? null)).size
+    : 0;
 
   const linkedBill = bills.find((b) => b.id === transaction.linked_bill_id);
   const linkedDebt = debts.find((d) => d.id === transaction.linked_debt_id);
@@ -655,7 +731,10 @@ export function TransactionDetail({
       }
       return;
     }
-    if (!confirm("Delete this transaction?")) return;
+    const msg = isPaycheckDeposit
+      ? "Delete this deposit? The other deposits in this paycheck are not affected."
+      : "Delete this transaction?";
+    if (!confirm(msg)) return;
     try {
       await del.mutateAsync(transaction!);
       toast.success("Transaction deleted");
@@ -664,6 +743,22 @@ export function TransactionDetail({
       toast.error((e as Error).message);
     }
   }
+
+  /** ADR-047 addendum: shown on a paycheck deposit row so it's clear that
+   *  editing here touches only this one deposit. */
+  const paycheckBanner = isPaycheckDeposit ? (
+    <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+      {isLinked
+        ? `This deposit was posted by a deduction. Correct it from ${
+            linkedBill?.name ?? linkedDebt?.name ?? "its bill or debt"
+          }, not here.`
+        : `Part of a paycheck deposit — ${groupRows.length} deposit${
+            groupRows.length === 1 ? "" : "s"
+          } across ${depositAccountCount} account${
+            depositAccountCount === 1 ? "" : "s"
+          }. Editing here changes only this deposit.`}
+    </p>
+  ) : null;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -676,6 +771,7 @@ export function TransactionDetail({
 
         {!edit ? (
           <div className="space-y-4">
+            {paycheckBanner}
             <DetailGrid>
               <DetailItem label="Amount" value={formatMoney(Number(transaction.amount))} />
               <DetailItem label="Date" value={transaction.transaction_date} />
@@ -729,6 +825,7 @@ export function TransactionDetail({
           </div>
         ) : (
           <div className="space-y-3">
+            {paycheckBanner}
             {isLinked && (
               <p className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
                 Amount and status are locked on linked entries — use{" "}
@@ -794,39 +891,46 @@ export function TransactionDetail({
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Category</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Uncategorized</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {/* ADR-053: re-tag or set the place this transaction occurred at */}
-            <div>
-              <Label>Place (institution)</Label>
-              <Select value={institutionId} onValueChange={setInstitutionId}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="No place" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No place</SelectItem>
-                  {institutions.map((i) => (
-                    <SelectItem key={i.id} value={i.id}>
-                      {i.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* ADR-047 addendum: paycheck deposit rows carry no category or
+                place by design — hide the controls so a stray tag can't be
+                added while correcting an amount. */}
+            {!transaction.split_group_id && (
+              <>
+                <div>
+                  <Label>Category</Label>
+                  <Select value={categoryId} onValueChange={setCategoryId}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Uncategorized</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* ADR-053: re-tag or set the place this transaction occurred at */}
+                <div>
+                  <Label>Place (institution)</Label>
+                  <Select value={institutionId} onValueChange={setInstitutionId}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="No place" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No place</SelectItem>
+                      {institutions.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>
+                          {i.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
           </div>
         )}
 

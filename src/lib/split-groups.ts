@@ -16,6 +16,60 @@ export type LedgerEntry = {
   isSplit: boolean;
 };
 
+/**
+ * What kind of `split_group_id` group a set of rows is (ADR-047 addendum).
+ * - `category-split`: a genuine ADR-044 split — one account, N category lines.
+ *   Safe to edit as a whole group via SplitTransactionDetail.
+ * - `paycheck`: deposits auto-posted by "mark income received" (ADR-047/055) —
+ *   the group id IS an income_events.id. Edited one deposit at a time.
+ * - `linked-or-multi`: spans >1 account or contains a bill/debt-linked row
+ *   (a hand-built multi-account split, or an ADR-046 payment+fee group).
+ *   Also edited one row at a time; the whole-group editor would corrupt it.
+ */
+export type LedgerGroupKind = "category-split" | "paycheck" | "linked-or-multi";
+
+export function classifyLedgerGroup(
+  rows: Transaction[],
+  groupId: string,
+  incomeEventIds: ReadonlySet<string>,
+): LedgerGroupKind {
+  if (incomeEventIds.has(groupId)) return "paycheck";
+  const accounts = new Set(rows.map((r) => r.account_id ?? null));
+  const hasLinked = rows.some((r) => r.linked_bill_id || r.linked_debt_id);
+  if (accounts.size > 1 || hasLinked) return "linked-or-multi";
+  return "category-split";
+}
+
+/** True only for a genuine ADR-044 category split (safe for the group editor). */
+export function isCategorySplitGroup(
+  rows: Transaction[],
+  groupId: string,
+  incomeEventIds: ReadonlySet<string>,
+): boolean {
+  return classifyLedgerGroup(rows, groupId, incomeEventIds) === "category-split";
+}
+
+/**
+ * Guard for the destructive whole-group split writes (delete-all + re-insert
+ * onto one account). Throws for a group that spans multiple accounts or holds a
+ * bill/debt-linked row — i.e. a paycheck/deduction or payment+fee group that
+ * must be edited row by row instead.
+ */
+export function assertCategorySplitRows(
+  rows: Array<Pick<Transaction, "account_id" | "linked_bill_id" | "linked_debt_id">>,
+): void {
+  if (new Set(rows.map((r) => r.account_id ?? null)).size > 1) {
+    throw new Error(
+      "This deposit group spans multiple accounts (a paycheck or transfer) — edit each deposit from the ledger instead of the split editor.",
+    );
+  }
+  if (rows.some((r) => r.linked_bill_id || r.linked_debt_id)) {
+    throw new Error(
+      "This group contains a bill or debt payment — correct it from that bill or debt, not the split editor.",
+    );
+  }
+}
+
 export function groupLedgerRows(rows: Transaction[]): LedgerEntry[] {
   const out: LedgerEntry[] = [];
   const byGroup = new Map<string, LedgerEntry>();
