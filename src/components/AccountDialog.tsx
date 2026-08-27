@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useUpsertAccount, useDeleteAccount, useInstitutions } from "@/lib/data-hooks";
+import { useHouseholdMembers, useCurrentMember, memberLabel } from "@/lib/household";
 import {
   Dialog,
   DialogContent,
@@ -58,12 +59,16 @@ export function AccountDialog({
   const upsert = useUpsertAccount();
   const del = useDeleteAccount();
   const { data: institutions = [] } = useInstitutions();
+  const { data: members = [] } = useHouseholdMembers();
+  const currentMember = useCurrentMember();
   const [name, setName] = useState("");
   const [type, setType] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [starting, setStarting] = useState("");
   const [notes, setNotes] = useState("");
   const [isSpendable, setIsSpendable] = useState(false);
+  const [includeInNetWorth, setIncludeInNetWorth] = useState(true);
+  const [ownerMemberId, setOwnerMemberId] = useState("joint");
   const [creditLimit, setCreditLimit] = useState("");
   const [institutionId, setInstitutionId] = useState("none");
 
@@ -80,6 +85,8 @@ export function AccountDialog({
     setStarting(account?.starting_balance != null ? String(account.starting_balance) : "");
     setNotes(account?.notes ?? "");
     setIsSpendable(account?.is_spendable ?? false);
+    setIncludeInNetWorth(account?.include_in_net_worth ?? true);
+    setOwnerMemberId(account?.owner_member_id ?? "joint");
     setCreditLimit(account?.credit_limit != null ? String(account.credit_limit) : "");
     setInstitutionId(account?.institution_id ?? "none");
   }
@@ -99,6 +106,8 @@ export function AccountDialog({
         starting_balance: starting ? Number(starting) : null,
         notes: notes || null,
         is_spendable: isSpendable,
+        include_in_net_worth: includeInNetWorth,
+        owner_member_id: ownerMemberId === "joint" ? null : ownerMemberId,
         credit_limit: isCredit && creditLimit ? Number(creditLimit) : null,
         institution_id: institutionId === "none" ? null : institutionId,
       });
@@ -149,6 +158,29 @@ export function AccountDialog({
               </SelectContent>
             </Select>
           </div>
+          {members.length > 1 && (
+            <div>
+              <Label>Belongs to</Label>
+              <Select value={ownerMemberId} onValueChange={setOwnerMemberId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="joint">Joint / shared</SelectItem>
+                  {members.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {memberLabel(m)}
+                      {m.id === currentMember?.id ? " (me)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                A personal account is left out of the other person's spendable
+                and net-worth totals. Both of you still see and can edit it.
+              </p>
+            </div>
+          )}
           <div>
             <Label>Type</Label>
             <Select value={type || "none"} onValueChange={(v) => setType(v === "none" ? "" : v)}>
@@ -209,6 +241,16 @@ export function AccountDialog({
             />
             <Label htmlFor="isSpendable" className="font-normal">
               Spendable
+            </Label>
+          </div>
+          <div className="flex items-center gap-2 py-1">
+            <Checkbox
+              id="includeInNetWorth"
+              checked={includeInNetWorth}
+              onCheckedChange={(v) => setIncludeInNetWorth(v !== false)}
+            />
+            <Label htmlFor="includeInNetWorth" className="font-normal">
+              Include in net worth
             </Label>
           </div>
           <div>

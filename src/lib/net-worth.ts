@@ -66,6 +66,9 @@ export function netWorthTrend(
     const byType: Record<string, number> = {};
     let total = 0;
     for (const a of accounts) {
+      // ADR-088: an account explicitly flagged off the trend is skipped.
+      // (Member-ownership scoping is applied by the caller before this point.)
+      if (a.include_in_net_worth === false) continue;
       const v = balanceAsOf(a, balances, transactions, date);
       const type = (a.account_type ?? "other").toLowerCase();
       byType[type] = (byType[type] ?? 0) + v;

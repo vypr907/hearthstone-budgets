@@ -17,7 +17,8 @@ import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
 import { useLedgerState } from "@/lib/ledger-state";
 import { formatMoney } from "@/lib/format";
 import { EmojiIcon, ItemBar, ProgressRing, itemColor } from "@/components/viz";
-import { computeBalances } from "@/lib/balances";
+import { accountInMemberView, computeBalances } from "@/lib/balances";
+import { useCurrentMember } from "@/lib/household";
 import { eventDate, periodRange } from "@/lib/paycheck-budget";
 import {
   buildSnapshot,
@@ -110,6 +111,9 @@ function SnapshotPage() {
   const { data: latest = {} } = useLatestBalances();
   const { data: transactions = [] } = useTransactions();
   const stateOf = useLedgerState();
+  // ADR-088: the snapshot is the signed-in member's picture — the other
+  // member's personal accounts are excluded from the balance subtotals.
+  const currentMember = useCurrentMember();
   const nodeRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -140,8 +144,12 @@ function SnapshotPage() {
     [accounts, latest, transactions],
   );
   const balanceSummary = useMemo(
-    () => buildBalanceSubtotals(accounts, balances),
-    [accounts, balances],
+    () =>
+      buildBalanceSubtotals(
+        accounts.filter((a) => accountInMemberView(a, currentMember?.id)),
+        balances,
+      ),
+    [accounts, balances, currentMember?.id],
   );
 
   /** Current pay period, falling back to the calendar month (ADR-034). */

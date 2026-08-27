@@ -19,12 +19,14 @@ import {
 import { deriveAutoTransferState, isAutoTransferOverdue } from "@/lib/auto-transfers";
 import { formatMoney, isDateOverdue, debtDueDate } from "@/lib/format";
 import {
+  accountInMemberView,
   accountTypeIs,
   computeBalances,
   creditAccountsMissingLimit,
   creditOwed,
   spendableContribution,
 } from "@/lib/balances";
+import { useCurrentMember } from "@/lib/household";
 import { billsBudgetedByCategory } from "@/lib/spending-actuals";
 import {
   combinedActualByCategory,
@@ -107,6 +109,10 @@ function Dashboard() {
   const { data: sources = [] } = useIncomeSources();
   const { data: events = [] } = useIncomeEvents();
   const { data: householdDeductions = [] } = useHouseholdDeductions();
+  // ADR-088: the signed-in member — personal accounts owned by the other member
+  // are left out of this viewer's spendable + net-worth totals.
+  const currentMember = useCurrentMember();
+  const memberId = currentMember?.id;
 
 
   const balances = useMemo(
@@ -118,6 +124,7 @@ function Dashboard() {
    * Spendable = only is_spendable checking/credit accounts. Savings,
    * investment and retirement are always excluded. ADR-023: credit accounts
    * contribute available credit, and are skipped when credit_limit is unset.
+   * ADR-088: accounts owned by the other member are skipped entirely.
    */
   const spendable = useMemo(() => {
     let total = 0;
@@ -125,6 +132,7 @@ function Dashboard() {
     let availableCredit = 0;
     let savings = 0;
     for (const a of accounts) {
+      if (!accountInMemberView(a, memberId)) continue;
       const b = balances[a.id]?.spendable ?? 0;
       const contribution = spendableContribution(a, b);
       if (contribution != null) total += contribution;
@@ -134,19 +142,32 @@ function Dashboard() {
       if (accountTypeIs(a, "savings")) savings += b;
     }
     return { total, checking, availableCredit, savings };
-  }, [accounts, balances]);
+  }, [accounts, balances, memberId]);
 
   /** Credit accounts excluded from the total because credit_limit is missing. */
   const missingLimits = useMemo(
-    () => creditAccountsMissingLimit(accounts),
-    [accounts],
+    () =>
+      creditAccountsMissingLimit(
+        accounts.filter((a) => accountInMemberView(a, memberId)),
+      ),
+    [accounts, memberId],
   );
 
 
-  /** Net worth over the last 6 months, split by account_type. */
+  /**
+   * Net worth over the last 6 months, split by account_type. ADR-088: the
+   * other member's personal accounts are dropped here; netWorthTrend itself
+   * also skips accounts flagged include_in_net_worth === false.
+   */
   const netWorth = useMemo(
-    () => netWorthTrend(accounts, balanceHistory, transactions, 6),
-    [accounts, balanceHistory, transactions],
+    () =>
+      netWorthTrend(
+        accounts.filter((a) => accountInMemberView(a, memberId)),
+        balanceHistory,
+        transactions,
+        6,
+      ),
+    [accounts, balanceHistory, transactions, memberId],
   );
   const netWorthTypes = useMemo(() => {
     const set = new Set<string>();

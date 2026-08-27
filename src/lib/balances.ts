@@ -50,6 +50,23 @@ export const SPENDABLE_TYPES = ["checking", "credit"];
 /** Never counted as spendable, regardless of is_spendable. */
 export const EXCLUDED_TYPES = ["savings", "invest", "retirement", "hsa", "lpfsa"];
 
+/**
+ * ADR-088: does this account count toward `viewerMemberId`'s spendable /
+ * net-worth aggregates? A null `owner_member_id` is shared (counts for
+ * everyone); a set owner counts only for that member. An unknown viewer
+ * (id null/undefined, e.g. members still loading) sees everything — the
+ * aggregate is never silently understated.
+ * Visibility and edit rights are unaffected; this only scopes totals.
+ */
+export function accountInMemberView(
+  a: Pick<Account, "owner_member_id">,
+  viewerMemberId: string | null | undefined,
+): boolean {
+  if (!a.owner_member_id) return true;
+  if (!viewerMemberId) return true;
+  return a.owner_member_id === viewerMemberId;
+}
+
 export function isSpendableAccount(a: Account): boolean {
   const t = norm(a.account_type);
   if (EXCLUDED_TYPES.includes(t)) return false;
