@@ -485,6 +485,16 @@ function DebtDetailDialog({
   // the current view (they're a right-now figure, not a historical one).
   const prior = debt ? priorArrearsSummary(toPayable("debt", debt)) : { amount: 0 };
   const showRollup = isCurrentView && !!cycle && prior.amount > 0.005;
+  // A debt can never owe more than its outstanding balance: this cycle's due
+  // amount is a slice of that balance, not an addition to it. Cap the rollup so
+  // arrears can't double-count what's already inside remaining_balance.
+  const totalOwed =
+    cycle && debt
+      ? debt.remaining_balance != null && debt.remaining_balance > 0
+        ? Math.min(cycle.remaining + prior.amount, debt.remaining_balance)
+        : cycle.remaining + prior.amount
+      : 0;
+
 
   const open = debt !== null;
   if (!debt || !cycle) return null;
