@@ -1040,6 +1040,17 @@ calendar month, with "Start new month" still anchored to the ledger's newest
 month) implemented 2026-08-06 — the edit/override flow applies to the selected
 month.
 
+### ADR-041 addendum (2026-08-27): "Start new month" is not a lock
+
+"Start new month" (`useStartNewSpendingMonth`) only inserts zeroed
+`spending_actuals` rows for the *next* month. It never freezes, locks, or
+overrides any prior-month row — prior months stay ledger-derived and every cell
+stays editable (subject only to the per-cell `is_manual_override` above, which a
+human sets and can revert). UI copy must not describe a rolled-past month as
+"locked". The toast now reads "Now budgeting <next> · earlier months stay
+editable"; the override confirm dialog says the override is for that month only
+and is reversible via the pencil control. No behaviour change — copy only.
+
 
 
 ## ADR-042: billing_cycle and manual_or_auto Are Always Stored Lowercase (Extends ADR-022's Pattern)
