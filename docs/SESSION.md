@@ -68,3 +68,26 @@
     the secondary line and only for non-monthly cycles.
   - Files: src/lib/ledger-state.ts, src/lib/ledger-state.test.ts,
     src/routes/app.debts.tsx, docs/DECISIONS.md. 88 tests green.
+
+- 2026-08-26 — ADR-083 follow-through: user ran the RLS-hardening migration
+  (verified: 0 tables without RLS, 0 without FORCE, `auto_transfers` policy
+  present, boundary re-proven). Rotated the `+lovabletest` password off the
+  transcript value — `updateUser({currentPassword})` with the anon key, new
+  32-char random into `.env.test`; `letmein` now rejected. ADR-083 status
+  updated.
+
+- 2026-08-27 — ADR-087 (was drafted as ADR-084; renumbered after main landed
+  its own ADR-084/085/086): hybrid task tracking. Created GitHub labels
+  (`schema`, `ledger`, `mobile`, `verification`, `tech-debt`), Milestones
+  (Phase 12/13/14), and Issues #4–#10 from `docs/TODO.md`. `docs/TODO.md`
+  stubbed to working-as-designed limitations only; `CLAUDE.md` updated (tasks →
+  Issues, phases → Milestones, `Closes #N` in PRs); ADR-087 written.
+
+- 2026-08-27 — `README.md` full rewrite (was stuck at "Phase 2" / "edit in
+  Lovable" / stale `.env` vars). Now: current feature summary, real stack,
+  Codespace dev flow (`npm run dev` :8080, `npm test`, `npm run build`),
+  docs table, ADR-083 testing note, private-repo privacy note. Added
+  `test` / `test:watch` / `typecheck` scripts to `package.json` — `npm test`
+  runs vitest.
+
+  Resolved: repo visibility flipped to private by the user 2026-08-27.

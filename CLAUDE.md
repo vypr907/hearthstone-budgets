@@ -28,7 +28,11 @@ At session end, summarize docs/SESSION.md into docs/CHANGELOG.md, then clear it.
   query it directly instead of asking the user to run SELECTs. It cannot
   write: schema/data changes still require the user to run SQL manually in
   the Supabase SQL Editor.
-- TODO.md = scoped/actionable only. Unready ideas → SCRATCHPAD.md.
+- Actionable open work = GitHub Issues (ADR-087), not docs/TODO.md. `gh issue
+  list`; label `verification` / `tech-debt` / `schema` / `ledger` / `mobile`.
+  Phases = GitHub Milestones. docs/TODO.md now holds only working-as-designed
+  limitations. Unready ideas → SCRATCHPAD.md. When a change closes an Issue,
+  put `Closes #N` in the PR body.
 - Don't rewrite working code unless asked.
 
 ## Known environment constraint
@@ -54,7 +58,7 @@ all work there.)
 
 ## Doc hierarchy
 Current conversation > existing code > existing schema > docs/DECISIONS.md >
-docs/SCHEMA.md > docs/CHANGELOG.md/TODO.md (only for roadmap questions).
+docs/SCHEMA.md > docs/CHANGELOG.md > GitHub Issues/Milestones (roadmap questions).
 
 ## Documentation Rules (docs/) — part of every task, not a wrap-up step
 Create any of these files if they don't exist yet.
@@ -77,8 +81,9 @@ Create any of these files if they don't exist yet.
    - No ADR named, but change looks like a variant of an existing entry →
      ASK before creating a new ADR. Do not guess.
    - Otherwise → new ADR, next sequential number.
-5. TODO.md — update as tasks are discovered/completed. Remove completed
-   items — this file is current open items only, never history.
-6. ROADMAP.md — update whenever milestones change.
+5. Tasks — open work is GitHub Issues, not a file (ADR-087). Create an Issue
+   when a task is discovered; `Closes #N` in the PR when it's done. docs/TODO.md
+   holds only working-as-designed limitations.
+6. Phases / milestones — GitHub Milestones (no ROADMAP.md).
 
 Do these inline as work happens, not batched at the end.
