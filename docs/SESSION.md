@@ -91,3 +91,10 @@
   runs vitest.
 
   Resolved: repo visibility flipped to private by the user 2026-08-27.
+
+- 2026-08-27 — `vitest.config.ts` added (follow-up to the `npm test` script
+  above). Vitest had no `include`, so `vitest run` globbed the whole tree —
+  including the `.trunk/` plugin cache — and reported ~190 bogus failed test
+  files. Now scoped to `src/**/*.test.ts` (node env, native
+  `resolve.tsconfigPaths` for the `@/` alias). `npm test`: 7 files / 88 tests,
+  ~3s (was ~37s). Files: vitest.config.ts.
