@@ -111,6 +111,40 @@
     "Belongs to" marks the signed-in member "(me)". PR #39, Closes #36.
     Live 2-member check happens when it reaches "Our Household".
 
+- 2026-08-27 — Issue #40: correcting one paycheck split collapsed the whole
+  paycheck onto one account. ADR-047 addendum. No schema change.
+    * Root cause: paycheck + deduction deposits share
+      `split_group_id = income_event.id`; `TransactionDetail` routed **any**
+      `split_group_id` row to `SplitTransactionDetail` (ADR-044 single-account
+      category editor), which delete-all + re-inserts every line onto one
+      account.
+    * `src/lib/split-groups.ts`: `classifyLedgerGroup` /
+      `isCategorySplitGroup` / `assertCategorySplitRows`. A genuine category
+      split = id not an `income_events.id`, one `account_id`, no linked rows.
+    * `src/routes/app.transactions.tsx`: only a category split opens
+      `SplitTransactionDetail`; a paycheck / deduction / multi-account group is
+      edited one deposit at a time via the normal single-row
+      `TransactionDetail` + `useUpsertTransaction` (banner "…changes only this
+      deposit"; category/place selects hidden; linked deduction deposits stay
+      read-only). Ledger card relabelled "Paycheck · N deposits"; its breakdown
+      rows are clickable.
+    * `src/lib/data-hooks.ts`: `useSaveSplitTransaction` /
+      `useDeleteSplitTransaction` hard-refuse multi-account / linked groups
+      (`assertCategorySplitGroup`).
+    * Tests: `src/lib/split-groups.test.ts` (11 new, 115 total).
+    * Browser-verified in the TEST household (seeded a 3-account paycheck +
+      a real category split): paycheck card shows "Paycheck · 3 deposits",
+      editing one deposit's amount left the two siblings' accounts+amounts
+      untouched; category split still opens the group editor. All test rows
+      cleaned up.
+  Files: src/lib/split-groups.ts, src/lib/split-groups.test.ts (new),
+  src/lib/data-hooks.ts, src/routes/app.transactions.tsx, docs/DECISIONS.md.
+  - Follow-up filed: Issue #41 "no safe way to un-receive a paycheck".
+  - Manual data repair pending (Steven, "Our Household"): the 2026-08-27
+    "ASRC Federal" paycheck (`split_group_id ca9ac780-…`) — 6 deposits to
+    re-point off USAA Classic Checking, and `income_events.actual_amount`
+    → 3159.37. SQL in the plan file / handed over.
+
 - Budget split lines (Spending / Bills / Debts / Deducted) now carry a small
   receipt icon that jumps to Transactions pre-filtered to the tile's categories,
   the period date range, and linked (bill/debt payments) vs. unlinked (spending).

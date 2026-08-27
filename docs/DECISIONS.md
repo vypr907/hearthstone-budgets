@@ -1308,6 +1308,39 @@ Status: Decided 2026-08-10. Implemented 2026-08-11, with one deviation:
   writes a single deposit into the chosen account. If no account is provided it
   throws a clear error instead of silently marking the event received.
 
+**2026-08-27 addendum — paycheck deposit groups are edited per-row, not as an
+ADR-044 split.** The `split_group_id = income_event.id` deviation makes a
+paycheck's deposits (bank splits + ADR-055 deduction deposits) look like an
+ADR-044 category split to the transactions UI. They are not: they span
+accounts, carry no `category_id`, and deduction-funded rows carry
+`linked_bill_id`/`linked_debt_id` (ADR-068). Editing one through
+`SplitTransactionDetail` ran `useSaveSplitTransaction`'s delete-all +
+re-insert-onto-one-account path and collapsed the whole paycheck onto the
+edited row's account (real incident: the 2026-08-27 "ASRC Federal" paycheck).
+
+- `src/lib/split-groups.ts` `classifyLedgerGroup(rows, groupId, incomeEventIds)`
+  → `category-split` only when the id is **not** an `income_events.id`, every
+  row shares one `account_id`, and no row is bill/debt-linked; else `paycheck`
+  or `linked-or-multi`.
+- `TransactionDetail` (`src/routes/app.transactions.tsx`) routes to
+  `SplitTransactionDetail` only for `category-split`. Anything else uses the
+  normal single-row view + `useUpsertTransaction` — amount / account / date /
+  status editable on a plain deposit; a deduction-funded (linked) deposit stays
+  read-only and points at its bill/debt (existing `isLinked` handling). The
+  category / place selects are hidden for a `split_group_id` row.
+- `useSaveSplitTransaction` / `useDeleteSplitTransaction`
+  (`src/lib/data-hooks.ts`) hard-refuse (via `assertCategorySplitRows`) any
+  group that spans >1 account or contains a linked row — defense in depth.
+- Ledger card label for a paycheck group: **"Paycheck · N deposits"**; its
+  breakdown rows are individually clickable.
+- The "mark received" idempotency check still keys on the existence of *any*
+  `transactions` row with `split_group_id = event.id` — editing or deleting a
+  subset of deposits will not trigger re-posting; delete every row to allow a
+  clean re-run (a dedicated un-receive action is tracked separately).
+
+Cross-ref: ADR-044 (category splits), ADR-055 / ADR-068 (deduction deposits).
+No schema change.
+
 ## ADR-048: Invoices as one-time charges with optional payment plans
 Decision:
 `debt_type = 'invoice'` is modelled as a real dated charge rather than a

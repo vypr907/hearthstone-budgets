@@ -20,6 +20,7 @@ import {
   type ExportFormat,
 } from "./supabase";
 import { advanceDate, needsEnvelope } from "./format";
+import { assertCategorySplitRows } from "./split-groups";
 import { useAuth } from "./auth-context";
 import { advanceMinimumPaymentPatch, advanceReactivationPatch } from "./payments";
 import { nextPayDate } from "./paycheck-budget";
@@ -598,6 +599,23 @@ export function useDeleteLinkedTransaction() {
 export type SplitLine = { categoryId: string | null; amount: number };
 
 /**
+ * ADR-047 addendum: refuse a whole-group split write against anything that
+ * isn't a genuine ADR-044 category split. Paycheck/deduction deposits and
+ * payment+fee groups also share a split_group_id but span accounts / carry
+ * linked rows — the delete-all + re-insert-onto-one-account path would corrupt
+ * them. Defense in depth: the transactions UI already routes those away from
+ * the group editor.
+ */
+async function assertCategorySplitGroup(splitGroupId: string) {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("account_id, linked_bill_id, linked_debt_id")
+    .eq("split_group_id", splitGroupId);
+  if (error) throw error;
+  assertCategorySplitRows(data ?? []);
+}
+
+/**
  * ADR-044: write one transactions row per split line, all sharing a single
  * split_group_id. Editing replaces the whole group (delete + re-insert) rather
  * than diffing individual lines. Split rows are never linked to a bill, debt
@@ -618,6 +636,7 @@ export function useSaveSplitTransaction() {
     }) => {
       const groupId = args.splitGroupId ?? crypto.randomUUID();
       if (args.splitGroupId) {
+        await assertCategorySplitGroup(args.splitGroupId);
         const { error } = await supabase
           .from("transactions")
           .delete()
@@ -655,6 +674,7 @@ export function useDeleteSplitTransaction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (splitGroupId: string) => {
+      await assertCategorySplitGroup(splitGroupId);
       const { error } = await supabase
         .from("transactions")
         .delete()
