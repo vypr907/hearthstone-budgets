@@ -120,3 +120,14 @@
   change. Typecheck clean.
 
 - Debt detail: "Total owed" is now capped at the debt's remaining_balance so past-due arrears can't roll the figure above what is actually outstanding (Alpine Medical - Steven showed $76 against a $38 balance). Presentation-only change in `src/routes/app.debts.tsx`; bills (no balance column) unchanged.
+
+- Deduction-funded bills/debts (ADR-068 addendum) now derive as Cleared. The
+  deduction posts a positive deposit into its destination account, which the
+  ADR-036 signed netting treated as a refund, so TSP Loan / TSP Loan 2 /
+  401k Loan 1 read UNPAID despite the 8/17 paycheck deduction. `deriveCycleInfo`
+  now counts a funded payable's own `Deduction: …` deposit rows by magnitude;
+  reversals keep signed behaviour. Derivation only — account credit and debt
+  balance reduction were already correct, no schema or data change.
+  Files: `src/lib/ledger-state.ts`, `src/lib/ledger-state.test.ts` (3 new tests,
+  104 total, all green). Verified live: both TSP loans now derive `cleared`.
+
