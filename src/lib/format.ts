@@ -7,6 +7,29 @@ export function formatMoney(n: number | null | undefined): string {
   }).format(v);
 }
 
+/** "August 2026" from a "YYYY-MM" or "YYYY-MM-DD" key. */
+export function monthLabel(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** "Jul 21 – Aug 21, 2026" — the date range a cycle / pay period covers. */
+export function formatWindow(start: string | null, end: string | null): string {
+  if (!start || !end) return "—";
+  const fmt = (iso: string, withYear: boolean) => {
+    const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      ...(withYear ? { year: "numeric" } : {}),
+    });
+  };
+  return `${fmt(start, start.slice(0, 4) !== end.slice(0, 4))} – ${fmt(end, true)}`;
+}
+
 export function isOverdue(dueDay: number | null | undefined, status: string | null | undefined) {
   if (!dueDay) return false;
   if (status === "paid" || status === "cleared") return false;

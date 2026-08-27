@@ -18,7 +18,7 @@ import {
   useUpsertSpendingBudget,
 } from "@/lib/data-hooks";
 import { billsBudgetedByCategory, buildActualResolver } from "@/lib/spending-actuals";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, monthLabel } from "@/lib/format";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -87,14 +87,6 @@ type Row = {
   color: string;
 };
 
-
-function monthLabel(key: string) {
-  const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
-}
 
 function SpendingPage() {
   const navigate = useNavigate();

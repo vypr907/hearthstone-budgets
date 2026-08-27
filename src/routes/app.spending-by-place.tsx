@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { itemColor } from "@/components/viz";
 import { useInstitutions, useTransactions } from "@/lib/data-hooks";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, monthLabel } from "@/lib/format";
 
 export const Route = createFileRoute("/app/spending-by-place")({
   head: () => ({
@@ -43,13 +43,6 @@ function shiftMonth(month: string, delta: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function monthLabel(month: string) {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(y!, (m ?? 1) - 1, 1).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-}
 
 /**
  * ADR-053: transactions carry the place they happened at, so spending can be
