@@ -50,3 +50,38 @@
   src/components/CycleMonthStepper.tsx, src/routes/app.debts.tsx,
   src/routes/app.bills.tsx, src/routes/app.spending.tsx,
   src/routes/app.spending-by-place.tsx, src/lib/ledger-state.test.ts, docs/*.
+
+- 2026-08-27 — SCRATCHPAD "Things to work on" #3 (Advance debt bug) + #2
+  (account/card number). ADR-056 addendum + ADR-021 addendum. No schema change.
+  Browser-verified against the TEST household (login via `.env.test`, all test
+  rows cleaned up); tsc + build + 96 tests green.
+  #3 — `src/routes/app.debts.tsx` `DebtDialog`:
+    * advance-type debts show **Remaining balance** + **Minimum payment**
+      disabled with helper text; on create they seed 0/0, on edit the form
+      omits `remaining_balance` / `minimum_payment` / `date_paid_off` from the
+      UPDATE entirely — a stale detail snapshot can no longer clobber a live
+      draw (the actual data-loss path on "Dave ExtraCash").
+    * `isPaidOff()` now treats an advance as paid off only when `date_paid_off`
+      is set (advances sit at $0 between draws); other debt types unchanged.
+    * creating any debt with no starting AND no remaining balance no longer
+      stamps `date_paid_off`.
+    * blank interest rate / minimum payment now write `0` not `null` — both
+      columns are NOT NULL, so a no-rate debt never saved before (pre-existing
+      bug surfaced while testing the advance flow).
+  #2 — "Account / card number" field added to `AccountDialog` bound to the
+    existing `accounts.account_number` column; `src/routes/app.accounts.tsx`
+    shows `···1234` after the account name; pickers/pills already used
+    `accountLast4`/`accountLabel`.
+  Files: src/routes/app.debts.tsx, src/components/AccountDialog.tsx,
+  src/routes/app.accounts.tsx, docs/DECISIONS.md, docs/SCHEMA.md,
+  docs/SCRATCHPAD.md. Issues: #37 (advance bug), #36 (ownership follow-up).
+  - Known follow-up: SCRATCHPAD #1 / Issue #36 (account ownership "mine vs
+    hers", exclude other member's accounts from spendable + net worth) —
+    designed in the plan, not built. Needs new ADR-088 +
+    `accounts.owner_member_id` migration.
+  - Manual data fix pending (Steven, "Our Household"): restore "Dave ExtraCash"
+    (`da042cbb-…`) to `remaining_balance`/`minimum_payment` = 50, `date_paid_off`
+    = null. SQL in Issue #37 / the plan file.
+  - Known cosmetic (not fixed): the debt-detail panel still shows an empty $0
+    advance's cycle as "Cleared" (ADR-036/085 ledger-derived state); harmless,
+    resolves once a draw is recorded.

@@ -52,8 +52,18 @@ Show me the diffs for all three files before finalizing.
 
 # Things to work on
 - so right now, I don't have visibility on transactions on my wife's accounts, nor a way in-app to denote an account as mine or hers. This currently leads to inflation of numbers in the checking/spendable areas, and need to figure out a way to resolve this
-- right now I have institutions, and accounts. Accounts have been the place holder representing both the account and the card associated with it. Worth adding something to track cards attached to an account? If not, I need something to be able to add a card number to an account, so that labels like "<institute>: <account> - <last 4 of acct number>" will work correctly
-- I tried to add a Debt (type: Advance) to Dave, so that I can track advances, but because I added the debt at zero balance, it's showing debt paid, and the advance I added is not reflecting in the any of the balances
+  - PLANNED (not built): `accounts.owner_member_id` FK → household_members
+    (null = joint); "Belongs to" picker in AccountDialog; the other member's
+    accounts drop out of the combined spendable total AND net worth; ledger
+    stays household-wide. Needs new ADR-088 + migration + `useCurrentMember()`
+    hook + `spendableContribution()` / `net-worth.ts` filter. See GitHub Issue.
+- ~~card/account number on accounts~~ DONE 2026-08-27 (ADR-021 addendum) —
+  "Account / card number" field added to AccountDialog; `accounts.account_number`
+  already existed. No `cards` table (an account still stands in for its card).
+- ~~Debt (type: Advance) added at zero balance shows paid / advance not in
+  balances~~ DONE 2026-08-27 (ADR-056 addendum) — advance balance/min-payment
+  now form-read-only, form never stamps an advance paid-off, and a 0/0 new debt
+  of any type stays active. Manual data fix for "Dave ExtraCash" still pending.
 ---
 
 ## Idea: smarter institution_type for inline-created merchants (Add Transaction)

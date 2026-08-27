@@ -12,7 +12,7 @@ import {
   useLogBalance,
   useTransactions,
 } from "@/lib/data-hooks";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, accountLast4 } from "@/lib/format";
 import { computeBalances } from "@/lib/balances";
 import { groupLedgerRows } from "@/lib/split-groups";
 
@@ -219,7 +219,14 @@ function AccountsPage() {
                       fallback="🏛️"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{a.name}</p>
+                      <p className="truncate font-medium">
+                        {a.name}
+                        {accountLast4(a.account_number) ? (
+                          <span className="ml-1 font-normal text-muted-foreground">
+                            •••{accountLast4(a.account_number)}
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="truncate text-xs text-muted-foreground">
                         {a.account_type || "Account"}
                         {b?.asOf
