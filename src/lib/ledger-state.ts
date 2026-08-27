@@ -105,6 +105,25 @@ export function deriveCycleInfo(
         return !!d && d >= monthStart && d <= monthEnd;
       };
 
+      // ADR-068 addendum: a deduction-funded payable is settled by the *deposit*
+      // row the deduction writes into its destination account (e.g. a TSP loan
+      // repayment lands as money INTO the TSP account). That row is positive,
+      // so the normal `-amount` netting below read it as a refund and the cycle
+      // stayed UNPAID. For such payables, the deduction's own deposit rows count
+      // by magnitude; every other row (including a `Reversed: …` correction)
+      // keeps the signed behaviour so reversals still cancel payments.
+      const fundingDeductionId =
+        (p.kind === "bill" ? p.bill?.funding_deduction_id : p.debt?.funding_deduction_id) ??
+        null;
+      const isDeductionDeposit = (t: Transaction) =>
+        !!fundingDeductionId &&
+        Number(t.amount ?? 0) > 0 &&
+        (t.description ?? "").trim().toLowerCase().startsWith("deduction:");
+      /** Signed contribution of a transaction toward the amount paid this cycle. */
+      const paidBy = (t: Transaction) =>
+        isDeductionDeposit(t) ? Math.abs(Number(t.amount ?? 0)) : -Number(t.amount ?? 0);
+
+
       // ADR-048: a one-time charge (invoice) has no rolling window — every
       // linked payment belongs to its single, open cycle. Windowing it by
       // due-date left invoice payments outside the range, so the Everything
@@ -161,7 +180,7 @@ export function deriveCycleInfo(
           0,
           prev
             .filter((t) => t.status === "cleared")
-            .reduce((s, t) => s - Number(t.amount ?? 0), 0),
+            .reduce((s, t) => s + paidBy(t), 0),
         );
         if (prev.length > 0 && due > 0 && clearedPrev + 0.005 >= due) {
           cycleTx = prev;
@@ -183,7 +202,7 @@ export function deriveCycleInfo(
         0,
         cycleTx
           .filter((t) => t.status === "cleared")
-          .reduce((s, t) => s - Number(t.amount ?? 0), 0),
+          .reduce((s, t) => s + paidBy(t), 0),
       );
 
       let state: LedgerState = "unpaid";

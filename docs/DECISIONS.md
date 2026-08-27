@@ -2211,6 +2211,22 @@ Status: Decided 2026-08-18. Ready to implement — SQL above plus the earlier
 `funding_deduction_id` columns on `bills`/`debts` can be run together in the SQL Editor as
 one BEGIN...COMMIT block.
 
+### Addendum 2026-08-27: sign convention for deduction-funded payments
+
+Decision: In `deriveCycleInfo` (ADR-036), a payable with `funding_deduction_id`
+counts its deduction's own deposit rows (positive amount, description starting
+`Deduction:`) by magnitude instead of the usual `-amount` netting.
+
+Reason: A deduction-funded repayment is written as the *deposit* into the
+deduction's destination account (a TSP loan repayment is money INTO the TSP
+account), so it is stored positive. Signed netting read it as a refund and both
+TSP loans stayed UNPAID on Payment Schedule / Everything even though the account
+was credited and `applyClearedPayment` had already reduced the balance and set
+`payment_status = 'cleared'`. Other rows keep signed behaviour so a positive
+`Reversed: …` row still cancels the payment it reverses.
+
+Status: Decided 2026-08-27. Implemented (derivation only; no schema or data change).
+
 
 ## ADR-069: Ad-Hoc Income Category
 
