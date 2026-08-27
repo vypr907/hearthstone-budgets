@@ -33,7 +33,7 @@ import {
 } from "@/lib/monthly-summary";
 import { todayISO } from "@/lib/snapshot";
 import { billRemainingOwed, debtRemainingOwed, toPayable } from "@/lib/payments";
-import { computeArrears } from "@/lib/arrears";
+import { computeArrears, priorArrearsSummary } from "@/lib/arrears";
 import { deductionFundingLabel, pastDueGroup, type PastDueGroup } from "@/lib/deduction-funding";
 import { useHouseholdDeductions } from "@/lib/income-hooks";
 
@@ -536,35 +536,49 @@ function Dashboard() {
 
   // ADR-049: overdue is a money figure — missed cycles plus carried-in arrears —
   // so an item months behind reads as more than one cycle's amount.
+  // ADR-049 addendum: `priorArrearsSummary` counts only cycles from before this
+  // calendar month — the current cycle shows separately under "Still owed this
+  // period" (ADR-080), so counting it here too would double it on the Dashboard.
+  // The isDateOverdue fallback is kept only for the case where the arrears walk
+  // produced nothing (e.g. no next_due_date) — gated on `cyclesMissed === 0` so
+  // it never re-adds a current cycle that priorArrearsSummary deliberately left out.
   // ADR-082: `group` is the Past Due bucket — paycheck_deduction / hsa_fsa
   // (auto-settled off a paycheck) or other (an ordinary bill/debt to pay).
   const overdue = [
     ...bills.map((b) => {
-      const arrears = computeArrears(toPayable("bill", b));
+      const prior = priorArrearsSummary(toPayable("bill", b));
+      const noWalk = computeArrears(toPayable("bill", b)).cyclesMissed === 0;
       return {
         id: `bill-${b.id}`,
         name: b.name,
-        amount: arrears.amountOverdue || (isDateOverdue(b.next_due_date, b.payment_status) ? billRemainingOwed(b) : 0),
-        cycles: arrears.cyclesMissed,
-        due_date: arrears.oldestMissedDate ?? b.next_due_date?.slice(0, 10) ?? "",
+        amount:
+          prior.amount ||
+          (noWalk && isDateOverdue(b.next_due_date, b.payment_status) ? billRemainingOwed(b) : 0),
+        cycles: prior.cycles,
+        due_date: prior.oldestMissedDate ?? b.next_due_date?.slice(0, 10) ?? "",
         kind: "Bill" as const,
         funding: deductionFundingLabel(b.funding_deduction_id, householdDeductions),
         group: pastDueGroup(b, householdDeductions),
       };
     }),
     ...debts.map((d) => {
-      const arrears = computeArrears(toPayable("debt", d));
+      const prior = priorArrearsSummary(toPayable("debt", d));
       // A paid-off debt (remaining_balance <= 0) must never fall through to
       // the isDateOverdue fallback below — that check only looks at
       // payment_status, which can be stale ("unpaid") on a debt that's
       // actually been paid off, making it wrongly reappear as past due.
       const paidOff = Number(d.remaining_balance ?? 0) <= 0;
+      const noWalk = computeArrears(toPayable("debt", d)).cyclesMissed === 0;
       return {
         id: `debt-${d.id}`,
         name: d.name,
-        amount: arrears.amountOverdue || (!paidOff && isDateOverdue(debtDueDate(d), d.payment_status) ? debtRemainingOwed(d) : 0),
-        cycles: arrears.cyclesMissed,
-        due_date: arrears.oldestMissedDate ?? debtDueDate(d) ?? "",
+        amount:
+          prior.amount ||
+          (noWalk && !paidOff && isDateOverdue(debtDueDate(d), d.payment_status)
+            ? debtRemainingOwed(d)
+            : 0),
+        cycles: prior.cycles,
+        due_date: prior.oldestMissedDate ?? debtDueDate(d) ?? "",
         kind: "Debt" as const,
         funding: deductionFundingLabel(d.funding_deduction_id, householdDeductions),
         group: pastDueGroup(d, householdDeductions),

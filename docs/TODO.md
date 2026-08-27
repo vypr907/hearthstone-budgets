@@ -20,3 +20,10 @@ not tasks:
 - **No guard against two Set Aside entries for the same bill in one month** was
   the state before 2026-08-26; now resolved as *warn-and-allow* (ADR-038
   addendum). Kept here as a pointer.
+- **Monthly-debt arrears recover at most ONE missed prior month** (ADR-049
+  addendum, `arrearsWalkStart`). A monthly debt's `due_day` is recomputed inside
+  the current calendar month with no history, so `computeArrears` can only infer
+  a single just-missed prior cycle from the row's current state. A debt two or
+  more months behind under-reports until each due day passes. A full fix needs
+  `computeArrears` to read the linked transaction ledger — a larger signature
+  change, deferred as its own task.

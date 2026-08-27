@@ -20,3 +20,15 @@
   editable"); override confirm dialog reworded to say the override is that-month-
   only and reversible via the pencil. ADR-041 addendum. No behaviour change.
   Files: src/routes/app.spending.tsx, docs/DECISIONS.md.
+
+- 2026-08-27 — Fix 2 (PR): Dashboard "Past due" + `PastDueBadge` now use new
+  `priorArrearsSummary()` (arrears from cycles before the current calendar month
+  only) instead of `computeArrears().amountOverdue` — the current cycle also
+  shows under "Still owed this period" (ADR-080), so counting it in both
+  double-counted (up to ~2–3× for an item a month behind). `computeArrears`
+  itself unchanged (still the payoff/repair figure + all payment math). Also
+  added `arrearsWalkStart()`: a monthly debt's missed prior-month cycle no longer
+  silently vanishes from arrears (one-month lookback; deeper misses need the
+  ledger — docs/TODO.md). ADR-049 addendum + ADR-080 note. 94 tests (88 + 6).
+  Files: src/lib/arrears.ts, src/components/PastDueBadge.tsx,
+  src/routes/app.index.tsx, src/lib/arrears.test.ts, docs/*.
