@@ -32,3 +32,21 @@
   ledger — docs/TODO.md). ADR-049 addendum + ADR-080 note. 94 tests (88 + 6).
   Files: src/lib/arrears.ts, src/components/PastDueBadge.tsx,
   src/routes/app.index.tsx, src/lib/arrears.test.ts, docs/*.
+
+- 2026-08-27 — Fix 1 (PR, stacked on Fix 2): historical-month cycle inspection.
+  `useCycleState(refDate?)` (default = today, all call sites unchanged). Shared
+  `CycleMonthStepper` on Bills + Debts detail (monthly items only; non-monthly
+  get a muted "not available" line). Stepping to a past month re-derives the
+  panel's cycle state / window / month-scoped transaction list; `refDate ≠ today`
+  hides Sync-stored-status, PayActions/ArrearsPaymentAction/SetAsideAction
+  (replaced with a Correct/Reverse pointer), keeps Log-a-payment / adjustments /
+  per-tx actions. **Bills detail brought to ADR-085 parity** (was showing raw
+  `payment_status`; now derives, with a `stored:` line). Added a right-now
+  "Still owed / Past due / Total owed" rollup to both panels. `monthLabel` +
+  `formatWindow` lifted to `src/lib/format.ts` (3 local copies removed).
+  ADR-085 addendum. Browser-verified (login via `.env.test`, both panels, month
+  step, gating, non-monthly). tsc + build + 96 tests (94 + 2 new).
+  Files: src/lib/ledger-state.ts, src/lib/format.ts,
+  src/components/CycleMonthStepper.tsx, src/routes/app.debts.tsx,
+  src/routes/app.bills.tsx, src/routes/app.spending.tsx,
+  src/routes/app.spending-by-place.tsx, src/lib/ledger-state.test.ts, docs/*.

@@ -149,3 +149,32 @@ describe("ADR-075 late-payment cycle tagging", () => {
     expect(i.state).toBe("cleared");
   });
 });
+
+describe("ADR-085 addendum: reference date reconstructs a prior month's cycle", () => {
+  const augPaid = tx(609, "cleared", "aug");
+  const sepPaid: Transaction = {
+    ...tx(609, "cleared", "sep"),
+    transaction_date: "2026-09-04",
+  };
+
+  it("counts only the reference month's transactions and window", () => {
+    const b = rent({ next_due_date: "2026-09-15" });
+    const aug = deriveCycleInfo(toPayable("bill", b), [augPaid, sepPaid], "2026-08-15");
+    expect(aug.state).toBe("cleared");
+    expect(aug.clearedSum).toBe(609);
+    expect(aug.windowStart).toBe("2026-08-01");
+    expect(aug.windowEnd).toBe("2026-08-31");
+    expect(aug.transactions.map((t) => t.id)).toEqual(["aug"]);
+
+    const sep = deriveCycleInfo(toPayable("bill", b), [augPaid, sepPaid], "2026-09-15");
+    expect(sep.clearedSum).toBe(609);
+    expect(sep.transactions.map((t) => t.id)).toEqual(["sep"]);
+  });
+
+  it("shows a prior month as unpaid when nothing landed in it", () => {
+    const b = rent({ next_due_date: "2026-09-15" });
+    const jul = deriveCycleInfo(toPayable("bill", b), [augPaid, sepPaid], "2026-07-15");
+    expect(jul.state).toBe("unpaid");
+    expect(jul.clearedSum).toBe(0);
+  });
+});

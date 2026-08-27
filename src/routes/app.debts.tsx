@@ -16,12 +16,15 @@ import {
   useDeleteDebtAdjustment,
   useCreateAdvance,
   useDeleteAdvance,
+  shiftMonth,
 } from "@/lib/data-hooks";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
 import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
+import { CycleMonthStepper } from "@/components/CycleMonthStepper";
 
 import { useCycleState } from "@/lib/ledger-state";
+import { priorArrearsSummary } from "@/lib/arrears";
 import { toPayable, useSyncStoredStatus } from "@/lib/payments";
 import { nextPayDate, periodRange, inRange } from "@/lib/paycheck-budget";
 
@@ -34,7 +37,14 @@ import {
   StatusBadge,
   statusVariant,
 } from "@/components/detail";
-import { formatMoney, debtDueDate, accountLabel, shiftDateSafe } from "@/lib/format";
+import {
+  formatMoney,
+  debtDueDate,
+  accountLabel,
+  shiftDateSafe,
+  formatWindow,
+  monthLabel,
+} from "@/lib/format";
 import { useHouseholdDeductions, useIncomeSources, useIncomeEvents } from "@/lib/income-hooks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,7 +70,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
 import { LogDebtPaymentDialog } from "@/components/LogDebtPaymentDialog";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Debt, BillingCycle } from "@/lib/supabase";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
@@ -378,20 +388,6 @@ function DebtsPage() {
   );
 }
 
-/** "Jul 21 – Aug 21, 2026" — the date range a cycle/pay period covers. */
-function formatWindow(start: string | null, end: string | null): string {
-  if (!start || !end) return "—";
-  const fmt = (iso: string, withYear: boolean) => {
-    const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      ...(withYear ? { year: "numeric" } : {}),
-    });
-  };
-  return `${fmt(start, start.slice(0, 4) !== end.slice(0, 4))} – ${fmt(end, true)}`;
-}
-
 /**
  * The primary-paycheck pay period the debt's due date falls into (ADR-059/060
  * periods), or null when there's no primary source / no covering paycheck.
@@ -447,7 +443,19 @@ function DebtDetailDialog({
   const { data: accounts = [] } = useAccounts();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
-  const infoOf = useCycleState();
+
+  // ADR-085 addendum: a month stepper to inspect a prior cycle in place. Only
+  // monthly items reconstruct faithfully (calendar-month window); non-monthly
+  // windows hang off the mutable next_due_date, so they don't get the stepper.
+  const [monthOffset, setMonthOffset] = useState(0);
+  useEffect(() => setMonthOffset(0), [debt?.id]);
+  const monthly = debt ? isMonthlyCycle(debt) : true;
+  const isCurrentView = monthOffset === 0;
+  // shiftMonth returns "YYYY-MM-01"; the stepper works in "YYYY-MM".
+  const targetMonthKey = shiftMonth(todayISO().slice(0, 7), monthOffset).slice(0, 7);
+  const refDate = !isCurrentView && monthly ? `${targetMonthKey}-15` : undefined;
+  const infoOf = useCycleState(refDate);
+
   const category = categories.find((c) => c.id === debt?.category_id);
   const account = accounts.find((a) => a.institution_id === debt?.institution_id);
 
@@ -461,8 +469,15 @@ function DebtDetailDialog({
   // happens to count transactions in.
   const billingWindow = debt ? billingPeriodFor(debt) : null;
   const syncStatus = useSyncStoredStatus();
+  // Only meaningful for the true current cycle — the stored columns are always
+  // "now", never a historical month.
   const storedDiffers =
-    !!debt && !!cycle && (debt.payment_status || "unpaid") !== cycle.state;
+    isCurrentView && !!debt && !!cycle && (debt.payment_status || "unpaid") !== cycle.state;
+
+  // ADR-049 addendum: prior-month arrears + a "total owed" rollup, shown only in
+  // the current view (they're a right-now figure, not a historical one).
+  const prior = debt ? priorArrearsSummary(toPayable("debt", debt)) : { amount: 0 };
+  const showRollup = isCurrentView && !!cycle && prior.amount > 0.005;
 
   const open = debt !== null;
   if (!debt || !cycle) return null;
@@ -476,6 +491,17 @@ function DebtDetailDialog({
           <DialogTitle>{debt.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {monthly ? (
+            <CycleMonthStepper
+              monthOffset={monthOffset}
+              onChange={setMonthOffset}
+              targetMonthKey={targetMonthKey}
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Historical cycle view isn't available for non-monthly items.
+            </p>
+          )}
           <DetailGrid>
             <DetailItem label="Category" value={category?.name ?? "—"} />
             <DetailItem label="Debt type" value={debt.debt_type ? formatTypeLabel(debt.debt_type) : "—"} />
@@ -489,6 +515,12 @@ function DebtDetailDialog({
             <DetailMoney label="Minimum payment" value={debt.minimum_payment} />
             <DetailMoney label="Paid this cycle" value={cycle.clearedSum} />
             <DetailMoney label="Still owed this cycle" value={cycle.remaining} />
+            {showRollup ? (
+              <>
+                <DetailMoney label="Past due (earlier cycles)" value={prior.amount} />
+                <DetailMoney label="Total owed" value={cycle.remaining + prior.amount} />
+              </>
+            ) : null}
 
             {/* ADR-048: payment-plan shape, only meaningful when one is set. */}
             {debt.plan_payment_count != null ? (
@@ -625,11 +657,21 @@ function DebtDetailDialog({
           </DetailGrid>
 
           <DetailText label="Notes" value={debt.notes} />
-          <PayActions payable={toPayable("debt", debt)} />
+          {isCurrentView ? (
+            <PayActions payable={toPayable("debt", debt)} />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Submit / Clear apply to the current cycle. To change a payment in{" "}
+              {monthLabel(targetMonthKey)}, use its Correct or Reverse action below.
+            </p>
+          )}
           <LogDebtPaymentDialog debt={debt} />
           <PastDueEditor debt={debt} />
 
-          <RecentDebtTransactions debt={debt} />
+          <RecentDebtTransactions
+            debt={debt}
+            month={isCurrentView ? undefined : targetMonthKey}
+          />
 
           <DebtAdjustments debt={debt} />
 
@@ -1260,26 +1302,33 @@ function DebtDialog({
 }
 
 
-/** Last 10 ledger rows linked to this debt, newest first. */
-function RecentDebtTransactions({ debt }: { debt: Debt }) {
+/**
+ * Ledger rows linked to this debt, newest first. Default: last 10 ("Recent").
+ * `month` ("YYYY-MM", ADR-085 addendum): scope to that calendar month instead,
+ * for correcting a payment while the detail panel views a prior cycle.
+ */
+function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string }) {
   const debtId = debt.id;
   const { data: transactions = [] } = useTransactions();
   const del = useDeleteLinkedTransaction();
 
-  const rows = useMemo(
-    () =>
-      transactions
-        .filter((t) => t.linked_debt_id === debtId)
-        .sort((a, b) => (b.transaction_date ?? "").localeCompare(a.transaction_date ?? ""))
-        .slice(0, 10),
-    [transactions, debtId],
-  );
+  const rows = useMemo(() => {
+    const linked = transactions
+      .filter((t) => t.linked_debt_id === debtId)
+      .sort((a, b) => (b.transaction_date ?? "").localeCompare(a.transaction_date ?? ""));
+    if (month) return linked.filter((t) => (t.transaction_date ?? "").slice(0, 7) === month);
+    return linked.slice(0, 10);
+  }, [transactions, debtId, month]);
 
   return (
     <div>
-      <SectionLabel>Recent transactions</SectionLabel>
+      <SectionLabel>
+        {month ? `Transactions · ${monthLabel(month)}` : "Recent transactions"}
+      </SectionLabel>
       {rows.length === 0 ? (
-        <EmptyState className="mt-1 py-2 text-left">No payments logged yet.</EmptyState>
+        <EmptyState className="mt-1 py-2 text-left">
+          {month ? "No transactions this month." : "No payments logged yet."}
+        </EmptyState>
       ) : (
         <div className="mt-1 divide-y divide-border/50">
           {rows.map((t) => (

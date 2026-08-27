@@ -225,12 +225,21 @@ export function deriveCycleInfo(
   }
 }
 
-export function useCycleState() {
+/**
+ * ADR-085 addendum: `refDate` lets a detail screen re-derive a prior cycle's
+ * state (a month stepper on Bills/Debts detail). It defaults to the real today,
+ * so every existing call site is unchanged. `deriveCycleInfo` is already a pure
+ * function of its reference date; only monthly items reconstruct a past cycle
+ * faithfully (calendar-month window) — non-monthly windows hang off the mutable
+ * `next_due_date` and can't be walked back, so callers only expose the stepper
+ * for monthly items.
+ */
+export function useCycleState(refDate?: string) {
   const { data: transactions = [] } = useTransactions();
   return useMemo(() => {
-    const today = todayISO();
+    const today = refDate ?? todayISO();
     return (p: Payable) => deriveCycleInfo(p, transactions, today);
-  }, [transactions]);
+  }, [transactions, refDate]);
 }
 
 /** Convenience wrapper for callers that only need the state name. */
