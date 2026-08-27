@@ -7,3 +7,27 @@
   docs/CHANGELOG.md + docs/CONTEXT.md for detail. Open verification issues
   #4–#8 assigned to it; #9–#10 left unmilestoned (cross-cutting tech-debt).
   Currently 16 closed / 5 open (76%). GitHub-only change, no code.
+
+- 2026-08-27 — Verified (3 Explore agents + live DB): the app never auto-creates
+  a balance snapshot (manual "Save snapshot" on Accounts only), and nothing is
+  written automatically on a calendar-month rollover — every cycle/arrears/​
+  spending figure is derived at render. The only persistent freeze is
+  `spending_actuals.is_manual_override` (manual cell edits). Plan approved to
+  fix three rough edges the check surfaced.
+
+- 2026-08-27 — Fix 3 (PR): `app.spending.tsx` "Start new month" toast no longer
+  says "<month> locked in" ("Now budgeting <next> · earlier months stay
+  editable"); override confirm dialog reworded to say the override is that-month-
+  only and reversible. ADR-041 addendum. Copy only.
+
+- 2026-08-27 — Fix 2 (PR): Dashboard "Past due" + `PastDueBadge` now use new
+  `priorArrearsSummary()` (arrears from cycles before the current calendar month
+  only) instead of `computeArrears().amountOverdue` — the current cycle also
+  shows under "Still owed this period" (ADR-080), so counting it in both
+  double-counted (up to ~2–3× for an item a month behind). `computeArrears`
+  itself unchanged (still the payoff/repair figure + all payment math). Also
+  added `arrearsWalkStart()`: a monthly debt's missed prior-month cycle no longer
+  silently vanishes from arrears (one-month lookback; deeper misses need the
+  ledger — docs/TODO.md). ADR-049 addendum + ADR-080 note. 94 tests (88 + 6).
+  Files: src/lib/arrears.ts, src/components/PastDueBadge.tsx,
+  src/routes/app.index.tsx, src/lib/arrears.test.ts, docs/*.

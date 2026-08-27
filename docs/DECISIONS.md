@@ -1343,6 +1343,42 @@ and the manual carry-in covers items that were already behind on day one.
 
 Status: Decided 2026-08-11. Implemented.
 
+### ADR-049 addendum (2026-08-27): "past due" display is prior-months-only; monthly-debt one-month lookback
+
+Two problems surfaced when the calendar rolls into a new month:
+
+1. **Double-count on the Dashboard.** `computeArrears().amountOverdue` folds the
+   current cycle's own remainder into the total once its due date has passed —
+   correct as a "total to get fully current" / payoff figure, but the current
+   cycle *also* shows under "Still owed this period" (ADR-080), so the Dashboard
+   was adding the same cycle twice (up to ~$2–3× the real figure for an item a
+   month or more behind). New `priorArrearsSummary(p)` runs the same walk with
+   its reference date clamped to the **first of the current calendar month**, so
+   it returns arrears from cycles that belong to a *prior* month only. The
+   Dashboard "Past due" card and `PastDueBadge` now use it; `computeArrears`
+   itself is unchanged and stays the payoff/repair figure used on the detail
+   panel and by all payment math. An item still appears in both "Past due" and
+   "Still owed this period" — the two are meant to be additive (a missed August
+   cycle + a live September cycle = two months genuinely owed). Residual edge:
+   for a mid-month due date viewed early in the following month, before that
+   month's due date and outside the current pay period, the prior cycle can
+   still show in both lists briefly; it self-corrects once the due date passes,
+   and the over-count is far smaller than before.
+
+2. **Monthly-debt arrears vanished.** `debtDueDate()` recomputes `due_day` inside
+   the current calendar month and never looks back, so a monthly debt's missed
+   prior-month cycle left no due-date signal and the walk never counted it.
+   `arrearsWalkStart()` (internal to `arrears.ts`) now steps a monthly debt's
+   walk start back one month when this month's due day is still ahead and the
+   current cycle isn't settled (`payment_status='cleared'` or
+   `cycle_paid_to_date >= minimum_payment`). Bills and non-monthly debts are
+   untouched — their `next_due_date` is a real stored pointer.
+   **Known limit:** recovers at most ONE missed prior month (the debt row has no
+   per-cycle history). A deeper miss needs `computeArrears` to read the linked
+   ledger — tracked in `docs/TODO.md`.
+
+No schema change. Cross-referenced from ADR-080.
+
 ## ADR-050: Obligation avatars and tap-to-reveal budget detail
 Decision:
 1. Bills, Debts and Accounts render a shared `ObligationIcon`: linked
@@ -2654,6 +2690,16 @@ screens pick it up, and that overdue items should keep appearing "every period u
 it's actually paid" rather than being special-cased to only the current period.
 
 Status: Decided 2026-08-22. Implemented 2026-08-22.
+
+### ADR-080 note (2026-08-27, see ADR-049 addendum): interaction with "Past due"
+
+Keeping an overdue item in "due this period" overlapped with the Dashboard's
+"Past due" card, which counted the *same* cycle again via
+`computeArrears().amountOverdue` (it folds the current cycle in). The Dashboard
+"Past due" total now uses `priorArrearsSummary()` — prior calendar months only —
+so an overdue item shows in both "Still owed this period" (its current cycle) and
+"Past due" (its earlier missed cycles) without the shared cycle being counted
+twice. ADR-080's list-membership rule here is unchanged.
 
 ## ADR-081: Auto-Transfer Tracking (Recurring Transfers with Due-Date Reminder)
 Decision:
