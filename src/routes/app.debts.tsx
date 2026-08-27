@@ -535,7 +535,7 @@ function DebtDetailDialog({
             {showRollup ? (
               <>
                 <DetailMoney label="Past due (earlier cycles)" value={prior.amount} />
-                <DetailMoney label="Total owed" value={cycle.remaining + prior.amount} />
+                <DetailMoney label="Total owed" value={totalOwed} />
               </>
             ) : null}
 
