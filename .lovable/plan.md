@@ -25,6 +25,12 @@ This affects every deduction-funded bill/debt, not just the two TSP loans
 
 ## Fix
 
+Both halves of "credit the account, reduce the debt" already happen today and
+stay unchanged: the deduction posts a positive deposit into its destination
+account (credit), and the auto-pay calls `applyClearedPayment`, which reduced
+the TSP balances and set `payment_status = 'cleared'`. The only thing broken is
+the *derived* status shown on screen.
+
 In `src/lib/ledger-state.ts`, count a linked transaction that is the payable's
 own deduction deposit by its **magnitude** rather than its sign:
 
@@ -37,6 +43,7 @@ own deduction deposit by its **magnitude** rather than its sign:
 - Apply the same treatment in the pending/partial branches and in the
   `resolved` lookback window so a deduction-funded item can also read
   `partial` when the posted amount is short.
+
 
 No data migration is needed: the rows and the stored statuses are already
 correct, only the derivation is wrong.
