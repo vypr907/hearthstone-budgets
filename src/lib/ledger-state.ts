@@ -180,7 +180,7 @@ export function deriveCycleInfo(
           0,
           prev
             .filter((t) => t.status === "cleared")
-            .reduce((s, t) => s - Number(t.amount ?? 0), 0),
+            .reduce((s, t) => s + paidBy(t), 0),
         );
         if (prev.length > 0 && due > 0 && clearedPrev + 0.005 >= due) {
           cycleTx = prev;
@@ -202,7 +202,7 @@ export function deriveCycleInfo(
         0,
         cycleTx
           .filter((t) => t.status === "cleared")
-          .reduce((s, t) => s - Number(t.amount ?? 0), 0),
+          .reduce((s, t) => s + paidBy(t), 0),
       );
 
       let state: LedgerState = "unpaid";
