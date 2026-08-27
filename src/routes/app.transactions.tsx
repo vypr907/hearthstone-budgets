@@ -84,6 +84,8 @@ function TransactionsPage() {
   const [sort, setSort] = useState("date");
   const [groupBy, setGroupBy] = useState("none");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  /** Multi-category drill-down from a parent-category tile (no UI control). */
+  const [categoryIds, setCategoryIds] = useState<string[] | null>(null);
   const [placeFilter, setPlaceFilter] = useState("all");
   const [linkedFilter, setLinkedFilter] = useState("all"); // all | linked | unlinked
   const [dateFrom, setDateFrom] = useState("");
@@ -105,6 +107,13 @@ function TransactionsPage() {
       setCategoryFilter(pre.categoryId);
       setFiltersOpen(true);
     }
+    if (pre.categoryIds?.length) {
+      setCategoryIds(pre.categoryIds);
+      setFiltersOpen(true);
+    }
+    if (pre.linked) setLinkedFilter(pre.linked);
+    if (pre.dateFrom) setDateFrom(pre.dateFrom);
+    if (pre.dateTo) setDateTo(pre.dateTo);
     if (pre.label) setFilterLabel(pre.label);
   }, []);
 
