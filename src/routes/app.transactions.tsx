@@ -239,6 +239,7 @@ function TransactionsPage() {
     setAccount("all");
     setStatus("all");
     setCategoryFilter("all");
+    setCategoryIds(null);
     setPlaceFilter("all");
     setLinkedFilter("all");
     setDateFrom("");
