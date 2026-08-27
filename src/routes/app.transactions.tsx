@@ -185,6 +185,7 @@ function TransactionsPage() {
     status,
     sort,
     categoryFilter,
+    categoryIds,
     placeFilter,
     linkedFilter,
     dateFrom,
