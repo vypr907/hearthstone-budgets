@@ -144,6 +144,8 @@ function TransactionsPage() {
       out = out.filter((t) =>
         categoryFilter === "none" ? !t.category_id : t.category_id === categoryFilter,
       );
+    if (categoryIds?.length)
+      out = out.filter((t) => !!t.category_id && categoryIds.includes(t.category_id));
     if (placeFilter !== "all")
       out = out.filter((t) =>
         placeFilter === "none" ? !t.institution_id : t.institution_id === placeFilter,
