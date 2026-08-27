@@ -159,7 +159,14 @@ function DebtsPage() {
     return m;
   }, [categories]);
 
-  const isPaidOff = (d: Debt) => Number(d.remaining_balance ?? 0) <= 0;
+  // ADR-056 addendum: an advance routinely sits at $0 between draws and is not
+  // "paid off" until the payment flow actually stamps date_paid_off (ADR-066
+  // then reactivates it on the next draw). Every other debt type is paid off
+  // once its balance hits zero.
+  const isPaidOff = (d: Debt) =>
+    d.debt_type === "advance"
+      ? !!d.date_paid_off
+      : Number(d.remaining_balance ?? 0) <= 0;
 
   const rows = useMemo(() => {
     let out = debts;
@@ -754,6 +761,11 @@ function DebtDialog({
   const [nameTouched, setNameTouched] = useState(false);
 
   const isInvoice = debtType === "invoice";
+  // ADR-056 addendum (2026-08-27): an advance's remaining_balance and
+  // minimum_payment are owned by "Record advance" / payments /
+  // advanceMinimumPaymentPatch — this form shows them read-only and never
+  // writes them, so a stale 0 in the form can't wipe a live draw.
+  const isAdvance = debtType === "advance";
 
   const open = debt !== null;
   const isEdit = !!debt?.id;
@@ -862,18 +874,43 @@ function DebtDialog({
     // applyClearedPayment()/useReversePayment() keep it in sync with a real
     // payment — otherwise this screen's own isPaidOff (remaining_balance <= 0)
     // and obligationsInRange()'s date_paid_off check can silently disagree.
+    //
+    // Two carve-outs (ADR-056 addendum 2026-08-27):
+    //  - advance-type debts: date_paid_off is owned by the payment flow +
+    //    advanceReactivationPatch(); this form never stamps or clears it.
+    //  - a brand-new debt with no balance at all is an empty shell, not a
+    //    settled debt — leave it active. Recording an already-paid historical
+    //    debt still works: give it a starting balance.
     let datePaidOff: string | null = debt?.date_paid_off ?? null;
-    if (nextRemaining != null && nextRemaining <= 0) {
-      if (!datePaidOff) {
-        const linkedDates = transactions
-          .filter((t) => t.linked_debt_id === debt?.id)
-          .map((t) => t.transaction_date)
-          .sort();
-        datePaidOff = linkedDates[linkedDates.length - 1] ?? todayISO();
+    const freshEmptyDebt =
+      !isEdit && startingBalance <= 0 && (nextRemaining ?? 0) <= 0;
+    if (!isAdvance && !freshEmptyDebt) {
+      if (nextRemaining != null && nextRemaining <= 0) {
+        if (!datePaidOff) {
+          const linkedDates = transactions
+            .filter((t) => t.linked_debt_id === debt?.id)
+            .map((t) => t.transaction_date)
+            .sort();
+          datePaidOff = linkedDates[linkedDates.length - 1] ?? todayISO();
+        }
+      } else if (nextRemaining != null && nextRemaining > 0) {
+        datePaidOff = null;
       }
-    } else if (nextRemaining != null && nextRemaining > 0) {
-      datePaidOff = null;
     }
+    // ADR-056 addendum: `remaining_balance`, `minimum_payment` and
+    // `date_paid_off` on an advance are owned by "Record advance" / payments /
+    // advanceMinimumPaymentPatch / advanceReactivationPatch — never this form.
+    // On an advance EDIT we omit all three from the update entirely, so a stale
+    // debt snapshot (e.g. the detail dialog was opened at $0, a draw recorded,
+    // then Edit → Save) cannot clobber a live balance. On a new advance we still
+    // have to seed the two NOT NULL columns, at 0.
+    // Both columns are NOT NULL in the DB (minimum_payment has no default), so
+    // for every other debt type a blank field must land as 0, never null.
+    const skipAdvanceLifecycleFields = isAdvance && isEdit;
+    const remainingToWrite = isAdvance
+      ? 0
+      : remainingNum ?? originalNum ?? startingBalance ?? 0;
+    const minPaymentToWrite = isAdvance ? 0 : minPay ? Number(minPay) : 0;
     // ADR-074: an explicit pick always wins; otherwise fall back to the most
     // recent linked-payment transaction's account, same derivation as the
     // backfill script ran once already.
@@ -888,13 +925,20 @@ function DebtDialog({
       await upsert.mutateAsync({
         id: debt?.id,
         name: name.trim(),
-        remaining_balance: remainingNum ?? originalNum,
-        date_paid_off: datePaidOff,
+        // Advance edits: leave remaining_balance / minimum_payment /
+        // date_paid_off untouched (owned elsewhere — see above).
+        ...(skipAdvanceLifecycleFields
+          ? {}
+          : {
+              remaining_balance: remainingToWrite,
+              minimum_payment: minPaymentToWrite,
+              date_paid_off: datePaidOff,
+            }),
         usual_payment_account_id: usualPaymentAccountId2,
         starting_balance: startingBalance,
-        // Interest rate is optional: blank stores null rather than 0.
-        interest_rate: rate.trim() !== "" && Number.isFinite(Number(rate)) ? Number(rate) : null,
-        minimum_payment: minPay ? Number(minPay) : null,
+        // Interest rate is optional; the column is NOT NULL default 0, so a
+        // blank field stores 0 (a null insert is rejected).
+        interest_rate: rate.trim() !== "" && Number.isFinite(Number(rate)) ? Number(rate) : 0,
         due_day: dated ? null : dueDay ? Number(dueDay) : null,
         billing_cycle: cycle.trim().toLowerCase() as BillingCycle,
         cycle_interval_days: intervalDays,
@@ -1105,13 +1149,20 @@ function DebtDialog({
                 type="number"
                 step="0.01"
                 placeholder="Same as starting"
-                value={remaining}
+                value={isAdvance ? String(debt?.remaining_balance ?? 0) : remaining}
+                disabled={isAdvance}
                 onChange={(e) => {
                   setRemainingTouched(true);
                   setRemaining(e.target.value);
                 }}
                 className="h-11"
               />
+              {isAdvance ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Managed automatically — record a draw with "Record advance",
+                  and payments bring it down.
+                </p>
+              ) : null}
             </div>
             <div>
               <Label>Interest rate (%)</Label>
@@ -1130,13 +1181,19 @@ function DebtDialog({
               <Input
                 type="number"
                 step="0.01"
-                value={minPay}
+                value={isAdvance ? String(debt?.minimum_payment ?? 0) : minPay}
+                disabled={isAdvance}
                 onChange={(e) => {
                   setMinPayTouched(true);
                   setMinPay(e.target.value);
                 }}
                 className="h-11"
               />
+              {isAdvance ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Always equals the outstanding advance (ADR-056).
+                </p>
+              ) : null}
             </div>
 
             {cycle === "monthly" ? (

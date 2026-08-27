@@ -188,11 +188,11 @@ accounts (
     name text not null,
     account_type text not null,
     account_subtype text,
-    account_number text,
+    account_number text,          -- full or masked; only last 4 ever displayed. User-editable via AccountDialog (ADR-021 addendum 2026-08-27)
     interest_apy numeric,
     credit_limit numeric,
-    is_spendable boolean default false,
-    include_in_net_worth boolean default true,
+    is_spendable boolean default true,   -- live default is TRUE
+    include_in_net_worth boolean default true,   -- present in DB, not yet referenced in code
     starting_balance numeric default 0,
     notes text,
     created_at timestamptz default now(),

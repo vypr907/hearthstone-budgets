@@ -60,6 +60,7 @@ export function AccountDialog({
   const { data: institutions = [] } = useInstitutions();
   const [name, setName] = useState("");
   const [type, setType] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [starting, setStarting] = useState("");
   const [notes, setNotes] = useState("");
   const [isSpendable, setIsSpendable] = useState(false);
@@ -75,6 +76,7 @@ export function AccountDialog({
     setLastKey(key);
     setName(account?.name ?? "");
     setType(account?.account_type ?? "");
+    setAccountNumber(account?.account_number ?? "");
     setStarting(account?.starting_balance != null ? String(account.starting_balance) : "");
     setNotes(account?.notes ?? "");
     setIsSpendable(account?.is_spendable ?? false);
@@ -93,6 +95,7 @@ export function AccountDialog({
         id: account?.id,
         name: name.trim(),
         account_type: type.trim() ? type.trim().toLowerCase() : null,
+        account_number: accountNumber.trim() || null,
         starting_balance: starting ? Number(starting) : null,
         notes: notes || null,
         is_spendable: isSpendable,
@@ -161,6 +164,20 @@ export function AccountDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label>Account / card number</Label>
+            <Input
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              placeholder="Last 4 is enough — e.g. 1234"
+              inputMode="numeric"
+              autoComplete="off"
+              className="h-11"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Only the last 4 digits are ever shown (e.g. •••1234).
+            </p>
           </div>
           <div>
             <Label>Starting balance</Label>

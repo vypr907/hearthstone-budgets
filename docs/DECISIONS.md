@@ -368,6 +368,18 @@ form simple and avoids accidental data entry.
 
 Status: Decided 2026-07-31. Implemented.
 
+**2026-08-27 addendum — expose `accounts.account_number` too:**
+The account add/edit dialog gains an "Account / card number" text input bound to
+`accounts.account_number` (nullable, stored as `null` when blank, not trimmed of
+digits on write). Same rationale as the original ADR: the column already exists
+(added 2026-07-28) and `accountLast4()` / `accountLabel()` (`src/lib/format.ts`)
+already render only its last 4 digits (`•••1234`) in account pickers and pills —
+there was just no way to enter it. The Accounts screen (`src/routes/app.accounts.tsx`)
+also now shows `···1234` after the account name. Balance logic unchanged. An
+account still represents both the account and its card; no separate `cards`
+table (see `docs/SCRATCHPAD.md` "Things to work on"). Implemented 2026-08-27 in
+`src/components/AccountDialog.tsx` + `src/routes/app.accounts.tsx`.
+
 ## ADR-022: account_type is always stored lowercase
 
 Decision:
@@ -1566,6 +1578,54 @@ defaulting the due date to the next paycheck reflects that directly instead
 of requiring manual upkeep. Scoped to `debt_type='advance'` only — every
 other debt/bill type keeps its existing minimum_payment and due-date
 behavior unchanged.
+
+**2026-08-27 addendum — advance balance is form-read-only; the Add/Edit Debt
+form never stamps an advance paid-off:**
+For `debt_type = 'advance'`, the Add/Edit Debt form (`DebtDialog`,
+`src/routes/app.debts.tsx`) shows **Remaining balance** and **Minimum payment**
+as disabled fields and never writes them — a draw is recorded through "Record
+advance" (`useCreateAdvance`), payments bring the balance down, and
+`advanceMinimumPaymentPatch()` keeps minimum payment mirrored. The form also
+never computes `date_paid_off` for an advance: payoff/reactivation is owned by
+the payment flow + `advanceReactivationPatch()`. On **create** it seeds the two
+NOT NULL columns at `remaining_balance = 0`, `minimum_payment = 0`; on **edit**
+it omits `remaining_balance`, `minimum_payment` and `date_paid_off` from the
+`UPDATE` payload entirely, so a stale debt snapshot (the detail dialog is opened
+at $0, a draw is recorded from inside it, then Edit → Save) cannot clobber the
+live balance.
+
+Also: the Debts list's `isPaidOff(d)` now treats an advance as paid off only
+when `date_paid_off` is actually set — an advance routinely sits at $0 between
+draws and must stay in the active list. Every other debt type is still "paid
+off" the moment `remaining_balance <= 0`.
+
+Separately (all debt types): creating a brand-new debt with no starting balance
+**and** no remaining balance no longer stamps `date_paid_off` — an empty new
+row is an active shell, not a settled debt. Recording an already-paid historical
+debt still works by giving it a starting balance > 0. And because
+`debts.interest_rate` is NOT NULL (default 0) and `debts.minimum_payment` is
+NOT NULL (no default), the form now writes `0` for a blank rate / minimum
+payment instead of `null` — a `null` insert was silently rejected, so a debt
+created without those fields never saved.
+
+Reason:
+A new advance is legitimately created at $0 (the product exists before the first
+draw), but the form's `remaining_balance <= 0 → stamp date_paid_off` sync then
+marked it paid-off and hid it from every aggregate (which key off
+`date_paid_off` / `remaining_balance <= 0`). Worse, re-saving the form later —
+while it still held a stale `0` — wiped a live draw recorded via "Record
+advance" back to $0/paid-off (observed on the "Dave ExtraCash" debt: the $50
+deposit and `debt_adjustments` advance row survived, but `debts.remaining_balance`
+was reset). Making the advance balance untouchable from the form removes the
+whole class of bug; the general empty-debt guard stops the same paid-off stamp
+firing on a just-created shell of any type.
+
+Data fix: existing advance rows corrupted this way (e.g. "Dave ExtraCash") are
+repaired with a manual `UPDATE` setting `remaining_balance` /`minimum_payment`
+back to the sum of their outstanding `debt_adjustments` advances and clearing
+`date_paid_off`.
+
+Status: Decided 2026-08-27. Implemented (`src/routes/app.debts.tsx`).
 
 ---
 
