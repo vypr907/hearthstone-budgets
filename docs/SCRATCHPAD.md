@@ -51,12 +51,10 @@ Show me the diffs for all three files before finalizing.
 
 
 # Things to work on
-- so right now, I don't have visibility on transactions on my wife's accounts, nor a way in-app to denote an account as mine or hers. This currently leads to inflation of numbers in the checking/spendable areas, and need to figure out a way to resolve this
-  - PLANNED (not built): `accounts.owner_member_id` FK → household_members
-    (null = joint); "Belongs to" picker in AccountDialog; the other member's
-    accounts drop out of the combined spendable total AND net worth; ledger
-    stays household-wide. Needs new ADR-088 + migration + `useCurrentMember()`
-    hook + `spendableContribution()` / `net-worth.ts` filter. See GitHub Issue.
+- ~~no way to denote an account as mine vs my wife's; her accounts inflate
+  checking/spendable~~ IN PROGRESS 2026-08-27 (ADR-088, Issue #36) — code done
+  (`accounts.owner_member_id`, "Belongs to" picker, per-viewer spendable +
+  net-worth scoping). Migration below still to run, then browser-test + PR.
 - ~~card/account number on accounts~~ DONE 2026-08-27 (ADR-021 addendum) —
   "Account / card number" field added to AccountDialog; `accounts.account_number`
   already existed. No `cards` table (an account still stands in for its card).

@@ -14,6 +14,7 @@ import {
 } from "@/lib/data-hooks";
 import { formatMoney, accountLast4 } from "@/lib/format";
 import { computeBalances } from "@/lib/balances";
+import { useHouseholdMembers, memberLabel } from "@/lib/household";
 import { groupLedgerRows } from "@/lib/split-groups";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -70,6 +71,7 @@ function AccountsPage() {
   const { data: latest = {} } = useLatestBalances();
   const { data: transactions = [] } = useTransactions();
   const { data: institutions = [] } = useInstitutions();
+  const { data: members = [] } = useHouseholdMembers();
   const [editing, setEditing] = useState<Partial<Account> | null>(null);
   const [logging, setLogging] = useState<Account | null>(null);
   /** Reuses the Transactions screen detail dialog for recent-activity rows. */
@@ -79,8 +81,13 @@ function AccountsPage() {
   const [sort, setSort] = useState<"name" | "current" | "type">("name");
   const [typeFilter, setTypeFilter] = useState("all");
   const [instFilter, setInstFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
 
   const institutionById = useInstitutionIndex(institutions);
+  const memberById = useMemo(
+    () => Object.fromEntries(members.map((m) => [m.id, m])),
+    [members],
+  );
 
 
   const accountTypes = useMemo(
@@ -120,6 +127,12 @@ function AccountsPage() {
           ? out.filter((a) => !a.institution_id)
           : out.filter((a) => a.institution_id === instFilter);
     }
+    if (ownerFilter !== "all") {
+      out =
+        ownerFilter === "joint"
+          ? out.filter((a) => !a.owner_member_id)
+          : out.filter((a) => a.owner_member_id === ownerFilter);
+    }
     if (q.trim()) {
       const t = q.toLowerCase();
       out = out.filter((a) => a.name.toLowerCase().includes(t));
@@ -133,7 +146,7 @@ function AccountsPage() {
         );
       return a.name.localeCompare(b.name);
     });
-  }, [accounts, typeFilter, instFilter, q, sort, balances]);
+  }, [accounts, typeFilter, instFilter, ownerFilter, q, sort, balances]);
 
   return (
     <>
@@ -180,20 +193,38 @@ function AccountsPage() {
           </Select>
         </div>
 
-        <Select value={instFilter} onValueChange={setInstFilter}>
-          <SelectTrigger className="h-11">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All institutions</SelectItem>
-            <SelectItem value="none">No institution</SelectItem>
-            {institutions.map((i) => (
-              <SelectItem key={i.id} value={i.id}>
-                {i.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className={members.length > 1 ? "grid grid-cols-2 gap-2" : ""}>
+          <Select value={instFilter} onValueChange={setInstFilter}>
+            <SelectTrigger className="h-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All institutions</SelectItem>
+              <SelectItem value="none">No institution</SelectItem>
+              {institutions.map((i) => (
+                <SelectItem key={i.id} value={i.id}>
+                  {i.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {members.length > 1 && (
+            <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All owners</SelectItem>
+                <SelectItem value="joint">Joint / shared</SelectItem>
+                {members.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {memberLabel(m)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && rows.length === 0 && (
@@ -229,6 +260,11 @@ function AccountsPage() {
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
                         {a.account_type || "Account"}
+                        {a.owner_member_id
+                          ? ` · ${memberLabel(memberById[a.owner_member_id])}`
+                          : members.length > 1
+                            ? " · joint"
+                            : ""}
                         {b?.asOf
                           ? ` · snapshot ${format(parseISO(b.asOf), "MMM d")}`
                           : " · starting balance"}

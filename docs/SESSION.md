@@ -85,3 +85,24 @@
   - Known cosmetic (not fixed): the debt-detail panel still shows an empty $0
     advance's cycle as "Cleared" (ADR-036/085 ledger-derived state); harmless,
     resolves once a draw is recorded.
+
+- 2026-08-27 — SCRATCHPAD #1 / Issue #36: account ownership "mine vs hers"
+  (ADR-088). Code written; **migration not yet run**, so not browser-tested.
+    * `accounts.owner_member_id uuid null → household_members(id)` — null =
+      joint. Also wires the pre-existing unused `accounts.include_in_net_worth`.
+    * New `src/lib/household.ts`: `useHouseholdMembers()` + `useCurrentMember()`
+      (mirrors `useMemberTheme`). New `accountInMemberView()` in `balances.ts`.
+    * `AccountDialog`: "Belongs to" select (Joint / each member) + "Include in
+      net worth" checkbox.
+    * Scoped per-viewer: dashboard combined spendable + breakdown
+      (`app.index.tsx`), net-worth total + trend (`net-worth.ts` also honors
+      `include_in_net_worth`), Status Snapshot balance subtotals
+      (`app.snapshot.tsx`). Ledger / per-account cards / institution totals
+      unchanged.
+    * Accounts screen: owner chip on each card + an "Owner" filter.
+    * `docs/SCHEMA.md` "Never Add" rule amended.
+  tsc + build + 96 tests green. NEXT: Steven runs the migration (below), then
+  browser-verify in the TEST household + commit/PR.
+  Files: src/lib/supabase.ts, src/lib/household.ts (new), src/lib/balances.ts,
+  src/lib/net-worth.ts, src/components/AccountDialog.tsx, src/routes/app.index.tsx,
+  src/routes/app.snapshot.tsx, src/routes/app.accounts.tsx, docs/*.

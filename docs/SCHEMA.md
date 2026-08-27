@@ -192,7 +192,8 @@ accounts (
     interest_apy numeric,
     credit_limit numeric,
     is_spendable boolean default true,   -- live default is TRUE
-    include_in_net_worth boolean default true,   -- present in DB, not yet referenced in code
+    include_in_net_worth boolean default true,   -- ADR-088: false drops the account from the net-worth trend
+    owner_member_id uuid references household_members(id) on delete set null,  -- ADR-088: null = joint; a set owner scopes spendable/net-worth aggregates to that member
     starting_balance numeric default 0,
     notes text,
     created_at timestamptz default now(),
@@ -483,7 +484,12 @@ DISABLED — fixed the same day: `enable row level security` + the standard
 ## Never Add
 
 * Password columns
-* User-specific ownership columns on financial tables
+* User-specific ownership columns on financial tables **that restrict row
+  visibility or edit rights**. ADR-088 (2026-08-27) adds
+  `accounts.owner_member_id` — allowed because it only scopes on-screen
+  *aggregates* (spendable / net worth) per viewer; both members still see and
+  edit every account, and the ledger is untouched. Same carve-out as ADR-061's
+  per-user `household_members.theme`.
 * Duplicate payment tracking systems
 
 ---

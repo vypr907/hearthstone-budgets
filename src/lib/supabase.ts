@@ -175,6 +175,14 @@ export type Account = {
   credit_limit: number | null;
   /** Full or masked account number; only the last 4 are ever displayed. */
   account_number?: string | null;
+  /**
+   * ADR-088: household_members.id this account belongs to, or null for a
+   * shared/joint account. A personal account folds into only that member's
+   * spendable / net-worth aggregates; visibility and edit rights are unchanged.
+   */
+  owner_member_id?: string | null;
+  /** ADR-088: when false, the account is left out of the net-worth trend. */
+  include_in_net_worth?: boolean | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -215,6 +223,9 @@ export type HouseholdMember = {
   user_id: string | null;
   /** ADR-061: per-user display preference, default 'standard'. */
   theme: ThemeName;
+  /** Human name for this member; shown in the ADR-088 account-owner picker. */
+  display_name?: string | null;
+  role?: string;
 };
 
 export type InstitutionCategory = {
