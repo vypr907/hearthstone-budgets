@@ -110,3 +110,11 @@
     path covered by `src/lib/balances.test.ts` (5 new tests, 101 total).
     "Belongs to" marks the signed-in member "(me)". PR #39, Closes #36.
     Live 2-member check happens when it reaches "Our Household".
+
+- Budget split lines (Spending / Bills / Debts / Deducted) now carry a small
+  receipt icon that jumps to Transactions pre-filtered to the tile's categories,
+  the period date range, and linked (bill/debt payments) vs. unlinked (spending).
+  Files: `src/components/BudgetSplitLines.tsx`, `src/lib/tx-filter-store.ts`,
+  `src/routes/app.transactions.tsx` (multi-category + linked/date pre-filter),
+  `src/routes/app.index.tsx`, `src/routes/app.spending.tsx`. UI-only, no schema
+  change. Typecheck clean.

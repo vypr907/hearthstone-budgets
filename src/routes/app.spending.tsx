@@ -788,6 +788,7 @@ function SpendingRow({
             spendingSpent={r.spendingSpent}
             billsSpent={r.billsSpent}
             extra={{ label: "3-mo avg", value: r.avg3 }}
+            drill={{ categoryIds: [r.categoryId], label: r.name }}
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button

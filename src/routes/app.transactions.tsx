@@ -84,6 +84,8 @@ function TransactionsPage() {
   const [sort, setSort] = useState("date");
   const [groupBy, setGroupBy] = useState("none");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  /** Multi-category drill-down from a parent-category tile (no UI control). */
+  const [categoryIds, setCategoryIds] = useState<string[] | null>(null);
   const [placeFilter, setPlaceFilter] = useState("all");
   const [linkedFilter, setLinkedFilter] = useState("all"); // all | linked | unlinked
   const [dateFrom, setDateFrom] = useState("");
@@ -105,6 +107,13 @@ function TransactionsPage() {
       setCategoryFilter(pre.categoryId);
       setFiltersOpen(true);
     }
+    if (pre.categoryIds?.length) {
+      setCategoryIds(pre.categoryIds);
+      setFiltersOpen(true);
+    }
+    if (pre.linked) setLinkedFilter(pre.linked);
+    if (pre.dateFrom) setDateFrom(pre.dateFrom);
+    if (pre.dateTo) setDateTo(pre.dateTo);
     if (pre.label) setFilterLabel(pre.label);
   }, []);
 
@@ -135,6 +144,8 @@ function TransactionsPage() {
       out = out.filter((t) =>
         categoryFilter === "none" ? !t.category_id : t.category_id === categoryFilter,
       );
+    if (categoryIds?.length)
+      out = out.filter((t) => !!t.category_id && categoryIds.includes(t.category_id));
     if (placeFilter !== "all")
       out = out.filter((t) =>
         placeFilter === "none" ? !t.institution_id : t.institution_id === placeFilter,
@@ -174,6 +185,7 @@ function TransactionsPage() {
     status,
     sort,
     categoryFilter,
+    categoryIds,
     placeFilter,
     linkedFilter,
     dateFrom,
@@ -227,6 +239,7 @@ function TransactionsPage() {
     setAccount("all");
     setStatus("all");
     setCategoryFilter("all");
+    setCategoryIds(null);
     setPlaceFilter("all");
     setLinkedFilter("all");
     setDateFrom("");
