@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useUpsertAccount, useDeleteAccount, useInstitutions } from "@/lib/data-hooks";
-import { useHouseholdMembers, memberLabel } from "@/lib/household";
+import { useHouseholdMembers, useCurrentMember, memberLabel } from "@/lib/household";
 import {
   Dialog,
   DialogContent,
@@ -60,6 +60,7 @@ export function AccountDialog({
   const del = useDeleteAccount();
   const { data: institutions = [] } = useInstitutions();
   const { data: members = [] } = useHouseholdMembers();
+  const currentMember = useCurrentMember();
   const [name, setName] = useState("");
   const [type, setType] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -169,6 +170,7 @@ export function AccountDialog({
                   {members.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {memberLabel(m)}
+                      {m.id === currentMember?.id ? " (me)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
