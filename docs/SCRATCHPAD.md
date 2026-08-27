@@ -51,14 +51,9 @@ Show me the diffs for all three files before finalizing.
 
 
 # Things to work on
-(cleared out 2026-08-21 — audited every item against current code before starting new
-work. Dashboard Budget vs Actual/Monthly Summary items were already done in earlier
-sessions [pay-period scope, "this pay period" label, HelpButton tooltips on both
-cards, Monthly Summary's "$actual of $expected" subheader] — confirmed by reading
-app.index.tsx directly. Everything page's paid-off-invoices-show-unpaid was very
-likely already fixed by the ADR-036 addendum [remaining_balance <= 0 forces "cleared"
-regardless of ledger] — worth a quick eyeball, not a dev task. The debts
-historical-payment ask became ADR-076's "Log arrears payment" action.)
+- so right now, I don't have visibility on transactions on my wife's accounts, nor a way in-app to denote an account as mine or hers. This currently leads to inflation of numbers in the checking/spendable areas, and need to figure out a way to resolve this
+- right now I have institutions, and accounts. Accounts have been the place holder representing both the account and the card associated with it. Worth adding something to track cards attached to an account? If not, I need something to be able to add a card number to an account, so that labels like "<institute>: <account> - <last 4 of acct number>" will work correctly
+- I tried to add a Debt (type: Advance) to Dave, so that I can track advances, but because I added the debt at zero balance, it's showing debt paid, and the advance I added is not reflecting in the any of the balances
 ---
 
 ## Idea: smarter institution_type for inline-created merchants (Add Transaction)
