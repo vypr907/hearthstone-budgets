@@ -987,7 +987,7 @@ function DebtDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit debt" : "Add debt"}</DialogTitle>
         </DialogHeader>
@@ -1345,7 +1345,7 @@ function DebtDialog({
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
         </div>
-        <DialogFooter className="gap-2 sm:justify-between">
+        <DialogFooter className="sticky bottom-0 -mx-6 -mb-6 mt-2 gap-2 border-t bg-background px-6 py-3 sm:justify-between">
           {isEdit ? (
             <Button variant="destructive" onClick={handleDelete} className="h-11">
               <Trash2 className="mr-2 h-4 w-4" /> Delete
@@ -1399,36 +1399,43 @@ function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string })
       ) : (
         <div className="mt-1 divide-y divide-border/50">
           {rows.map((t) => (
-            <div key={t.id} className="flex items-center justify-between py-2 text-sm">
-              <span className="min-w-0 flex-1 truncate">
-                {t.transaction_date?.slice(0, 10)}
-                {t.description ? ` · ${t.description}` : ""}
-              </span>
-              <span className="ml-2 shrink-0 text-xs capitalize text-muted-foreground">
-                {t.status ?? "—"}
-              </span>
-              <span className="ml-2 shrink-0 tabular-nums">
-                {formatMoney(Number(t.amount ?? 0))}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="ml-1 h-9 w-9 shrink-0"
-                aria-label="Delete transaction"
-                disabled={del.isPending}
-                onClick={() => {
-                  if (!confirm("Delete this ledger transaction? The debt row is left as-is.")) return;
-                  del.mutate(t, {
-                    onSuccess: () => toast.success("Transaction deleted"),
-                    onError: (e: unknown) => toast.error((e as Error).message),
-                  });
-                }}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-              <CorrectPaymentButton transaction={t} payable={toPayable("debt", debt)} />
-              <ReversePaymentButton transaction={t} payable={toPayable("debt", debt)} />
-
+            <div key={t.id} className="py-2 text-sm">
+              {/* Two-line row: the three action buttons get their own line so
+                  nothing crowds or clips off the right edge on phones. */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 flex-1 truncate">
+                  {t.transaction_date?.slice(0, 10)}
+                  {t.description ? ` · ${t.description}` : ""}
+                </span>
+                <span className="shrink-0 tabular-nums">
+                  {formatMoney(Number(t.amount ?? 0))}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-center justify-between gap-1">
+                <span className="text-xs capitalize text-muted-foreground">
+                  {t.status ?? "—"}
+                </span>
+                <div className="flex shrink-0 items-center justify-end">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    aria-label="Delete transaction"
+                    disabled={del.isPending}
+                    onClick={() => {
+                      if (!confirm("Delete this ledger transaction? The debt row is left as-is.")) return;
+                      del.mutate(t, {
+                        onSuccess: () => toast.success("Transaction deleted"),
+                        onError: (e: unknown) => toast.error((e as Error).message),
+                      });
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                  <CorrectPaymentButton transaction={t} payable={toPayable("debt", debt)} />
+                  <ReversePaymentButton transaction={t} payable={toPayable("debt", debt)} />
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -1654,7 +1661,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
 
       {/* ---- Add Adjustment dialog ---- */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>Add adjustment</DialogTitle>
           </DialogHeader>
@@ -1732,7 +1739,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
 
       {/* ---- Add Advance dialog (ADR-056) ---- */}
       <Dialog open={advanceOpen} onOpenChange={setAdvanceOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>Record advance</DialogTitle>
           </DialogHeader>
