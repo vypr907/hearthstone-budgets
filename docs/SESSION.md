@@ -165,3 +165,11 @@
   Files: `src/lib/ledger-state.ts`, `src/lib/ledger-state.test.ts` (3 new tests,
   104 total, all green). Verified live: both TSP loans now derive `cleared`.
 
+- Debts mobile fit fixes (`src/routes/app.debts.tsx`, UI-only): the Edit debt
+  dialog had no height cap or scroll — it overflowed the viewport top/bottom
+  with body scroll locked, leaving Esc as the only exit. It (plus the Add
+  adjustment / Record advance dialogs) now uses the standard
+  `max-h-[90vh] overflow-y-auto` constraint, and the edit footer is sticky so
+  Save/Delete stay reachable. Detail dialog's Recent-transactions rows split
+  into two lines (info+amount, then status + Delete/Correct/Reverse) so the
+  action buttons no longer crowd off the right edge on phones. 115 tests green.
