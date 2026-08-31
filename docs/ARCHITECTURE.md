@@ -94,3 +94,12 @@ picker). `InstitutionDialog` likewise embeds `AccountDialog` for its inline
   plain `status: 'cleared'` update via `useUpsertTransaction`.
 - `src/components/BottomNav.tsx` — Pending takes the fifth nav slot (ADR-026 icon-only
   style); Accounts moved into the More grid (`src/routes/app.more.tsx`).
+
+## Internal transfers (ADR-089)
+
+src/lib/internal-transfers.ts defines a transfer as *internal* when both legs
+exist (a negative and a positive row sharing `transfer_group_id`). Internal
+transfers are excluded from spending actuals and trailing averages in
+src/lib/monthly-summary.ts and src/lib/spending-actuals.ts, and from budget
+drill-downs via `TxPreFilter.excludeInternalTransfers`. One-sided legs still
+count as spend.

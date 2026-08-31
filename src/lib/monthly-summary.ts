@@ -1,6 +1,7 @@
 import type { Bill, Category, Debt, Transaction } from "./supabase";
 import { categoryDomain, monthKey } from "./data-hooks";
 import { monthlyEquivalent } from "./format";
+import { internalTransferIds } from "./internal-transfers";
 import { isPaycheckDeducted } from "./paycheck-budget";
 
 function incomeCategoryIds(categories: Category[] = []): Set<string> {
@@ -55,6 +56,9 @@ export function combinedActualByCategory(
   const billCategory = new Map<string, string | null>(bills.map((b) => [b.id, (b.category_id as string | null) ?? null]));
   const debtCategory = new Map<string, string | null>(debts.map((d) => [d.id, (d.category_id as string | null) ?? null]));
   const deductedDebtIds = new Set(debts.filter(isPaycheckDeducted).map((d) => d.id));
+  // ADR-089: two-sided transfers move money between the household's own
+  // accounts — never spend. One-sided legs still count.
+  const internal = internalTransferIds(transactions);
   const out = new Map<string, CategoryActual>();
 
   const bump = (
@@ -76,6 +80,7 @@ export function combinedActualByCategory(
     if (`${t.transaction_date.slice(0, 7)}-01` !== month) continue;
     const amount = Number(t.amount || 0);
     if (amount >= 0) continue; // only money out counts as spend
+    if (t.transfer_group_id && internal.has(t.transfer_group_id)) continue; // ADR-089
     const linkedBillId = t.linked_bill_id ?? null;
     const linkedDebtId = t.linked_debt_id ?? null;
     if (linkedDebtId && deductedDebtIds.has(linkedDebtId)) continue; // ADR-032: never spendable cash

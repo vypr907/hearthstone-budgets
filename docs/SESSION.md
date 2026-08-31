@@ -213,3 +213,16 @@
   Known issue: the pre-existing 2550.00 → 1855.06 balance couldn't be explained
   by the four logged payments (368.16); the restatement overwrites it rather
   than reconciling the earlier drift.
+- ADR-089: fixed Monthly Summary drill-down returning an empty transaction list
+  (the date range was built from a `YYYY-MM-01` month key as `...-01`/`...-31`,
+  so no date could match) and stopped counting two-sided transfers as spending.
+  New `src/lib/internal-transfers.ts` (`internalTransferIds`,
+  `isInternalTransfer`) is used by `monthly-summary.ts` and
+  `spending-actuals.ts`; drill-downs pass `excludeInternalTransfers` through
+  `tx-filter-store.ts` so the Transactions list matches the figure tapped.
+  Files: `src/lib/internal-transfers.ts` (+test), `src/lib/monthly-summary.ts`,
+  `src/lib/spending-actuals.ts`, `src/lib/tx-filter-store.ts`,
+  `src/components/BudgetSplitLines.tsx`, `src/routes/app.transactions.tsx`,
+  `src/routes/app.index.tsx`, `src/routes/app.spending.tsx`. 120 tests green.
+  User-visible: Savings' inflated $1,710.34 drops to any genuinely one-sided
+  transfer leg, and the receipt icon now lists the rows behind the number.

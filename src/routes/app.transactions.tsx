@@ -55,6 +55,7 @@ import {
   type SplitRow,
 } from "@/components/SplitLinesEditor";
 import { consumeTxPreFilter } from "@/lib/tx-filter-store";
+import { internalTransferIds, isInternalTransfer } from "@/lib/internal-transfers";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { useEditLinkedTransaction, toPayable } from "@/lib/payments";
 
@@ -106,6 +107,8 @@ function TransactionsPage() {
   const [linkedFilter, setLinkedFilter] = useState("all"); // all | linked | unlinked
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  /** ADR-089: drill-downs from budget figures hide two-sided transfers. */
+  const [hideInternalTransfers, setHideInternalTransfers] = useState(false);
   /** ADR-053/063: search matches free-text description or the resolved place. */
   const [searchQuery, setSearchQuery] = useState("");
   const [amountMin, setAmountMin] = useState("");
@@ -130,6 +133,7 @@ function TransactionsPage() {
     if (pre.linked) setLinkedFilter(pre.linked);
     if (pre.dateFrom) setDateFrom(pre.dateFrom);
     if (pre.dateTo) setDateTo(pre.dateTo);
+    if (pre.excludeInternalTransfers) setHideInternalTransfers(true);
     if (pre.label) setFilterLabel(pre.label);
   }, []);
 
@@ -176,6 +180,11 @@ function TransactionsPage() {
       );
     if (dateFrom) out = out.filter((t) => t.transaction_date >= dateFrom);
     if (dateTo) out = out.filter((t) => t.transaction_date <= dateTo);
+    // ADR-089: mirror the budget math — two-sided transfers aren't spending.
+    if (hideInternalTransfers) {
+      const internal = internalTransferIds(transactions);
+      out = out.filter((t) => !isInternalTransfer(t, internal));
+    }
     const q = searchQuery.trim().toLowerCase();
     if (q)
       out = out.filter((t) => {
@@ -206,6 +215,7 @@ function TransactionsPage() {
     linkedFilter,
     dateFrom,
     dateTo,
+    hideInternalTransfers,
     searchQuery,
     amountMin,
     amountMax,

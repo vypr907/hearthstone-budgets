@@ -429,7 +429,11 @@ function SpendingPage() {
                           .catch((e: unknown) => toast.error((e as Error).message))
                       }
                       onDrillDown={() => {
-                        setTxPreFilter({ categoryId: r.categoryId, label: r.name });
+                        setTxPreFilter({
+                          categoryId: r.categoryId,
+                          excludeInternalTransfers: true,
+                          label: r.name,
+                        });
                         void navigate({ to: "/app/transactions" });
                       }}
                     />

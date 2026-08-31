@@ -16,6 +16,12 @@ export type SplitDrill = {
 };
 
 /**
+ * ADR-089: budget figures exclude two-sided (internal) transfers, so the
+ * drill-down list must exclude them too — otherwise the total and the rows
+ * disagree.
+ */
+
+/**
  * Expanded budget breakdown: one labelled progress bar per split
  * (spending vs. bills vs. debts), plus an optional extra stat line.
  * ADR-029 visual conventions.
@@ -205,6 +211,7 @@ function SplitRow({
                   linked,
                   dateFrom: drill.dateFrom,
                   dateTo: drill.dateTo,
+                  excludeInternalTransfers: true,
                   label: `${drill.label} · ${label}`,
                 });
                 void navigate({ to: "/app/transactions" });
