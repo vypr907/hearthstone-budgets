@@ -535,7 +535,12 @@ function TransactionsPage() {
                             }));
                           }}
                         >
-                          {expanded[entry.key] ? "Hide breakdown" : "Show breakdown"}
+                          {expanded[entry.key]
+                            ? "Hide breakdown"
+                            : perRow
+                              ? "Show breakdown (tap a line to edit)"
+                              : "Show breakdown"}
+
                         </button>
                       ) : null}
                       {entry.isSplit && expanded[entry.key] ? (
