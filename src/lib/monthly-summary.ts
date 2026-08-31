@@ -80,6 +80,7 @@ export function combinedActualByCategory(
     if (`${t.transaction_date.slice(0, 7)}-01` !== month) continue;
     const amount = Number(t.amount || 0);
     if (amount >= 0) continue; // only money out counts as spend
+    if (t.transfer_group_id && internal.has(t.transfer_group_id)) continue; // ADR-089
     const linkedBillId = t.linked_bill_id ?? null;
     const linkedDebtId = t.linked_debt_id ?? null;
     if (linkedDebtId && deductedDebtIds.has(linkedDebtId)) continue; // ADR-032: never spendable cash
