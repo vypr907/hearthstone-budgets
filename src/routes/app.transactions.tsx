@@ -54,6 +54,9 @@ import {
   type SplitRow,
 } from "@/components/SplitLinesEditor";
 import { consumeTxPreFilter } from "@/lib/tx-filter-store";
+import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
+import { ReversePaymentButton } from "@/components/ReversePaymentButton";
+import { toPayable } from "@/lib/payments";
 
 export const Route = createFileRoute("/app/transactions")({
   head: () => ({
@@ -532,7 +535,12 @@ function TransactionsPage() {
                             }));
                           }}
                         >
-                          {expanded[entry.key] ? "Hide breakdown" : "Show breakdown"}
+                          {expanded[entry.key]
+                            ? "Hide breakdown"
+                            : perRow
+                              ? "Show breakdown (tap a line to edit)"
+                              : "Show breakdown"}
+
                         </button>
                       ) : null}
                       {entry.isSplit && expanded[entry.key] ? (
@@ -671,6 +679,13 @@ export function TransactionDetail({
   const linkedBill = bills.find((b) => b.id === transaction.linked_bill_id);
   const linkedDebt = debts.find((d) => d.id === transaction.linked_debt_id);
   const isLinked = !!(transaction.linked_bill_id || transaction.linked_debt_id);
+  // ADR-077/ADR-070: let a linked payment be corrected or reversed straight from
+  // the ledger instead of dead-ending on "fix it from the bill/debt screen".
+  const linkedPayable = linkedBill
+    ? toPayable("bill", linkedBill)
+    : linkedDebt
+      ? toPayable("debt", linkedDebt)
+      : null;
   const placeName = institutions.find((i) => i.id === transaction.institution_id)?.name ?? null;
   // ADR-056: a transfer is two rows sharing transfer_group_id — negative on
   // the from-account, positive on the to-account. Find the other leg to show
@@ -746,19 +761,16 @@ export function TransactionDetail({
 
   /** ADR-047 addendum: shown on a paycheck deposit row so it's clear that
    *  editing here touches only this one deposit. */
-  const paycheckBanner = isPaycheckDeposit ? (
-    <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-      {isLinked
-        ? `This deposit was posted by a deduction. Correct it from ${
-            linkedBill?.name ?? linkedDebt?.name ?? "its bill or debt"
-          }, not here.`
-        : `Part of a paycheck deposit — ${groupRows.length} deposit${
-            groupRows.length === 1 ? "" : "s"
-          } across ${depositAccountCount} account${
-            depositAccountCount === 1 ? "" : "s"
-          }. Editing here changes only this deposit.`}
-    </p>
-  ) : null;
+  const paycheckBanner =
+    isPaycheckDeposit && !isLinked ? (
+      <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+        {`Part of a grouped entry — ${groupRows.length} row${
+          groupRows.length === 1 ? "" : "s"
+        } across ${depositAccountCount} account${
+          depositAccountCount === 1 ? "" : "s"
+        }. Editing here changes only this row.`}
+      </p>
+    ) : null;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -816,23 +828,39 @@ export function TransactionDetail({
               />
             </DetailGrid>
             <DetailText label="Description" value={transaction.description} />
-            {isLinked && (
-              <p className="text-xs text-muted-foreground">
-                This transaction is linked to a {linkedBill ? "bill" : "debt"}; it can't be
-                deleted so the ledger stays in sync with its payment status.
-              </p>
+            {isLinked && linkedPayable && (
+              <div className="space-y-2 rounded-md border border-dashed p-3">
+                <p className="text-xs text-muted-foreground">
+                  Linked to {linkedPayable.name}. Amount and status stay in sync with the{" "}
+                  {linkedPayable.kind} — fix them here with Correct (adjusts this payment in
+                  place) or Reverse (undoes it so you can re-enter it).
+                </p>
+                <div className="flex items-center gap-1">
+                  <CorrectPaymentButton transaction={transaction} payable={linkedPayable} />
+                  <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
+                  <span className="text-xs text-muted-foreground">Correct / Reverse</span>
+                </div>
+              </div>
             )}
+
           </div>
         ) : (
           <div className="space-y-3">
             {paycheckBanner}
-            {isLinked && (
-              <p className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
-                Amount and status are locked on linked entries — use{" "}
-                {linkedBill ? "the bill's" : "the debt's"} Pay actions (or Reverse) so{" "}
-                {linkedBill?.name ?? linkedDebt?.name} stays in sync.
-              </p>
+            {isLinked && linkedPayable && (
+              <div className="space-y-2 rounded-md border border-dashed p-2">
+                <p className="text-xs text-muted-foreground">
+                  Amount and status are locked here so {linkedPayable.name} stays in sync — use
+                  Correct to change the amount, or Reverse to undo the payment.
+                </p>
+                <div className="flex items-center gap-1">
+                  <CorrectPaymentButton transaction={transaction} payable={linkedPayable} />
+                  <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
+                  <span className="text-xs text-muted-foreground">Correct / Reverse</span>
+                </div>
+              </div>
             )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Amount</Label>

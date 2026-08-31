@@ -173,3 +173,15 @@
   Save/Delete stay reachable. Detail dialog's Recent-transactions rows split
   into two lines (info+amount, then status + Delete/Correct/Reverse) so the
   action buttons no longer crowd off the right edge on phones. 115 tests green.
+
+- Ledger: linked payments are now correctable from the Transactions screen
+  (`src/routes/app.transactions.tsx`, UI-only). A bill/debt-linked row used to
+  dead-end on "correct it from the bill/debt", but the bill/debt detail only
+  exposes Correct/Reverse for a narrow eligibility window, so a wrong
+  payment+fee split (e.g. Aarons - Dresser: -$14.26 fee + -$106.30 payment)
+  had no reachable edit path. Transaction detail now renders the existing
+  `CorrectPaymentButton` (ADR-077) and `ReversePaymentButton` (ADR-070) inline
+  for linked rows in both view and edit mode; the fee row remains directly
+  editable since it carries no link (ADR-046). Breakdown affordance for
+  per-row groups now reads "tap a line to edit". No logic/schema change,
+  115 tests green.
