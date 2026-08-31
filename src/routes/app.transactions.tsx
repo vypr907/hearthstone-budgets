@@ -829,7 +829,7 @@ export function TransactionDetail({
                 <div className="flex items-center gap-1">
                   <CorrectPaymentButton transaction={transaction} payable={linkedPayable} />
                   <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
-                  <span className="text-xs text-muted-foreground">Correct · Reverse</span>
+                  <span className="text-xs text-muted-foreground">Correct / Reverse</span>
                 </div>
               </div>
             )}
