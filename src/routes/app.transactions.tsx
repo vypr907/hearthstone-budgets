@@ -819,12 +819,21 @@ export function TransactionDetail({
               />
             </DetailGrid>
             <DetailText label="Description" value={transaction.description} />
-            {isLinked && (
-              <p className="text-xs text-muted-foreground">
-                This transaction is linked to a {linkedBill ? "bill" : "debt"}; it can't be
-                deleted so the ledger stays in sync with its payment status.
-              </p>
+            {isLinked && linkedPayable && (
+              <div className="space-y-2 rounded-md border border-dashed p-3">
+                <p className="text-xs text-muted-foreground">
+                  Linked to {linkedPayable.name}. Amount and status stay in sync with the{" "}
+                  {linkedPayable.kind} — fix them here with Correct (adjusts this payment in
+                  place) or Reverse (undoes it so you can re-enter it).
+                </p>
+                <div className="flex items-center gap-1">
+                  <CorrectPaymentButton transaction={transaction} payable={linkedPayable} />
+                  <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
+                  <span className="text-xs text-muted-foreground">Correct · Reverse</span>
+                </div>
+              </div>
             )}
+
           </div>
         ) : (
           <div className="space-y-3">
