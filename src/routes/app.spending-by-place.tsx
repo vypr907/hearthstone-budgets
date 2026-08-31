@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { itemColor } from "@/components/viz";
 import { useInstitutions, useTransactions } from "@/lib/data-hooks";
 import { formatMoney, monthLabel } from "@/lib/format";
+import { internalTransferIds } from "@/lib/internal-transfers";
 
 export const Route = createFileRoute("/app/spending-by-place")({
   head: () => ({
@@ -53,10 +54,15 @@ function SpendingByPlacePage() {
   const { data: institutions = [] } = useInstitutions();
   const [month, setMonth] = useState(currentMonth());
 
+  // ADR-089: money moved between the household's own accounts isn't spending
+  // at a place, even when a leg happens to carry an institution.
+  const internal = useMemo(() => internalTransferIds(transactions), [transactions]);
+
   const rows = useMemo(() => {
     const byPlace = new Map<string, number>();
     for (const t of transactions) {
       if (!t.institution_id) continue;
+      if (t.transfer_group_id && internal.has(t.transfer_group_id)) continue;
       if (!(t.transaction_date ?? "").startsWith(month)) continue;
       // Money out only — deposits and refunds aren't spending.
       const spent = -Number(t.amount ?? 0);
@@ -69,21 +75,27 @@ function SpendingByPlacePage() {
       institution: institutions.find((i) => i.id === id) ?? null,
     }));
     return list.sort((a, b) => b.amount - a.amount);
-  }, [transactions, institutions, month]);
+  }, [transactions, institutions, month, internal]);
 
   const total = rows.reduce((sum, r) => sum + r.amount, 0);
-  const untagged = useMemo(
-    () =>
-      transactions
-        .filter(
-          (t) =>
-            !t.institution_id &&
-            (t.transaction_date ?? "").startsWith(month) &&
-            -Number(t.amount ?? 0) > 0,
-        )
-        .reduce((sum, t) => sum + -Number(t.amount ?? 0), 0),
-    [transactions, month],
-  );
+  /**
+   * Only count what Fix Places can actually repair: internal transfer legs have
+   * no merchant, so including them made this footnote read like thousands of
+   * missing places that the repair tool then refused to show.
+   */
+  const untagged = useMemo(() => {
+    const rowsOut = transactions.filter(
+      (t) =>
+        !t.institution_id &&
+        (t.transaction_date ?? "").startsWith(month) &&
+        -Number(t.amount ?? 0) > 0 &&
+        !(t.transfer_group_id && internal.has(t.transfer_group_id)),
+    );
+    return {
+      amount: rowsOut.reduce((sum, t) => sum + -Number(t.amount ?? 0), 0),
+      count: rowsOut.length,
+    };
+  }, [transactions, month, internal]);
 
   return (
     <>
@@ -185,9 +197,14 @@ function SpendingByPlacePage() {
                 );
               })
             )}
-            {untagged > 0.005 ? (
+            {untagged.amount > 0.005 ? (
               <p className="pt-1 text-xs text-muted-foreground">
-                {formatMoney(untagged)} of spending this month has no place attached.
+                {formatMoney(untagged.amount)} of spending this month has no place attached
+                {" ("}
+                <Link to="/app/fix-places" className="underline">
+                  fix {untagged.count} transaction{untagged.count === 1 ? "" : "s"}
+                </Link>
+                {")"}.
               </p>
             ) : null}
           </CardContent>
