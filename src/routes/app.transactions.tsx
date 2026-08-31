@@ -54,6 +54,9 @@ import {
   type SplitRow,
 } from "@/components/SplitLinesEditor";
 import { consumeTxPreFilter } from "@/lib/tx-filter-store";
+import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
+import { ReversePaymentButton } from "@/components/ReversePaymentButton";
+import { toPayable } from "@/lib/payments";
 
 export const Route = createFileRoute("/app/transactions")({
   head: () => ({
