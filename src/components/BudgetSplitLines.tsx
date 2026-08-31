@@ -211,6 +211,7 @@ function SplitRow({
                   linked,
                   dateFrom: drill.dateFrom,
                   dateTo: drill.dateTo,
+                  excludeInternalTransfers: true,
                   label: `${drill.label} · ${label}`,
                 });
                 void navigate({ to: "/app/transactions" });
