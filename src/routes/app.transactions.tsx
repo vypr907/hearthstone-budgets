@@ -132,6 +132,7 @@ function TransactionsPage() {
     if (pre.linked) setLinkedFilter(pre.linked);
     if (pre.dateFrom) setDateFrom(pre.dateFrom);
     if (pre.dateTo) setDateTo(pre.dateTo);
+    if (pre.excludeInternalTransfers) setHideInternalTransfers(true);
     if (pre.label) setFilterLabel(pre.label);
   }, []);
 
