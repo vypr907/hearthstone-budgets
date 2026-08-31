@@ -1,6 +1,7 @@
 import type { Bill, Category, Debt, Transaction } from "./supabase";
 import { categoryDomain, monthKey } from "./data-hooks";
 import { monthlyEquivalent } from "./format";
+import { internalTransferIds } from "./internal-transfers";
 import { isPaycheckDeducted } from "./paycheck-budget";
 
 function incomeCategoryIds(categories: Category[] = []): Set<string> {
