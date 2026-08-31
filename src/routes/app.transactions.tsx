@@ -864,38 +864,16 @@ export function TransactionDetail({
             </DetailGrid>
             <DetailText label="Description" value={transaction.description} />
             {isLinked && linkedPayable && (
-              <div className="space-y-2 rounded-md border border-dashed p-3">
-                <p className="text-xs text-muted-foreground">
-                  Linked to {linkedPayable.name}. Amount and status stay in sync with the{" "}
-                  {linkedPayable.kind} — fix them here with Correct (adjusts this payment in
-                  place) or Reverse (undoes it so you can re-enter it).
-                </p>
-                <div className="flex items-center gap-1">
-                  <CorrectPaymentButton transaction={transaction} payable={linkedPayable} />
-                  <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
-                  <span className="text-xs text-muted-foreground">Correct / Reverse</span>
-                </div>
-              </div>
+              <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                Linked to {linkedPayable.name}. Editing this payment also updates the{" "}
+                {linkedPayable.kind}'s balance, cycle progress and status.
+              </p>
             )}
 
           </div>
         ) : (
           <div className="space-y-3">
             {paycheckBanner}
-            {isLinked && linkedPayable && (
-              <div className="space-y-2 rounded-md border border-dashed p-2">
-                <p className="text-xs text-muted-foreground">
-                  Amount and status are locked here so {linkedPayable.name} stays in sync — use
-                  Correct to change the amount, or Reverse to undo the payment.
-                </p>
-                <div className="flex items-center gap-1">
-                  <CorrectPaymentButton transaction={transaction} payable={linkedPayable} />
-                  <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
-                  <span className="text-xs text-muted-foreground">Correct / Reverse</span>
-                </div>
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Amount</Label>
@@ -905,9 +883,9 @@ export function TransactionDetail({
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="h-11"
-                  disabled={isLinked}
                 />
               </div>
+
               <div>
                 <Label>Date</Label>
                 <Input
