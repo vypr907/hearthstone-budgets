@@ -730,16 +730,30 @@ export function TransactionDetail({
 
   async function save() {
     try {
+      // ADR-088: a linked row is edited through the payable-aware path — the
+      // bill/debt is rolled back and re-applied so its balance, cycle counters
+      // and status match the edited payment.
+      if (isLinked && linkedPayable) {
+        await editLinked.mutateAsync({
+          transaction: transaction!,
+          kind: linkedPayable.kind,
+          payableId: linkedPayable.id,
+          amount: Math.abs(Number(amount)),
+          date,
+          status: status as "pending" | "cleared",
+          accountId: accountId === "none" ? null : accountId,
+          categoryId: categoryId === "none" ? null : categoryId,
+          institutionId: institutionId === "none" ? null : institutionId,
+          description: description || null,
+        });
+        toast.success(`Transaction updated — ${linkedPayable.name} kept in sync`);
+        onClose();
+        return;
+      }
       await upsert.mutateAsync({
         id: transaction!.id,
-        // ADR-037 addendum: the amount field is disabled while linked, so this
-        // is always the untouched original value — sent through unconditionally
-        // to satisfy the mutation's required `amount`.
         amount: Number(amount),
-        // Status on a linked row must go through applyClearedPayment (Pay
-        // actions / Reverse) so bills/debts stay in sync — editing it here
-        // would silently strand cycle_paid_to_date.
-        ...(isLinked ? {} : { status: status as "pending" | "cleared" }),
+        status: status as "pending" | "cleared",
         description: description || null,
         transaction_date: date,
         account_id: accountId === "none" ? null : accountId,
@@ -752,6 +766,7 @@ export function TransactionDetail({
       toast.error((e as Error).message);
     }
   }
+
 
   async function handleDelete() {
     // ADR-056: if this row is one side of a transfer, delete both sides.
