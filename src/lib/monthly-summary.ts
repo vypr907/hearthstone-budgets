@@ -56,6 +56,9 @@ export function combinedActualByCategory(
   const billCategory = new Map<string, string | null>(bills.map((b) => [b.id, (b.category_id as string | null) ?? null]));
   const debtCategory = new Map<string, string | null>(debts.map((d) => [d.id, (d.category_id as string | null) ?? null]));
   const deductedDebtIds = new Set(debts.filter(isPaycheckDeducted).map((d) => d.id));
+  // ADR-089: two-sided transfers move money between the household's own
+  // accounts — never spend. One-sided legs still count.
+  const internal = internalTransferIds(transactions);
   const out = new Map<string, CategoryActual>();
 
   const bump = (
