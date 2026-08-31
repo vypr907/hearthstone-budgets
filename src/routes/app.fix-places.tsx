@@ -228,7 +228,8 @@ function FixPlacesPage() {
                   />
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </>
         )}
       </div>
