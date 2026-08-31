@@ -1,6 +1,7 @@
 import type { Bill, Category, SpendingActual, Transaction } from "./supabase";
 import { categoryDomain } from "./data-hooks";
 import { monthlyEquivalent } from "./format";
+import { internalTransferIds } from "./internal-transfers";
 
 /**
  * ADR-069: set of category ids in the 'income' domain. Ad-hoc income never
