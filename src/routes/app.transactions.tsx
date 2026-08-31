@@ -756,19 +756,16 @@ export function TransactionDetail({
 
   /** ADR-047 addendum: shown on a paycheck deposit row so it's clear that
    *  editing here touches only this one deposit. */
-  const paycheckBanner = isPaycheckDeposit ? (
-    <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-      {isLinked
-        ? `This deposit was posted by a deduction. Correct it from ${
-            linkedBill?.name ?? linkedDebt?.name ?? "its bill or debt"
-          }, not here.`
-        : `Part of a paycheck deposit — ${groupRows.length} deposit${
-            groupRows.length === 1 ? "" : "s"
-          } across ${depositAccountCount} account${
-            depositAccountCount === 1 ? "" : "s"
-          }. Editing here changes only this deposit.`}
-    </p>
-  ) : null;
+  const paycheckBanner =
+    isPaycheckDeposit && !isLinked ? (
+      <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+        {`Part of a grouped entry — ${groupRows.length} row${
+          groupRows.length === 1 ? "" : "s"
+        } across ${depositAccountCount} account${
+          depositAccountCount === 1 ? "" : "s"
+        }. Editing here changes only this row.`}
+      </p>
+    ) : null;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
