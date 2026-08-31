@@ -234,3 +234,4 @@
   Files: `src/routes/app.fix-places.tsx`, `src/routes/app.spending-by-place.tsx`.
   User-visible: the August "$14,238.72 has no place attached" note drops to the
   ~$1,716 that is actually assignable, and tapping it opens those rows.
+- Fix Places rows now show context: derived title (description → linked bill/debt → category → parent split line), category + linked payable line, and a split/transfer sibling breakdown with group total, line amounts, and each sibling's assigned place. Files: src/routes/app.fix-places.tsx. ADR-090.
