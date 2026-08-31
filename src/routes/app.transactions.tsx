@@ -179,6 +179,11 @@ function TransactionsPage() {
       );
     if (dateFrom) out = out.filter((t) => t.transaction_date >= dateFrom);
     if (dateTo) out = out.filter((t) => t.transaction_date <= dateTo);
+    // ADR-089: mirror the budget math — two-sided transfers aren't spending.
+    if (hideInternalTransfers) {
+      const internal = internalTransferIds(transactions);
+      out = out.filter((t) => !isInternalTransfer(t, internal));
+    }
     const q = searchQuery.trim().toLowerCase();
     if (q)
       out = out.filter((t) => {
