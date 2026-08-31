@@ -44,6 +44,7 @@ import {
   groupLedgerRows,
   classifyLedgerGroup,
   isCategorySplitGroup,
+  isPaymentWithFeesGroup,
 } from "@/lib/split-groups";
 import { useIncomeEvents } from "@/lib/income-hooks";
 import {
@@ -54,9 +55,9 @@ import {
   type SplitRow,
 } from "@/components/SplitLinesEditor";
 import { consumeTxPreFilter } from "@/lib/tx-filter-store";
-import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
-import { toPayable } from "@/lib/payments";
+import { useEditLinkedTransaction, toPayable } from "@/lib/payments";
+
 
 export const Route = createFileRoute("/app/transactions")({
   head: () => ({
@@ -618,6 +619,8 @@ export function TransactionDetail({
   const upsert = useUpsertTransaction();
   const del = useDeleteTransaction();
   const delTransferPair = useDeleteTransferPair();
+  const editLinked = useEditLinkedTransaction();
+
 
   const incomeEventIds = useMemo(
     () => new Set(incomeEvents.map((e) => e.id)),
@@ -667,6 +670,23 @@ export function TransactionDetail({
     isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds)
   )
     return <SplitTransactionDetail transaction={transaction} onClose={onClose} />;
+  // ADR-088: a payment + fee group (one linked row, one account) gets its own
+  // grouped editor — the linked line stays in sync with the bill/debt while
+  // the plain fee lines can be edited, added or removed.
+  if (
+    transaction.split_group_id &&
+    groupRows.length > 1 &&
+    !incomeEventIds.has(transaction.split_group_id) &&
+    isPaymentWithFeesGroup(groupRows)
+  )
+    return (
+      <LinkedGroupDetail
+        groupId={transaction.split_group_id}
+        rows={groupRows}
+        onClose={onClose}
+      />
+    );
+
 
   const isPaycheckDeposit =
     !!transaction.split_group_id &&
@@ -710,16 +730,30 @@ export function TransactionDetail({
 
   async function save() {
     try {
+      // ADR-088: a linked row is edited through the payable-aware path — the
+      // bill/debt is rolled back and re-applied so its balance, cycle counters
+      // and status match the edited payment.
+      if (isLinked && linkedPayable) {
+        await editLinked.mutateAsync({
+          transaction: transaction!,
+          kind: linkedPayable.kind,
+          payableId: linkedPayable.id,
+          amount: Math.abs(Number(amount)),
+          date,
+          status: status as "pending" | "cleared",
+          accountId: accountId === "none" ? null : accountId,
+          categoryId: categoryId === "none" ? null : categoryId,
+          institutionId: institutionId === "none" ? null : institutionId,
+          description: description || null,
+        });
+        toast.success(`Transaction updated — ${linkedPayable.name} kept in sync`);
+        onClose();
+        return;
+      }
       await upsert.mutateAsync({
         id: transaction!.id,
-        // ADR-037 addendum: the amount field is disabled while linked, so this
-        // is always the untouched original value — sent through unconditionally
-        // to satisfy the mutation's required `amount`.
         amount: Number(amount),
-        // Status on a linked row must go through applyClearedPayment (Pay
-        // actions / Reverse) so bills/debts stay in sync — editing it here
-        // would silently strand cycle_paid_to_date.
-        ...(isLinked ? {} : { status: status as "pending" | "cleared" }),
+        status: status as "pending" | "cleared",
         description: description || null,
         transaction_date: date,
         account_id: accountId === "none" ? null : accountId,
@@ -732,6 +766,7 @@ export function TransactionDetail({
       toast.error((e as Error).message);
     }
   }
+
 
   async function handleDelete() {
     // ADR-056: if this row is one side of a transfer, delete both sides.
@@ -829,38 +864,16 @@ export function TransactionDetail({
             </DetailGrid>
             <DetailText label="Description" value={transaction.description} />
             {isLinked && linkedPayable && (
-              <div className="space-y-2 rounded-md border border-dashed p-3">
-                <p className="text-xs text-muted-foreground">
-                  Linked to {linkedPayable.name}. Amount and status stay in sync with the{" "}
-                  {linkedPayable.kind} — fix them here with Correct (adjusts this payment in
-                  place) or Reverse (undoes it so you can re-enter it).
-                </p>
-                <div className="flex items-center gap-1">
-                  <CorrectPaymentButton transaction={transaction} payable={linkedPayable} />
-                  <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
-                  <span className="text-xs text-muted-foreground">Correct / Reverse</span>
-                </div>
-              </div>
+              <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                Linked to {linkedPayable.name}. Editing this payment also updates the{" "}
+                {linkedPayable.kind}'s balance, cycle progress and status.
+              </p>
             )}
 
           </div>
         ) : (
           <div className="space-y-3">
             {paycheckBanner}
-            {isLinked && linkedPayable && (
-              <div className="space-y-2 rounded-md border border-dashed p-2">
-                <p className="text-xs text-muted-foreground">
-                  Amount and status are locked here so {linkedPayable.name} stays in sync — use
-                  Correct to change the amount, or Reverse to undo the payment.
-                </p>
-                <div className="flex items-center gap-1">
-                  <CorrectPaymentButton transaction={transaction} payable={linkedPayable} />
-                  <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
-                  <span className="text-xs text-muted-foreground">Correct / Reverse</span>
-                </div>
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Amount</Label>
@@ -870,9 +883,9 @@ export function TransactionDetail({
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="h-11"
-                  disabled={isLinked}
                 />
               </div>
+
               <div>
                 <Label>Date</Label>
                 <Input
@@ -893,7 +906,7 @@ export function TransactionDetail({
             </div>
             <div>
               <Label>Status</Label>
-              <Select value={status} onValueChange={setStatus} disabled={isLinked}>
+              <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
@@ -967,11 +980,22 @@ export function TransactionDetail({
             <Button variant="destructive" className="h-11" onClick={handleDelete}>
               <Trash2 className="mr-2 h-4 w-4" /> Delete
             </Button>
+          ) : linkedPayable ? (
+            /* ADR-088: Reverse is the undo for a linked payment — Delete would
+               strand the bill/debt's cycle counters. */
+            <div className="flex items-center gap-1">
+              <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
+              <span className="text-xs text-muted-foreground">Reverse</span>
+            </div>
           ) : (
             <span />
           )}
           {edit ? (
-            <Button className="h-11" onClick={save} disabled={upsert.isPending}>
+            <Button
+              className="h-11"
+              onClick={save}
+              disabled={upsert.isPending || editLinked.isPending}
+            >
               Save
             </Button>
           ) : (
@@ -980,6 +1004,7 @@ export function TransactionDetail({
             </Button>
           )}
         </DialogFooter>
+
       </DialogContent>
     </Dialog>
   );
@@ -1188,6 +1213,342 @@ function SplitTransactionDetail({
           </Button>
           {edit ? (
             <Button className="h-11" onClick={save} disabled={saveSplit.isPending}>
+              Save
+            </Button>
+          ) : (
+            <Button className="h-11" onClick={() => setEdit(true)}>
+              Edit
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * ADR-088: edit a payment + fee group (ADR-046) as one unit — exactly one
+ * bill/debt-linked payment line plus any number of plain fee/charge lines on
+ * the same account. The linked line goes through the payable-aware edit so the
+ * bill/debt stays in sync; the fee lines are patched, added or removed
+ * directly. Never deletes and re-inserts the linked row.
+ */
+function LinkedGroupDetail({
+  groupId,
+  rows,
+  onClose,
+}: {
+  groupId: string;
+  rows: Transaction[];
+  onClose: () => void;
+}) {
+  const { data: accounts = [] } = useAccounts();
+  const { data: categories = [] } = useCategories();
+  const { data: bills = [] } = useBills();
+  const { data: debts = [] } = useDebts();
+  const upsert = useUpsertTransaction();
+  const del = useDeleteTransaction();
+  const editLinked = useEditLinkedTransaction();
+
+  const linkedRow = rows.find((r) => r.linked_bill_id || r.linked_debt_id)!;
+  const feeRows = useMemo(() => rows.filter((r) => r.id !== linkedRow.id), [rows, linkedRow.id]);
+  const total = rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+  const sign = Number(linkedRow.amount ?? 0) < 0 ? -1 : 1;
+
+  const linkedBill = bills.find((b) => b.id === linkedRow.linked_bill_id);
+  const linkedDebt = debts.find((d) => d.id === linkedRow.linked_debt_id);
+  const payable = linkedBill
+    ? toPayable("bill", linkedBill)
+    : linkedDebt
+      ? toPayable("debt", linkedDebt)
+      : null;
+
+  type FeeLine = { id: string | null; categoryId: string; amount: string; description: string };
+
+  const [edit, setEdit] = useState(false);
+  const [payAmount, setPayAmount] = useState("");
+  const [date, setDate] = useState("");
+  const [status, setStatus] = useState("cleared");
+  const [accountId, setAccountId] = useState("");
+  const [description, setDescription] = useState("");
+  const [lines, setLines] = useState<FeeLine[]>([]);
+  const [removed, setRemoved] = useState<Transaction[]>([]);
+
+  const [lastKey, setLastKey] = useState("");
+  if (groupId !== lastKey) {
+    setLastKey(groupId);
+    setEdit(false);
+    setPayAmount(String(Math.abs(Number(linkedRow.amount ?? 0))));
+    setDate(linkedRow.transaction_date.slice(0, 10));
+    setStatus(linkedRow.status ?? "cleared");
+    setAccountId(linkedRow.account_id ?? "");
+    setDescription(linkedRow.description ?? "");
+    setRemoved([]);
+    setLines(
+      feeRows.map((r) => ({
+        id: r.id,
+        categoryId: r.category_id ?? NO_SPLIT_CATEGORY,
+        amount: String(Math.abs(Number(r.amount ?? 0))),
+        description: r.description ?? "",
+      })),
+    );
+  }
+
+  const editedTotal =
+    sign *
+    (Math.abs(Number(payAmount) || 0) +
+      lines.reduce((s, l) => s + Math.abs(Number(l.amount) || 0), 0));
+
+  const categoryName = (id: string | null | undefined) =>
+    categories.find((c) => c.id === id)?.name ?? "No category";
+
+  async function save() {
+    if (!accountId) {
+      toast.error("Pick an account");
+      return;
+    }
+    if (!payable) {
+      toast.error("This payment's bill or debt is missing.");
+      return;
+    }
+    try {
+      await editLinked.mutateAsync({
+        transaction: linkedRow,
+        kind: payable.kind,
+        payableId: payable.id,
+        amount: Math.abs(Number(payAmount)),
+        date,
+        status: status as "pending" | "cleared",
+        accountId,
+        description: description || null,
+      });
+      for (const line of lines) {
+        const value = Math.abs(Number(line.amount) || 0);
+        if (!(value > 0.005)) continue;
+        await upsert.mutateAsync({
+          ...(line.id ? { id: line.id } : {}),
+          amount: sign * value,
+          status: status as "pending" | "cleared",
+          transaction_date: date,
+          account_id: accountId,
+          category_id: line.categoryId === NO_SPLIT_CATEGORY ? null : line.categoryId,
+          description: line.description || `Fee: ${payable.name}`,
+          split_group_id: groupId,
+          institution_id: linkedRow.institution_id,
+        });
+      }
+      // Lines cleared to zero count as removals too.
+      const zeroed = lines.filter(
+        (l) => l.id && !(Math.abs(Number(l.amount) || 0) > 0.005),
+      );
+      for (const t of [...removed, ...feeRows.filter((r) => zeroed.some((z) => z.id === r.id))]) {
+        await del.mutateAsync(t);
+      }
+      toast.success(`Transaction updated — ${payable.name} kept in sync`);
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{linkedRow.description || payable?.name || "Payment"}</DialogTitle>
+        </DialogHeader>
+
+        {!edit ? (
+          <div className="space-y-4">
+            <DetailGrid>
+              <DetailItem label="Total" value={formatMoney(total)} />
+              <DetailItem label="Date" value={linkedRow.transaction_date} />
+              <DetailItem
+                label="Status"
+                value={
+                  <Badge
+                    variant={linkedRow.status === "cleared" ? "outline" : "secondary"}
+                    className="capitalize"
+                  >
+                    {linkedRow.status || "pending"}
+                  </Badge>
+                }
+              />
+              <DetailItem
+                label="Account"
+                value={accounts.find((a) => a.id === linkedRow.account_id)?.name ?? "—"}
+              />
+              <DetailItem label="Linked to" value={payable?.name ?? "—"} />
+            </DetailGrid>
+            <div>
+              <SectionLabel>Lines</SectionLabel>
+              <div className="mt-1 divide-y divide-border/50 rounded-md border">
+                {rows.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between px-2 py-2 text-sm">
+                    <span className="min-w-0 truncate">
+                      {r.id === linkedRow.id
+                        ? `Payment · ${payable?.name ?? ""}`
+                        : r.description || categoryName(r.category_id)}
+                    </span>
+                    <span className="tabular-nums">{formatMoney(Number(r.amount))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {payable && (
+              <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                Editing here updates the payment and its fees together — {payable.name}'s
+                balance, cycle progress and status follow along.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Payment amount</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Status</Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">pending</SelectItem>
+                    <SelectItem value="cleared">cleared</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Account</Label>
+                <Select value={accountId} onValueChange={setAccountId}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Pick an account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Fees and extra lines</Label>
+              {lines.map((l, i) => (
+                <div key={l.id ?? `new-${i}`} className="flex items-center gap-2">
+                  <Select
+                    value={l.categoryId}
+                    onValueChange={(v) =>
+                      setLines(lines.map((x, idx) => (idx === i ? { ...x, categoryId: v } : x)))
+                    }
+                  >
+                    <SelectTrigger className="h-11 flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_SPLIT_CATEGORY}>No category</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    className="h-11 w-28"
+                    value={l.amount}
+                    onChange={(e) =>
+                      setLines(
+                        lines.map((x, idx) => (idx === i ? { ...x, amount: e.target.value } : x)),
+                      )
+                    }
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label="Remove line"
+                    className="h-11 w-11 shrink-0"
+                    onClick={() => {
+                      const existing = feeRows.find((r) => r.id === l.id);
+                      if (existing) setRemoved((prev) => [...prev, existing]);
+                      setLines(lines.filter((_, idx) => idx !== i));
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full"
+                onClick={() =>
+                  setLines([
+                    ...lines,
+                    { id: null, categoryId: NO_SPLIT_CATEGORY, amount: "", description: "" },
+                  ])
+                }
+              >
+                Add line
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Group total {formatMoney(editedTotal)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          {payable ? (
+            <div className="flex items-center gap-1">
+              <ReversePaymentButton transaction={linkedRow} payable={payable} />
+              <span className="text-xs text-muted-foreground">Reverse</span>
+            </div>
+          ) : (
+            <span />
+          )}
+          {edit ? (
+            <Button
+              className="h-11"
+              onClick={save}
+              disabled={editLinked.isPending || upsert.isPending}
+            >
               Save
             </Button>
           ) : (

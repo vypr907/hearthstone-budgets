@@ -3304,3 +3304,31 @@ wiring it in the same change covers "keep this account off the trend" (a
 tracking-only card, a locked HSA) without inventing a second concept.
 
 Status: Decided 2026-08-27. Not implemented.
+
+## ADR-088: One "Edit" for linked transactions (payable-aware edit)
+
+Decision:
+A bill/debt-linked transaction is edited through the ordinary transaction Edit
+button, not a separate Correct/Reverse affordance. Amount, date, status and
+account are unlocked for linked rows; saving runs rollback-then-reapply on the
+underlying payable (`rollbackClearedPayment` + `applyClearedPayment` in
+`src/lib/payments.ts`, `useEditLinkedTransaction`) so `remaining_balance`,
+`cycle_paid_to_date`, `payment_status`, `date_paid_off` and any
+`resolved_cycle_due_date` tag are recomputed for the new values, including
+across the pending/cleared boundary. Delete is replaced by Reverse (ADR-070)
+for linked rows. A group that is exactly one linked payment plus plain fee
+lines on one account is classified `payment-with-fees`
+(`src/lib/split-groups.ts`) and opens a grouped editor that edits the payment
+and its fees together, allows adding/removing fee lines, and never
+delete-and-reinserts the linked row. Groups with >1 linked row or >1 account
+stay per-row (`linked-or-multi`). ADR-077's CorrectPaymentButton remains on
+the Bill/Debt detail screens only.
+
+Reason:
+ADR-077's Correct button only appeared for an un-resolved partial payment in
+an unpaid cycle, so the common case — a cleared payment that closed its cycle,
+or a wrong payment+fee split — had no reachable edit path and the transaction
+Edit button locked the fields. Users think in terms of "edit the transaction";
+keeping the bill/debt in sync is the app's job, not a second workflow.
+
+Status: Decided 2026-08-31. Implemented.

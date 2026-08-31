@@ -185,3 +185,14 @@
   editable since it carries no link (ADR-046). Breakdown affordance for
   per-row groups now reads "tap a line to edit". No logic/schema change,
   115 tests green.
+- ADR-088 — unified linked-transaction editing. `src/lib/payments.ts`:
+  `fetchPayable`, `rollbackClearedPayment`, `useEditLinkedTransaction`
+  (rollback-then-reapply, handles pending↔cleared and stale cycle tags).
+  `src/lib/split-groups.ts`: new `payment-with-fees` classification +
+  `isPaymentWithFeesGroup`. `src/routes/app.transactions.tsx`: linked rows now
+  fully editable via the normal Edit button with payable-aware save, Reverse
+  replaces Delete, and payment+fee groups open a new `LinkedGroupDetail`
+  editor (edit payment + fees together, add/remove fee lines). Tests updated
+  for the new classification; 117 green, build OK.
+  User-visible: tap the Aarons - Dresser group → Edit → fix the payment amount
+  and the fee line in one place; the debt follows along.

@@ -1028,6 +1028,139 @@ export function useCorrectPayment() {
 }
 
 /* ------------------------------------------------------------------------ */
+/* ADR-088: one Edit for a linked transaction                                */
+/* ------------------------------------------------------------------------ */
+
+/** Re-read a bill/debt straight from the DB so payable math starts from truth. */
+async function fetchPayable(kind: PayableKind, id: string): Promise<Payable> {
+  const { data, error } = await supabase.from(table(kind)).select("*").eq("id", id).single();
+  if (error) throw error;
+  if (!data) throw new Error(`That ${kind} no longer exists.`);
+  return toPayable(kind, data as Bill | Debt);
+}
+
+/**
+ * ADR-088: undo the payable-side effect of one cleared payment WITHOUT writing
+ * an offsetting ledger row (that's `useReversePayment`'s job). Used as the
+ * first half of rollback-then-reapply when a linked transaction is edited.
+ *
+ * When the payment resolved a cycle (`resolved_cycle_due_date`), the due date
+ * it rolled past is restored exactly instead of being guessed backwards.
+ */
+export async function rollbackClearedPayment(
+  p: Payable,
+  amount: number,
+  resolvedDueDate?: string | null,
+) {
+  const amt = Math.abs(amount);
+  if (p.kind === "bill") {
+    const bill = p.bill!;
+    const paid = Math.max(0, Number(bill.cycle_paid_to_date ?? 0) - amt);
+    const update: Record<string, unknown> = { cycle_paid_to_date: paid };
+    if (resolvedDueDate) {
+      // The resolve rolled the cycle forward and cleared the counters — put the
+      // cycle back where it was and credit whatever else had been paid into it.
+      update.next_due_date = resolvedDueDate;
+      update.cycle_paid_to_date = 0;
+      update.payment_status = "unpaid";
+    } else if (paid + 0.005 < billCycleDue(bill)) {
+      update.payment_status = paid > 0.005 ? "pending" : "unpaid";
+    }
+    await updateRow("bills", p.id, update);
+    return;
+  }
+  const debt = p.debt!;
+  const paid = Math.max(0, Number(debt.cycle_paid_to_date ?? 0) - amt);
+  const nextBalance = Number(debt.remaining_balance ?? 0) + amt;
+  const update: Record<string, unknown> = {
+    remaining_balance: nextBalance,
+    cycle_paid_to_date: paid,
+    ...advanceMinimumPaymentPatch(debt, nextBalance),
+  };
+  if (debt.date_paid_off) update.date_paid_off = null;
+  if (resolvedDueDate) {
+    update.next_due_date = resolvedDueDate;
+    update.cycle_paid_to_date = 0;
+    update.payment_status = "unpaid";
+  } else if (paid + 0.005 < debtCycleDue(debt)) {
+    update.payment_status = paid > 0.005 ? "pending" : "unpaid";
+  }
+  await updateRow("debts", p.id, update);
+}
+
+export type EditLinkedTransactionInput = {
+  transaction: Transaction;
+  kind: PayableKind;
+  payableId: string;
+  /** Positive magnitude of the payment. */
+  amount: number;
+  date: string;
+  status: "pending" | "cleared";
+  accountId: string | null;
+  categoryId?: string | null;
+  institutionId?: string | null;
+  description?: string | null;
+};
+
+/**
+ * ADR-088: the single "Edit" behind a bill/debt-linked transaction. Instead of
+ * refusing edits that cross the paid/unpaid boundary (the old ADR-077 Correct),
+ * it rolls the payable back by the transaction's previous cleared effect and
+ * re-applies the new one, payable-first (ADR-037). Status changes are handled
+ * the same way: cleared → pending only rolls back, pending → cleared only
+ * applies.
+ */
+export function useEditLinkedTransaction() {
+  const done = useAfterPayment();
+  return useMutation({
+    mutationFn: async (input: EditLinkedTransactionInput) => {
+      const { transaction, kind, payableId } = input;
+      const newAmount = Math.abs(Number(input.amount));
+      if (!(newAmount > 0.005)) throw new Error("Enter a positive amount");
+
+      const wasCleared = transaction.status === "cleared";
+      const willClear = input.status === "cleared";
+      const oldAmount = Math.abs(Number(transaction.amount ?? 0));
+      const sign = Number(transaction.amount ?? 0) > 0 ? 1 : -1;
+
+      if (wasCleared) {
+        const before = await fetchPayable(kind, payableId);
+        await rollbackClearedPayment(before, oldAmount, transaction.resolved_cycle_due_date);
+        if (transaction.resolved_cycle_due_date) {
+          // Drop the stale resolve tag BEFORE re-applying, so applyClearedPayment
+          // can re-tag this row if the new amount resolves a cycle again.
+          const { error: untagError } = await supabase
+            .from("transactions")
+            .update({ resolved_cycle_due_date: null })
+            .eq("id", transaction.id);
+          if (untagError) throw untagError;
+        }
+      }
+      if (willClear) {
+        const mid = await fetchPayable(kind, payableId);
+        await applyClearedPayment(mid, newAmount, 0, input.date);
+      }
+
+      const patch: Record<string, unknown> = {
+        amount: sign * newAmount,
+        transaction_date: input.date,
+        status: input.status,
+        account_id: input.accountId,
+        description: input.description ?? null,
+      };
+      if (input.categoryId !== undefined) patch.category_id = input.categoryId;
+      if (input.institutionId !== undefined) patch.institution_id = input.institutionId;
+
+
+      const { error } = await supabase.from("transactions").update(patch).eq("id", transaction.id);
+      if (error) throw error;
+    },
+    onSuccess: done,
+  });
+}
+
+/* ------------------------------------------------------------------------ */
+
 /* Log a debt payment (historical or current cycle) — ADR-084                */
 /* ------------------------------------------------------------------------ */
 
