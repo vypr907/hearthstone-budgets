@@ -670,6 +670,23 @@ export function TransactionDetail({
     isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds)
   )
     return <SplitTransactionDetail transaction={transaction} onClose={onClose} />;
+  // ADR-088: a payment + fee group (one linked row, one account) gets its own
+  // grouped editor — the linked line stays in sync with the bill/debt while
+  // the plain fee lines can be edited, added or removed.
+  if (
+    transaction.split_group_id &&
+    groupRows.length > 1 &&
+    !incomeEventIds.has(transaction.split_group_id) &&
+    isPaymentWithFeesGroup(groupRows)
+  )
+    return (
+      <LinkedGroupDetail
+        groupId={transaction.split_group_id}
+        rows={groupRows}
+        onClose={onClose}
+      />
+    );
+
 
   const isPaycheckDeposit =
     !!transaction.split_group_id &&
