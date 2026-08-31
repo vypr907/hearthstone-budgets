@@ -1126,6 +1126,15 @@ export function useEditLinkedTransaction() {
       if (wasCleared) {
         const before = await fetchPayable(kind, payableId);
         await rollbackClearedPayment(before, oldAmount, transaction.resolved_cycle_due_date);
+        if (transaction.resolved_cycle_due_date) {
+          // Drop the stale resolve tag BEFORE re-applying, so applyClearedPayment
+          // can re-tag this row if the new amount resolves a cycle again.
+          const { error: untagError } = await supabase
+            .from("transactions")
+            .update({ resolved_cycle_due_date: null })
+            .eq("id", transaction.id);
+          if (untagError) throw untagError;
+        }
       }
       if (willClear) {
         const mid = await fetchPayable(kind, payableId);
@@ -1141,9 +1150,7 @@ export function useEditLinkedTransaction() {
       };
       if (input.categoryId !== undefined) patch.category_id = input.categoryId;
       if (input.institutionId !== undefined) patch.institution_id = input.institutionId;
-      // The old resolve tag no longer describes this row — applyClearedPayment
-      // re-tags it if the new amount resolves a cycle again.
-      if (wasCleared && transaction.resolved_cycle_due_date) patch.resolved_cycle_due_date = null;
+
 
       const { error } = await supabase.from("transactions").update(patch).eq("id", transaction.id);
       if (error) throw error;
