@@ -906,7 +906,7 @@ export function TransactionDetail({
             </div>
             <div>
               <Label>Status</Label>
-              <Select value={status} onValueChange={setStatus} disabled={isLinked}>
+              <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
