@@ -196,3 +196,20 @@
   for the new classification; 117 green, build OK.
   User-visible: tap the Aarons - Dresser group → Edit → fix the payment amount
   and the fee line in one place; the debt follows along.
+- Aaron's - Dresser lease alignment (data-only, no ADR — existing fields only).
+  Read the live row + ledger: debt `8004b659…`, starting 2550.00 / remaining
+  1855.06 / min 92.04 / due_day 21 / next_due 2026-08-18 / plan 24 payments,
+  four cleared payments of -92.04 (04-23, 05-21, 07-21, 08-21) plus fee lines
+  (Tax 5.06, Protection Plus 9.20, one 5.00 Non-Renewal; August's lone -14.26
+  = 5.06 tax + 9.20 protection). None of that matched lease 33984278: $97.10/mo
+  x 24 = $2,330.40 total cost to own, cash price $1,297.42.
+  Wrote `scripts/migrations/2026-08-31-aarons-dresser-lease-alignment.sql`
+  (user runs it in the Supabase SQL Editor): rolls the $5.06 tax into each of
+  the four principal rows (92.04 → 97.10) and strips the matching tax fee rows
+  so account cash-out is unchanged; restates the debt to starting 2330.40 /
+  remaining 1942.00 (20 payments left) / min 97.10 / due 2026-09-21 /
+  cycle_paid_to_date 0 / status unpaid / interest 0 / lease details in notes.
+  Protection Plus stays a fee line (ADR-046) — it isn't part of the 24 payments.
+  Known issue: the pre-existing 2550.00 → 1855.06 balance couldn't be explained
+  by the four logged payments (368.16); the restatement overwrites it rather
+  than reconciling the earlier drift.
