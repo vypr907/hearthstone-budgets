@@ -145,27 +145,81 @@ function FixPlacesPage() {
               </CardContent>
             </Card>
 
-            {unassigned.map((t) => (
+            {unassigned.map((t) => {
+              const gid = t.split_group_id ?? t.transfer_group_id ?? null;
+              const group = gid ? (siblings[gid] ?? []) : [];
+              const others = group.filter((g) => g.id !== t.id);
+              const groupTotal = group.reduce((s, g) => s + Math.abs(Number(g.amount ?? 0)), 0);
+              const linked =
+                (t.linked_bill_id && nameOf.bill[t.linked_bill_id]) ||
+                (t.linked_debt_id && nameOf.debt[t.linked_debt_id]) ||
+                null;
+              const category = t.category_id ? nameOf.cat[t.category_id] : null;
+              const title =
+                t.description ||
+                (linked ? `Payment · ${linked}` : null) ||
+                (category ? `${category} purchase` : null) ||
+                (others.find((o) => o.description)?.description
+                  ? `Part of: ${others.find((o) => o.description)!.description}`
+                  : "(no description)");
+              return (
               <Card key={t.id}>
                 <CardContent className="space-y-2 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
-                        {t.description || "(no description)"}
-                      </p>
+                      <p className="truncate text-sm font-semibold">{title}</p>
                       <p className="text-xs text-muted-foreground">
                         {t.transaction_date}
                         {t.account_id && accountName[t.account_id]
                           ? ` · ${accountName[t.account_id]}`
                           : ""}
                         {t.status ? ` · ${t.status}` : ""}
-                        {t.split_group_id ? " · part of a split" : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {category ? `Category: ${category}` : "No category"}
+                        {linked ? ` · ${linked}` : ""}
                       </p>
                     </div>
                     <span className="shrink-0 text-sm font-semibold tabular-nums">
                       {formatMoney(Math.abs(Number(t.amount ?? 0)))}
                     </span>
                   </div>
+
+                  {others.length > 0 && (
+                    <div className="rounded-md border border-border/60 bg-muted/30 p-2">
+                      <p className="text-[11px] font-medium text-muted-foreground">
+                        {t.split_group_id ? "Split" : "Transfer"} of{" "}
+                        {formatMoney(groupTotal)} · {group.length} lines
+                      </p>
+                      <ul className="mt-1 space-y-0.5">
+                        {others.slice(0, 4).map((o) => (
+                          <li
+                            key={o.id}
+                            className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground"
+                          >
+                            <span className="truncate">
+                              {o.description ||
+                                (o.linked_debt_id && nameOf.debt[o.linked_debt_id]) ||
+                                (o.linked_bill_id && nameOf.bill[o.linked_bill_id]) ||
+                                (o.category_id && nameOf.cat[o.category_id]) ||
+                                "line"}
+                              {o.institution_id && nameOf.inst[o.institution_id]
+                                ? ` @ ${nameOf.inst[o.institution_id]}`
+                                : ""}
+                            </span>
+                            <span className="shrink-0 tabular-nums">
+                              {formatMoney(Math.abs(Number(o.amount ?? 0)))}
+                            </span>
+                          </li>
+                        ))}
+                        {others.length > 4 && (
+                          <li className="text-[11px] text-muted-foreground">
+                            +{others.length - 4} more
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
                   <PlacePicker
                     value={null}
                     onChange={(id) => void assign(t, id)}
