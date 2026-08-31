@@ -980,11 +980,22 @@ export function TransactionDetail({
             <Button variant="destructive" className="h-11" onClick={handleDelete}>
               <Trash2 className="mr-2 h-4 w-4" /> Delete
             </Button>
+          ) : linkedPayable ? (
+            /* ADR-088: Reverse is the undo for a linked payment — Delete would
+               strand the bill/debt's cycle counters. */
+            <div className="flex items-center gap-1">
+              <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
+              <span className="text-xs text-muted-foreground">Reverse</span>
+            </div>
           ) : (
             <span />
           )}
           {edit ? (
-            <Button className="h-11" onClick={save} disabled={upsert.isPending}>
+            <Button
+              className="h-11"
+              onClick={save}
+              disabled={upsert.isPending || editLinked.isPending}
+            >
               Save
             </Button>
           ) : (
@@ -993,6 +1004,7 @@ export function TransactionDetail({
             </Button>
           )}
         </DialogFooter>
+
       </DialogContent>
     </Dialog>
   );
