@@ -11,6 +11,8 @@ export type TxPreFilter = {
   linked?: "linked" | "unlinked";
   dateFrom?: string;
   dateTo?: string;
+  /** ADR-089: hide two-sided transfers so the list matches the budget figure. */
+  excludeInternalTransfers?: boolean;
   label?: string;
 };
 
