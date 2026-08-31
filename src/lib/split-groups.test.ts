@@ -46,22 +46,37 @@ describe("classifyLedgerGroup (ADR-047 addendum)", () => {
     expect(classifyLedgerGroup(rows, "grp", EVENTS)).toBe("linked-or-multi");
   });
 
-  it("non-event id with a bill/debt-linked row → linked-or-multi", () => {
+  // ADR-088: one linked row + fee lines on one account is the payment+fee
+  // shape and gets the grouped editor; >1 linked row stays per-row.
+  it("non-event id with exactly one bill/debt-linked row → payment-with-fees", () => {
+    expect(
+      classifyLedgerGroup([row({}), row({ linked_bill_id: "b1" })], "grp", EVENTS),
+    ).toBe("payment-with-fees");
+    expect(
+      classifyLedgerGroup([row({}), row({ linked_debt_id: "d1" })], "grp", EVENTS),
+    ).toBe("payment-with-fees");
+  });
+
+  it("non-event id with two linked rows → linked-or-multi", () => {
     expect(
       classifyLedgerGroup(
-        [row({}), row({ linked_bill_id: "b1" })],
-        "grp",
-        EVENTS,
-      ),
-    ).toBe("linked-or-multi");
-    expect(
-      classifyLedgerGroup(
-        [row({}), row({ linked_debt_id: "d1" })],
+        [row({ linked_debt_id: "d1" }), row({ linked_bill_id: "b1" })],
         "grp",
         EVENTS,
       ),
     ).toBe("linked-or-multi");
   });
+
+  it("linked row across two accounts → linked-or-multi", () => {
+    expect(
+      classifyLedgerGroup(
+        [row({ account_id: "a" }), row({ account_id: "b", linked_bill_id: "b1" })],
+        "grp",
+        EVENTS,
+      ),
+    ).toBe("linked-or-multi");
+  });
+
 
   it("one account, no links, non-event id → category-split", () => {
     const rows = [
