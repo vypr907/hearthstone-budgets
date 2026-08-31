@@ -55,6 +55,7 @@ import {
   type SplitRow,
 } from "@/components/SplitLinesEditor";
 import { consumeTxPreFilter } from "@/lib/tx-filter-store";
+import { internalTransferIds, isInternalTransfer } from "@/lib/internal-transfers";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { useEditLinkedTransaction, toPayable } from "@/lib/payments";
 
@@ -214,6 +215,7 @@ function TransactionsPage() {
     linkedFilter,
     dateFrom,
     dateTo,
+    hideInternalTransfers,
     searchQuery,
     amountMin,
     amountMax,
