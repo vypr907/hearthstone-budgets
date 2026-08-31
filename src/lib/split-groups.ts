@@ -26,7 +26,23 @@ export type LedgerEntry = {
  *   (a hand-built multi-account split, or an ADR-046 payment+fee group).
  *   Also edited one row at a time; the whole-group editor would corrupt it.
  */
-export type LedgerGroupKind = "category-split" | "paycheck" | "linked-or-multi";
+export type LedgerGroupKind =
+  | "category-split"
+  | "paycheck"
+  | "payment-with-fees"
+  | "linked-or-multi";
+
+/**
+ * ADR-088: exactly one bill/debt-linked row on a single account, plus any
+ * number of plain fee/charge lines — the ADR-046 payment+fee shape. Safe for
+ * the grouped editor because only one payable has to be kept in sync.
+ */
+export function isPaymentWithFeesGroup(rows: Transaction[]): boolean {
+  const accounts = new Set(rows.map((r) => r.account_id ?? null));
+  if (accounts.size > 1) return false;
+  const linked = rows.filter((r) => r.linked_bill_id || r.linked_debt_id);
+  return linked.length === 1 && rows.length > 1;
+}
 
 export function classifyLedgerGroup(
   rows: Transaction[],
@@ -36,9 +52,11 @@ export function classifyLedgerGroup(
   if (incomeEventIds.has(groupId)) return "paycheck";
   const accounts = new Set(rows.map((r) => r.account_id ?? null));
   const hasLinked = rows.some((r) => r.linked_bill_id || r.linked_debt_id);
+  if (isPaymentWithFeesGroup(rows)) return "payment-with-fees";
   if (accounts.size > 1 || hasLinked) return "linked-or-multi";
   return "category-split";
 }
+
 
 /** True only for a genuine ADR-044 category split (safe for the group editor). */
 export function isCategorySplitGroup(
