@@ -674,6 +674,13 @@ export function TransactionDetail({
   const linkedBill = bills.find((b) => b.id === transaction.linked_bill_id);
   const linkedDebt = debts.find((d) => d.id === transaction.linked_debt_id);
   const isLinked = !!(transaction.linked_bill_id || transaction.linked_debt_id);
+  // ADR-077/ADR-070: let a linked payment be corrected or reversed straight from
+  // the ledger instead of dead-ending on "fix it from the bill/debt screen".
+  const linkedPayable = linkedBill
+    ? toPayable("bill", linkedBill)
+    : linkedDebt
+      ? toPayable("debt", linkedDebt)
+      : null;
   const placeName = institutions.find((i) => i.id === transaction.institution_id)?.name ?? null;
   // ADR-056: a transfer is two rows sharing transfer_group_id — negative on
   // the from-account, positive on the to-account. Find the other leg to show
