@@ -51,11 +51,39 @@ function FixPlacesPage() {
   const { data: accounts = [] } = useAccounts();
   const save = useUpsertTransaction();
 
+  const { data: categories = [] } = useCategories();
+  const { data: institutions = [] } = useInstitutions();
+  const { data: bills = [] } = useBills();
+  const { data: debts = [] } = useDebts();
+
   const accountName = useMemo(() => {
     const m: Record<string, string> = {};
     for (const a of accounts) m[a.id] = accountLabel(a);
     return m;
   }, [accounts]);
+
+  const nameOf = useMemo(() => {
+    const cat: Record<string, string> = {};
+    for (const c of categories as { id: string; name: string }[]) cat[c.id] = c.name;
+    const inst: Record<string, string> = {};
+    for (const i of institutions as { id: string; name: string }[]) inst[i.id] = i.name;
+    const bill: Record<string, string> = {};
+    for (const b of bills as { id: string; name: string }[]) bill[b.id] = b.name;
+    const debt: Record<string, string> = {};
+    for (const d of debts as { id: string; name: string }[]) debt[d.id] = d.name;
+    return { cat, inst, bill, debt };
+  }, [categories, institutions, bills, debts]);
+
+  /** ADR-090: sibling lines give a split row the context its own fields lack. */
+  const siblings = useMemo(() => {
+    const m: Record<string, Transaction[]> = {};
+    for (const t of transactions as Transaction[]) {
+      const gid = t.split_group_id ?? t.transfer_group_id;
+      if (!gid) continue;
+      (m[gid] ||= []).push(t);
+    }
+    return m;
+  }, [transactions]);
 
   /**
    * Internal (two-sided) transfers move money between the household's own
