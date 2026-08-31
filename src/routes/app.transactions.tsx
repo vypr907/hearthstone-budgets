@@ -56,7 +56,7 @@ import {
 } from "@/components/SplitLinesEditor";
 import { consumeTxPreFilter } from "@/lib/tx-filter-store";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
-import { useEditLinkedTransaction } from "@/lib/payments";
+import { useEditLinkedTransaction, toPayable } from "@/lib/payments";
 
 
 export const Route = createFileRoute("/app/transactions")({
