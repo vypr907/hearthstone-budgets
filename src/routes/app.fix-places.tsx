@@ -6,7 +6,15 @@ import { AppHeader } from "@/components/AppHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { PlacePicker } from "@/components/PlacePicker";
 import { EmptyState } from "@/components/EmptyState";
-import { useAccounts, useTransactions, useUpsertTransaction } from "@/lib/data-hooks";
+import {
+  useAccounts,
+  useBills,
+  useCategories,
+  useDebts,
+  useInstitutions,
+  useTransactions,
+  useUpsertTransaction,
+} from "@/lib/data-hooks";
 import { internalTransferIds } from "@/lib/internal-transfers";
 import { accountLabel, formatMoney } from "@/lib/format";
 import type { Transaction } from "@/lib/supabase";
