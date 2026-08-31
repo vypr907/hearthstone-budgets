@@ -226,3 +226,11 @@
   `src/routes/app.index.tsx`, `src/routes/app.spending.tsx`. 120 tests green.
   User-visible: Savings' inflated $1,710.34 drops to any genuinely one-sided
   transfer leg, and the receipt icon now lists the rows behind the number.
+- ADR-090: reconciled Fix Places with Spending by Place. Fix Places no longer
+  skips split lines or one-sided transfer legs (only internal two-sided
+  transfers are excluded, ADR-089) and labels split rows "part of a split";
+  Spending by Place excludes internal transfers from its rankings and its
+  untagged footnote, which now links to Fix Places with a row count.
+  Files: `src/routes/app.fix-places.tsx`, `src/routes/app.spending-by-place.tsx`.
+  User-visible: the August "$14,238.72 has no place attached" note drops to the
+  ~$1,716 that is actually assignable, and tapping it opens those rows.

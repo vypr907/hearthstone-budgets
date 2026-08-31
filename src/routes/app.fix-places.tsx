@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PlacePicker } from "@/components/PlacePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { useAccounts, useTransactions, useUpsertTransaction } from "@/lib/data-hooks";
+import { internalTransferIds } from "@/lib/internal-transfers";
 import { accountLabel, formatMoney } from "@/lib/format";
 import type { Transaction } from "@/lib/supabase";
 
@@ -49,18 +50,22 @@ function FixPlacesPage() {
   }, [accounts]);
 
   /**
-   * Transfers, paycheck deposits, splits, and deductions (ADR-047/055/056)
-   * never get an institution_id — there's no merchant to assign, they move
-   * money between the household's own accounts/sources. Excluded here so
-   * Fix Places only ever surfaces genuinely place-less spending.
+   * Internal (two-sided) transfers move money between the household's own
+   * accounts (ADR-056/089) — there is no merchant to assign, so they stay out.
+   * Everything else that spends money without a place is fixable, including
+   * split lines (ADR-044), which are ordinary purchases and often happen at
+   * different places than the rest of their group, and one-sided transfer legs,
+   * where the money really did leave the household.
    */
-  const unassigned = useMemo(
-    () =>
-      transactions.filter(
-        (t: Transaction) => !t.institution_id && !t.transfer_group_id && !t.split_group_id,
-      ),
-    [transactions],
-  );
+  const unassigned = useMemo(() => {
+    const internal = internalTransferIds(transactions);
+    return transactions.filter(
+      (t: Transaction) =>
+        !t.institution_id &&
+        !(t.transfer_group_id && internal.has(t.transfer_group_id)) &&
+        Number(t.amount ?? 0) < 0,
+    );
+  }, [transactions]);
 
   async function assign(t: Transaction, institutionId: string | null) {
     if (!institutionId) return;
@@ -118,6 +123,7 @@ function FixPlacesPage() {
                           ? ` · ${accountName[t.account_id]}`
                           : ""}
                         {t.status ? ` · ${t.status}` : ""}
+                        {t.split_group_id ? " · part of a split" : ""}
                       </p>
                     </div>
                     <span className="shrink-0 text-sm font-semibold tabular-nums">
