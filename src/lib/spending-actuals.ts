@@ -34,9 +34,14 @@ export function buildActualResolver(
     bills.map((b) => [b.id, b.category_id ?? null]),
   );
 
+  // ADR-089: internal (two-sided) transfers are money moved between the
+  // household's own accounts, never spend.
+  const internal = internalTransferIds(transactions);
+
   const fromLedger = new Map<string, number>();
   const billsLedger = new Map<string, number>();
   for (const t of transactions) {
+    if (t.transfer_group_id && internal.has(t.transfer_group_id)) continue; // ADR-089
     const linkedBillId = t.linked_bill_id ?? null;
     const categoryId =
       t.category_id ?? (linkedBillId ? (billCategory.get(linkedBillId) ?? null) : null);
