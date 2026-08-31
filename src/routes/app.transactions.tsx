@@ -845,13 +845,20 @@ export function TransactionDetail({
         ) : (
           <div className="space-y-3">
             {paycheckBanner}
-            {isLinked && (
-              <p className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
-                Amount and status are locked on linked entries — use{" "}
-                {linkedBill ? "the bill's" : "the debt's"} Pay actions (or Reverse) so{" "}
-                {linkedBill?.name ?? linkedDebt?.name} stays in sync.
-              </p>
+            {isLinked && linkedPayable && (
+              <div className="space-y-2 rounded-md border border-dashed p-2">
+                <p className="text-xs text-muted-foreground">
+                  Amount and status are locked here so {linkedPayable.name} stays in sync — use
+                  Correct to change the amount, or Reverse to undo the payment.
+                </p>
+                <div className="flex items-center gap-1">
+                  <CorrectPaymentButton transaction={transaction} payable={linkedPayable} />
+                  <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
+                  <span className="text-xs text-muted-foreground">Correct / Reverse</span>
+                </div>
+              </div>
             )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Amount</Label>
