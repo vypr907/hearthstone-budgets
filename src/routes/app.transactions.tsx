@@ -619,6 +619,8 @@ export function TransactionDetail({
   const upsert = useUpsertTransaction();
   const del = useDeleteTransaction();
   const delTransferPair = useDeleteTransferPair();
+  const editLinked = useEditLinkedTransaction();
+
 
   const incomeEventIds = useMemo(
     () => new Set(incomeEvents.map((e) => e.id)),
