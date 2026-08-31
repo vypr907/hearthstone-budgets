@@ -106,6 +106,8 @@ function TransactionsPage() {
   const [linkedFilter, setLinkedFilter] = useState("all"); // all | linked | unlinked
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  /** ADR-089: drill-downs from budget figures hide two-sided transfers. */
+  const [hideInternalTransfers, setHideInternalTransfers] = useState(false);
   /** ADR-053/063: search matches free-text description or the resolved place. */
   const [searchQuery, setSearchQuery] = useState("");
   const [amountMin, setAmountMin] = useState("");
