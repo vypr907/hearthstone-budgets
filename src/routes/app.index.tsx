@@ -1413,6 +1413,13 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
   );
 }
 
+/** Last calendar day of a YYYY-MM-01 month key, as YYYY-MM-DD. */
+function monthEndISO(monthKeyValue: string): string {
+  const [y, m] = monthKeyValue.split("-").map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return `${monthKeyValue.slice(0, 7)}-${String(last).padStart(2, "0")}`;
+}
+
 /** ADR-073: bills + debts + spending combined, vs. budget target and trailing average. */
 type MonthlySummaryGroup = {
   name: string;
@@ -1520,8 +1527,10 @@ function MonthlySummaryTile({ group: g, index: i }: { group: MonthlySummaryGroup
             drill={{
               categoryIds: g.categoryIds,
               label: g.name,
-              dateFrom: `${g.month}-01`,
-              dateTo: `${g.month}-31`,
+              // `g.month` is already a YYYY-MM-01 key (monthKey), so the range
+              // is that day through the real last day of the month.
+              dateFrom: g.month,
+              dateTo: monthEndISO(g.month),
             }}
           />
         </div>
