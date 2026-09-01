@@ -273,6 +273,12 @@
   vertically. File: `src/routes/app.everything.tsx`.
 - Everything row refinements v4 (UI-only): category emoji chip enlarged from
   `h-5 w-5` to `h-6 w-6` (`text-xs`). File: `src/routes/app.everything.tsx`.
+- Everything row refinements v5 (UI-only): removed the coloured chip around the
+  category emoji and expanded the emoji to `text-2xl` so it fills the emoji stack
+  space. File: `src/routes/app.everything.tsx`.
+
+
+
 
 
 
