@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Bill, type BillAdjustment, type Debt, type Transaction } from "./supabase";
 import { advanceDate, reverseDate, shiftDateSafe, formatMoney } from "./format";
 import { useAuth } from "./auth-context";
+import { debtPayoffDatePatch } from "./debt-payoff-state";
 
 function todayISO() {
   const n = new Date();
@@ -261,8 +262,8 @@ export async function applyClearedPayment(
     const update: Record<string, unknown> = {
       remaining_balance: nextBalance,
       ...advanceMinimumPaymentPatch(debt, nextBalance),
+      ...debtPayoffDatePatch(debt, nextBalance, date),
     };
-    if (nextBalance === 0 && !debt.date_paid_off) update.date_paid_off = date;
 
     if (target > 0 && paid + 0.005 < target) {
       // Shortfall: stay pending in the same cycle so a follow-up can be submitted.
@@ -821,7 +822,10 @@ export function useResetCycle() {
           payment_status: "unpaid",
           cycle_paid_to_date: 0,
           remaining_balance: Number(debt.remaining_balance ?? 0) + clearedTotal,
-          date_paid_off: null,
+          ...debtPayoffDatePatch(
+            debt,
+            Number(debt.remaining_balance ?? 0) + clearedTotal,
+          ),
         };
         const cycle = (debt.billing_cycle ?? "monthly").toLowerCase();
         if (resolved && cycle !== "monthly" && debt.next_due_date) {
@@ -906,9 +910,9 @@ export function useReversePayment() {
           remaining_balance: nextBalance,
           cycle_paid_to_date: paid,
           ...advanceMinimumPaymentPatch(debt, nextBalance),
+          ...debtPayoffDatePatch(debt, nextBalance),
         };
         if (paid + 0.005 < due) update.payment_status = "unpaid";
-        if (debt.date_paid_off) update.date_paid_off = null;
         await updateRow("debts", payable.id, update);
       }
 
@@ -989,6 +993,7 @@ export function useCorrectPayment() {
           cycle_paid_to_date: paidAfter,
           remaining_balance: newRemaining,
           ...advanceMinimumPaymentPatch(debt, newRemaining),
+          ...debtPayoffDatePatch(debt, newRemaining, date),
         });
       } else {
         const bill = payable.bill!;
@@ -1076,8 +1081,8 @@ export async function rollbackClearedPayment(
     remaining_balance: nextBalance,
     cycle_paid_to_date: paid,
     ...advanceMinimumPaymentPatch(debt, nextBalance),
+    ...debtPayoffDatePatch(debt, nextBalance),
   };
-  if (debt.date_paid_off) update.date_paid_off = null;
   if (resolvedDueDate) {
     update.next_due_date = resolvedDueDate;
     update.cycle_paid_to_date = 0;
@@ -1246,7 +1251,7 @@ export function useLogDebtPayment() {
             await updateRow("debts", debt.id, {
               remaining_balance: nextBalance,
               ...advanceMinimumPaymentPatch(debt, nextBalance),
-              ...(nextBalance === 0 && !debt.date_paid_off ? { date_paid_off: date } : {}),
+              ...debtPayoffDatePatch(debt, nextBalance, date),
             });
           }
         } else if (inCycle) {

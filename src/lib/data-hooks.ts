@@ -25,6 +25,7 @@ import { useAuth } from "./auth-context";
 import { advanceMinimumPaymentPatch, advanceReactivationPatch } from "./payments";
 import { nextPayDate } from "./paycheck-budget";
 import { useIncomeSources, useIncomeEvents } from "./income-hooks";
+import { debtPayoffDatePatch } from "./debt-payoff-state";
 
 /** Normalized domain comparison — stored values vary in case/whitespace. */
 export function categoryDomain(c: { domain?: string | null } | undefined | null) {
@@ -733,7 +734,11 @@ export function useAddDebtAdjustment() {
         );
         const { error: debtError } = await supabase
           .from("debts")
-          .update({ remaining_balance: next, ...advanceMinimumPaymentPatch(args.debt, next) })
+          .update({
+            remaining_balance: next,
+            ...advanceMinimumPaymentPatch(args.debt, next),
+            ...debtPayoffDatePatch(args.debt, next, args.adjustmentDate),
+          })
           .eq("id", args.debt.id);
         if (debtError) throw debtError;
       }
@@ -768,7 +773,11 @@ export function useDeleteDebtAdjustment() {
         );
         const { error: debtError } = await supabase
           .from("debts")
-          .update({ remaining_balance: next, ...advanceMinimumPaymentPatch(args.debt, next) })
+          .update({
+            remaining_balance: next,
+            ...advanceMinimumPaymentPatch(args.debt, next),
+            ...debtPayoffDatePatch(args.debt, next, args.adjustment.adjustment_date),
+          })
           .eq("id", args.debt.id);
         if (debtError) throw debtError;
       }
@@ -1057,7 +1066,11 @@ export function useDeleteAdvance() {
       );
       const { error: debtError } = await supabase
         .from("debts")
-        .update({ remaining_balance: next, ...advanceMinimumPaymentPatch(args.debt, next) })
+        .update({
+          remaining_balance: next,
+          ...advanceMinimumPaymentPatch(args.debt, next),
+          ...debtPayoffDatePatch(args.debt, next, args.adjustment.adjustment_date),
+        })
         .eq("id", args.debt.id);
       if (debtError) throw debtError;
       // Step 2: delete the adjustment row.
