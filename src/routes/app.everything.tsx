@@ -399,7 +399,7 @@ function EverythingPage() {
                             {KIND_EMOJI[r.kind]}
                           </span>
                           <span
-                            className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] leading-none"
+                            className="flex h-6 w-6 items-center justify-center rounded-full text-xs leading-none"
                             style={{
                               background: `color-mix(in oklab, ${visual.color} 18%, transparent)`,
                               border: `1px solid color-mix(in oklab, ${visual.color} 40%, transparent)`,
