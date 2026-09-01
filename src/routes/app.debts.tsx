@@ -35,9 +35,13 @@ import {
   DetailGrid,
   DetailItem,
   DetailMoney,
+  DetailMoneyStrong,
   DetailText,
   StatusBadge,
   statusVariant,
+  CategoryChip,
+  ValueChip,
+  LogoLabel,
 } from "@/components/detail";
 import {
   formatMoney,
@@ -442,6 +446,7 @@ export function DebtDetailDialog({
 }) {
   const { data: categories = [] } = useCategories();
   const { data: accounts = [] } = useAccounts();
+  const { data: institutions = [] } = useInstitutions();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
 
@@ -458,6 +463,7 @@ export function DebtDetailDialog({
   const infoOf = useCycleState(refDate);
 
   const category = categories.find((c) => c.id === debt?.category_id);
+  const institution = institutions.find((i) => i.id === debt?.institution_id);
   const account = accounts.find((a) => a.institution_id === debt?.institution_id);
 
   // ADR-036: the detail panel reports the ledger-derived cycle, not the stored
@@ -499,7 +505,16 @@ export function DebtDetailDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto overflow-x-hidden">
         <DialogHeader>
-          <DialogTitle>{debt.name}</DialogTitle>
+          <DialogTitle className="flex items-center justify-between gap-2 pr-6">
+            <span className="min-w-0 truncate">{debt.name}</span>
+            {institution ? (
+              <InstitutionLogo
+                logoUrl={institution.logo_url}
+                type={institution.institution_type}
+                size={32}
+              />
+            ) : null}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           {monthly ? (
@@ -514,9 +529,18 @@ export function DebtDetailDialog({
             </p>
           )}
           <DetailGrid>
-            <DetailItem label="Category" value={category?.name ?? "—"} />
+            <DetailItem label="Category" value={<CategoryChip category={category} />} />
             <DetailItem label="Debt type" value={debt.debt_type ? formatTypeLabel(debt.debt_type) : "—"} />
-            <DetailItem label="Account" value={account?.name ?? "—"} />
+            <DetailItem
+              label="Account"
+              value={
+                <LogoLabel
+                  name={account?.name ?? institution?.name}
+                  logoUrl={institution?.logo_url}
+                  type={institution?.institution_type}
+                />
+              }
+            />
             <DetailMoney label="Starting balance" value={debt.starting_balance} />
             <DetailMoney
               label="Program start balance"
@@ -529,7 +553,7 @@ export function DebtDetailDialog({
             {showRollup ? (
               <>
                 <DetailMoney label="Past due (earlier cycles)" value={prior.amount} />
-                <DetailMoney label="Total owed" value={totalOwed} />
+                <DetailMoneyStrong label="Total owed" value={totalOwed} />
               </>
             ) : null}
 
@@ -564,7 +588,7 @@ export function DebtDetailDialog({
             />
             <DetailItem
               label="Billing cycle"
-              value={formatTypeLabel(debt.billing_cycle ?? "monthly")}
+              value={<ValueChip value={debt.billing_cycle ?? "monthly"} />}
             />
             <DetailItem
               label="Paycheck deduction"
@@ -657,7 +681,7 @@ export function DebtDetailDialog({
             />
             <DetailItem
               label="Manual or auto"
-              value={debt.manual_or_auto ?? "—"}
+              value={<ValueChip value={debt.manual_or_auto} />}
             />
             <DetailItem
               label="Priority order"

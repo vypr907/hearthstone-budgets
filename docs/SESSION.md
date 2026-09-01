@@ -9,3 +9,4 @@
     Supabase project, so the checks must be run via the read-only MCP / SQL Editor.
   - Next step: user runs the verify script; if checks 3 or 4 return rows, investigate
     the write path that produced them.
+- Added detail-screen polish to docs/SESSION.md

@@ -57,7 +57,8 @@ import {
 import type { Account, AutoTransfer, Bill, BillingCycle, Transaction } from "@/lib/supabase";
 import { HelpButton } from "@/components/HelpButton";
 import { TransactionDetail } from "@/routes/app.transactions";
-import { DetailGrid, DetailItem, DetailMoney, DetailText, StatusBadge } from "@/components/detail";
+import { DetailGrid, DetailItem, DetailMoney, DetailMoneyStrong, DetailText, StatusBadge, CategoryChip, ValueChip, LogoLabel } from "@/components/detail";
+import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
 import { SetAsideAction } from "@/components/SetAsideAction";
@@ -397,7 +398,16 @@ export function BillDetailDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{bill.name}</DialogTitle>
+          <DialogTitle className="flex items-center justify-between gap-2 pr-6">
+            <span className="min-w-0 truncate">{bill.name}</span>
+            {institution ? (
+              <InstitutionLogo
+                logoUrl={institution.logo_url}
+                type={institution.institution_type}
+                size={32}
+              />
+            ) : null}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           {monthly ? (
@@ -412,11 +422,20 @@ export function BillDetailDialog({
             </p>
           )}
           <DetailGrid>
-            <DetailItem label="Category" value={category?.name ?? "—"} />
-            <DetailItem label="Institution / account" value={institution?.name ?? "—"} />
+            <DetailItem label="Category" value={<CategoryChip category={category} />} />
+            <DetailItem
+              label="Institution / account"
+              value={
+                <LogoLabel
+                  name={institution?.name}
+                  logoUrl={institution?.logo_url}
+                  type={institution?.institution_type}
+                />
+              }
+            />
             <DetailMoney label="Amount" value={bill.amount} />
             <DetailItem label="Next due date" value={bill.next_due_date ?? "—"} />
-            <DetailItem label="Billing cycle" value={bill.billing_cycle ?? "—"} />
+            <DetailItem label="Billing cycle" value={<ValueChip value={bill.billing_cycle} />} />
             <DetailItem
               label="Payment status"
               value={
@@ -430,7 +449,7 @@ export function BillDetailDialog({
                 </div>
               }
             />
-            <DetailItem label="Manual or auto" value={bill.manual_or_auto ?? "—"} />
+            <DetailItem label="Manual or auto" value={<ValueChip value={bill.manual_or_auto} />} />
             <DetailItem label="Variable amount" value={bill.is_variable_amount ? "Yes" : "No"} />
             <DetailItem
               label="Active"
@@ -442,7 +461,7 @@ export function BillDetailDialog({
             {showRollup ? (
               <>
                 <DetailMoney label="Past due (earlier cycles)" value={prior.amount} />
-                <DetailMoney label="Total owed" value={info.remaining + prior.amount} />
+                <DetailMoneyStrong label="Total owed" value={info.remaining + prior.amount} />
               </>
             ) : null}
             <DetailItem
