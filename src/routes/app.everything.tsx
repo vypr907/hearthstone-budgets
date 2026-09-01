@@ -394,10 +394,7 @@ function EverythingPage() {
                           <Icon className={`h-6 w-6 ${stateColor}`} />
                         </button>
 
-                        <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center">
-                          <span aria-label={r.kind} title={r.kind} className="text-base leading-none">
-                            {KIND_EMOJI[r.kind]}
-                          </span>
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center">
                           <span
                             className="text-2xl leading-none"
                             title={cat?.name ?? "Uncategorized"}
@@ -440,12 +437,15 @@ function EverythingPage() {
                             ) : null}
                           </div>
                           <div className="relative mt-1 flex items-center gap-2">
-                            <Badge
-                              variant="secondary"
-                              className="w-24 shrink-0 justify-center truncate text-[11px] font-normal"
+                            <span aria-label={r.kind} title={r.kind} className="text-base leading-none">
+                              {KIND_EMOJI[r.kind]}
+                            </span>
+                            <span
+                              className="inline-flex w-24 shrink-0 items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-normal text-white"
+                              style={{ backgroundColor: visual.color }}
                             >
                               {cycleLabel(r.cycle)}
-                            </Badge>
+                            </span>
                             {r.info.clearedSum > 0 && r.info.remaining > 0 ? (
                               <p className="relative min-w-0 truncate text-xs font-medium text-destructive">
                                 {formatMoney(r.info.remaining)} still owed this cycle
