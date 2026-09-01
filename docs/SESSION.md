@@ -235,3 +235,14 @@
   User-visible: the August "$14,238.72 has no place attached" note drops to the
   ~$1,716 that is actually assignable, and tapping it opens those rows.
 - Fix Places rows now show context: derived title (description → linked bill/debt → category → parent split line), category + linked payable line, and a split/transfer sibling breakdown with group total, line amounts, and each sibling's assigned place. Files: src/routes/app.fix-places.tsx. ADR-090.
+- Everything screen rework: added paid-status, due-this-pay-period and
+  due-this-month filters, multi-select category filter, A–Z sort, and grouping
+  by category / bill vs debt / paid status / pay period / month (group headers
+  show count + summed amount). Rows now tap through to the same Bill/Debt
+  detail dialogs used on those screens (exported from their routes, edit wired
+  through), show an emoji instead of the "Bill"/"Debt" word, lead with the due
+  date, and render cycle + category as fixed-width aligned chips. Pay-period
+  derivation moved to the shared `src/lib/pay-period.ts` (`currentPayPeriod`,
+  `payPeriodForDate`, `dueInPeriod`, `currentMonthWindow`) and `app.debts.tsx`
+  now uses it. Files: `src/lib/pay-period.ts`, `src/routes/app.everything.tsx`,
+  `src/routes/app.bills.tsx`, `src/routes/app.debts.tsx`. 120 tests green.
