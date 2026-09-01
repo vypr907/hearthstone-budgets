@@ -680,7 +680,7 @@ export function TransactionDetail({
     isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds)
   )
     return <SplitTransactionDetail transaction={transaction} onClose={onClose} />;
-  // ADR-088: a payment + fee group (one linked row, one account) gets its own
+  // ADR-091: a payment + fee group (one linked row, one account) gets its own
   // grouped editor — the linked line stays in sync with the bill/debt while
   // the plain fee lines can be edited, added or removed.
   if (
@@ -740,7 +740,7 @@ export function TransactionDetail({
 
   async function save() {
     try {
-      // ADR-088: a linked row is edited through the payable-aware path — the
+      // ADR-091: a linked row is edited through the payable-aware path — the
       // bill/debt is rolled back and re-applied so its balance, cycle counters
       // and status match the edited payment.
       if (isLinked && linkedPayable) {
@@ -991,7 +991,7 @@ export function TransactionDetail({
               <Trash2 className="mr-2 h-4 w-4" /> Delete
             </Button>
           ) : linkedPayable ? (
-            /* ADR-088: Reverse is the undo for a linked payment — Delete would
+            /* ADR-091: Reverse is the undo for a linked payment — Delete would
                strand the bill/debt's cycle counters. */
             <div className="flex items-center gap-1">
               <ReversePaymentButton transaction={transaction} payable={linkedPayable} />
@@ -1237,7 +1237,7 @@ function SplitTransactionDetail({
 }
 
 /**
- * ADR-088: edit a payment + fee group (ADR-046) as one unit — exactly one
+ * ADR-091: edit a payment + fee group (ADR-046) as one unit — exactly one
  * bill/debt-linked payment line plus any number of plain fee/charge lines on
  * the same account. The linked line goes through the payable-aware edit so the
  * bill/debt stays in sync; the fee lines are patched, added or removed

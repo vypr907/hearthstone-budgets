@@ -5,8 +5,31 @@
   checks: trigger + function installed, no settled non-Advance debt missing
   `date_paid_off`, no open non-Advance debt still carrying one, backfill spot-check,
   Advance rows informational). Unit tests pass (21) and build is clean.
-  - Known issue: this environment has no direct connection to the self-managed
-    Supabase project, so the checks must be run via the read-only MCP / SQL Editor.
-  - Next step: user runs the verify script; if checks 3 or 4 return rows, investigate
-    the write path that produced them.
-- Added detail-screen polish to docs/SESSION.md
+  - Verified live 2026-09-01 via the read-only Supabase MCP. All 6 checks pass:
+    trigger installed (`BEFORE INSERT OR UPDATE OF remaining_balance, debt_type,
+    date_paid_off`), function present with a body; check 3 = 0 rows, check 4 =
+    0 rows; the 12 settled non-Advance debts all carry a plausible payoff date
+    (2026-07-31 … 2026-08-27, none defaulted to today); Advance debts untouched.
+    Nothing to investigate.
+- Detail-screen visual polish (Lovable editor, presentation only — no ADR).
+  New shared chips in `src/components/detail.tsx` (`CategoryChip`, `ValueChip`,
+  `LogoLabel`, `DetailMoneyStrong`); Bill and Debt detail dialogs
+  (`src/routes/app.bills.tsx`, `src/routes/app.debts.tsx`) render Category /
+  Institution / Billing cycle / Manual-auto through them, title gained the
+  institution logo, "Total owed" is bold. No schema/query/logic change.
+  Summarised into docs/CHANGELOG.md (2026-09-01).
+- Doc reconciliation for the 2026-09-01 Lovable session.
+  - Resolved the duplicate `## ADR-088` in docs/DECISIONS.md: "One Edit for
+    linked transactions" renumbered to ADR-091 (header + ~9 code comment refs
+    in `src/routes/app.transactions.tsx`, `src/lib/payments.ts`,
+    `src/lib/split-groups.ts` + test); ADR-088 (Per-Account Owner) status line
+    corrected to "Implemented 2026-08-27 (Issue #36, PR #39)".
+  - Brought docs/CONTEXT.md current: status bullets for ADR-088/089/090/091 and
+    the detail-screen polish.
+  - `npm run typecheck` clean, `npm test` 124 passing (comment-only code edits).
+  - Reconciled two committed-but-undocumented migrations, both confirmed applied
+    via the Supabase MCP: `2026-09-01-enforce-debt-payoff-date.sql` (ADR-066,
+    verified below) and `2026-08-31-aarons-dresser-lease-alignment.sql` (debt
+    `8004b659…` now $2,330.40 basis / $1,942.00 remaining / $97.10 payment).
+    Wrote **ADR-092** (rent-to-own debts tracked at total cost to own) + a
+    CHANGELOG entry under 2026-08-31.
