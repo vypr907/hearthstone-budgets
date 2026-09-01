@@ -5,6 +5,7 @@ import {
   useDebts,
   useCategories,
   useResetDebtsMonth,
+  useInstitutions,
 } from "@/lib/data-hooks";
 import { usePayFlow } from "@/lib/pay-flow";
 import { toPayable, type Payable } from "@/lib/payments";
@@ -27,7 +28,7 @@ import { useState, useMemo } from "react";
 import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
-import { StatusBadge } from "@/components/detail";
+import { useInstitutionIndex } from "@/components/ObligationIcon";
 import { SectionLabel } from "@/components/SectionLabel";
 import { EmptyState } from "@/components/EmptyState";
 import { ListControls, groupRows } from "@/components/ListControls";
@@ -72,6 +73,8 @@ type Row = {
   info: CycleInfo;
   inPeriod: boolean;
   inMonth: boolean;
+  overdue: boolean;
+  logoUrl: string | null;
   bill?: Bill;
   debt?: Debt;
 };
@@ -89,6 +92,7 @@ function EverythingPage() {
   const { data: categories = [] } = useCategories();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
+  const { data: institutions = [] } = useInstitutions();
   const resetDebts = useResetDebtsMonth();
   const { tap, busy, picker } = usePayFlow();
   const infoOf = useCycleState();
@@ -121,9 +125,11 @@ function EverythingPage() {
   );
   const month = useMemo(() => currentMonthWindow(today), [today]);
 
+  const institutionIndex = useInstitutionIndex(institutions);
+
   const rows = useMemo<Row[]>(() => {
     const build = (
-      base: Omit<Row, "inPeriod" | "inMonth" | "state" | "info">,
+      base: Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
       info: CycleInfo,
     ): Row => ({
       ...base,
@@ -131,6 +137,8 @@ function EverythingPage() {
       info,
       inPeriod: period ? dueInPeriod(base.due_date, period, today) : false,
       inMonth: dueInPeriod(base.due_date, month, today),
+      // Past its due date and still owing something this cycle.
+      overdue: !!base.due_date && base.due_date < today && info.state !== "cleared",
     });
 
     const all: Row[] = [
@@ -146,8 +154,11 @@ function EverythingPage() {
             category_id: b.category_id,
             cycle: b.billing_cycle,
             payable,
+            logoUrl: b.institution_id
+              ? (institutionIndex[b.institution_id]?.logo_url ?? null)
+              : null,
             bill: b,
-          } as Omit<Row, "inPeriod" | "inMonth" | "state" | "info">,
+          } as Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
           infoOf(payable),
         );
       }),
@@ -163,8 +174,11 @@ function EverythingPage() {
             category_id: d.category_id,
             cycle: d.billing_cycle ?? "monthly",
             payable,
+            logoUrl: d.institution_id
+              ? (institutionIndex[d.institution_id]?.logo_url ?? null)
+              : null,
             debt: d,
-          } as Omit<Row, "inPeriod" | "inMonth" | "state" | "info">,
+          } as Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
           infoOf(payable),
         );
       }),
@@ -203,6 +217,7 @@ function EverythingPage() {
     q,
     sort,
     infoOf,
+    institutionIndex,
     period,
     month,
     today,
@@ -356,9 +371,18 @@ function EverythingPage() {
                         <button
                           type="button"
                           onClick={() => openDetail(r)}
-                          className="min-w-0 flex-1 text-left"
+                          className="relative min-w-0 flex-1 overflow-hidden text-left"
                         >
-                          <div className="flex items-center gap-2">
+                          {r.logoUrl ? (
+                            <img
+                              src={r.logoUrl}
+                              alt=""
+                              aria-hidden
+                              loading="lazy"
+                              className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-10"
+                            />
+                          ) : null}
+                          <div className="relative flex items-center gap-2">
                             <span aria-label={r.kind} title={r.kind} className="shrink-0">
                               {KIND_EMOJI[r.kind]}
                             </span>
@@ -372,9 +396,13 @@ function EverythingPage() {
                             >
                               {r.name}
                             </p>
-                            <StatusBadge status={r.state} />
+                            {r.overdue ? (
+                              <Badge variant="destructive" className="shrink-0 text-[11px]">
+                                Overdue
+                              </Badge>
+                            ) : null}
                           </div>
-                          <div className="mt-1 flex items-center gap-2">
+                          <div className="relative mt-1 flex items-center gap-2">
                             <Badge
                               variant="secondary"
                               className="w-24 shrink-0 justify-center truncate text-[11px] font-normal"
@@ -391,7 +419,7 @@ function EverythingPage() {
                             </Badge>
                           </div>
                           {r.info.clearedSum > 0 && r.info.remaining > 0 ? (
-                            <p className="mt-1 text-xs font-medium text-destructive">
+                            <p className="relative mt-1 text-xs font-medium text-destructive">
                               {formatMoney(r.info.remaining)} still owed this cycle
                             </p>
                           ) : null}

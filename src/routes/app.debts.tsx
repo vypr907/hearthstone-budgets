@@ -727,6 +727,8 @@ export function DebtDialog({
   const { data: deductions = [] } = useHouseholdDeductions();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
+  const { data: categories = [] } = useCategories();
+  const [categoryId, setCategoryId] = useState("none");
   const [fundingDeductionId, setFundingDeductionId] = useState("none");
   /** ADR-074: the account this debt is usually paid from. */
   const [usualPaymentAccountId, setUsualPaymentAccountId] = useState("none");
@@ -786,6 +788,7 @@ export function DebtDialog({
     setNextDue(debt?.next_due_date ? debt.next_due_date.slice(0, 10) : "");
     setDebtType(debt?.debt_type ?? "");
     setInstitutionId(debt?.institution_id ?? "none");
+    setCategoryId(debt?.category_id ?? "none");
     setNotes(debt?.notes ?? "");
     setDeduction(debt?.is_paycheck_deduction === true);
     setOnPlan(debt?.on_payment_plan === true);
@@ -948,6 +951,7 @@ export function DebtDialog({
         next_due_date: dated ? nextDue || null : debt?.next_due_date ?? null,
         debt_type: debtType || null,
         institution_id: institutionId === "none" ? null : institutionId,
+        category_id: categoryId === "none" ? null : categoryId,
         notes: notes || null,
         is_paycheck_deduction: deduction,
         on_payment_plan: onPlan,
@@ -1018,6 +1022,24 @@ export function DebtDialog({
                       <span aria-hidden>{institutionTypeVisual(t).icon}</span>
                       {formatTypeLabel(t)}
                     </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Category</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="h-14 text-base">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="py-3 text-base">
+                  Uncategorized
+                </SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id} className="py-3 text-base">
+                    {c.name}
                   </SelectItem>
                 ))}
               </SelectContent>

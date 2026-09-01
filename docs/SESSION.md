@@ -246,3 +246,12 @@
   `payPeriodForDate`, `dueInPeriod`, `currentMonthWindow`) and `app.debts.tsx`
   now uses it. Files: `src/lib/pay-period.ts`, `src/routes/app.everything.tsx`,
   `src/routes/app.bills.tsx`, `src/routes/app.debts.tsx`. 120 tests green.
+- Everything row polish + debt category editing: the debt edit dialog now has a
+  Category picker (sits above Institution, writes `category_id`) — previously
+  debts had no way to set a category anywhere in the app. On the Everything
+  rows, the linked institution's logo renders as a 10%-opacity decorative
+  watermark behind the title (skipped when there's no institution or logo), and
+  the Unpaid/Pending/Cleared chip is gone (the circular state icon already says
+  it) — replaced by a red "Overdue" chip shown when the due date has passed and
+  the item isn't cleared. Files: `src/routes/app.debts.tsx`,
+  `src/routes/app.everything.tsx`.
