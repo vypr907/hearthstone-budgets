@@ -383,15 +383,6 @@ function EverythingPage() {
                           onClick={() => openDetail(r)}
                           className="relative min-w-0 flex-1 overflow-hidden text-left"
                         >
-                          {r.logoUrl ? (
-                            <img
-                              src={r.logoUrl}
-                              alt=""
-                              aria-hidden
-                              loading="lazy"
-                              className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-10"
-                            />
-                          ) : null}
                           <div className="relative flex items-center gap-2">
                             <span aria-label={r.kind} title={r.kind} className="shrink-0">
                               {KIND_EMOJI[r.kind]}
@@ -401,23 +392,34 @@ function EverythingPage() {
                                 {r.due_date.slice(5)}
                               </span>
                             ) : null}
-                            <p
-                              className={`truncate font-medium ${paid ? "line-through text-muted-foreground" : ""}`}
-                            >
-                              {r.name}
-                            </p>
+                            <div className="relative min-w-0 flex-1">
+                              {r.logoUrl ? (
+                                <img
+                                  src={r.logoUrl}
+                                  alt=""
+                                  aria-hidden
+                                  loading="lazy"
+                                  className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-[0.18]"
+                                />
+                              ) : null}
+                              <p
+                                className={`relative truncate font-medium ${paid ? "line-through text-muted-foreground" : ""}`}
+                              >
+                                {r.name}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="relative mt-1 flex items-center gap-2">
                             {r.overdue ? (
                               <Badge variant="destructive" className="shrink-0 text-[11px]">
                                 Overdue
                               </Badge>
                             ) : null}
-                          </div>
-                          <div className="relative mt-1 flex items-center gap-2">
                             <Badge
                               variant="secondary"
                               className="w-24 shrink-0 justify-center truncate text-[11px] font-normal"
                             >
-                              {r.cycle ?? "—"}
+                              {cycleLabel(r.cycle)}
                             </Badge>
                             <Badge
                               variant="outline"
@@ -433,6 +435,7 @@ function EverythingPage() {
                               {formatMoney(r.info.remaining)} still owed this cycle
                             </p>
                           ) : null}
+
                         </button>
                         <p className="shrink-0 font-semibold tabular-nums">
                           {formatMoney(r.amount)}
