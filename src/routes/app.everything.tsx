@@ -435,8 +435,8 @@ function EverythingPage() {
                               {formatMoney(r.info.remaining)} still owed this cycle
                             </p>
                           ) : null}
-
                         </button>
+
                         <p className="shrink-0 font-semibold tabular-nums">
                           {formatMoney(r.amount)}
                         </p>
