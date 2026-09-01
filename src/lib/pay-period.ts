@@ -8,7 +8,16 @@
 import { periodRange, inRange } from "@/lib/paycheck-budget";
 import { todayISO } from "@/lib/snapshot";
 
+type SourceLike = { id: string; is_primary?: boolean | null };
+type EventLike = Parameters<typeof periodRange>[0] & { income_source_id?: string | null };
+
 export type Period = { start: string; end: string };
+
+/** True when `date` falls inside the inclusive-start, exclusive-end period. */
+export function dateInPeriod(date: string | null | undefined, period: Period | null): boolean {
+  if (!date || !period) return false;
+  return inRange(date, period.start, period.end);
+}
 
 function primaryEventsOf(sources: SourceLike[], events: EventLike[]): EventLike[] {
   const primary = sources.find((s) => s.is_primary);
