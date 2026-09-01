@@ -1,3 +1,22 @@
+## 2026-09-01 — ADR-093: "Log In" action on institution & debt detail
+
+* New `src/components/InstitutionLoginButton.tsx` — a "Log In" button on the
+  institution detail and debt detail views, shown only when the institution has
+  a non-empty `login_url`. Opens that URL via `@capacitor/browser`
+  (`Browser.open`) — a system browser / Android Custom Tab, loaded with a
+  dynamic `import()` in the click handler (SSR-safe, out of the initial bundle).
+  Not `window.open`, an `<a>`, or a WebView: OS-level Autofill (Keeper) only
+  triggers on a real browser page.
+* When `sign_in_with_google` is true and `login_username` is set, a small
+  display-only hint sits next to the button — "Sign in with Google — use
+  <username>" — so the right account is picked in Google's chooser (the app
+  can't force-select it).
+* Adds `@capacitor/core` + `@capacitor/browser` — the project's first Capacitor
+  runtime deps. No config file, native project, or scripts (Phase 12). On the
+  web build `Browser.open` falls back to a normal new-tab open; the Custom Tab /
+  Autofill behaviour arrives once the Android shell lands.
+* No schema change, no new storage — the no-password-storage rule is unaffected.
+
 ## 2026-08-31 — ADR-092: Aaron's–Dresser lease alignment (data-only)
 
 * **ADR-092** — rent-to-own debts are tracked at **total cost to own**
