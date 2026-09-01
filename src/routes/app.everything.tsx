@@ -379,6 +379,8 @@ function EverythingPage() {
                 {list.map((r) => {
                   const paid = r.state === "cleared";
                   const { Icon, className: stateColor } = stateVisual(r.state);
+                  const cat = r.category_id ? categoryById[r.category_id] : null;
+                  const visual = categoryVisual(cat);
                   return (
                     <Card key={`${r.kind}-${r.id}`}>
                       <CardContent className="flex items-center gap-3 p-3">
@@ -391,15 +393,29 @@ function EverythingPage() {
                         >
                           <Icon className={`h-6 w-6 ${stateColor}`} />
                         </button>
+
+                        <div className="flex h-11 shrink-0 flex-col items-center justify-center gap-1">
+                          <span aria-label={r.kind} title={r.kind} className="text-base leading-none">
+                            {KIND_EMOJI[r.kind]}
+                          </span>
+                          <span
+                            className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] leading-none"
+                            style={{
+                              background: `color-mix(in oklab, ${visual.color} 18%, transparent)`,
+                              border: `1px solid color-mix(in oklab, ${visual.color} 40%, transparent)`,
+                            }}
+                            title={cat?.name ?? "Uncategorized"}
+                          >
+                            {visual.icon}
+                          </span>
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => openDetail(r)}
                           className="relative min-w-0 flex-1 overflow-hidden text-left"
                         >
                           <div className="relative flex items-center gap-2">
-                            <span aria-label={r.kind} title={r.kind} className="shrink-0">
-                              {KIND_EMOJI[r.kind]}
-                            </span>
                             {r.due_date ? (
                               <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                                 {r.due_date.slice(5)}
@@ -412,7 +428,7 @@ function EverythingPage() {
                                   alt=""
                                   aria-hidden
                                   loading="lazy"
-                                  className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-[0.20]"
+                                  className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-25"
                                 />
                               ) : null}
                               <p
@@ -434,36 +450,17 @@ function EverythingPage() {
                             >
                               {cycleLabel(r.cycle)}
                             </Badge>
-                            {(() => {
-                              const cat = r.category_id ? categoryById[r.category_id] : null;
-                              const visual = categoryVisual(cat);
-                              const label = cat?.name ?? "Uncategorized";
-                              return (
-                                <span
-                                  className="inline-flex w-32 shrink-0 items-center justify-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[11px] font-normal"
-                                  style={{
-                                    background: `color-mix(in oklab, ${visual.color} 18%, transparent)`,
-                                    border: `1px solid color-mix(in oklab, ${visual.color} 40%, transparent)`,
-                                  }}
-                                  title={label}
-                                >
-                                  <span aria-hidden>{visual.icon}</span>
-                                  <span className="truncate">{label}</span>
-                                </span>
-                              );
-                            })()}
+                            {r.info.clearedSum > 0 && r.info.remaining > 0 ? (
+                              <p className="relative min-w-0 truncate text-xs font-medium text-destructive">
+                                {formatMoney(r.info.remaining)} still owed this cycle
+                              </p>
+                            ) : null}
                           </div>
-
-                          {r.info.clearedSum > 0 && r.info.remaining > 0 ? (
-                            <p className="relative mt-1 text-xs font-medium text-destructive">
-                              {formatMoney(r.info.remaining)} still owed this cycle
-                            </p>
-                          ) : null}
                         </button>
 
-                        <p className="shrink-0 font-semibold tabular-nums">
-                          {formatMoney(r.amount)}
-                        </p>
+                        <div className="flex w-20 shrink-0 justify-end">
+                          <p className="font-semibold tabular-nums">{formatMoney(r.amount)}</p>
+                        </div>
                       </CardContent>
                     </Card>
                   );
