@@ -405,15 +405,7 @@ function payPeriodFor(
   events: Parameters<typeof periodRange>[1],
 ): { start: string; end: string } | null {
   const due = debtDueDate(debt) ?? (debt.next_due_date ? debt.next_due_date.slice(0, 10) : null);
-  if (!due) return null;
-  const primary = sources.find((s) => s.is_primary);
-  if (!primary) return null;
-  const primaryEvents = events.filter((e) => e.income_source_id === primary.id);
-  for (const e of primaryEvents) {
-    const range = periodRange(e, primaryEvents);
-    if (range && inRange(due, range.start, range.end)) return range;
-  }
-  return null;
+  return payPeriodForDate(due, sources, events as never);
 }
 
 /**
