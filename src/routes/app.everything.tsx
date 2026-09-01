@@ -441,7 +441,7 @@ function EverythingPage() {
                               {KIND_EMOJI[r.kind]}
                             </span>
                             <span
-                              className="inline-flex w-24 shrink-0 items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-normal text-white"
+                              className="inline-flex w-24 shrink-0 items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-normal text-white opacity-60"
                               style={{ backgroundColor: visual.color }}
                             >
                               {cycleLabel(r.cycle)}

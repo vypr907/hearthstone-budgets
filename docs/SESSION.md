@@ -282,6 +282,8 @@
   is color-coded to the category's stored `color` and rendered with an opaque
   solid background. File: `src/routes/app.everything.tsx`.
 
+- 2026-09-01 — Reduced Everything row cycle-chip opacity to 60% so the colored pill is less visually dominant. File: `src/routes/app.everything.tsx`.
+
 
 
 
