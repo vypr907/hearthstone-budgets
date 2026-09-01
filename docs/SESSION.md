@@ -261,4 +261,10 @@
   the cycle/category chip row so all three status pills line up. Cycle chips are
   now capitalized, and `one_time` displays as "Invoice". File:
   `src/routes/app.everything.tsx`.
+- Everything row refinements v2 (UI-only): watermark bumped to 20% opacity.
+  "Overdue" chip returned to the title line and pushed to the right with
+  `ml-auto`. Category chips now use the category's stored `color` as a tinted
+  background/border and show the stored `icon` emoji. File:
+  `src/routes/app.everything.tsx`.
+
 
