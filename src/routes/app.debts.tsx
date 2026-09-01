@@ -727,6 +727,8 @@ export function DebtDialog({
   const { data: deductions = [] } = useHouseholdDeductions();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
+  const { data: categories = [] } = useCategories();
+  const [categoryId, setCategoryId] = useState("none");
   const [fundingDeductionId, setFundingDeductionId] = useState("none");
   /** ADR-074: the account this debt is usually paid from. */
   const [usualPaymentAccountId, setUsualPaymentAccountId] = useState("none");
