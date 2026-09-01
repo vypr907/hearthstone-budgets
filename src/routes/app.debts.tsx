@@ -35,9 +35,13 @@ import {
   DetailGrid,
   DetailItem,
   DetailMoney,
+  DetailMoneyStrong,
   DetailText,
   StatusBadge,
   statusVariant,
+  CategoryChip,
+  ValueChip,
+  LogoLabel,
 } from "@/components/detail";
 import {
   formatMoney,
@@ -677,7 +681,7 @@ export function DebtDetailDialog({
             />
             <DetailItem
               label="Manual or auto"
-              value={debt.manual_or_auto ?? "—"}
+              value={<ValueChip value={debt.manual_or_auto} />}
             />
             <DetailItem
               label="Priority order"
