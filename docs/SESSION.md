@@ -276,6 +276,18 @@
 - Everything row refinements v5 (UI-only): removed the coloured chip around the
   category emoji and expanded the emoji to `text-2xl` so it fills the emoji stack
   space. File: `src/routes/app.everything.tsx`.
+- Everything row refinements v6 (UI-only): bill/debt kind emoji moved from the
+  left stack to the second row, placed in front of the cycle chip. Category emoji
+  is now the sole content of the left column and vertically centered. Cycle chip
+  is color-coded to the category's stored `color` and rendered with an opaque
+  solid background. File: `src/routes/app.everything.tsx`.
+
+
+
+
+
+
+
 
 
 
