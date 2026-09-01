@@ -1,3 +1,47 @@
+## 2026-08-31 — ADR-092: Aaron's–Dresser lease alignment (data-only)
+
+* **ADR-092** — rent-to-own debts are tracked at **total cost to own**
+  (scheduled payment × number of payments), not the early-buyout cash price;
+  tax is rolled into the cycle payment, an optional protection plan stays a fee
+  line (ADR-046).
+* `scripts/migrations/2026-08-31-aarons-dresser-lease-alignment.sql` — applied
+  and confirmed live 2026-09-01 (debt `8004b659…`: `starting_balance` /
+  `program_start_balance` = $2,330.40 (was the $1,297.42 cash price),
+  `remaining_balance` = $1,942.00 after 4 payments, `minimum_payment` = $97.10;
+  the four historical payments are $97.10 each). Cash out of the accounts is
+  unchanged: each payment row grew $5.06 and its paired tax-fee row shrank $5.06.
+
+## 2026-09-01 — Detail-screen polish; ADR-088 duplicate resolved
+
+### Detail-screen visual polish (presentation only, no ADR)
+
+* New shared chips in `src/components/detail.tsx`:
+  * `CategoryChip` — category as a 60%-opacity colour pill with its emoji.
+  * `ValueChip` — neutral capitalised badge for enum-ish fields (billing cycle,
+    manual/auto), via the existing `formatTypeLabel()`.
+  * `LogoLabel` — institution/account name with its `InstitutionLogo` in front.
+  * `DetailMoneyStrong` — bold, larger money value, used for the "Total owed"
+    rollup line.
+* Bill and Debt detail dialogs (`src/routes/app.bills.tsx`,
+  `src/routes/app.debts.tsx`) now render Category, Institution/Account, Billing
+  cycle and Manual/auto through those chips; the dialog title gained the linked
+  institution's logo; "Total owed" uses `DetailMoneyStrong`.
+* No schema, query or logic change — consistent with prior visual passes that
+  carried a CHANGELOG entry and no ADR.
+
+### ADR-088 duplicate number resolved
+
+* Two unrelated decisions had both been written as `## ADR-088`: "Per-Account
+  Owner" (2026-08-27, shipped in PR #39) and "One Edit for linked transactions"
+  (2026-08-31, shipped on the same feature branch).
+* The linked-transaction-edit decision is renumbered **ADR-091**; its ~9 code
+  comment references (`src/routes/app.transactions.tsx`, `src/lib/payments.ts`,
+  `src/lib/split-groups.ts` + test) updated to match. ADR-088 now unambiguously
+  means Per-Account Owner, and its status line is corrected to "Implemented".
+* Also caught up in `docs/CONTEXT.md`: status bullets for ADR-088 (per-account
+  owner), ADR-089 (internal transfers aren't spending), ADR-090 (Fix Places
+  coverage) and ADR-091.
+
 ## 2026-09-01 — ADR-066 payoff-date invariant
 
 * Non-Advance debts now persist `date_paid_off` whenever their remaining
@@ -6,6 +50,10 @@
   adjustments, and manual debt edits; reusable Advance debts remain exempt.
 * Added a manual SQL migration to repair legacy rows and install a database
   trigger that enforces the invariant for future write paths.
+* Verified live 2026-09-01 (read-only Supabase MCP): trigger + function
+  installed; no settled non-Advance debt missing `date_paid_off`; no open
+  non-Advance debt carrying a stale one; all 12 backfilled payoff dates are
+  real payment dates. `scripts/migrations/2026-09-01-enforce-debt-payoff-date.verify.sql`.
 
 ## 2026-07-28 – Supabase Schema Migration & Data Import
 

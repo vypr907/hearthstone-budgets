@@ -46,7 +46,7 @@ describe("classifyLedgerGroup (ADR-047 addendum)", () => {
     expect(classifyLedgerGroup(rows, "grp", EVENTS)).toBe("linked-or-multi");
   });
 
-  // ADR-088: one linked row + fee lines on one account is the payment+fee
+  // ADR-091: one linked row + fee lines on one account is the payment+fee
   // shape and gets the grouped editor; >1 linked row stays per-row.
   it("non-event id with exactly one bill/debt-linked row → payment-with-fees", () => {
     expect(

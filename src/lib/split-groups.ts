@@ -33,7 +33,7 @@ export type LedgerGroupKind =
   | "linked-or-multi";
 
 /**
- * ADR-088: exactly one bill/debt-linked row on a single account, plus any
+ * ADR-091: exactly one bill/debt-linked row on a single account, plus any
  * number of plain fee/charge lines — the ADR-046 payment+fee shape. Safe for
  * the grouped editor because only one payable has to be kept in sync.
  */

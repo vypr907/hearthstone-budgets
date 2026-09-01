@@ -1033,7 +1033,7 @@ export function useCorrectPayment() {
 }
 
 /* ------------------------------------------------------------------------ */
-/* ADR-088: one Edit for a linked transaction                                */
+/* ADR-091: one Edit for a linked transaction                                */
 /* ------------------------------------------------------------------------ */
 
 /** Re-read a bill/debt straight from the DB so payable math starts from truth. */
@@ -1045,7 +1045,7 @@ async function fetchPayable(kind: PayableKind, id: string): Promise<Payable> {
 }
 
 /**
- * ADR-088: undo the payable-side effect of one cleared payment WITHOUT writing
+ * ADR-091: undo the payable-side effect of one cleared payment WITHOUT writing
  * an offsetting ledger row (that's `useReversePayment`'s job). Used as the
  * first half of rollback-then-reapply when a linked transaction is edited.
  *
@@ -1108,7 +1108,7 @@ export type EditLinkedTransactionInput = {
 };
 
 /**
- * ADR-088: the single "Edit" behind a bill/debt-linked transaction. Instead of
+ * ADR-091: the single "Edit" behind a bill/debt-linked transaction. Instead of
  * refusing edits that cross the paid/unpaid boundary (the old ADR-077 Correct),
  * it rolls the payable back by the transaction's previous cleared effect and
  * re-applies the new one, payable-first (ADR-037). Status changes are handled

@@ -3326,35 +3326,7 @@ shared ledger is untouched. `include_in_net_worth` already existed unused —
 wiring it in the same change covers "keep this account off the trend" (a
 tracking-only card, a locked HSA) without inventing a second concept.
 
-Status: Decided 2026-08-27. Not implemented.
-
-## ADR-088: One "Edit" for linked transactions (payable-aware edit)
-
-Decision:
-A bill/debt-linked transaction is edited through the ordinary transaction Edit
-button, not a separate Correct/Reverse affordance. Amount, date, status and
-account are unlocked for linked rows; saving runs rollback-then-reapply on the
-underlying payable (`rollbackClearedPayment` + `applyClearedPayment` in
-`src/lib/payments.ts`, `useEditLinkedTransaction`) so `remaining_balance`,
-`cycle_paid_to_date`, `payment_status`, `date_paid_off` and any
-`resolved_cycle_due_date` tag are recomputed for the new values, including
-across the pending/cleared boundary. Delete is replaced by Reverse (ADR-070)
-for linked rows. A group that is exactly one linked payment plus plain fee
-lines on one account is classified `payment-with-fees`
-(`src/lib/split-groups.ts`) and opens a grouped editor that edits the payment
-and its fees together, allows adding/removing fee lines, and never
-delete-and-reinserts the linked row. Groups with >1 linked row or >1 account
-stay per-row (`linked-or-multi`). ADR-077's CorrectPaymentButton remains on
-the Bill/Debt detail screens only.
-
-Reason:
-ADR-077's Correct button only appeared for an un-resolved partial payment in
-an unpaid cycle, so the common case — a cleared payment that closed its cycle,
-or a wrong payment+fee split — had no reachable edit path and the transaction
-Edit button locked the fields. Users think in terms of "edit the transaction";
-keeping the bill/debt in sync is the app's job, not a second workflow.
-
-Status: Decided 2026-08-31. Implemented.
+Status: Decided 2026-08-27. Implemented 2026-08-27 (Issue #36, PR #39).
 
 ## ADR-089: Internal transfers are not spending; budget drill-down date range
 Decision:
@@ -3402,3 +3374,63 @@ and $1,650 was split lines (fixable, but filtered out). The two screens have to
 count the same rows, or the footnote is an unactionable alarm.
 
 Status: Decided 2026-08-31. Implemented.
+
+## ADR-091: One "Edit" for linked transactions (payable-aware edit)
+
+(Originally drafted as a second ADR-088 on the 2026-08-31 feature branch, which
+collided with the ADR-088 already on `main` from 2026-08-27. Renumbered to 091
+on 2026-09-01; code comments updated to match.)
+
+Decision:
+A bill/debt-linked transaction is edited through the ordinary transaction Edit
+button, not a separate Correct/Reverse affordance. Amount, date, status and
+account are unlocked for linked rows; saving runs rollback-then-reapply on the
+underlying payable (`rollbackClearedPayment` + `applyClearedPayment` in
+`src/lib/payments.ts`, `useEditLinkedTransaction`) so `remaining_balance`,
+`cycle_paid_to_date`, `payment_status`, `date_paid_off` and any
+`resolved_cycle_due_date` tag are recomputed for the new values, including
+across the pending/cleared boundary. Delete is replaced by Reverse (ADR-070)
+for linked rows. A group that is exactly one linked payment plus plain fee
+lines on one account is classified `payment-with-fees`
+(`src/lib/split-groups.ts`) and opens a grouped editor that edits the payment
+and its fees together, allows adding/removing fee lines, and never
+delete-and-reinserts the linked row. Groups with >1 linked row or >1 account
+stay per-row (`linked-or-multi`). ADR-077's CorrectPaymentButton remains on
+the Bill/Debt detail screens only.
+
+Reason:
+ADR-077's Correct button only appeared for an un-resolved partial payment in
+an unpaid cycle, so the common case — a cleared payment that closed its cycle,
+or a wrong payment+fee split — had no reachable edit path and the transaction
+Edit button locked the fields. Users think in terms of "edit the transaction";
+keeping the bill/debt in sync is the app's job, not a second workflow.
+
+Status: Decided 2026-08-31. Implemented.
+
+## ADR-092: Rent-to-own debts are tracked at total cost to own
+
+Decision:
+A rent-to-own / lease-purchase agreement (Aaron's and similar) is tracked as a
+debt whose balance basis is the **total cost to own** — the scheduled payment
+times the number of payments — not the early-buyout cash price. `debts.amount`
+per cycle is the full scheduled payment with tax rolled in. Any optional add-on
+(a protection / insurance plan) is not part of the payment count and is posted
+as a fee line (ADR-046), never reducing the balance.
+
+Applied 2026-08-31 to "Aarons - Dresser" (debt `8004b659-7e01-4630-8e76-bea58065ab16`,
+"Our Household") via `scripts/migrations/2026-08-31-aarons-dresser-lease-alignment.sql`
+(data-only, no schema change): balance basis $97.10 × 24 = $2,330.40 (was the
+$1,297.42 cash price); `remaining_balance` $1,942.00 after 4 payments;
+`minimum_payment` $97.10. Each historical payment row grew $5.06 and its paired
+tax-fee row shrank $5.06, so cash out of the accounts is unchanged. Verified
+live 2026-09-01.
+
+Reason:
+The tracked balance had been set to the early-buyout cash price, which the
+household is not paying — they are on the 24-payment plan, so the amount that
+actually retires the debt is the total-cost-to-own figure. Using the cash price
+understated the obligation and made payoff-progress math wrong. Tax belongs in
+the payment (it is owed every cycle); the protection plan does not (it is
+optional and buys nothing toward ownership), so it stays a fee.
+
+Status: Decided 2026-08-31. Implemented 2026-08-31 (migration), verified 2026-09-01.
