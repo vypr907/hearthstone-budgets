@@ -371,9 +371,18 @@ function EverythingPage() {
                         <button
                           type="button"
                           onClick={() => openDetail(r)}
-                          className="min-w-0 flex-1 text-left"
+                          className="relative min-w-0 flex-1 overflow-hidden text-left"
                         >
-                          <div className="flex items-center gap-2">
+                          {r.logoUrl ? (
+                            <img
+                              src={r.logoUrl}
+                              alt=""
+                              aria-hidden
+                              loading="lazy"
+                              className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-10"
+                            />
+                          ) : null}
+                          <div className="relative flex items-center gap-2">
                             <span aria-label={r.kind} title={r.kind} className="shrink-0">
                               {KIND_EMOJI[r.kind]}
                             </span>
@@ -387,9 +396,13 @@ function EverythingPage() {
                             >
                               {r.name}
                             </p>
-                            <StatusBadge status={r.state} />
+                            {r.overdue ? (
+                              <Badge variant="destructive" className="shrink-0 text-[11px]">
+                                Overdue
+                              </Badge>
+                            ) : null}
                           </div>
-                          <div className="mt-1 flex items-center gap-2">
+                          <div className="relative mt-1 flex items-center gap-2">
                             <Badge
                               variant="secondary"
                               className="w-24 shrink-0 justify-center truncate text-[11px] font-normal"
