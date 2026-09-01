@@ -29,7 +29,13 @@ import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
 import { useInstitutionIndex } from "@/components/ObligationIcon";
+import {
+  categoryVisual,
+  DEFAULT_CATEGORY_COLOR,
+  DEFAULT_CATEGORY_ICON,
+} from "@/lib/visual-meta";
 import { SectionLabel } from "@/components/SectionLabel";
+
 import { EmptyState } from "@/components/EmptyState";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { BillDetailDialog, BillDialog } from "@/routes/app.bills";
