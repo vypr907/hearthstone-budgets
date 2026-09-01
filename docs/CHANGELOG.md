@@ -1,3 +1,25 @@
+## 2026-09-01 — Fix: detail dialogs & Everything rows clipped content (no ADR)
+
+* **Detail dialogs no longer overflow horizontally.** Root cause: `DialogContent`
+  is `display: grid` and its child wrappers had the default `min-width: auto`, so
+  the 2-column `DetailGrid` forced the body to ~508px inside a 375–512px dialog
+  → a horizontal scrollbar (bill dialogs) or a hard right-column clip (debt
+  dialogs, which carried `overflow-x-hidden`). Fix: `[&>*]:min-w-0` on the base
+  `DialogContent` (`src/components/ui/dialog.tsx`) — verified in-browser to bring
+  `scrollWidth` from 556 back to the box width at every viewport.
+* Debt dialogs dropped the `w-[calc(100vw-1.5rem)]` override (a foot-gun — `100vw`
+  counts the scrollbar gutter); all bill/debt detail + edit dialogs now share
+  `max-h-[90vh] overflow-y-auto overflow-x-hidden`.
+* **Everything screen row:** the bill/debt name was crushed to 0px on phones
+  (line 1 packed date + name + an "Overdue" badge into ~110px). The name now
+  gets its own line; the date, kind, cycle pill, "Overdue" badge and
+  "still owed" note moved to a wrapping meta line; the fixed-width cycle pill and
+  the oversized category-emoji column were trimmed. Name column: 0px → ~135px at
+  375px wide.
+* `src/routes/app.tsx` — `overflow-x-hidden` on the app shell so no screen can
+  push a page-level horizontal scrollbar again.
+* Presentation only — no schema, query, or logic change; 124 tests still green.
+
 ## 2026-09-01 — ADR-093: "Log In" action on institution & debt detail
 
 * New `src/components/InstitutionLoginButton.tsx` — a "Log In" button on the

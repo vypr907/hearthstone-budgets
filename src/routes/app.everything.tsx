@@ -391,7 +391,7 @@ function EverythingPage() {
                   const visual = categoryVisual(cat);
                   return (
                     <Card key={`${r.kind}-${r.id}`}>
-                      <CardContent className="flex items-center gap-3 p-3">
+                      <CardContent className="flex items-center gap-2.5 p-3">
                         <button
                           type="button"
                           aria-label={`${r.name}: ${r.state} — tap to advance`}
@@ -402,9 +402,9 @@ function EverythingPage() {
                           <Icon className={`h-6 w-6 ${stateColor}`} />
                         </button>
 
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center">
+                        <div className="flex h-9 w-7 shrink-0 items-center justify-center">
                           <span
-                            className="text-2xl leading-none"
+                            className="text-xl leading-none"
                             title={cat?.name ?? "Uncategorized"}
                           >
                             {visual.icon}
@@ -416,46 +416,44 @@ function EverythingPage() {
                           onClick={() => openDetail(r)}
                           className="relative min-w-0 flex-1 overflow-hidden text-left"
                         >
-                          <div className="relative flex items-center gap-2">
+                          <div className="relative">
+                            {r.logoUrl ? (
+                              <img
+                                src={r.logoUrl}
+                                alt=""
+                                aria-hidden
+                                loading="lazy"
+                                className="pointer-events-none absolute inset-y-0 left-0 my-auto h-9 w-9 select-none object-contain opacity-20"
+                              />
+                            ) : null}
+                            <p
+                              className={`relative truncate font-medium ${paid ? "line-through text-muted-foreground" : ""}`}
+                            >
+                              {r.name}
+                            </p>
+                          </div>
+                          <div className="relative mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             {r.due_date ? (
-                              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                              <span className="text-xs tabular-nums text-muted-foreground">
                                 {r.due_date.slice(5)}
                               </span>
                             ) : null}
-                            <div className="relative min-w-0 flex-1">
-                              {r.logoUrl ? (
-                                <img
-                                  src={r.logoUrl}
-                                  alt=""
-                                  aria-hidden
-                                  loading="lazy"
-                                  className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-25"
-                                />
-                              ) : null}
-                              <p
-                                className={`relative truncate font-medium ${paid ? "line-through text-muted-foreground" : ""}`}
-                              >
-                                {r.name}
-                              </p>
-                            </div>
-                            {r.overdue ? (
-                              <Badge variant="destructive" className="ml-auto shrink-0 text-[11px]">
-                                Overdue
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <div className="relative mt-1 flex items-center gap-2">
                             <span aria-label={r.kind} title={r.kind} className="text-base leading-none">
                               {KIND_EMOJI[r.kind]}
                             </span>
                             <span
-                              className="inline-flex w-24 shrink-0 items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-normal text-white opacity-60"
+                              className="inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-normal text-white opacity-60"
                               style={{ backgroundColor: visual.color }}
                             >
                               {cycleLabel(r.cycle)}
                             </span>
+                            {r.overdue ? (
+                              <Badge variant="destructive" className="text-[11px]">
+                                Overdue
+                              </Badge>
+                            ) : null}
                             {r.info.clearedSum > 0 && r.info.remaining > 0 ? (
-                              <p className="relative min-w-0 truncate text-xs font-medium text-destructive">
+                              <p className="text-xs font-medium text-destructive">
                                 {formatMoney(r.info.remaining)} still owed this cycle
                               </p>
                             ) : null}

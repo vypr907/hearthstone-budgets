@@ -46,3 +46,17 @@
     `routeTree.gen.ts` import-order churn the build regenerated.
   - Next step: manual check on the dev server (button shows only with a
     login_url; hint only for Google-auth institutions).
+- Fix: detail dialogs & Everything rows clipped content (presentation only, no ADR).
+  - `src/components/ui/dialog.tsx`: `[&>*]:min-w-0` on base `DialogContent` —
+    root fix for the horizontal overflow (grid children had `min-width:auto`, so
+    the 2-col `DetailGrid` forced the body to ~508px inside a 375–512px dialog).
+    Verified headless: dialog `scrollWidth` 556 → box width at 375 and 1280.
+  - `app.debts.tsx` (4 dialogs): dropped `w-[calc(100vw-1.5rem)]`; converged all
+    bill/debt dialogs on `max-h-[90vh] overflow-y-auto overflow-x-hidden`.
+  - `app.everything.tsx`: name on its own line, meta chips wrap, trimmed the
+    fixed cycle-pill width + category-emoji column. Name column 0px → ~135px @375.
+  - `app.tsx`: `overflow-x-hidden` on the app shell.
+  - typecheck/build/`npm test` (124) all green; no new lint errors on touched
+    files. Verified with headless-browser checks (`scratchpad/verify2.mjs`).
+  - Deferred (Steven to discuss): broader Everything visual redesign — watermark
+    logo, leading-icon treatment, cycle-pill style, FAB overlapping scrolled rows.

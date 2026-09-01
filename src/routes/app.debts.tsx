@@ -504,7 +504,7 @@ export function DebtDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto overflow-x-hidden">
+      <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between gap-2 pr-6">
             <span className="min-w-0 truncate">{debt.name}</span>
@@ -1005,7 +1005,7 @@ export function DebtDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto overflow-x-hidden">
+      <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit debt" : "Add debt"}</DialogTitle>
         </DialogHeader>
@@ -1697,7 +1697,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
 
       {/* ---- Add Adjustment dialog ---- */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto overflow-x-hidden">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>Add adjustment</DialogTitle>
           </DialogHeader>
@@ -1775,7 +1775,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
 
       {/* ---- Add Advance dialog (ADR-056) ---- */}
       <Dialog open={advanceOpen} onOpenChange={setAdvanceOpen}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto overflow-x-hidden">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>Record advance</DialogTitle>
           </DialogHeader>
