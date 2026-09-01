@@ -185,26 +185,34 @@ function EverythingPage() {
           infoOf(payable),
         );
       }),
-      ...debts.map((d) => {
-        const payable = toPayable("debt", d);
-        return build(
-          {
-            id: d.id,
-            kind: "Debt" as const,
-            name: d.name,
-            amount: Number(d.minimum_payment || 0),
-            due_date: debtDueDate(d),
-            category_id: d.category_id,
-            cycle: d.billing_cycle ?? "monthly",
-            payable,
-            logoUrl: d.institution_id
-              ? (institutionIndex[d.institution_id]?.logo_url ?? null)
-              : null,
-            debt: d,
-          } as Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
-          infoOf(payable),
-        );
-      }),
+      ...debts
+        .filter((d) => {
+          // Hide paid-off non-Advance debts whose payoff date is outside the current pay period.
+          if (d.debt_type === "advance") return true;
+          if (!d.date_paid_off) return true;
+          if (!period) return true;
+          return dateInPeriod(d.date_paid_off, period);
+        })
+        .map((d) => {
+          const payable = toPayable("debt", d);
+          return build(
+            {
+              id: d.id,
+              kind: "Debt" as const,
+              name: d.name,
+              amount: Number(d.minimum_payment || 0),
+              due_date: debtDueDate(d),
+              category_id: d.category_id,
+              cycle: d.billing_cycle ?? "monthly",
+              payable,
+              logoUrl: d.institution_id
+                ? (institutionIndex[d.institution_id]?.logo_url ?? null)
+                : null,
+              debt: d,
+            } as Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
+            infoOf(payable),
+          );
+        }),
     ];
 
     let out = all;
