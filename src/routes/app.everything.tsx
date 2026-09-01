@@ -5,6 +5,7 @@ import {
   useDebts,
   useCategories,
   useResetDebtsMonth,
+  useInstitutions,
 } from "@/lib/data-hooks";
 import { usePayFlow } from "@/lib/pay-flow";
 import { toPayable, type Payable } from "@/lib/payments";
@@ -27,7 +28,6 @@ import { useState, useMemo } from "react";
 import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
-import { useInstitutions } from "@/lib/data-hooks";
 import { useInstitutionIndex } from "@/components/ObligationIcon";
 import { SectionLabel } from "@/components/SectionLabel";
 import { EmptyState } from "@/components/EmptyState";
@@ -419,7 +419,7 @@ function EverythingPage() {
                             </Badge>
                           </div>
                           {r.info.clearedSum > 0 && r.info.remaining > 0 ? (
-                            <p className="mt-1 text-xs font-medium text-destructive">
+                            <p className="relative mt-1 text-xs font-medium text-destructive">
                               {formatMoney(r.info.remaining)} still owed this cycle
                             </p>
                           ) : null}
