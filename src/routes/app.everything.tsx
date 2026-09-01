@@ -12,7 +12,7 @@ import { toPayable, type Payable } from "@/lib/payments";
 import { useCycleState, stateVisual, type CycleInfo, type LedgerState } from "@/lib/ledger-state";
 import { formatMoney, debtDueDate } from "@/lib/format";
 import { useIncomeSources, useIncomeEvents } from "@/lib/income-hooks";
-import { currentPayPeriod, currentMonthWindow, dueInPeriod } from "@/lib/pay-period";
+import { currentPayPeriod, currentMonthWindow, dueInPeriod, dateInPeriod } from "@/lib/pay-period";
 import { todayISO } from "@/lib/snapshot";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
