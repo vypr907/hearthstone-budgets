@@ -412,7 +412,7 @@ function EverythingPage() {
                                   alt=""
                                   aria-hidden
                                   loading="lazy"
-                                  className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-[0.18]"
+                                  className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-[0.20]"
                                 />
                               ) : null}
                               <p
@@ -421,28 +421,39 @@ function EverythingPage() {
                                 {r.name}
                               </p>
                             </div>
-                          </div>
-                          <div className="relative mt-1 flex items-center gap-2">
                             {r.overdue ? (
-                              <Badge variant="destructive" className="shrink-0 text-[11px]">
+                              <Badge variant="destructive" className="ml-auto shrink-0 text-[11px]">
                                 Overdue
                               </Badge>
                             ) : null}
+                          </div>
+                          <div className="relative mt-1 flex items-center gap-2">
                             <Badge
                               variant="secondary"
                               className="w-24 shrink-0 justify-center truncate text-[11px] font-normal"
                             >
                               {cycleLabel(r.cycle)}
                             </Badge>
-                            <Badge
-                              variant="outline"
-                              className="w-32 shrink-0 justify-center truncate text-[11px] font-normal"
-                            >
-                              {r.category_id
-                                ? (categoryName[r.category_id] ?? "Uncategorized")
-                                : "Uncategorized"}
-                            </Badge>
+                            {(() => {
+                              const cat = r.category_id ? categoryById[r.category_id] : null;
+                              const visual = categoryVisual(cat);
+                              const label = cat?.name ?? "Uncategorized";
+                              return (
+                                <span
+                                  className="inline-flex w-32 shrink-0 items-center justify-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[11px] font-normal"
+                                  style={{
+                                    background: `color-mix(in oklab, ${visual.color} 18%, transparent)`,
+                                    border: `1px solid color-mix(in oklab, ${visual.color} 40%, transparent)`,
+                                  }}
+                                  title={label}
+                                >
+                                  <span aria-hidden>{visual.icon}</span>
+                                  <span className="truncate">{label}</span>
+                                </span>
+                              );
+                            })()}
                           </div>
+
                           {r.info.clearedSum > 0 && r.info.remaining > 0 ? (
                             <p className="relative mt-1 text-xs font-medium text-destructive">
                               {formatMoney(r.info.remaining)} still owed this cycle
