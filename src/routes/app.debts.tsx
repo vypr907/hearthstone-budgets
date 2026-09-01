@@ -1028,6 +1028,24 @@ export function DebtDialog({
             </Select>
           </div>
           <div>
+            <Label>Category</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="h-14 text-base">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="py-3 text-base">
+                  Uncategorized
+                </SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id} className="py-3 text-base">
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
             <Label>Institution</Label>
             <Select
               value={institutionId}
