@@ -14,7 +14,7 @@ function localTodayISO() {
  * date_paid_off. Advances are reusable and intentionally exempt.
  */
 export function debtPayoffDatePatch(
-  debt: Pick<Debt, "debt_type" | "date_paid_off">,
+  debt: Partial<Pick<Debt, "debt_type" | "date_paid_off">>,
   nextBalance: number,
   effectiveDate?: string | null,
 ): { date_paid_off?: string | null } {
