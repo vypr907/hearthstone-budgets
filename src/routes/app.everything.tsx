@@ -394,16 +394,12 @@ function EverythingPage() {
                           <Icon className={`h-6 w-6 ${stateColor}`} />
                         </button>
 
-                        <div className="flex h-11 shrink-0 flex-col items-center justify-center gap-1">
+                        <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center">
                           <span aria-label={r.kind} title={r.kind} className="text-base leading-none">
                             {KIND_EMOJI[r.kind]}
                           </span>
                           <span
-                            className="flex h-6 w-6 items-center justify-center rounded-full text-xs leading-none"
-                            style={{
-                              background: `color-mix(in oklab, ${visual.color} 18%, transparent)`,
-                              border: `1px solid color-mix(in oklab, ${visual.color} 40%, transparent)`,
-                            }}
+                            className="text-2xl leading-none"
                             title={cat?.name ?? "Uncategorized"}
                           >
                             {visual.icon}
