@@ -101,6 +101,7 @@ import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon
 import { Switch } from "@/components/ui/switch";
 import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel, institutionTypeVisual } from "@/lib/visual-meta";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
+import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
 
 
 import {
@@ -517,6 +518,7 @@ export function DebtDetailDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          <InstitutionLoginButton institution={institution} />
           {monthly ? (
             <CycleMonthStepper
               monthOffset={monthOffset}

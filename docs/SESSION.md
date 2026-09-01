@@ -33,3 +33,16 @@
     `8004b659…` now $2,330.40 basis / $1,942.00 remaining / $97.10 payment).
     Wrote **ADR-092** (rent-to-own debts tracked at total cost to own) + a
     CHANGELOG entry under 2026-08-31.
+- ADR-093: "Log In" action on institution & debt detail.
+  New `src/components/InstitutionLoginButton.tsx` (button + optional
+  Google-account hint), wired into `InstitutionDetail` (`app.institutions.tsx`)
+  and `DebtDetailDialog` (`app.debts.tsx`) — one `<InstitutionLoginButton>` line
+  + import each. Opens `login_url` via `@capacitor/browser` (dynamic import,
+  Custom Tab on Android, new-tab fallback on web). Added `@capacitor/core` +
+  `@capacitor/browser` — the project's first Capacitor deps; no config/native
+  scaffolding (Phase 12). No schema change, no new storage.
+  - typecheck clean, build clean, `npm test` 124 passing, lint clean on the new
+    file (repo-wide prettier debt untouched — Issue #10). Reverted the unrelated
+    `routeTree.gen.ts` import-order churn the build regenerated.
+  - Next step: manual check on the dev server (button shows only with a
+    login_url; hint only for Google-auth institutions).

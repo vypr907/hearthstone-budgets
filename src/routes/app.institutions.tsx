@@ -28,6 +28,7 @@ import { useState } from "react";
 import type { Institution } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
+import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
 import { formatTypeLabel } from "@/lib/visual-meta";
 import {
   Select,
@@ -268,6 +269,7 @@ function InstitutionDetail({
               }
             />
           </DetailGrid>
+          <InstitutionLoginButton institution={institution} />
           <DetailGrid>
             <DetailItem
               label="Current balance"
