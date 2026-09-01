@@ -357,7 +357,7 @@ function BillsPage() {
     </>
   );
 }
-function BillDetailDialog({
+export function BillDetailDialog({
   bill,
   onClose,
   onEdit,
@@ -752,7 +752,7 @@ function RecentBillTransactions({ bill, month }: { bill: Bill; month?: string })
     </div>
   );
 }
-function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: () => void }) {
+export function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onClose: () => void }) {
   const upsert = useUpsertBill();
   const del = useDeleteBill();
   const { data: categories = [] } = useCategories();

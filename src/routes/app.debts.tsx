@@ -436,7 +436,7 @@ function billingPeriodFor(debt: Debt): { start: string; end: string } | null {
 
 
 
-function DebtDetailDialog({
+export function DebtDetailDialog({
 
   debt,
   onClose,
@@ -719,7 +719,7 @@ function DebtDetailDialog({
 
 
 
-function DebtDialog({
+export function DebtDialog({
   debt,
   onClose,
 }: {
