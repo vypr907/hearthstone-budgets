@@ -951,6 +951,7 @@ export function DebtDialog({
         next_due_date: dated ? nextDue || null : debt?.next_due_date ?? null,
         debt_type: debtType || null,
         institution_id: institutionId === "none" ? null : institutionId,
+        category_id: categoryId === "none" ? null : categoryId,
         notes: notes || null,
         is_paycheck_deduction: deduction,
         on_payment_plan: onPlan,
