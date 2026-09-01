@@ -86,6 +86,16 @@ const STATE_LABEL: Record<LedgerState, string> = {
   cleared: "Cleared",
 };
 
+function cycleLabel(cycle: string | null): string {
+  if (!cycle) return "—";
+  if (cycle === "one_time") return "Invoice";
+  return cycle
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+
 function EverythingPage() {
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
