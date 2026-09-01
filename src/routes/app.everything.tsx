@@ -12,7 +12,7 @@ import { toPayable, type Payable } from "@/lib/payments";
 import { useCycleState, stateVisual, type CycleInfo, type LedgerState } from "@/lib/ledger-state";
 import { formatMoney, debtDueDate } from "@/lib/format";
 import { useIncomeSources, useIncomeEvents } from "@/lib/income-hooks";
-import { currentPayPeriod, currentMonthWindow, dueInPeriod } from "@/lib/pay-period";
+import { currentPayPeriod, currentMonthWindow, dueInPeriod, dateInPeriod } from "@/lib/pay-period";
 import { todayISO } from "@/lib/snapshot";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -185,26 +185,34 @@ function EverythingPage() {
           infoOf(payable),
         );
       }),
-      ...debts.map((d) => {
-        const payable = toPayable("debt", d);
-        return build(
-          {
-            id: d.id,
-            kind: "Debt" as const,
-            name: d.name,
-            amount: Number(d.minimum_payment || 0),
-            due_date: debtDueDate(d),
-            category_id: d.category_id,
-            cycle: d.billing_cycle ?? "monthly",
-            payable,
-            logoUrl: d.institution_id
-              ? (institutionIndex[d.institution_id]?.logo_url ?? null)
-              : null,
-            debt: d,
-          } as Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
-          infoOf(payable),
-        );
-      }),
+      ...debts
+        .filter((d) => {
+          // Hide paid-off non-Advance debts whose payoff date is outside the current pay period.
+          if (d.debt_type === "advance") return true;
+          if (!d.date_paid_off) return true;
+          if (!period) return true;
+          return dateInPeriod(d.date_paid_off, period);
+        })
+        .map((d) => {
+          const payable = toPayable("debt", d);
+          return build(
+            {
+              id: d.id,
+              kind: "Debt" as const,
+              name: d.name,
+              amount: Number(d.minimum_payment || 0),
+              due_date: debtDueDate(d),
+              category_id: d.category_id,
+              cycle: d.billing_cycle ?? "monthly",
+              payable,
+              logoUrl: d.institution_id
+                ? (institutionIndex[d.institution_id]?.logo_url ?? null)
+                : null,
+              debt: d,
+            } as Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
+            infoOf(payable),
+          );
+        }),
     ];
 
     let out = all;
