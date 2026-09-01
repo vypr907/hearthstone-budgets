@@ -271,6 +271,9 @@
   watermark bumped to 25% opacity. Amount moved into a fixed-width right
   column so the title area has a constant width and the "Overdue" chips line up
   vertically. File: `src/routes/app.everything.tsx`.
+- Everything row refinements v4 (UI-only): category emoji chip enlarged from
+  `h-5 w-5` to `h-6 w-6` (`text-xs`). File: `src/routes/app.everything.tsx`.
+
 
 
 
