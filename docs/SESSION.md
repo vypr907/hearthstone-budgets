@@ -255,3 +255,10 @@
   it) — replaced by a red "Overdue" chip shown when the due date has passed and
   the item isn't cleared. Files: `src/routes/app.debts.tsx`,
   `src/routes/app.everything.tsx`.
+- Everything row refinements (UI-only): the institution watermark is now 18%
+  opacity and horizontally aligned with the item title (after the emoji/due-date
+  prefix) instead of the left edge of the row. The "Overdue" chip moved down to
+  the cycle/category chip row so all three status pills line up. Cycle chips are
+  now capitalized, and `one_time` displays as "Invoice". File:
+  `src/routes/app.everything.tsx`.
+
