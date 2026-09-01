@@ -1,20 +1,36 @@
-# Why the 06-03 invoice is still listed
+# Enforce the debt payoff-date invariant
 
-The new rule only hides a debt when it has a stored payoff date (`date_paid_off`). That field is written only by the in-app payment flow at the moment a payment drives the balance to exactly zero. A debt that was settled another way — imported, manually edited to a zero balance, corrected, or cleared before that logic existed — ends up settled but with no payoff date, so the filter treats it as still open and keeps showing it.
+The Everything filter is behaving as written: it only hides a paid-off non-Advance debt after `date_paid_off` is populated. The real defect is that some balance-changing paths can leave a non-Advance debt at an effectively-zero balance without setting that date.
 
-The circled row is that case: it derives as cleared with nothing owing, but has no payoff date, so it slips through.
+## Changes
 
-## Fix
+1. **Centralize the rule in a shared helper**
+   - For non-Advance debts, a remaining balance `<= 0.005` must have `date_paid_off`.
+   - When a balance moves above that threshold again, clear `date_paid_off`.
+   - Advance debts remain exempt because zero is their normal reusable state.
+   - Preserve an explicitly supplied transaction/payment date; otherwise use the action date, then today only as the final fallback.
 
-Broaden the hide rule for non-Advance debts to "settled and not recent" rather than "has a payoff date":
+2. **Apply it to every debt balance write**
+   - Payment and historical-payment flows.
+   - Linked payment edit, correction, reversal, and cycle reset flows.
+   - Manual debt edits.
+   - Balance-affecting debt adjustments and adjustment deletion.
+   - Keep Advance-specific reactivation behavior unchanged.
 
-- Treat a debt as settled when `date_paid_off` is set OR its remaining balance is effectively zero (<= half a cent) OR its derived ledger state is `cleared` with nothing outstanding.
-- Determine the reference date in this order: `date_paid_off`, else the date of the most recent transaction linked to that debt, else its due date.
-- Hide the debt when that reference date falls outside the current pay period.
-- Advance debts and bills keep the current behavior (always shown).
+3. **Add a database guard and repair migration**
+   - Extend the existing payoff/Advance decision rather than inventing a separate competing rule.
+   - Add a `BEFORE INSERT OR UPDATE OF remaining_balance, debt_type` trigger so future writes outside the current UI cannot violate the invariant.
+   - Backfill existing non-Advance rows at or below the threshold that have no payoff date, preferring their latest linked cleared payment date and falling back to the current date when no payment history exists.
+   - Provide the SQL migration for you to run manually in your own database editor; no Lovable Cloud.
 
-## Technical notes
+4. **Keep Everything strict**
+   - Do not add a display-time zero-balance workaround. Once the stored invariant is repaired, the current pay-period filter remains the single rule: paid-off non-Advance debts appear only when `date_paid_off` is in the current pay period.
 
-- Change is confined to the debt `.filter(...)` in `src/routes/app.everything.tsx`, using the existing `dateInPeriod()` from `src/lib/pay-period.ts` and the already-computed payable/ledger info so no new queries are needed.
-- Falling back to the last linked transaction date keeps a just-paid legacy invoice visible for the rest of the current pay period.
-- Docs: append a bullet to `docs/SESSION.md` and extend the existing ADR covering the Everything payoff filter (no new ADR number).
+5. **Verification and documentation**
+   - Add focused tests for threshold, reactivation, explicit historical date, and Advance exemption.
+   - Update the relevant existing ADR, schema documentation, session notes, and changelog according to the project workflow.
+   - Local build verification will be flagged for Codespace/CI because this project's documented Windows policy blocks local build binaries.
+
+## Expected result
+
+The circled invoice receives a real payoff date during the repair. If that date is outside the current pay period, it disappears from Everything. Future non-Advance debts cannot reach an effectively-zero remaining balance without a populated payoff date, regardless of which supported write path changes the balance.
