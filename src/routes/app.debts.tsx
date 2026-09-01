@@ -26,7 +26,7 @@ import { CycleMonthStepper } from "@/components/CycleMonthStepper";
 import { useCycleState } from "@/lib/ledger-state";
 import { priorArrearsSummary } from "@/lib/arrears";
 import { toPayable, useSyncStoredStatus } from "@/lib/payments";
-import { nextPayDate, periodRange, inRange } from "@/lib/paycheck-budget";
+import { nextPayDate, periodRange } from "@/lib/paycheck-budget";
 import { payPeriodForDate } from "@/lib/pay-period";
 
 import { todayISO } from "@/lib/snapshot";
