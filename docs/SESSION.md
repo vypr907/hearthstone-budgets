@@ -266,5 +266,11 @@
   `ml-auto`. Category chips now use the category's stored `color` as a tinted
   background/border and show the stored `icon` emoji. File:
   `src/routes/app.everything.tsx`.
+- Everything row refinements v3 (UI-only): category reduced to its emoji only,
+  rendered in a coloured chip directly below the bill/debt kind emoji. Institution
+  watermark bumped to 25% opacity. Amount moved into a fixed-width right
+  column so the title area has a constant width and the "Overdue" chips line up
+  vertically. File: `src/routes/app.everything.tsx`.
+
 
 
