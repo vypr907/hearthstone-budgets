@@ -134,7 +134,14 @@ function EverythingPage() {
     return m;
   }, [categories]);
 
+  const categoryById = useMemo(() => {
+    const m: Record<string, { name: string; icon?: string | null; color?: string | null }> = {};
+    for (const c of categories) m[c.id] = c;
+    return m;
+  }, [categories]);
+
   const today = todayISO();
+
   const period = useMemo(
     () => currentPayPeriod(incomeSources, incomeEvents as never, today),
     [incomeSources, incomeEvents, today],
