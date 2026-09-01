@@ -27,7 +27,8 @@ import { useState, useMemo } from "react";
 import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
-import { StatusBadge } from "@/components/detail";
+import { useInstitutions } from "@/lib/data-hooks";
+import { useInstitutionIndex } from "@/components/ObligationIcon";
 import { SectionLabel } from "@/components/SectionLabel";
 import { EmptyState } from "@/components/EmptyState";
 import { ListControls, groupRows } from "@/components/ListControls";
@@ -72,6 +73,8 @@ type Row = {
   info: CycleInfo;
   inPeriod: boolean;
   inMonth: boolean;
+  overdue: boolean;
+  logoUrl: string | null;
   bill?: Bill;
   debt?: Debt;
 };
@@ -89,6 +92,7 @@ function EverythingPage() {
   const { data: categories = [] } = useCategories();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
+  const { data: institutions = [] } = useInstitutions();
   const resetDebts = useResetDebtsMonth();
   const { tap, busy, picker } = usePayFlow();
   const infoOf = useCycleState();
@@ -121,9 +125,11 @@ function EverythingPage() {
   );
   const month = useMemo(() => currentMonthWindow(today), [today]);
 
+  const institutionIndex = useInstitutionIndex(institutions);
+
   const rows = useMemo<Row[]>(() => {
     const build = (
-      base: Omit<Row, "inPeriod" | "inMonth" | "state" | "info">,
+      base: Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
       info: CycleInfo,
     ): Row => ({
       ...base,
@@ -131,6 +137,8 @@ function EverythingPage() {
       info,
       inPeriod: period ? dueInPeriod(base.due_date, period, today) : false,
       inMonth: dueInPeriod(base.due_date, month, today),
+      // Past its due date and still owing something this cycle.
+      overdue: !!base.due_date && base.due_date < today && info.state !== "cleared",
     });
 
     const all: Row[] = [
@@ -146,8 +154,11 @@ function EverythingPage() {
             category_id: b.category_id,
             cycle: b.billing_cycle,
             payable,
+            logoUrl: b.institution_id
+              ? (institutionIndex[b.institution_id]?.logo_url ?? null)
+              : null,
             bill: b,
-          } as Omit<Row, "inPeriod" | "inMonth" | "state" | "info">,
+          } as Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
           infoOf(payable),
         );
       }),
@@ -163,8 +174,11 @@ function EverythingPage() {
             category_id: d.category_id,
             cycle: d.billing_cycle ?? "monthly",
             payable,
+            logoUrl: d.institution_id
+              ? (institutionIndex[d.institution_id]?.logo_url ?? null)
+              : null,
             debt: d,
-          } as Omit<Row, "inPeriod" | "inMonth" | "state" | "info">,
+          } as Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
           infoOf(payable),
         );
       }),
@@ -203,6 +217,7 @@ function EverythingPage() {
     q,
     sort,
     infoOf,
+    institutionIndex,
     period,
     month,
     today,
