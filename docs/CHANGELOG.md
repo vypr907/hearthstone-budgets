@@ -1,3 +1,12 @@
+## 2026-09-01 — ADR-066 payoff-date invariant
+
+* Non-Advance debts now persist `date_paid_off` whenever their remaining
+  balance reaches the effectively-zero threshold ($0.005), and clear it when
+  reopened. This is shared across payments, linked edits/reversals,
+  adjustments, and manual debt edits; reusable Advance debts remain exempt.
+* Added a manual SQL migration to repair legacy rows and install a database
+  trigger that enforces the invariant for future write paths.
+
 ## 2026-07-28 – Supabase Schema Migration & Data Import
 
 ### Completed

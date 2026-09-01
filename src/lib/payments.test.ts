@@ -5,6 +5,7 @@ import {
   rebuiltCycleAmountDue,
 } from "./payments";
 import type { Bill, BillAdjustment, Debt } from "./supabase";
+import { debtPayoffDatePatch } from "./debt-payoff-state";
 
 const debt = (over: Partial<Debt> = {}): Debt =>
   ({
@@ -47,6 +48,30 @@ describe("advanceReactivationPatch (ADR-066)", () => {
 
   it("is a no-op for a paid-off debt that is not an advance", () => {
     expect(advanceReactivationPatch(debt({ debt_type: "loan" }))).toEqual({});
+  });
+});
+
+describe("debtPayoffDatePatch (ADR-066 addendum)", () => {
+  it("sets the supplied effective date at the zero-balance threshold", () => {
+    expect(
+      debtPayoffDatePatch(debt({ debt_type: "invoice", date_paid_off: null }), 0.005, "2026-06-03"),
+    ).toEqual({ date_paid_off: "2026-06-03" });
+  });
+
+  it("preserves an existing payoff date", () => {
+    expect(debtPayoffDatePatch(debt({ debt_type: "loan" }), 0, "2026-09-01")).toEqual({
+      date_paid_off: "2026-08-10",
+    });
+  });
+
+  it("clears the payoff date when a non-Advance debt is reopened", () => {
+    expect(debtPayoffDatePatch(debt({ debt_type: "loan" }), 0.006)).toEqual({
+      date_paid_off: null,
+    });
+  });
+
+  it("does not manage the reusable Advance lifecycle", () => {
+    expect(debtPayoffDatePatch(debt(), 0, "2026-09-01")).toEqual({});
   });
 });
 

@@ -28,6 +28,7 @@ import { priorArrearsSummary } from "@/lib/arrears";
 import { toPayable, useSyncStoredStatus } from "@/lib/payments";
 import { nextPayDate, periodRange } from "@/lib/paycheck-budget";
 import { payPeriodForDate } from "@/lib/pay-period";
+import { debtPayoffDatePatch } from "@/lib/debt-payoff-state";
 
 import { todayISO } from "@/lib/snapshot";
 import {
@@ -881,28 +882,22 @@ export function DebtDialog({
     // payment — otherwise this screen's own isPaidOff (remaining_balance <= 0)
     // and obligationsInRange()'s date_paid_off check can silently disagree.
     //
-    // Two carve-outs (ADR-056 addendum 2026-08-27):
+    // Advance carve-out (ADR-056 addendum 2026-08-27):
     //  - advance-type debts: date_paid_off is owned by the payment flow +
     //    advanceReactivationPatch(); this form never stamps or clears it.
-    //  - a brand-new debt with no balance at all is an empty shell, not a
-    //    settled debt — leave it active. Recording an already-paid historical
-    //    debt still works: give it a starting balance.
-    let datePaidOff: string | null = debt?.date_paid_off ?? null;
-    const freshEmptyDebt =
-      !isEdit && startingBalance <= 0 && (nextRemaining ?? 0) <= 0;
-    if (!isAdvance && !freshEmptyDebt) {
-      if (nextRemaining != null && nextRemaining <= 0) {
-        if (!datePaidOff) {
-          const linkedDates = transactions
-            .filter((t) => t.linked_debt_id === debt?.id)
-            .map((t) => t.transaction_date)
-            .sort();
-          datePaidOff = linkedDates[linkedDates.length - 1] ?? todayISO();
-        }
-      } else if (nextRemaining != null && nextRemaining > 0) {
-        datePaidOff = null;
-      }
-    }
+    const linkedDates = transactions
+      .filter((t) => t.linked_debt_id === debt?.id)
+      .map((t) => t.transaction_date)
+      .sort();
+    const latestLinkedDate = linkedDates[linkedDates.length - 1] ?? todayISO();
+    const datePaidOff =
+      nextRemaining == null
+        ? debt?.date_paid_off ?? null
+        : (debtPayoffDatePatch(
+            debt ?? { debt_type: debtType, date_paid_off: null },
+            nextRemaining,
+            latestLinkedDate,
+          ).date_paid_off ?? null);
     // ADR-056 addendum: `remaining_balance`, `minimum_payment` and
     // `date_paid_off` on an advance are owned by "Record advance" / payments /
     // advanceMinimumPaymentPatch / advanceReactivationPatch — never this form.
