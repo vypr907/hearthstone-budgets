@@ -788,6 +788,7 @@ export function DebtDialog({
     setNextDue(debt?.next_due_date ? debt.next_due_date.slice(0, 10) : "");
     setDebtType(debt?.debt_type ?? "");
     setInstitutionId(debt?.institution_id ?? "none");
+    setCategoryId(debt?.category_id ?? "none");
     setNotes(debt?.notes ?? "");
     setDeduction(debt?.is_paycheck_deduction === true);
     setOnPlan(debt?.on_payment_plan === true);
