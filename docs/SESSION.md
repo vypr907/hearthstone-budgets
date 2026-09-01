@@ -290,6 +290,17 @@
 
 - 2026-09-01 — Reduced Everything row cycle-chip opacity to 60% so the colored pill is less visually dominant. File: `src/routes/app.everything.tsx`.
 
+- 2026-09-01 — Enforced the ADR-066 non-Advance payoff-date invariant across
+  payment, edit/reversal, adjustment, and manual debt balance writes using the
+  shared `debtPayoffDatePatch()` helper. Added focused tests and the manual
+  database repair + trigger migration at
+  `scripts/migrations/2026-09-01-enforce-debt-payoff-date.sql`. User-visible:
+  settled non-Advance debts now persist a payoff date, allowing Everything's
+  current-pay-period rule to remove old paid-off rows reliably.
+  - Known issue: migration remains pending manual execution in the project's
+    database editor; GitHub issue creation was unavailable because `gh` is not
+    installed in this environment.
+
 
 
 

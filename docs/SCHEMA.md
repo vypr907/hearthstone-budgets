@@ -367,6 +367,14 @@ debts (
 )
 ```
 
+### Debt payoff-date invariant (ADR-066 addendum)
+
+`trg_sync_debt_date_paid_off` runs before inserts and updates that touch
+`remaining_balance`, `debt_type`, or `date_paid_off`. For every debt whose
+normalized type is not `advance`, `remaining_balance <= 0.005` requires a
+populated `date_paid_off`; moving above the threshold clears the date. Advance
+debts are exempt because they are reusable at a zero balance.
+
 ## Debt Types
 
 Current values:

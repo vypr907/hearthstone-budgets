@@ -2115,6 +2115,29 @@ existing advance write, plus the debt_type constraint.
 
 Status: Decided 2026-08-14. Implemented 2026-08-17.
 
+**2026-09-01 addendum — non-Advance payoff dates are a stored invariant:**
+Every write that changes a non-Advance debt's `remaining_balance` also keeps
+`date_paid_off` synchronized: a balance at or below $0.005 has a payoff date,
+and a balance above that threshold clears it. Payment and historical-payment
+writes use the transaction date; adjustments use the adjustment date; other
+writes fall back to the action date. Advance debts remain exempt because a zero
+balance is their normal reusable state and ADR-066 owns their reactivation.
+
+The database trigger `trg_sync_debt_date_paid_off` enforces the same invariant,
+preventing imports or future write paths from creating another zero-balance
+non-Advance debt without a payoff date. The 2026-09-01 migration repairs
+existing rows using the latest linked cleared transaction date, falling back to
+the migration date when no payment history exists.
+
+Reason:
+Everything correctly filtered on the stored payoff date, but legacy/imported
+and adjustment-driven zero balances could lack that date and therefore remain
+visible forever. Fixing the persisted lifecycle state, rather than adding a
+display-only inference, keeps all aggregates and filters consistent.
+
+Status: Decided 2026-09-01. Implemented in code; database migration pending
+manual execution (`scripts/migrations/2026-09-01-enforce-debt-payoff-date.sql`).
+
 ## ADR-067: Parent Category Becomes a Dropdown Over Existing Values (Amends ADR-011)
 
 Decision:
