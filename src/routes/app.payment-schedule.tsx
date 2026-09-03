@@ -11,7 +11,7 @@ import {
   useScheduleCheckoffs,
   useToggleScheduleCheckoff,
 } from "@/lib/data-hooks";
-import { activeDebts, type StrategyKey } from "@/lib/debt-payoff";
+import { activeDebts, strategyKeyOf } from "@/lib/debt-payoff";
 import { buildSchedule, monthKeyOf } from "@/lib/payment-schedule";
 import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { formatMoney } from "@/lib/format";
@@ -46,10 +46,7 @@ function PaymentSchedulePage() {
   const { data: checked = [] } = useScheduleCheckoffs();
   const toggle = useToggleScheduleCheckoff();
 
-  const strategy = ((): StrategyKey => {
-    const s = (settings?.active_strategy ?? "avalanche").toLowerCase();
-    return s === "snowball" || s === "custom" ? s : "avalanche";
-  })();
+  const strategy = strategyKeyOf(settings?.active_strategy);
   const extra = Number(settings?.extra_monthly_payment ?? 0);
 
   const plan = useMemo(() => activeDebts(debts), [debts]);

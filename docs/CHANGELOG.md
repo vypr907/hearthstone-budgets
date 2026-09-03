@@ -1,3 +1,30 @@
+## 2026-09-03 — Debt payoff engine correctness, part 1 (ADR-094)
+
+* **Cash advances no longer distort the payoff projection.** `activeDebts()`
+  excludes `debt_type='advance'` — their `minimum_payment` mirrors the full
+  balance, so the sim used to "clear" them in month 1 and then roll a phantom
+  freed minimum onto the target debt forever. Advances stay on the Debts /
+  Everything screens and in obligation totals, just not the amortisation plan.
+* **Biweekly / quarterly minimums now feed the engine as their monthly
+  equivalent** (`monthlyEquivalent`, biweekly → ×2). The simulation is a
+  calendar-month grid, so a $200 biweekly minimum is ~$400/month of real payoff
+  power; treating it as monthly understated it ~2×. **Every projected debt-free
+  date and interest total on the Debt Strategy and Payment Schedule screens has
+  shifted** — this is a correction, not a regression (projections are always
+  approximate and never stored, ADR-015).
+* `orderFor` is now exported from `src/lib/debt-payoff.ts` (was duplicated
+  verbatim in `payment-schedule.ts`); new `strategyKeyOf()` centralises the
+  stored-string → `StrategyKey` coercion that was copy-pasted into both routes.
+* Debt Strategy screen gains a one-line footnote explaining the advance
+  exclusion and the monthly-equivalent minimums.
+* New `src/lib/debt-payoff.test.ts` — 18 tests covering `activeDebts` (advance
+  exclusion, monthly-equivalent, priority fallback), `orderFor`, `simulate`
+  (rollover, `known_finance_charge`, the 600-month `incomplete` cap, negative
+  extra), `compareStrategies`, and `buildSchedule`. Suite 124 → 142.
+* Still to come (ADR-094): editable custom order (PR2), the recommended-payment
+  "plan $X/mo" hint + one-tap plan + pay-dialog preset (PR3).
+* typecheck / build / `npm test` (142) green; no new lint errors on touched files.
+
 ## 2026-09-03 — Everything row redesign — "Option A / Clean ledger" (no ADR)
 
 * **`src/routes/app.everything.tsx` row layout reworked.** From the reviewed

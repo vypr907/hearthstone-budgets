@@ -17,6 +17,7 @@ import {
   activeDebts,
   compareStrategies,
   formatMonths,
+  strategyKeyOf,
   type StrategyKey,
 } from "@/lib/debt-payoff";
 import { formatMoney } from "@/lib/format";
@@ -61,16 +62,12 @@ function DebtStrategyPage() {
   useEffect(() => {
     if (!settings) return;
     setExtra(String(settings.extra_monthly_payment ?? 0));
-    const s = (settings.active_strategy ?? "").toLowerCase();
-    if (s === "avalanche" || s === "snowball" || s === "custom") setActive(s);
+    setActive(strategyKeyOf(settings.active_strategy));
   }, [settings]);
 
   const plan = useMemo(() => activeDebts(debts), [debts]);
   const extraNum = Number(extra) || 0;
-  const comparison = useMemo(
-    () => compareStrategies(plan, extraNum),
-    [plan, extraNum],
-  );
+  const comparison = useMemo(() => compareStrategies(plan, extraNum), [plan, extraNum]);
 
   // Payment history comes straight from the ledger — cleared debt transactions.
   const paidByDebt = useMemo(() => {
@@ -131,6 +128,12 @@ function DebtStrategyPage() {
             </div>
           </CardContent>
         </Card>
+
+        <p className="px-1 text-xs text-muted-foreground">
+          Cash advances are excluded from the payoff plan — they're short-term and repeat, so they'd
+          distort it. Track them on the Debts screen. Non-monthly minimums are shown as their
+          monthly equivalent.
+        </p>
 
         {plan.length === 0 ? (
           <Card>
@@ -205,9 +208,7 @@ function DebtStrategyPage() {
                     <span className="block font-medium">{s.label}</span>
                     <span className="block text-xs opacity-80">{s.hint}</span>
                   </span>
-                  <span className="text-sm">
-                    {formatMonths(comparison[s.key].months)}
-                  </span>
+                  <span className="text-sm">{formatMonths(comparison[s.key].months)}</span>
                 </Button>
               ))}
             </div>

@@ -351,7 +351,7 @@ debts (
     payment_status text,
     on_payment_plan boolean,
     manual_or_auto text,
-    priority_order integer,
+    priority_order integer,                      -- Custom payoff order; dense 1..N over active non-advance debts, written by the Debt Strategy reorder editor + auto-assigned on new debts (ADR-094)
     notes text,
     date_paid_off date,
     is_paycheck_deduction boolean default false, -- ADR-032: serviced by payroll/HSA deduction
@@ -377,21 +377,22 @@ debts are exempt because they are reusable at a zero balance.
 
 ## Debt Types
 
-Current values:
+DB-enforced lowercase check constraint (ADR-066). Current values:
 
-* Medical
-* Credit Card
-* Loan
-* Other
-* Advance
+* `advance`
+* `credit card`
+* `invoice`
+* `loan`
+* `medical`
+* `other`
 
-Previous categories such as:
+Previous free-text categories (Car Loan, Mortgage, Student Loan, …) are no
+longer used.
 
-* Car Loan
-* Mortgage
-* Student Loan
-
-are no longer used.
+**`advance`** debts are excluded from the payoff engine and the Payment Schedule
+(ADR-094) — their `minimum_payment` mirrors the full balance and they repeat
+each cycle, so amortising them distorts the projection. They stay fully visible
+on the Debts / Everything screens and count toward obligation totals.
 
 ---
 
