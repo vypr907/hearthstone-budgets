@@ -23,8 +23,8 @@
   Verified in a headless browser (viewport 390): no page horizontal overflow,
   rows render, watermark treatment checked with a simulated logo.
 * Folded into **PR #46** alongside the dialog-overflow fix (same file, same area).
-* Still deferred: the urgency-based grouping (Overdue → Due this period → Later →
-  Paid) and the shrink-on-scroll FAB from the same canvas.
+* Still deferred, now filed as Issues: the urgency-based grouping (Overdue → Due
+  this period → Later → Paid, **#47**) and the shrink-on-scroll FAB (**#48**).
 
 ## 2026-09-01 — Fix: detail dialogs & Everything rows clipped content (no ADR)
 

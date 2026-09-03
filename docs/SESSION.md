@@ -76,5 +76,6 @@
     a simulated logo (`scratchpad/shot.mjs`, `shot2.mjs`).
   * Folded into PR #46 (same file/area as the dialog-overflow fix). Threw away
     the `app.everything-preview.tsx` route + its routeTree churn.
-  * Next: rebase/repush PR #46, update its body; then (deferred) urgency grouping
-    + shrink-on-scroll FAB from the same canvas.
+  * PR #46 repushed + body updated to cover both changes.
+  * Deferred canvas pieces filed as Issues #47 (urgency grouping) and #48
+    (shrink-on-scroll FAB).
