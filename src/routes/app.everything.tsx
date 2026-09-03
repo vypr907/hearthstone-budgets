@@ -401,9 +401,9 @@ function EverythingPage() {
                             aria-hidden
                             loading="lazy"
                             // Oversized watermark: taller than the row so the card
-                            // crops it (a "window"), centred just right of middle so
-                            // it lands in the gap between the text and the amount.
-                            className="pointer-events-none absolute left-[56%] top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 select-none object-contain opacity-[0.08]"
+                            // crops it (a "window"), centred at 60% width so it
+                            // lands in the gap between the text and the amount.
+                            className="pointer-events-none absolute left-[60%] top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 select-none object-contain opacity-[0.08]"
                           />
                         ) : null}
                         <button

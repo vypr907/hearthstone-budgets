@@ -70,7 +70,7 @@
     (new `shortDate()` helper). Removed now-unused `KIND_EMOJI`, `cycleLabel`,
     `Badge` import, `DEFAULT_CATEGORY_*` imports.
   * Logo watermark kept and reworked (2nd pass, per Steven): oversized
-    `h-28 w-28` / `opacity-0.08`, centred at 56% of card width so it lands in the
+    `h-28 w-28` / `opacity-0.08`, centred at 60% of card width so it lands in the
     gap between text and amount, taller than the row so the card crops it top and
     bottom (a "window").
   * typecheck / build / `npm test` (124) green; lint clean on the touched file;

@@ -14,7 +14,7 @@
     Billing cycle lives in the detail view (matches the Bills-list card redesign).
   * Date format is now `Sep 3` (`shortDate()` helper), not `09-03`.
 * **Institution logo watermark kept** (Steven's ask) and reworked into an
-  oversized mark (`h-28 w-28`, `opacity-0.08`) centred at 56% of the card width —
+  oversized mark (`h-28 w-28`, `opacity-0.08`) centred at 60% of the card width —
   it sits in the gap between the text block and the amount, and is taller than
   the row so the card crops it top and bottom ("a little window to see the
   watermark beyond"). Was a 20%-opacity mark behind the name that PR #46 had to
