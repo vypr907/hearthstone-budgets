@@ -33,6 +33,7 @@ import {
   isStrategyLocked,
   lockedInputs,
 } from "@/lib/strategy-lock";
+import { isAdvanceDisbursement } from "@/lib/payments";
 import { formatMoney } from "@/lib/format";
 import { move } from "@/lib/reorder";
 
@@ -99,6 +100,7 @@ function DebtStrategyPage() {
     const map = new Map<string, { count: number; total: number; last: string | null }>();
     for (const t of transactions) {
       if (!t.linked_debt_id || t.status !== "cleared") continue;
+      if (isAdvanceDisbursement(t)) continue; // ADR-056 addendum: not a payment
       const cur = map.get(t.linked_debt_id) ?? { count: 0, total: 0, last: null };
       cur.count += 1;
       cur.total += Math.abs(Number(t.amount || 0));

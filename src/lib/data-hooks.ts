@@ -1010,7 +1010,10 @@ export function useCreateAdvance() {
         throw new Error("Enter a positive amount");
       }
       const groupId = crypto.randomUUID();
-      // Step 1: deposit transaction into the destination account.
+      // Step 1: deposit transaction into the destination account. `linked_debt_id`
+      // ties it to the advance debt so it shows in the debt's Recent Transactions
+      // alongside repayments; `transfer_group_id` is still the tag useDeleteAdvance
+      // keys off (ADR-056 addendum).
       await saveWithOptionalColumns<Transaction>(
         {
           household_id: householdId!,
@@ -1020,6 +1023,7 @@ export function useCreateAdvance() {
           description: `Advance: ${args.debt.name}`,
           transaction_date: args.advanceDate,
           transfer_group_id: groupId,
+          linked_debt_id: args.debt.id,
         } as Record<string, unknown>,
         async (p) => supabase.from("transactions").insert(p).select("*").single(),
       );

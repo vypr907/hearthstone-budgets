@@ -21,9 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { useAccounts, useTransactions } from "@/lib/data-hooks";
+import { useAccounts, useDebtAdjustments, useTransactions } from "@/lib/data-hooks";
 import {
   debtRemainingOwed,
+  isPreAdvanceHistoricalPayment,
   isWithinCurrentCycle,
   toPayable,
   useLogDebtPayment,
@@ -59,7 +60,17 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
   const [open, setOpen] = useState(false);
   const { data: accounts = [] } = useAccounts();
   const { data: transactions = [] } = useTransactions();
+  const { data: adjustments = [] } = useDebtAdjustments();
   const log = useLogDebtPayment();
+
+  /** ADR-084 addendum: newest 'advance' adjustment for this debt, if any. */
+  const newestAdvanceDate = useMemo(() => {
+    const advances = adjustments
+      .filter((a) => a.debt_id === debt.id && a.adjustment_type === "advance")
+      .map((a) => String(a.adjustment_date).slice(0, 10))
+      .sort();
+    return advances.length ? advances[advances.length - 1] : null;
+  }, [adjustments, debt.id]);
 
   const lastAccountId = useMemo(
     () => transactions.find((t) => t.linked_debt_id === debt.id)?.account_id ?? "",
@@ -73,6 +84,7 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
   const [lines, setLines] = useState<Line[]>([]);
 
   const inCycle = isWithinCurrentCycle(debt, date);
+  const ledgerOnly = isPreAdvanceHistoricalPayment(debt, date, newestAdvanceDate);
 
   /** Newest ledger/adjustment date, used for the out-of-order warning. */
   const mostRecentEntryDate = useMemo(() => {
@@ -122,8 +134,15 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
         status,
         lines: lines.map(({ type, amount, note }) => ({ type, amount, note })),
         priorArrears: priorCyclesArrears(toPayable("debt", debt)),
+        newestAdvanceDate,
       });
-      toast.success(inCycle ? "Payment logged" : "Historical payment logged");
+      toast.success(
+        ledgerOnly
+          ? "Recorded — balance unchanged"
+          : inCycle
+            ? "Payment logged"
+            : "Historical payment logged",
+      );
       setOpen(false);
     } catch (e) {
       toast.error((e as Error).message);
@@ -167,9 +186,11 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
                   onChange={(e) => setDate(e.target.value)}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {inCycle
-                    ? "Applies to the current cycle — updates cycle progress, status and due date."
-                    : "Historical — balance and ledger only. The current cycle is left untouched."}
+                  {ledgerOnly
+                    ? "This advance was taken out after this date — recorded for account history only. The current balance and amount due won't change."
+                    : inCycle
+                      ? "Applies to the current cycle — updates cycle progress, status and due date."
+                      : "Historical — balance and ledger only. The current cycle is left untouched."}
                 </p>
               </div>
 
@@ -202,7 +223,9 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
                   onChange={(e) => setPrincipal(e.target.value)}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Only this amount reduces the debt balance.
+                  {ledgerOnly
+                    ? "Recorded against the account only — it won't reduce this debt's balance."
+                    : "Only this amount reduces the debt balance."}
                 </p>
               </div>
 
