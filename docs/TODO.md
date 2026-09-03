@@ -20,6 +20,12 @@ not tasks:
 - **No guard against two Set Aside entries for the same bill in one month** was
   the state before 2026-08-26; now resolved as *warn-and-allow* (ADR-038
   addendum). Kept here as a pointer.
+- **The payoff engine is a calendar-month grid; biweekly minimums are modelled
+  as their monthly equivalent** (`monthlyEquivalent`, biweekly → ×2), not as a
+  true 14-day cadence (ADR-094 PR1, reaffirmed in the ADR-095 interview). The
+  monthly cash rate is right; the exact payoff *month* for a biweekly debt can be
+  off by one. Modelling the real cadence means a month-indexed engine rewrite and
+  biweekly rows on the Payment Schedule — deliberately deferred.
 - **Monthly-debt arrears recover at most ONE missed prior month** (ADR-049
   addendum, `arrearsWalkStart`). A monthly debt's `due_day` is recomputed inside
   the current calendar month with no history, so `computeArrears` can only infer
