@@ -103,6 +103,34 @@ export function advanceMinimumPaymentPatch(debt: Debt, newRemainingBalance: numb
 }
 
 /**
+ * ADR-056 addendum: the money-in row `useCreateAdvance` writes into the
+ * destination account. It carries `linked_debt_id` (so it shows in the debt's
+ * Recent Transactions) but it is a DISBURSEMENT, never a repayment — every
+ * "amount paid" / cycle-progress calculation must skip it. Identified by the
+ * positive amount + the "Advance: <name>" description the hook and the
+ * ADR-056-addendum backfill both write.
+ */
+export function isAdvanceDisbursement(
+  t: Pick<Transaction, "amount" | "description" | "linked_debt_id">,
+): boolean {
+  return (
+    !!t.linked_debt_id &&
+    Number(t.amount ?? 0) > 0 &&
+    (t.description ?? "").trim().toLowerCase().startsWith("advance:")
+  );
+}
+
+/**
+ * ADR-046: a "Fee: …" row is a payment fee / advance fee — it rides alongside a
+ * payment but never credits the cycle. They're normally written unlinked; a
+ * linked one (e.g. an advance's express fee, ADR-056 addendum) must still be
+ * kept out of cycle math. Matches `clearPairedFees`' `ilike 'Fee:%'`.
+ */
+export function isFeeTransaction(t: Pick<Transaction, "description">): boolean {
+  return (t.description ?? "").trimStart().toLowerCase().startsWith("fee:");
+}
+
+/**
  * ADR-066: recording a new advance against a paid-off advance-type debt
  * reactivates it in place. Beyond clearing `date_paid_off`, that also starts a
  * fresh cycle — so the stale `payment_status`/`cycle_paid_to_date` left from the
@@ -1188,6 +1216,12 @@ export type LogDebtPaymentInput = {
   lines: DebtPaymentLine[];
   /** priorCyclesArrears(payable) from arrears.ts — only used for the in-cycle path. */
   priorArrears: number;
+  /**
+   * ADR-084 addendum: the date of this debt's most recent 'advance' adjustment,
+   * if any (`adjustment_date`). Lets the historical path recognise a payment
+   * that settles an already-closed advance cycle and keep it ledger-only.
+   */
+  newestAdvanceDate?: string | null;
 };
 
 /**
@@ -1211,6 +1245,27 @@ export function isWithinCurrentCycle(debt: Debt, date: string, today = todayISO(
 }
 
 /**
+ * ADR-084 addendum: an advance-type debt keeps ONE running balance covering the
+ * current advance; older advances are already settled. So a historical payment
+ * dated before this debt's most recent advance is repaying a closed advance —
+ * it must NOT touch `remaining_balance` / `minimum_payment`. The ledger row is
+ * still written so the paying account stays accurate ("ledger-only").
+ */
+export function isPreAdvanceHistoricalPayment(
+  debt: Debt,
+  date: string,
+  newestAdvanceDate: string | null | undefined,
+  today = todayISO(),
+): boolean {
+  return (
+    debt.debt_type === "advance" &&
+    !isWithinCurrentCycle(debt, date, today) &&
+    !!newestAdvanceDate &&
+    date < String(newestAdvanceDate).slice(0, 10)
+  );
+}
+
+/**
  * ADR-084: one form, one write — a (possibly backdated) debt payment plus any
  * number of fee/interest lines. Only the principal touches remaining_balance;
  * every extra line is its own ledger row against the same account so the
@@ -1229,12 +1284,16 @@ export function useLogDebtPayment() {
       status,
       lines,
       priorArrears,
+      newestAdvanceDate,
     }: LogDebtPaymentInput) => {
       const p = toPayable("debt", debt);
       const amt = Math.abs(Number(principal) || 0);
       const extras = (lines ?? []).filter((l) => Math.abs(Number(l.amount) || 0) >= 0.005);
       const groupId = extras.length > 0 ? crypto.randomUUID() : null;
       const inCycle = isWithinCurrentCycle(debt, date);
+      // ADR-084 addendum: a pre-advance historical payment is ledger-only — the
+      // running balance still reflects the current advance.
+      const ledgerOnly = isPreAdvanceHistoricalPayment(debt, date, newestAdvanceDate);
 
       let resolvedDueDate: string | null = null;
 
@@ -1244,7 +1303,7 @@ export function useLogDebtPayment() {
           if (inCycle) {
             const res = await applyClearedPayment(p, amt, priorArrears ?? 0, date);
             resolvedDueDate = res.resolved_due_date ?? null;
-          } else {
+          } else if (!ledgerOnly) {
             // Historical: balance only. Cycle counters, status and due date stay put.
             const remaining = Number(debt.remaining_balance ?? 0);
             const nextBalance = Math.max(0, remaining - amt);
@@ -1295,7 +1354,7 @@ export function useLogDebtPayment() {
         if (error) throw error;
       }
 
-      return { inCycle };
+      return { inCycle, ledgerOnly };
     },
     onSuccess: done,
   });

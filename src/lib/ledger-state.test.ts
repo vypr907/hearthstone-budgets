@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deriveCycleInfo } from "@/lib/ledger-state";
 import { toPayable } from "@/lib/payments";
-import type { Bill, Transaction } from "@/lib/supabase";
+import type { Bill, Debt, Transaction } from "@/lib/supabase";
 
 const TODAY = "2026-08-05";
 const LATER = "2026-09-20";
@@ -176,6 +176,44 @@ describe("ADR-085 addendum: reference date reconstructs a prior month's cycle", 
     const jul = deriveCycleInfo(toPayable("bill", b), [augPaid, sepPaid], "2026-07-15");
     expect(jul.state).toBe("unpaid");
     expect(jul.clearedSum).toBe(0);
+  });
+});
+
+describe("ADR-056 addendum: advance disbursement row is excluded from cycle math", () => {
+  const advDebt = {
+    id: "adv1",
+    name: "Cleo",
+    debt_type: "advance",
+    billing_cycle: "monthly",
+    minimum_payment: 100,
+    remaining_balance: 100,
+    next_due_date: "2026-08-20",
+    cycle_paid_to_date: 0,
+    category_id: null,
+    institution_id: null,
+  } as unknown as Debt;
+
+  const dtx = (amount: number, description: string, id: string): Transaction =>
+    ({
+      id,
+      amount,
+      status: "cleared",
+      transaction_date: "2026-08-03",
+      linked_bill_id: null,
+      linked_debt_id: "adv1",
+      description,
+      account_id: "acct",
+    }) as unknown as Transaction;
+
+  it("counts the repayment but not the +disbursement", () => {
+    const i = deriveCycleInfo(
+      toPayable("debt", advDebt),
+      [dtx(100, "Advance: Cleo", "disb"), dtx(-40, "Debt payment · Cleo", "pay")],
+      "2026-08-05",
+    );
+    expect(i.clearedSum).toBe(40);
+    expect(i.state).toBe("partial");
+    expect(i.transactions.map((t) => t.id)).toEqual(["pay"]);
   });
 });
 

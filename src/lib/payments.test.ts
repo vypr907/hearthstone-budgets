@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   advanceMinimumPaymentPatch,
   advanceReactivationPatch,
+  isAdvanceDisbursement,
+  isFeeTransaction,
+  isPreAdvanceHistoricalPayment,
   rebuiltCycleAmountDue,
 } from "./payments";
-import type { Bill, BillAdjustment, Debt } from "./supabase";
+import type { Bill, BillAdjustment, Debt, Transaction } from "./supabase";
 import { debtPayoffDatePatch } from "./debt-payoff-state";
 
 const debt = (over: Partial<Debt> = {}): Debt =>
@@ -30,6 +33,61 @@ describe("advanceMinimumPaymentPatch", () => {
   it("is a no-op for every other debt type", () => {
     expect(advanceMinimumPaymentPatch(debt({ debt_type: "loan" }), 231.75)).toEqual({});
     expect(advanceMinimumPaymentPatch(debt({ debt_type: "credit card" }), 500)).toEqual({});
+  });
+});
+
+describe("isPreAdvanceHistoricalPayment (ADR-084 addendum)", () => {
+  // biweekly advance, current cycle window ≈ 2026-08-21 → 2026-09-04.
+  const adv = debt({ next_due_date: "2026-09-04", date_paid_off: null });
+  const TODAY = "2026-09-03";
+
+  it("is true for an advance payment dated before both the cycle and the newest advance", () => {
+    expect(isPreAdvanceHistoricalPayment(adv, "2026-07-17", "2026-08-28", TODAY)).toBe(true);
+  });
+
+  it("is false for a payment inside the current cycle", () => {
+    expect(isPreAdvanceHistoricalPayment(adv, "2026-08-25", "2026-08-28", TODAY)).toBe(false);
+  });
+
+  it("is false for a historical payment dated after the newest advance", () => {
+    expect(isPreAdvanceHistoricalPayment(adv, "2026-08-15", "2026-08-10", TODAY)).toBe(false);
+  });
+
+  it("is false for non-advance debts and when there is no advance date", () => {
+    const loan = debt({ debt_type: "loan", next_due_date: "2026-09-04" });
+    expect(isPreAdvanceHistoricalPayment(loan, "2026-07-17", "2026-08-28", TODAY)).toBe(false);
+    expect(isPreAdvanceHistoricalPayment(adv, "2026-07-17", null, TODAY)).toBe(false);
+  });
+});
+
+describe("isAdvanceDisbursement (ADR-056 addendum)", () => {
+  const tx = (over: Partial<Transaction>): Transaction => ({ ...over }) as Transaction;
+
+  it("is true for a linked positive 'Advance: …' row", () => {
+    expect(
+      isAdvanceDisbursement(tx({ linked_debt_id: "d1", amount: 40, description: "Advance: Cleo" })),
+    ).toBe(true);
+  });
+
+  it("is false for a repayment, an unlinked leg, or a differently-described credit", () => {
+    const repayment = tx({ linked_debt_id: "d1", amount: -40, description: "Debt payment · Cleo" });
+    const unlinked = tx({ linked_debt_id: null, amount: 40, description: "Advance: Cleo" });
+    const refund = tx({ linked_debt_id: "d1", amount: 40, description: "Refund" });
+    expect(isAdvanceDisbursement(repayment)).toBe(false);
+    expect(isAdvanceDisbursement(unlinked)).toBe(false);
+    expect(isAdvanceDisbursement(refund)).toBe(false);
+  });
+});
+
+describe("isFeeTransaction (ADR-046)", () => {
+  const tx = (description: string | null): Transaction => ({ description }) as Transaction;
+  it("matches a 'Fee:' row regardless of case or leading space", () => {
+    expect(isFeeTransaction(tx("Fee: Cleo · advance fee"))).toBe(true);
+    expect(isFeeTransaction(tx("  fee: something"))).toBe(true);
+  });
+  it("does not match a payment or a null description", () => {
+    expect(isFeeTransaction(tx("Debt payment · Cleo"))).toBe(false);
+    expect(isFeeTransaction(tx(null))).toBe(false);
   });
 });
 

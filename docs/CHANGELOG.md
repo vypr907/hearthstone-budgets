@@ -1,3 +1,33 @@
+## 2026-09-04 — Advance historical payments, Cleo/Instacash cleanup, credit categories (ADR-084 / ADR-056 addenda)
+
+* **Logging an old payment on a cash-advance debt no longer wrecks the current
+  balance.** An advance debt keeps one running balance for the *current* advance;
+  a historical payment dated before your most recent advance is now recorded
+  against the paying account only — `remaining_balance` / minimum / amount-due
+  stay put. `LogDebtPaymentDialog` explains this inline and the toast reads
+  "Recorded — balance unchanged". In-cycle payments and post-advance historical
+  payments are unchanged. (`isPreAdvanceHistoricalPayment`, `useLogDebtPayment`.)
+* **An advance's deposit now shows in the debt's Recent Transactions** next to
+  its repayments (`useCreateAdvance` sets `linked_debt_id`). Since it's a
+  disbursement, not a repayment, `isAdvanceDisbursement()` keeps it out of cycle
+  math, the Debt Strategy payment history, and Correct/Reverse.
+* **Debt-detail transaction rows are tappable** → the full Transaction detail
+  dialog, matching the Bills screen. (Fixes "can't view details from the debt
+  screen".)
+* **Data cleanup — run `scripts/migrations/2026-09-04-*.sql`:**
+  * `cleo-instacash-untangle.sql` — the 8/14 Cleo "$5.99 bill payment + $1 fee"
+    split was really one $6.99 Venmo Express Fee: deleted and re-added as a fee
+    on the Cleo *advance*; the missing 8/3 Cleo Plus bill payment added; the
+    Cleo advance deposit linked and its repayment named; Instacash reset to
+    $600 / $600 with the stray 7/17 $443.03 payment unlinked (kept as a Classic
+    Checking expense); every advance deposit backfilled with `linked_debt_id`.
+    A ~$234.90 Instacash residual remains for you to reconcile against MoneyLion.
+  * `credit-categories.sql` — new categories: **Cash Back / Rewards** and
+    **Interest Earned** (income), **Interest Charge** (spending). Covers
+    cash-back credits and finance charges on credit accounts like Mission Lane.
+* New tests in `payments.test.ts` / `ledger-state.test.ts`. Suite 168 → 175.
+* Deferred: a per-account detail dialog on Accounts & Balances (its own ADR).
+
 ## 2026-09-03 — Strategy lock + baseline scoreboard (ADR-094 part 4 / ADR-095)
 
 * **You can now lock a payoff plan.** The Debt Strategy screen gains a **Lock

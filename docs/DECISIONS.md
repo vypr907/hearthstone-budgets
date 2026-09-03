@@ -3132,6 +3132,29 @@ form matches how real statements arrive, and keeping fees ledger-only avoids
 faking interest accrual against the balance.
 Status: Decided 2026-08-26. Implemented.
 
+Addendum (2026-09-04): **a historical payment on a `debt_type='advance'` debt
+dated before that debt's most recent advance is ledger-only.** An advance debt
+carries ONE running `remaining_balance` covering the current advance; earlier
+advances are already settled, so subtracting a backdated repayment from the
+balance (and, via `advanceMinimumPaymentPatch`, from `minimum_payment` / amount
+due) corrupts the current draw — the symptom the user hit: logging a July
+Instacash payment for account accuracy cut the live advance's balance.
+`isPreAdvanceHistoricalPayment(debt, date, newestAdvanceDate)` (`src/lib/payments.ts`)
+gates it; `useLogDebtPayment` skips the balance write when it's true and still
+inserts the ledger row; `LogDebtPaymentDialog` loads `useDebtAdjustments`,
+passes `newestAdvanceDate`, and swaps its hint/toast to say the balance won't
+change. In-cycle payments and historical payments *after* the newest advance are
+unaffected. Data cleanup for the pre-existing Instacash drift:
+`scripts/migrations/2026-09-04-cleo-instacash-untangle.sql`.
+
+Cross-note to **ADR-056**: `useCreateAdvance` now also sets `linked_debt_id` on
+the advance's deposit transaction so it appears in the debt's Recent
+Transactions next to repayments (still tagged `transfer_group_id` for
+`useDeleteAdvance`). Because that row is a disbursement, not a repayment,
+`isAdvanceDisbursement(t)` (`src/lib/payments.ts`) excludes it from
+`deriveCycleInfo` cycle math, the Debt Strategy payment-history tally, and the
+Correct/Reverse actions. Existing deposits backfilled by the same script.
+
 ## ADR-085: Debt Detail Reads Ledger-Derived Cycle State; Cycle Window + Pay Period Fields
 Decision: The Debt detail panel derives "Payment status", "Paid this cycle" and
 "Still owed this cycle" from `deriveCycleInfo` (ADR-036) rather than the stored

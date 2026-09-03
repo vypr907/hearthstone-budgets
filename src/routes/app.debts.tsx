@@ -26,7 +26,7 @@ import { CycleMonthStepper } from "@/components/CycleMonthStepper";
 import { useCycleState } from "@/lib/ledger-state";
 import { hasRecommendation, useRecommendedPayments } from "@/lib/debt-recommended";
 import { priorArrearsSummary } from "@/lib/arrears";
-import { toPayable, useSyncStoredStatus } from "@/lib/payments";
+import { isAdvanceDisbursement, toPayable, useSyncStoredStatus } from "@/lib/payments";
 import { nextPayDate, periodRange } from "@/lib/paycheck-budget";
 import { payPeriodForDate } from "@/lib/pay-period";
 import { debtPayoffDatePatch } from "@/lib/debt-payoff-state";
@@ -79,7 +79,8 @@ import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
 import { LogDebtPaymentDialog } from "@/components/LogDebtPaymentDialog";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Debt, BillingCycle } from "@/lib/supabase";
+import type { Debt, BillingCycle, Transaction } from "@/lib/supabase";
+import { TransactionDetail } from "@/routes/app.transactions";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 import { PastDueBadge } from "@/components/PastDueBadge";
 import { PastDueEditor } from "@/components/PastDueEditor";
@@ -1440,6 +1441,7 @@ function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string })
   const debtId = debt.id;
   const { data: transactions = [] } = useTransactions();
   const del = useDeleteLinkedTransaction();
+  const [detail, setDetail] = useState<Transaction | null>(null);
 
   const rows = useMemo(() => {
     const linked = transactions
@@ -1460,49 +1462,63 @@ function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string })
         </EmptyState>
       ) : (
         <div className="mt-1 divide-y divide-border/50">
-          {rows.map((t) => (
-            <div key={t.id} className="py-2 text-sm">
-              {/* Two-line row: the three action buttons get their own line so
-                  nothing crowds or clips off the right edge on phones. */}
-              <div className="flex items-center justify-between gap-2">
-                <span className="min-w-0 flex-1 truncate">
-                  {t.transaction_date?.slice(0, 10)}
-                  {t.description ? ` · ${t.description}` : ""}
-                </span>
-                <span className="shrink-0 tabular-nums">
-                  {formatMoney(Number(t.amount ?? 0))}
-                </span>
-              </div>
-              <div className="mt-0.5 flex items-center justify-between gap-1">
-                <span className="text-xs capitalize text-muted-foreground">
-                  {t.status ?? "—"}
-                </span>
-                <div className="flex shrink-0 items-center justify-end">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9"
-                    aria-label="Delete transaction"
-                    disabled={del.isPending}
-                    onClick={() => {
-                      if (!confirm("Delete this ledger transaction? The debt row is left as-is.")) return;
-                      del.mutate(t, {
-                        onSuccess: () => toast.success("Transaction deleted"),
-                        onError: (e: unknown) => toast.error((e as Error).message),
-                      });
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                  <CorrectPaymentButton transaction={t} payable={toPayable("debt", debt)} />
-                  <ReversePaymentButton transaction={t} payable={toPayable("debt", debt)} />
+          {rows.map((t) => {
+            // ADR-056 addendum: the advance disbursement row shows for context
+            // but Correct/Reverse don't apply — it isn't a payment.
+            const disbursement = isAdvanceDisbursement(t);
+            return (
+              <div key={t.id} className="py-2 text-sm">
+                {/* Two-line row: the three action buttons get their own line so
+                    nothing crowds or clips off the right edge on phones. */}
+                <button
+                  type="button"
+                  className="-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-2 rounded px-1 text-left hover:bg-muted/50"
+                  onClick={() => setDetail(t)}
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {t.transaction_date?.slice(0, 10)}
+                    {t.description ? ` · ${t.description}` : ""}
+                  </span>
+                  <span className="shrink-0 tabular-nums">
+                    {formatMoney(Number(t.amount ?? 0))}
+                  </span>
+                </button>
+                <div className="mt-0.5 flex items-center justify-between gap-1">
+                  <span className="text-xs capitalize text-muted-foreground">
+                    {disbursement ? "advance" : (t.status ?? "—")}
+                  </span>
+                  <div className="flex shrink-0 items-center justify-end">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      aria-label="Delete transaction"
+                      disabled={del.isPending}
+                      onClick={() => {
+                        if (!confirm("Delete this ledger transaction? The debt row is left as-is.")) return;
+                        del.mutate(t, {
+                          onSuccess: () => toast.success("Transaction deleted"),
+                          onError: (e: unknown) => toast.error((e as Error).message),
+                        });
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                    {disbursement ? null : (
+                      <>
+                        <CorrectPaymentButton transaction={t} payable={toPayable("debt", debt)} />
+                        <ReversePaymentButton transaction={t} payable={toPayable("debt", debt)} />
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
+      <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />
     </div>
   );
 }
