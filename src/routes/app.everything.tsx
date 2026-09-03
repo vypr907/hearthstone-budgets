@@ -400,7 +400,10 @@ function EverythingPage() {
                             alt=""
                             aria-hidden
                             loading="lazy"
-                            className="pointer-events-none absolute right-2 top-1/2 h-14 w-14 -translate-y-1/2 select-none object-contain opacity-[0.09]"
+                            // Oversized watermark: taller than the row so the card
+                            // crops it (a "window"), centred just right of middle so
+                            // it lands in the gap between the text and the amount.
+                            className="pointer-events-none absolute left-[56%] top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 select-none object-contain opacity-[0.08]"
                           />
                         ) : null}
                         <button
