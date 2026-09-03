@@ -30,5 +30,25 @@
   * Verified against the TEST household via dev server + read-only MCP: reorder →
     `priority_order` `1,2,3` (advance stays `null`); new debt → `4`; edit → 1
     unchanged. Cleaned up the throwaway test debt.
-  * Branch `feat/debt-custom-order-editor`.
-  * Next: PR3 recommended-payment hint + one-tap plan + pay preset; PR4 lock+baseline.
+  * Branch `feat/debt-custom-order-editor`. Opened as PR #50.
+- ADR-094 PR3 — recommended-payment surface (no schema).
+  * `src/lib/debt-recommended.ts` — `recommendedPaymentsThisCycle(debts, settings)`
+    → per-debt `{ monthlyTarget, monthlyMinimum, rollover }` from
+    `buildSchedule(plan, extra, strategy, 1)[0]`; `hasRecommendation()` gates the
+    UI at `rollover > $0.01`; `useRecommendedPayments()` hook. Never stored.
+  * `$X/mo min · $Y/mo plan` hint on Everything, Debts (list tile + detail
+    dialog "Strategy target / mo"), and Paycheck Budget "Due this period" rows.
+  * Paycheck Budget: one-tap "Plan $Y" on debt rows → `commitPlanned` writes the
+    ADR-059 allocation (hidden once already planned); "Plan a payment" dialog
+    prefills the amount from the strategy target.
+  * `pay-flow.tsx` Submit/Clear dialog: "Recommended (plan / mo)" preset,
+    shown only when the target exceeds "Owed this cycle". Its pre-existing
+    non-conforming preset block got prettier-reformatted by the edit.
+  * `obligationsInRange` / `obligationsTotalExcludingPlanned` / left-to-allocate
+    untouched — hint is text-only, only the Planned row moves budget math.
+  * New `src/lib/debt-recommended.test.ts` (6 tests). Suite 148 → 154.
+  * typecheck / build / test green; new file lint-clean; routeTree.gen.ts build
+    churn reverted. Docs (ADR-094, CHANGELOG, CONTEXT) updated.
+  * Branch `feat/debt-recommended-payment` (stacked on PR2's `feat/debt-custom-order-editor`).
+  * Next: PR4 = ADR-095 strategy lock + baseline (Option 2: freeze inputs +
+    baseline snapshot; needs schema migration).

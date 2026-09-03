@@ -24,6 +24,7 @@ import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
 import { CycleMonthStepper } from "@/components/CycleMonthStepper";
 
 import { useCycleState } from "@/lib/ledger-state";
+import { hasRecommendation, useRecommendedPayments } from "@/lib/debt-recommended";
 import { priorArrearsSummary } from "@/lib/arrears";
 import { toPayable, useSyncStoredStatus } from "@/lib/payments";
 import { nextPayDate, periodRange } from "@/lib/paycheck-budget";
@@ -153,6 +154,7 @@ function DebtsPage() {
   const [editing, setEditing] = useState<Partial<Debt> | null>(null);
   const [detail, setDetail] = useState<Debt | null>(null);
   const infoOf = useCycleState();
+  const recommended = useRecommendedPayments();
   const { data: categories = [] } = useCategories();
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("priority");
@@ -362,6 +364,14 @@ function DebtsPage() {
                     <p className="text-xl font-extrabold tabular-nums">
                       {formatMoney(Number(d.minimum_payment))}
                     </p>
+                        {hasRecommendation(recommended.get(d.id)) ? (
+                          <p className="mt-0.5 text-[11px] leading-tight tabular-nums text-muted-foreground">
+                            {formatMoney(recommended.get(d.id)!.monthlyMinimum)}/mo min ·{" "}
+                            <span className="font-medium text-foreground">
+                              {formatMoney(recommended.get(d.id)!.monthlyTarget)}/mo plan
+                            </span>
+                          </p>
+                        ) : null}
                   </div>
                 </div>
                 {(() => {
@@ -450,6 +460,7 @@ export function DebtDetailDialog({
   const { data: institutions = [] } = useInstitutions();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
+  const recommended = useRecommendedPayments();
 
   // ADR-085 addendum: a month stepper to inspect a prior cycle in place. Only
   // monthly items reconstruct faithfully (calendar-month window); non-monthly
@@ -550,6 +561,12 @@ export function DebtDetailDialog({
             />
             <DetailMoney label="Remaining balance" value={debt.remaining_balance} />
             <DetailMoney label="Minimum payment" value={debt.minimum_payment} />
+            {hasRecommendation(recommended.get(debt.id)) ? (
+              <DetailItem
+                label="Strategy target / mo"
+                value={formatMoney(recommended.get(debt.id)!.monthlyTarget)}
+              />
+            ) : null}
             <DetailMoney label="Paid this cycle" value={cycle.clearedSum} />
             <DetailMoney label="Still owed this cycle" value={cycle.remaining} />
             {showRollup ? (

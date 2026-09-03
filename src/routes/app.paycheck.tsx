@@ -58,6 +58,11 @@ import {
 import { buildActualResolver } from "@/lib/spending-actuals";
 import { useBills, useDebts, useAutoTransfers } from "@/lib/data-hooks";
 import { deriveCycleInfo, type CycleInfo } from "@/lib/ledger-state";
+import {
+  hasRecommendation,
+  useRecommendedPayments,
+  type RecommendedPayment,
+} from "@/lib/debt-recommended";
 import { deriveAutoTransferState } from "@/lib/auto-transfers";
 import { toPayable } from "@/lib/payments";
 import {
@@ -309,12 +314,26 @@ function ObligationStatusIcon({ info }: { info: CycleInfo }) {
 }
 
 /** One "Due this period" row — shared by the flat Due-date list and each Category group. */
-function ObligationRow({ o, status }: { o: ObligationRowItem; status?: CycleInfo }) {
+function ObligationRow({
+  o,
+  status,
+  rec,
+  alreadyPlanned,
+  onPlan,
+}: {
+  o: ObligationRowItem;
+  status?: CycleInfo;
+  /** ADR-094: payoff-strategy target for a debt obligation this month. */
+  rec?: RecommendedPayment;
+  alreadyPlanned?: boolean;
+  onPlan?: (amount: number) => void;
+}) {
   // ADR-081: auto-transfers get a distinct kind label so they read as a
   // different kind of line item, even though they add to the same total.
   const kindLabel = o.kind === "auto_transfer" ? "🔁 Auto-transfer" : o.kind;
+  const showPlan = o.kind === "debt" && hasRecommendation(rec);
   return (
-    <div className="flex items-center justify-between gap-2 py-1 text-sm">
+    <div className="flex items-start justify-between gap-2 py-1 text-sm">
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="flex-1">
           {o.name}
@@ -335,8 +354,29 @@ function ObligationRow({ o, status }: { o: ObligationRowItem; status?: CycleInfo
         </span>
         {status ? <ObligationStatusIcon info={status} /> : null}
       </span>
-      <span className={o.projected ? "font-medium text-muted-foreground" : "font-medium"}>
-        {formatMoney(o.amount)}
+      <span className="flex flex-col items-end gap-0.5">
+        <span className={o.projected ? "font-medium text-muted-foreground" : "font-medium"}>
+          {formatMoney(o.amount)}
+        </span>
+        {showPlan ? (
+          <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
+            <span>
+              {formatMoney(rec!.monthlyMinimum)}/mo min ·{" "}
+              <span className="font-medium text-foreground">
+                {formatMoney(rec!.monthlyTarget)}/mo plan
+              </span>
+            </span>
+            {onPlan && !alreadyPlanned ? (
+              <button
+                type="button"
+                onClick={() => onPlan(rec!.monthlyTarget)}
+                className="rounded-full border px-2 py-0.5 font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                Plan {formatMoney(rec!.monthlyTarget)}
+              </button>
+            ) : null}
+          </span>
+        ) : null}
       </span>
     </div>
   );
@@ -366,6 +406,7 @@ function PeriodBudget({
   allocations: import("@/lib/supabase").PayPeriodAllocation[];
 }) {
   const setAllocation = useSetAllocation();
+  const recommended = useRecommendedPayments();
   const { data: splits = [] } = useIncomeSourceSplits(primarySourceId);
   const { data: accounts = [] } = useAccounts();
   const { data: goals = [] } = useSavingsGoals();
@@ -634,6 +675,17 @@ function PeriodBudget({
 
   const sliderMax = Math.max(100, Math.ceil((income - obligationsTotal) / 50) * 50 || 100);
 
+  const renderObligationRow = (o: ObligationRowItem) => (
+    <ObligationRow
+      key={obligationRowKey(o)}
+      o={o}
+      status={obligationStatus.get(obligationRowKey(o))}
+      rec={o.kind === "debt" ? recommended.get(o.id) : undefined}
+      alreadyPlanned={plannedKeys.has(`debt:${o.id}`)}
+      onPlan={(amount) => void commitPlanned({ kind: "debt", targetId: o.id, amount })}
+    />
+  );
+
   return (
     <div className="space-y-4">
       <Card>
@@ -680,9 +732,7 @@ function PeriodBudget({
           {obligations.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing due in this range.</p>
           ) : obligationsGroupBy === "due" ? (
-            obligations.map((o) => (
-              <ObligationRow key={obligationRowKey(o)} o={o} status={obligationStatus.get(obligationRowKey(o))} />
-            ))
+            obligations.map(renderObligationRow)
           ) : (
             (obligationsGroupBy === "category" ? obligationsByCategory : obligationsByAccount).map(
               (g) => (
@@ -691,13 +741,7 @@ function PeriodBudget({
                     <span>{g.name}</span>
                     <span>{formatMoney(g.total)}</span>
                   </div>
-                  {g.rows.map((o) => (
-                    <ObligationRow
-                      key={obligationRowKey(o)}
-                      o={o}
-                      status={obligationStatus.get(obligationRowKey(o))}
-                    />
-                  ))}
+                  {g.rows.map(renderObligationRow)}
                 </div>
               ),
             )
@@ -733,7 +777,12 @@ function PeriodBudget({
         <CardContent className="space-y-2 p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Planned</h2>
-            <PlanPaymentDialog bills={bills} debts={debts} onSave={commitPlanned} />
+            <PlanPaymentDialog
+              bills={bills}
+              debts={debts}
+              recommended={recommended}
+              onSave={commitPlanned}
+            />
           </div>
           {planned.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -994,10 +1043,13 @@ function PeriodBudget({
 function PlanPaymentDialog({
   bills,
   debts,
+  recommended,
   onSave,
 }: {
   bills: import("@/lib/supabase").Bill[];
   debts: import("@/lib/supabase").Debt[];
+  /** ADR-094: per-debt payoff-strategy target, used to prefill the amount. */
+  recommended: Map<string, RecommendedPayment>;
   onSave: (args: {
     kind: "bill" | "debt";
     targetId: string;
@@ -1025,10 +1077,11 @@ function PlanPaymentDialog({
         .map((d) => ({
           value: `debt:${d.id}`,
           label: d.name,
-          amount: Number(d.minimum_payment ?? 0),
+          amount:
+            recommended.get(d.id)?.monthlyTarget ?? Number(d.minimum_payment ?? 0),
         })),
     ],
-    [bills, debts],
+    [bills, debts, recommended],
   );
 
   const save = async () => {

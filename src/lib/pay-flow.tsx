@@ -12,6 +12,7 @@ import {
 } from "@/lib/payments";
 import type { CycleInfo } from "@/lib/ledger-state";
 import { useAccounts, useInstitutions, useTransactions } from "@/lib/data-hooks";
+import { hasRecommendation, useRecommendedPayments } from "@/lib/debt-recommended";
 import { accountLast4, formatMoney } from "@/lib/format";
 import { todayISO } from "@/lib/snapshot";
 import { accountTypeVisual } from "@/lib/visual-meta";
@@ -43,6 +44,7 @@ export function usePayFlow() {
   const { data: institutions = [] } = useInstitutions();
 
   const { data: transactions = [] } = useTransactions();
+  const recommended = useRecommendedPayments();
   const submit = useMarkSubmitted();
   const clear = useMarkCleared();
   const undo = useMarkUnpaid();
@@ -278,45 +280,62 @@ export function usePayFlow() {
           <Label htmlFor="pay-amount">{ask?.payable.name}</Label>
 
           {/* ADR-057/076: three presets shown on the pay stage only. */}
-          {ask?.stage === "pay" ? (() => {
-            // ADR-076: computeArrears().amountOverdue folds the current cycle's
-            // own remainder in once it's overdue — priorCyclesArrears strips
-            // that back out so it isn't added to owedThisCycle a second time.
-            const priorArrears = priorCyclesArrears(ask.payable);
-            const owedThisCycle = Math.max(0,
-              (ask.cycleAmount ?? (ask.payable.kind === "bill"
-                ? billCycleDue(ask.payable.bill!)
-                : Number(ask.payable.debt?.minimum_payment ?? 0)))
-              - paidSoFar
-            );
-            const totalDue = Math.round((owedThisCycle + priorArrears) * 100) / 100;
-            const presets = [
-              { label: "Owed this cycle", value: owedThisCycle },
-              ...(totalDue > owedThisCycle + 0.005
-                ? [{ label: `Total due (+ ${formatMoney(priorArrears)} arrears)`, value: totalDue }]
-                : []),
-              { label: "Other amount", value: null },
-            ];
-            return (
-              <div className="flex flex-wrap gap-2 pb-1">
-                {presets.map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setAskValue(p.value != null ? String(p.value) : "")}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                      p.value != null && askValue === String(p.value)
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-muted/50 text-muted-foreground hover:border-primary hover:text-foreground"
-                    }`}
-                  >
-                    {p.label}
-                    {p.value != null ? ` · ${formatMoney(p.value)}` : ""}
-                  </button>
-                ))}
-              </div>
-            );
-          })() : null}
+          {ask?.stage === "pay"
+            ? (() => {
+                // ADR-076: computeArrears().amountOverdue folds the current cycle's
+                // own remainder in once it's overdue — priorCyclesArrears strips
+                // that back out so it isn't added to owedThisCycle a second time.
+                const priorArrears = priorCyclesArrears(ask.payable);
+                const owedThisCycle = Math.max(
+                  0,
+                  (ask.cycleAmount ??
+                    (ask.payable.kind === "bill"
+                      ? billCycleDue(ask.payable.bill!)
+                      : Number(ask.payable.debt?.minimum_payment ?? 0))) - paidSoFar,
+                );
+                const totalDue = Math.round((owedThisCycle + priorArrears) * 100) / 100;
+                // ADR-094: the active payoff strategy's target for this debt this
+                // month (a monthly figure — may cover two cycles on a biweekly debt).
+                const rec =
+                  ask.payable.kind === "debt"
+                    ? recommended.get(ask.payable.debt?.id ?? "")
+                    : undefined;
+                const presets = [
+                  { label: "Owed this cycle", value: owedThisCycle },
+                  ...(hasRecommendation(rec) && rec!.monthlyTarget > owedThisCycle + 0.005
+                    ? [{ label: "Recommended (plan / mo)", value: rec!.monthlyTarget }]
+                    : []),
+                  ...(totalDue > owedThisCycle + 0.005
+                    ? [
+                        {
+                          label: `Total due (+ ${formatMoney(priorArrears)} arrears)`,
+                          value: totalDue,
+                        },
+                      ]
+                    : []),
+                  { label: "Other amount", value: null },
+                ];
+                return (
+                  <div className="flex flex-wrap gap-2 pb-1">
+                    {presets.map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setAskValue(p.value != null ? String(p.value) : "")}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                          p.value != null && askValue === String(p.value)
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-muted/50 text-muted-foreground hover:border-primary hover:text-foreground"
+                        }`}
+                      >
+                        {p.label}
+                        {p.value != null ? ` · ${formatMoney(p.value)}` : ""}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()
+            : null}
 
           <Input
             id="pay-amount"
@@ -385,7 +404,14 @@ export function usePayFlow() {
               }
               setAsk(null);
               const fee = Number(feeValue) > 0 ? Number(feeValue) : undefined;
-              resolveAccount(a.payable, a.action, value, a.cycleAmount, fee, dateValue || undefined);
+              resolveAccount(
+                a.payable,
+                a.action,
+                value,
+                a.cycleAmount,
+                fee,
+                dateValue || undefined,
+              );
             }}
           >
             Continue

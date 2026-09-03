@@ -7,6 +7,7 @@ import {
   useResetDebtsMonth,
   useInstitutions,
 } from "@/lib/data-hooks";
+import { hasRecommendation, useRecommendedPayments } from "@/lib/debt-recommended";
 import { usePayFlow } from "@/lib/pay-flow";
 import { toPayable, type Payable } from "@/lib/payments";
 import { useCycleState, stateVisual, type CycleInfo, type LedgerState } from "@/lib/ledger-state";
@@ -100,6 +101,7 @@ function EverythingPage() {
   const resetDebts = useResetDebtsMonth();
   const { tap, busy, picker } = usePayFlow();
   const infoOf = useCycleState();
+  const recommended = useRecommendedPayments();
 
   const [q, setQ] = useState("");
   const [kindFilter, setKindFilter] = useState<"all" | "bills" | "debts">("all");
@@ -388,6 +390,9 @@ function EverythingPage() {
                     : r.due_date
                       ? shortDate(r.due_date)
                       : null;
+                  // ADR-094: the payoff strategy's target for this debt this month.
+                  const rec = recommended.get(r.id);
+                  const planHint = r.kind === "Debt" && hasRecommendation(rec) ? rec : null;
                   return (
                     <Card key={`${r.kind}-${r.id}`} className="overflow-hidden">
                       <CardContent
@@ -445,6 +450,14 @@ function EverythingPage() {
                             ) : null}
                             {formatMoney(r.amount)}
                           </p>
+                          {planHint ? (
+                            <div className="mt-0.5 whitespace-nowrap text-[11px] leading-tight tabular-nums text-muted-foreground">
+                              <div>{formatMoney(planHint.monthlyMinimum)}/mo min</div>
+                              <div className="font-medium text-foreground">
+                                {formatMoney(planHint.monthlyTarget)}/mo plan
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       </CardContent>
                     </Card>
