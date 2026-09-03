@@ -50,5 +50,17 @@
   * typecheck / build / test green; new file lint-clean; routeTree.gen.ts build
     churn reverted. Docs (ADR-094, CHANGELOG, CONTEXT) updated.
   * Branch `feat/debt-recommended-payment` (stacked on PR2's `feat/debt-custom-order-editor`).
-  * Next: PR4 = ADR-095 strategy lock + baseline (Option 2: freeze inputs +
-    baseline snapshot; needs schema migration).
+  * Merged: PR2 → PR #50 (squash `4195b25`), PR3 → PR #52 (squash `41df5a4`,
+    rebased onto main; #51 auto-closed when #50's branch was deleted).
+- ADR-094 PR4 = ADR-095 — strategy lock + baseline. **Design settled via
+  interview** (freeze inputs + baseline snapshot; hard lock + Unlock; re-lock
+  replaces baseline; keep paycheck-deduction debts in; keep biweekly
+  monthly-equivalent; scoreboard on Debt Strategy + Dashboard + Payment
+  Schedule; Payment Schedule follows the locked strategy).
+  * ADR-095 written (docs/DECISIONS.md); SCHEMA.md updated.
+  * Migration `scripts/migrations/2026-09-03-strategy-lock-baseline.sql`
+    (+ `.verify.sql`) — 6 nullable columns on `debt_strategy_settings`,
+    additive, no backfill, no RLS change.
+  * **Blocked on the user running the SQL** in the Supabase SQL Editor, then
+    the verify. Code (new `src/lib/strategy-lock.ts`, lock/unlock hooks, the
+    three screens) is not started.
