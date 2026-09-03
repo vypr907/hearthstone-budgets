@@ -1,3 +1,31 @@
+## 2026-09-03 — Everything row redesign — "Option A / Clean ledger" (no ADR)
+
+* **`src/routes/app.everything.tsx` row layout reworked.** From the reviewed
+  design canvas (three options; Steven picked "A — Clean ledger"):
+  * Name + bold amount on the top line; a single muted meta line below reads
+    **`Status · date`** (e.g. `Pending · Sep 3`) — the status *word* now shows on
+    every row, not just "Overdue". An overdue row reads `Overdue · <date>` in red.
+  * A partially-paid cycle shows **`Partial · $X left`** (the remaining figure
+    replaces the date) instead of the old separate red "still owed this cycle"
+    line.
+  * **Debts** render `min. $85` (muted "min." prefix); bills stay `$85`.
+  * Category is now only a **3px left edge** on the card — the category emoji
+    column, the 🧾/💳 kind emoji, and the colored billing-cycle pill are gone.
+    Billing cycle lives in the detail view (matches the Bills-list card redesign).
+  * Date format is now `Sep 3` (`shortDate()` helper), not `09-03`.
+* **Institution logo watermark kept** (Steven's ask) — moved to a larger, fainter
+  mark (`h-14 w-14`, `opacity-0.09`) bleeding off the right edge behind the
+  amount, clipped by the card, instead of the old 20%-opacity mark behind the
+  name that PR #46 had to fight for space.
+* Presentation only — no schema, query, or logic change; the tap-to-advance
+  circle, filters, sort and group controls are untouched. `npm run typecheck` /
+  `npm run build` / `npm test` (124) all green; lint clean on the touched file.
+  Verified in a headless browser (viewport 390): no page horizontal overflow,
+  rows render, watermark treatment checked with a simulated logo.
+* Folded into **PR #46** alongside the dialog-overflow fix (same file, same area).
+* Still deferred: the urgency-based grouping (Overdue → Due this period → Later →
+  Paid) and the shrink-on-scroll FAB from the same canvas.
+
 ## 2026-09-01 — Fix: detail dialogs & Everything rows clipped content (no ADR)
 
 * **Detail dialogs no longer overflow horizontally.** Root cause: `DialogContent`

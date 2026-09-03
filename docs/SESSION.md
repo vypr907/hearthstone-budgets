@@ -60,3 +60,21 @@
     files. Verified with headless-browser checks (`scratchpad/verify2.mjs`).
   - Deferred (Steven to discuss): broader Everything visual redesign — watermark
     logo, leading-icon treatment, cycle-pill style, FAB overlapping scrolled rows.
+- Everything row redesign — "Option A / Clean ledger" (presentation only, no ADR).
+  Built a 3-option design canvas for review; Steven picked A and asked to keep the
+  institution-logo watermark. `src/routes/app.everything.tsx` only:
+  * Row is now circle · (name + bold amount) · `Status · date` meta line ·
+    3px category left edge. Dropped the category-emoji column, the 🧾/💳 kind
+    emoji, and the colored cycle pill (cycle → detail view). Debts read
+    `min. $85`. Partial rows read `Partial · $X left`. Date shows as `Sep 3`
+    (new `shortDate()` helper). Removed now-unused `KIND_EMOJI`, `cycleLabel`,
+    `Badge` import, `DEFAULT_CATEGORY_*` imports.
+  * Logo watermark kept but restyled: `h-14 w-14` / `opacity-0.09`, off the right
+    edge behind the amount, clipped by the card.
+  * typecheck / build / `npm test` (124) green; lint clean on the touched file;
+    headless-browser check at 390px — no page overflow, watermark previewed with
+    a simulated logo (`scratchpad/shot.mjs`, `shot2.mjs`).
+  * Folded into PR #46 (same file/area as the dialog-overflow fix). Threw away
+    the `app.everything-preview.tsx` route + its routeTree churn.
+  * Next: rebase/repush PR #46, update its body; then (deferred) urgency grouping
+    + shrink-on-scroll FAB from the same canvas.
