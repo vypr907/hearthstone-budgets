@@ -748,6 +748,7 @@ export function DebtDialog({
 }) {
   const upsert = useUpsertDebt();
   const del = useDeleteDebt();
+  const { data: allDebts = [] } = useDebts();
   const { data: transactions = [] } = useTransactions();
   const { data: institutions = [] } = useInstitutions();
   const { data: accounts = [] } = useAccounts();
@@ -952,6 +953,14 @@ export function DebtDialog({
       await upsert.mutateAsync({
         id: debt?.id,
         name: name.trim(),
+        // ADR-094: a new debt lands at the end of the Custom payoff order.
+        // Edits never touch priority_order — the reorder editor owns it.
+        ...(!isEdit
+          ? {
+              priority_order:
+                Math.max(0, ...allDebts.map((d) => d.priority_order ?? 0)) + 1,
+            }
+          : {}),
         // Advance edits: leave remaining_balance / minimum_payment /
         // date_paid_off untouched (owned elsewhere — see above).
         ...(skipAdvanceLifecycleFields

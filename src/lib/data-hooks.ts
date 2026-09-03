@@ -310,6 +310,28 @@ export function useDeleteDebt() {
   });
 }
 
+/**
+ * ADR-094: write the Custom payoff order. `orderedIds` is the debts shown in the
+ * reorder editor, top-first; each gets a dense `priority_order` of `1..N`.
+ * Sequential single-column updates stay within RLS (no upsert, which would need
+ * every NOT NULL column); an RPC is the upgrade path if atomicity matters.
+ */
+export function useSaveDebtPriorityOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        const { error } = await supabase
+          .from("debts")
+          .update({ priority_order: i + 1 })
+          .eq("id", orderedIds[i]);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+  });
+}
+
 export function useSetPaymentStatus() {
   const qc = useQueryClient();
   return useMutation({

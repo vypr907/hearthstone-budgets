@@ -1,3 +1,19 @@
+## 2026-09-03 — Editable custom payoff order (ADR-094, part 2)
+
+* The **Debt Strategy screen has a "Custom payoff order" card** — every active
+  non-advance debt in a list with up/down arrows; "Save order" writes a dense
+  `priority_order` of `1..N` over the shown debts (fixing today's gaps / nulls /
+  any duplicate in one save). Only affects the projection while the active
+  strategy is Custom.
+* **New debts auto-join the end of the order** — `DebtDialog` sets
+  `priority_order = max(existing) + 1` on insert; edits never touch it.
+* `useSaveDebtPriorityOrder()` (`src/lib/data-hooks.ts`) writes the sequence as
+  per-row `priority_order` updates (RLS-safe, no upsert). New `src/lib/reorder.ts`
+  `move()` helper + 6 tests. Suite 142 → 148.
+* Verified against the TEST household: reorder → `priority_order` `1,2,3` (advance
+  stays `null`); a new debt → `4`; an edit → unchanged.
+* typecheck / build / test green; touched files lint-clean.
+
 ## 2026-09-03 — Debt payoff engine correctness, part 1 (ADR-094)
 
 * **Cash advances no longer distort the payoff projection.** `activeDebts()`
