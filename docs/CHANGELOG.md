@@ -25,8 +25,16 @@
   * `credit-categories.sql` — new categories: **Cash Back / Rewards** and
     **Interest Earned** (income), **Interest Charge** (spending). Covers
     cash-back credits and finance charges on credit accounts like Mission Lane.
-* New tests in `payments.test.ts` / `ledger-state.test.ts`. Suite 168 → 175.
-* Deferred: a per-account detail dialog on Accounts & Balances (its own ADR).
+* A linked `Fee:` row (the new advance express fee) is kept out of
+  `deriveCycleInfo` cycle math, matching ADR-046's rule for unlinked fees
+  (`isFeeTransaction`).
+* New tests in `payments.test.ts` / `ledger-state.test.ts`. Suite 168 → 177.
+* SQL run + verified live 2026-09-04: Cleo bill = 3 payments (7/2, 8/3, 9/1);
+  Cleo advance = deposit + repayment + $6.99 fee; Instacash = $600/$600; all
+  advance deposits linked; 3 credit categories created. Instacash still carries
+  a ~$234.90 residual to reconcile against MoneyLion.
+* Deferred: per-account detail dialog (#56); "Log a historical bill payment"
+  dialog (#57); Instacash ledger reconciliation (#58).
 
 ## 2026-09-03 — Strategy lock + baseline scoreboard (ADR-094 part 4 / ADR-095)
 
