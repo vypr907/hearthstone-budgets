@@ -2,7 +2,13 @@ import { useMemo } from "react";
 import { CheckCircle2, Circle, Clock, PieChart } from "lucide-react";
 import { useTransactions } from "./data-hooks";
 import { shiftDateSafe } from "./format";
-import { billCycleDue, debtCycleDue, isAdvanceDisbursement, type Payable } from "./payments";
+import {
+  billCycleDue,
+  debtCycleDue,
+  isAdvanceDisbursement,
+  isFeeTransaction,
+  type Payable,
+} from "./payments";
 import type { Transaction } from "./supabase";
 
 /** ADR-036: state is derived from the ledger, never from a tap counter. */
@@ -58,8 +64,10 @@ export function deriveCycleInfo(
         (t) =>
           (p.kind === "bill" ? t.linked_bill_id === p.id : t.linked_debt_id === p.id) &&
           // ADR-056 addendum: an advance's disbursement row is linked for
-          // visibility but is not a repayment — keep it out of cycle math.
-          !isAdvanceDisbursement(t),
+          // visibility but is not a repayment. ADR-046: a "Fee:" row never
+          // credits the cycle even when linked. Keep both out of cycle math.
+          !isAdvanceDisbursement(t) &&
+          !isFeeTransaction(t),
       );
 
       const due = p.kind === "bill" ? billCycleDue(p.bill!) : debtCycleDue(p.debt!);

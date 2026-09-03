@@ -121,6 +121,16 @@ export function isAdvanceDisbursement(
 }
 
 /**
+ * ADR-046: a "Fee: …" row is a payment fee / advance fee — it rides alongside a
+ * payment but never credits the cycle. They're normally written unlinked; a
+ * linked one (e.g. an advance's express fee, ADR-056 addendum) must still be
+ * kept out of cycle math. Matches `clearPairedFees`' `ilike 'Fee:%'`.
+ */
+export function isFeeTransaction(t: Pick<Transaction, "description">): boolean {
+  return (t.description ?? "").trimStart().toLowerCase().startsWith("fee:");
+}
+
+/**
  * ADR-066: recording a new advance against a paid-off advance-type debt
  * reactivates it in place. Beyond clearing `date_paid_off`, that also starts a
  * fresh cycle — so the stale `payment_status`/`cycle_paid_to_date` left from the

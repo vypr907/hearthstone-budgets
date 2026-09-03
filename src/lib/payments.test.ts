@@ -3,6 +3,7 @@ import {
   advanceMinimumPaymentPatch,
   advanceReactivationPatch,
   isAdvanceDisbursement,
+  isFeeTransaction,
   isPreAdvanceHistoricalPayment,
   rebuiltCycleAmountDue,
 } from "./payments";
@@ -75,6 +76,18 @@ describe("isAdvanceDisbursement (ADR-056 addendum)", () => {
     expect(isAdvanceDisbursement(repayment)).toBe(false);
     expect(isAdvanceDisbursement(unlinked)).toBe(false);
     expect(isAdvanceDisbursement(refund)).toBe(false);
+  });
+});
+
+describe("isFeeTransaction (ADR-046)", () => {
+  const tx = (description: string | null): Transaction => ({ description }) as Transaction;
+  it("matches a 'Fee:' row regardless of case or leading space", () => {
+    expect(isFeeTransaction(tx("Fee: Cleo · advance fee"))).toBe(true);
+    expect(isFeeTransaction(tx("  fee: something"))).toBe(true);
+  });
+  it("does not match a payment or a null description", () => {
+    expect(isFeeTransaction(tx("Debt payment · Cleo"))).toBe(false);
+    expect(isFeeTransaction(tx(null))).toBe(false);
   });
 });
 
