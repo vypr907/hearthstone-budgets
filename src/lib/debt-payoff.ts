@@ -1,6 +1,17 @@
+import { monthlyEquivalent } from "./format";
 import type { Debt } from "./supabase";
 
 export type StrategyKey = "avalanche" | "snowball" | "custom";
+
+/**
+ * Coerce a stored `debt_strategy_settings.active_strategy` string (historically
+ * "Snowball" / "Custom Priority" / lowercase / null) to a `StrategyKey`.
+ * Anything unrecognized falls back to avalanche — the safe default.
+ */
+export function strategyKeyOf(raw: string | null | undefined): StrategyKey {
+  const s = (raw ?? "").toLowerCase();
+  return s === "snowball" || s === "custom" ? s : "avalanche";
+}
 
 export type DebtPlanInput = {
   id: string;
@@ -34,23 +45,43 @@ export type ScenarioResult = {
 
 const MAX_MONTHS = 600;
 
-/** Only debts with a remaining balance participate in the payoff projection. */
+/**
+ * Debts that participate in the payoff projection: a remaining balance, not
+ * already paid off, and NOT a cash advance (ADR-094). Advances are short-cycle
+ * payroll cash-outs whose `minimum_payment` mirrors the full balance — leaving
+ * them in makes the sim "pay them off" in month 1 and then roll a phantom
+ * minimum onto the target debt forever. They stay tracked on the Debts screen.
+ *
+ * `minimum` is the *monthly-equivalent* of `minimum_payment`: the sim is a
+ * calendar-month grid, so a biweekly $200 minimum is ~$400/month of real cash
+ * (`monthlyEquivalent`, ADR-033/040). Falls back to the raw per-cycle figure
+ * when there is no monthly equivalent (one-time charges, interval-less custom).
+ */
 export function activeDebts(debts: Debt[]): DebtPlanInput[] {
   return debts
-    .filter((d) => !d.date_paid_off && Number(d.remaining_balance ?? 0) > 0)
+    .filter(
+      (d) =>
+        (d.debt_type ?? "").toLowerCase() !== "advance" &&
+        !d.date_paid_off &&
+        Number(d.remaining_balance ?? 0) > 0,
+    )
     .map((d, i) => ({
       id: d.id,
       name: d.name,
       balance: Number(d.remaining_balance ?? 0),
       rate: Number(d.interest_rate ?? 0),
-      minimum: Number(d.minimum_payment ?? 0),
+      minimum:
+        monthlyEquivalent({
+          amount: d.minimum_payment,
+          billing_cycle: d.billing_cycle,
+          cycle_interval_days: d.cycle_interval_days,
+        }) ?? Number(d.minimum_payment ?? 0),
       priority: d.priority_order ?? 1000 + i,
-      knownFinanceCharge:
-        d.known_finance_charge == null ? null : Number(d.known_finance_charge),
+      knownFinanceCharge: d.known_finance_charge == null ? null : Number(d.known_finance_charge),
     }));
 }
 
-function orderFor(strategy: StrategyKey, debts: DebtPlanInput[]): DebtPlanInput[] {
+export function orderFor(strategy: StrategyKey, debts: DebtPlanInput[]): DebtPlanInput[] {
   const list = [...debts];
   if (strategy === "avalanche") list.sort((a, b) => b.rate - a.rate || a.balance - b.balance);
   else if (strategy === "snowball") list.sort((a, b) => a.balance - b.balance || b.rate - a.rate);
@@ -143,10 +174,7 @@ export type Comparison = Record<StrategyKey, ScenarioResult> & {
 };
 
 /** All three strategies plus the minimums-only baseline used for savings. */
-export function compareStrategies(
-  debts: DebtPlanInput[],
-  extraMonthly: number,
-): Comparison {
+export function compareStrategies(debts: DebtPlanInput[], extraMonthly: number): Comparison {
   const minimumsOnly = simulate(debts, 0, "avalanche");
   const build = (s: StrategyKey) => {
     const r = simulate(debts, extraMonthly, s);

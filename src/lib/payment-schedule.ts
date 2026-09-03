@@ -1,3 +1,4 @@
+import { orderFor } from "./debt-payoff";
 import type { DebtPlanInput, StrategyKey } from "./debt-payoff";
 
 export type ScheduledPayment = {
@@ -17,14 +18,6 @@ export type ScheduleMonth = {
   total: number;
   payments: ScheduledPayment[];
 };
-
-function orderFor(strategy: StrategyKey, debts: DebtPlanInput[]): DebtPlanInput[] {
-  const list = [...debts];
-  if (strategy === "avalanche") list.sort((a, b) => b.rate - a.rate || a.balance - b.balance);
-  else if (strategy === "snowball") list.sort((a, b) => a.balance - b.balance || b.rate - a.rate);
-  else list.sort((a, b) => a.priority - b.priority || a.balance - b.balance);
-  return list;
-}
 
 export function monthKeyOf(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
