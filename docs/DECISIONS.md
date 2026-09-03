@@ -3531,5 +3531,10 @@ Status: Decided 2026-09-03. Implemented 2026-09-03 — PR1: advance exclusion,
 monthly-equivalent minimums, `orderFor` / `strategyKeyOf` refactor, engine unit
 tests. PR2: editable `priority_order` (`useSaveDebtPriorityOrder` writes a dense
 `1..N`; `DebtDialog` auto-assigns `max + 1` on INSERT; reorder card on the Debt
-Strategy screen; `src/lib/reorder.ts`). Recommended-payment surface (PR3) to
-follow. No schema change.
+Strategy screen; `src/lib/reorder.ts`). PR3: recommended-payment surface —
+`src/lib/debt-recommended.ts` (`recommendedPaymentsThisCycle` /
+`useRecommendedPayments`, from `buildSchedule(...,1)[0]`), a "$X/mo min · $Y/mo
+plan" hint on Everything / Debts / Paycheck Budget when `rollover > $0.01`, a
+one-tap "Plan $Y" on Paycheck Budget rows (writes an ADR-059 allocation), and a
+"Recommended" preset on the Submit/Clear pay dialog. `obligationsInRange` /
+left-to-allocate untouched. No schema change.

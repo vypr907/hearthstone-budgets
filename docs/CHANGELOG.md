@@ -1,3 +1,31 @@
+## 2026-09-03 — Recommended-payment hint + one-tap plan (ADR-094, part 3)
+
+* **Every debt now shows what the payoff strategy says to pay**, not just its
+  minimum. `src/lib/debt-recommended.ts` derives, per debt, the current calendar
+  month's target (monthly-equivalent minimum + any snowball rollover aimed at it)
+  from the schedule engine — `useRecommendedPayments()`, recomputed on demand,
+  never stored.
+* A **`$X/mo min · $Y/mo plan`** hint appears beside the minimum on the
+  **Everything**, **Debts** (list tile + detail dialog), and **Paycheck Budget**
+  screens — only when the plan wants more than the minimum (`rollover > $0.01`).
+  Both figures are monthly so a biweekly debt's numbers line up.
+* **Paycheck Budget** "Due this period" debt rows get a one-tap **"Plan $Y"**
+  button → creates/updates the ADR-059 `pay_period_allocations` row for the
+  period (ADR-071 then supersedes the debt's auto amount in the total). The
+  "Plan a payment" dialog also prefills from the strategy target instead of the
+  raw minimum.
+* The **Submit/Clear pay dialog** gains a **"Recommended (plan / mo)"** preset
+  alongside "Owed this cycle" / "Total due" / "Other".
+* No change to `obligationsInRange` / `obligationsTotalExcludingPlanned` /
+  left-to-allocate — the hint is pure text; only the Planned row moves budget math.
+* New `src/lib/debt-recommended.test.ts` (6 tests). Suite 148 → 154.
+* Verified against the TEST household: with avalanche + $300 extra the hint shows
+  on the rollover-target debt only; the "Plan $420" button creates a
+  `pay_period_allocations` row (`allocated_amount = 420`), the Planned card picks
+  it up and the obligations total drops by the superseded auto amount.
+* typecheck / build / test green; `pay-flow.tsx` also had its (already
+  non-conforming) preset block reformatted by prettier as part of the edit.
+
 ## 2026-09-03 — Editable custom payoff order (ADR-094, part 2)
 
 * The **Debt Strategy screen has a "Custom payoff order" card** — every active
