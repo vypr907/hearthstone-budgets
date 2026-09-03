@@ -1,3 +1,31 @@
+## 2026-09-03 — Strategy lock + baseline scoreboard (ADR-094 part 4 / ADR-095)
+
+* **You can now lock a payoff plan.** The Debt Strategy screen gains a **Lock
+  this plan** button that freezes the strategy, extra payment and custom order,
+  and records the moment's projected debt-free date + total interest as a
+  baseline. While locked, those three inputs and the reorder card are disabled;
+  an **Unlock plan** button (with a confirm) clears the lock and baseline.
+* **Baseline scoreboard.** A "Locked plan" card shows the frozen plan's
+  debt-free date / interest next to a live recompute from the *same* locked
+  inputs against *today's* balances, with an **On track / N mo ahead / N mo
+  behind** badge — so real payments and adjustments visibly move it.
+* The **Dashboard** Payoff Progress card gets a one-line "Locked plan · <status>"
+  readout, and the **Payment Schedule** screen renders the locked strategy /
+  extra / order (with a "plan locked to …" banner) instead of the live picker.
+* Schema: `debt_strategy_settings` gains six nullable columns
+  (`strategy_locked_at`, `locked_strategy`, `locked_extra_monthly_payment`,
+  `locked_priority_order`, `baseline_debt_free_date`, `baseline_total_interest`);
+  all null = unlocked = prior behaviour. Migration
+  `scripts/migrations/2026-09-03-strategy-lock-baseline.sql`, run + verified live.
+* `src/lib/strategy-lock.ts` (`lockedInputs` / `computeBaseline` /
+  `baselineComparison` / `applyLockedOrder` / helpers), `useLockStrategy` /
+  `useUnlockStrategy`. The baseline scalars are display-only and never re-enter
+  engine math (deliberate ADR-015 exception). Re-locking replaces the baseline.
+* The ADR-094 PR3 recommended-payment hint also projects from the frozen inputs
+  while a plan is locked. Paycheck-deduction debts stay in the projection;
+  biweekly minimums stay monthly-equivalent.
+* New `src/lib/strategy-lock.test.ts` (14 tests). Suite 154 → 168.
+
 ## 2026-09-03 — Recommended-payment hint + one-tap plan (ADR-094, part 3)
 
 * **Every debt now shows what the payoff strategy says to pay**, not just its

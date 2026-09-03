@@ -311,6 +311,14 @@ export type DebtStrategySettings = {
   active_strategy: string | null;
   extra_monthly_payment: number | null;
   updated_at?: string | null;
+  // ADR-095: strategy lock + baseline snapshot. All null = unlocked.
+  strategy_locked_at?: string | null;
+  locked_strategy?: string | null;
+  locked_extra_monthly_payment?: number | null;
+  /** Array of debt-id strings — the Custom payoff order frozen at lock. */
+  locked_priority_order?: string[] | null;
+  baseline_debt_free_date?: string | null;
+  baseline_total_interest?: number | null;
 };
 
 /** A recurring source of income. Exactly one per household may be primary. */

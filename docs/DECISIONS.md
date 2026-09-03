@@ -3600,6 +3600,13 @@ ADR-015 forbids stored projections; `baseline_debt_free_date` /
 `baseline_total_interest` are a deliberate, bounded exception — a historical
 record of one decision, displayed only, never read back into engine math.
 
-Status: Decided 2026-09-03. Not implemented — schema migration
-`scripts/migrations/2026-09-03-strategy-lock-baseline.sql` pending a manual run in
-the Supabase SQL Editor. ADR-094 PR4.
+Status: Decided 2026-09-03. Implemented 2026-09-03 — migration
+`scripts/migrations/2026-09-03-strategy-lock-baseline.sql` run + verified live
+(6 nullable columns on `debt_strategy_settings`). `src/lib/strategy-lock.ts`
+(`lockedInputs` / `computeBaseline` / `baselineComparison` / `applyLockedOrder`
+/ `comparisonLabel` + date helpers), `useLockStrategy` / `useUnlockStrategy`
+hooks, Lock/Unlock + baseline scoreboard on the Debt Strategy screen (controls
+disabled while locked), a "Locked plan" line on the Dashboard Payoff Progress
+card, and the Payment Schedule screen following the locked strategy/order.
+`src/lib/debt-recommended.ts` (ADR-094 PR3) also projects from the frozen
+inputs while locked. `src/lib/strategy-lock.test.ts` (14 tests). ADR-094 PR4.

@@ -12,11 +12,13 @@ import {
   useBills,
   useCategories,
   useDebts,
+  useDebtStrategySettings,
   useLatestBalances,
   useSpendingBudgets,
   useTransactions,
 } from "@/lib/data-hooks";
 import { deriveAutoTransferState, isAutoTransferOverdue } from "@/lib/auto-transfers";
+import { baselineComparison, comparisonLabel } from "@/lib/strategy-lock";
 import { formatMoney, isDateOverdue, debtDueDate } from "@/lib/format";
 import {
   accountInMemberView,
@@ -99,6 +101,7 @@ export const Route = createFileRoute("/app/")({
 function Dashboard() {
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
+  const { data: strategySettings } = useDebtStrategySettings();
   const { data: autoTransfers = [] } = useAutoTransfers();
   const { data: accounts = [] } = useAccounts();
   const { data: latest = {} } = useLatestBalances();
@@ -672,6 +675,12 @@ function Dashboard() {
   /** Payoff progress is collapsed by default to keep the dashboard short. */
   const [payoffOpen, setPayoffOpen] = useState(false);
 
+  /** ADR-095: locked-plan scoreboard, null when the strategy isn't locked. */
+  const payoffCmp = useMemo(
+    () => baselineComparison(strategySettings, debts),
+    [strategySettings, debts],
+  );
+
 
 
 
@@ -987,6 +996,22 @@ function Dashboard() {
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 )}
               </button>
+              {payoffCmp ? (
+                <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">Locked plan</span>
+                  <span
+                    className={`font-semibold ${
+                      payoffCmp.status === "ahead"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : payoffCmp.status === "behind"
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {comparisonLabel(payoffCmp)}
+                  </span>
+                </div>
+              ) : null}
               {payoffOpen ? (
                 <div className="mt-3 space-y-3">
                   {payoffProgress.map((d, i) => (

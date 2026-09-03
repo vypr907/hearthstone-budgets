@@ -11,9 +11,11 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   useDebts,
   useDebtStrategySettings,
+  useLockStrategy,
   useSaveDebtPriorityOrder,
   useSaveDebtStrategySettings,
   useTransactions,
+  useUnlockStrategy,
 } from "@/lib/data-hooks";
 import {
   activeDebts,
@@ -22,6 +24,15 @@ import {
   strategyKeyOf,
   type StrategyKey,
 } from "@/lib/debt-payoff";
+import {
+  applyLockedOrder,
+  baselineComparison,
+  comparisonLabel,
+  computeBaseline,
+  formatMonthYear,
+  isStrategyLocked,
+  lockedInputs,
+} from "@/lib/strategy-lock";
 import { formatMoney } from "@/lib/format";
 import { move } from "@/lib/reorder";
 
@@ -58,6 +69,8 @@ function DebtStrategyPage() {
   const { data: transactions = [] } = useTransactions();
   const { data: settings } = useDebtStrategySettings();
   const save = useSaveDebtStrategySettings();
+  const lock = useLockStrategy();
+  const unlock = useUnlockStrategy();
 
   const [extra, setExtra] = useState("0");
   const [active, setActive] = useState<StrategyKey>("avalanche");
@@ -68,7 +81,16 @@ function DebtStrategyPage() {
     setActive(strategyKeyOf(settings.active_strategy));
   }, [settings]);
 
-  const plan = useMemo(() => activeDebts(debts), [debts]);
+  // ADR-095: a locked plan freezes the three inputs and renders every
+  // projection from the frozen order.
+  const locked = isStrategyLocked(settings);
+  const lockInputs = useMemo(() => lockedInputs(settings), [settings]);
+  const cmp = useMemo(() => baselineComparison(settings, debts), [settings, debts]);
+
+  const plan = useMemo(() => {
+    const base = activeDebts(debts);
+    return lockInputs ? applyLockedOrder(base, lockInputs.order) : base;
+  }, [debts, lockInputs]);
   const extraNum = Number(extra) || 0;
   const comparison = useMemo(() => compareStrategies(plan, extraNum), [plan, extraNum]);
 
@@ -137,6 +159,49 @@ function DebtStrategyPage() {
     }
   }
 
+  // ADR-095: lock the current plan + snapshot the baseline projection.
+  const onLock = async () => {
+    const frozenOrder = order.length ? order : null;
+    const base = computeBaseline(debts, {
+      strategy: active,
+      extra: extraNum,
+      order: frozenOrder,
+    });
+    if (!base) {
+      toast.error("Can't project a debt-free date for this plan yet.");
+      return;
+    }
+    try {
+      if (orderDirty) {
+        await savePriority.mutateAsync(order);
+        setOrderDirty(false);
+      }
+      await lock.mutateAsync({
+        strategy: active,
+        extra: extraNum,
+        order: frozenOrder,
+        baseline_debt_free_date: base.baseline_debt_free_date,
+        baseline_total_interest: base.baseline_total_interest,
+      });
+      toast.success("Plan locked");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const onUnlock = async () => {
+    if (
+      !window.confirm("Unlock this plan? Your baseline comparison is cleared until you lock again.")
+    )
+      return;
+    try {
+      await unlock.mutateAsync();
+      toast.success("Plan unlocked");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
   const totalBalance = plan.reduce((s, d) => s + d.balance, 0);
   const totalMinimums = plan.reduce((s, d) => s + d.minimum, 0);
 
@@ -165,11 +230,93 @@ function DebtStrategyPage() {
                 inputMode="decimal"
                 className="h-12"
                 value={extra}
+                disabled={locked}
                 onChange={(e) => setExtra(e.target.value)}
               />
+              {locked ? (
+                <p className="text-xs text-muted-foreground">
+                  Frozen by your locked plan. Unlock below to change.
+                </p>
+              ) : null}
             </div>
           </CardContent>
         </Card>
+
+        {locked && cmp ? (
+          <Card>
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold">Locked plan</h2>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    cmp.status === "ahead"
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                      : cmp.status === "behind"
+                        ? "bg-destructive/15 text-destructive"
+                        : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {comparisonLabel(cmp)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Locked strategy</p>
+                  <p className="font-medium capitalize">
+                    {lockInputs?.strategy}
+                    {lockInputs && lockInputs.extra > 0
+                      ? ` · +${formatMoney(lockInputs.extra)}/mo`
+                      : ""}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Locked on</p>
+                  <p className="font-medium">
+                    {settings?.strategy_locked_at
+                      ? new Date(settings.strategy_locked_at).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Debt-free — plan</p>
+                  <p className="font-medium">{formatMonthYear(cmp.baselineDate)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Debt-free — now</p>
+                  <p className="font-medium">
+                    {cmp.liveDate ? formatMonthYear(cmp.liveDate) : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Interest — plan</p>
+                  <p className="font-medium">{formatMoney(cmp.baselineInterest)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Interest — now</p>
+                  <p className="font-medium">
+                    {cmp.liveInterest != null ? formatMoney(cmp.liveInterest) : "—"}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                &ldquo;Now&rdquo; recomputes from your locked inputs against today&rsquo;s balances,
+                so real payments and adjustments move it.
+              </p>
+              <Button
+                variant="outline"
+                className="h-11 w-full"
+                disabled={unlock.isPending}
+                onClick={onUnlock}
+              >
+                Unlock plan
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <p className="px-1 text-xs text-muted-foreground">
           Cash advances are excluded from the payoff plan — they're short-term and repeat, so they'd
@@ -244,6 +391,7 @@ function DebtStrategyPage() {
                   key={s.key}
                   variant={active === s.key ? "default" : "outline"}
                   className="h-14 justify-between"
+                  disabled={locked}
                   onClick={() => setActive(s.key)}
                 >
                   <span className="text-left">
@@ -255,9 +403,30 @@ function DebtStrategyPage() {
               ))}
             </div>
 
-            <Button className="h-12 w-full" disabled={save.isPending} onClick={onSave}>
-              Save strategy
-            </Button>
+            {locked ? (
+              <p className="px-1 text-xs text-muted-foreground">
+                Strategy is locked. Use <span className="font-medium">Unlock plan</span> above to
+                switch strategies or change your extra payment.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                <Button className="h-12 w-full" disabled={save.isPending} onClick={onSave}>
+                  Save strategy
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-12 w-full"
+                  disabled={lock.isPending || plan.length === 0}
+                  onClick={onLock}
+                >
+                  Lock this plan
+                </Button>
+                <p className="px-1 text-xs text-muted-foreground">
+                  Locking freezes the strategy, extra payment and custom order, and records
+                  today&rsquo;s projected debt-free date as your baseline to track against.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2 pt-2">
               <div className="flex items-baseline justify-between px-1">
@@ -269,6 +438,7 @@ function DebtStrategyPage() {
               <p className="px-1 text-xs text-muted-foreground">
                 Sets each debt's priority. Only used while the active strategy is Custom; new debts
                 are added to the end.
+                {locked ? " Frozen by your locked plan." : ""}
               </p>
               <div className="space-y-2">
                 {orderRows.map((d, i) => (
@@ -285,7 +455,7 @@ function DebtStrategyPage() {
                         variant="outline"
                         size="icon"
                         className="h-9 w-9 shrink-0"
-                        disabled={i === 0 || savePriority.isPending}
+                        disabled={i === 0 || savePriority.isPending || locked}
                         aria-label={`Move ${d.name} up`}
                         onClick={() => moveRow(i, -1)}
                       >
@@ -295,7 +465,7 @@ function DebtStrategyPage() {
                         variant="outline"
                         size="icon"
                         className="h-9 w-9 shrink-0"
-                        disabled={i === orderRows.length - 1 || savePriority.isPending}
+                        disabled={i === orderRows.length - 1 || savePriority.isPending || locked}
                         aria-label={`Move ${d.name} down`}
                         onClick={() => moveRow(i, 1)}
                       >
@@ -308,7 +478,7 @@ function DebtStrategyPage() {
               <Button
                 className="h-11 w-full"
                 variant={orderDirty ? "default" : "outline"}
-                disabled={!orderDirty || savePriority.isPending}
+                disabled={!orderDirty || savePriority.isPending || locked}
                 onClick={onSaveOrder}
               >
                 Save order

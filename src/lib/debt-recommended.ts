@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { activeDebts, strategyKeyOf } from "./debt-payoff";
 import { useDebts, useDebtStrategySettings } from "./data-hooks";
 import { buildSchedule } from "./payment-schedule";
-import type { Debt } from "./supabase";
+import { applyLockedOrder, lockedInputs } from "./strategy-lock";
+import type { Debt, DebtStrategySettings } from "./supabase";
 
 /**
  * ADR-094: what the active payoff strategy says to pay on a debt THIS calendar
@@ -21,22 +22,18 @@ export type RecommendedPayment = {
 
 const EPSILON = 0.01;
 
-type StrategySettings =
-  | {
-      active_strategy?: string | null;
-      extra_monthly_payment?: number | null;
-    }
-  | null
-  | undefined;
+type StrategySettings = Partial<DebtStrategySettings> | null | undefined;
 
 export function recommendedPaymentsThisCycle(
   debts: Debt[],
   settings: StrategySettings,
   start: Date = new Date(),
 ): Map<string, RecommendedPayment> {
-  const plan = activeDebts(debts);
-  const strategy = strategyKeyOf(settings?.active_strategy);
-  const extra = Number(settings?.extra_monthly_payment ?? 0);
+  // ADR-095: a locked plan projects from the frozen inputs, not the live ones.
+  const locked = lockedInputs(settings as DebtStrategySettings | null | undefined);
+  const strategy = locked ? locked.strategy : strategyKeyOf(settings?.active_strategy);
+  const extra = locked ? locked.extra : Number(settings?.extra_monthly_payment ?? 0);
+  const plan = locked ? applyLockedOrder(activeDebts(debts), locked.order) : activeDebts(debts);
   const month0 = buildSchedule(plan, extra, strategy, 1, start)[0];
 
   const out = new Map<string, RecommendedPayment>();

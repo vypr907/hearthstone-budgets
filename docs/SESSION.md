@@ -61,6 +61,28 @@
   * Migration `scripts/migrations/2026-09-03-strategy-lock-baseline.sql`
     (+ `.verify.sql`) — 6 nullable columns on `debt_strategy_settings`,
     additive, no backfill, no RLS change.
-  * **Blocked on the user running the SQL** in the Supabase SQL Editor, then
-    the verify. Code (new `src/lib/strategy-lock.ts`, lock/unlock hooks, the
-    three screens) is not started.
+  * Migration run + verified live 2026-09-03 (6 nullable columns present, all
+    rows still null = unlocked).
+  * `src/lib/strategy-lock.ts` — `isStrategyLocked` / `lockedInputs` /
+    `debtFreeDateFrom` / `monthsBetween` / `formatMonthYear` / `applyLockedOrder`
+    / `computeBaseline` / `baselineComparison` / `comparisonLabel`. Baseline
+    scalars are display-only, never fed back to the engine.
+  * `useLockStrategy` / `useUnlockStrategy` (`data-hooks.ts`) — lock writes the
+    frozen inputs + `active_strategy`/`extra_monthly_payment` (can't drift) +
+    the two baseline scalars; unlock nulls all six.
+  * `app.debt-strategy.tsx` — "Lock this plan" button (computes the baseline
+    first), a "Locked plan" scoreboard card (baseline vs live debt-free date +
+    interest, ahead/behind badge), "Unlock plan" with a `confirm()`. While
+    locked: strategy picker, extra-payment field, "Save strategy" and the
+    reorder card / "Save order" are all disabled. The whole screen's comparison
+    + payoff-order list render from the frozen order.
+  * `app.index.tsx` — "Locked plan · On track / N mo ahead/behind" line on the
+    Payoff Progress card (only when locked).
+  * `app.payment-schedule.tsx` — follows the locked strategy/extra/order,
+    "Plan locked to <strategy>" banner, header row relabelled "Locked strategy".
+  * `debt-recommended.ts` (PR3) also projects from the frozen inputs while locked.
+  * New `src/lib/strategy-lock.test.ts` (14 tests). Suite 154 → 168.
+  * typecheck / build / test green; new files lint-clean; no new lint errors in
+    touched files (repo-wide prettier debt left alone — Issue #10); routeTree
+    churn reverted.
+  * Branch `feat/strategy-lock-baseline` (ADR + migration committed as `b095a87`).
