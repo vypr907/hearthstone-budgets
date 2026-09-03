@@ -1495,6 +1495,68 @@ export function useSaveDebtStrategySettings() {
   });
 }
 
+/**
+ * ADR-095: lock the payoff plan — freeze the current inputs and store the
+ * baseline snapshot the caller computed with `computeBaseline()`. Writes
+ * `active_strategy` / `extra_monthly_payment` too so live and locked can't drift.
+ */
+export function useLockStrategy() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      strategy: string;
+      extra: number;
+      order: string[] | null;
+      baseline_debt_free_date: string | null;
+      baseline_total_interest: number | null;
+    }) => {
+      const now = new Date().toISOString();
+      const { error } = await supabase.from("debt_strategy_settings").upsert(
+        {
+          household_id: householdId!,
+          active_strategy: payload.strategy,
+          extra_monthly_payment: payload.extra,
+          strategy_locked_at: now,
+          locked_strategy: payload.strategy,
+          locked_extra_monthly_payment: payload.extra,
+          locked_priority_order: payload.order,
+          baseline_debt_free_date: payload.baseline_debt_free_date,
+          baseline_total_interest: payload.baseline_total_interest,
+          updated_at: now,
+        },
+        { onConflict: "household_id" },
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debt_strategy_settings"] }),
+  });
+}
+
+/** ADR-095: unlock — clear the lock timestamp, frozen inputs and baseline. */
+export function useUnlockStrategy() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("debt_strategy_settings")
+        .update({
+          strategy_locked_at: null,
+          locked_strategy: null,
+          locked_extra_monthly_payment: null,
+          locked_priority_order: null,
+          baseline_debt_free_date: null,
+          baseline_total_interest: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("household_id", householdId!);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debt_strategy_settings"] }),
+  });
+}
+
 /* ---------------- Payment schedule check-offs ---------------- */
 
 /**

@@ -50,5 +50,39 @@
   * typecheck / build / test green; new file lint-clean; routeTree.gen.ts build
     churn reverted. Docs (ADR-094, CHANGELOG, CONTEXT) updated.
   * Branch `feat/debt-recommended-payment` (stacked on PR2's `feat/debt-custom-order-editor`).
-  * Next: PR4 = ADR-095 strategy lock + baseline (Option 2: freeze inputs +
-    baseline snapshot; needs schema migration).
+  * Merged: PR2 → PR #50 (squash `4195b25`), PR3 → PR #52 (squash `41df5a4`,
+    rebased onto main; #51 auto-closed when #50's branch was deleted).
+- ADR-094 PR4 = ADR-095 — strategy lock + baseline. **Design settled via
+  interview** (freeze inputs + baseline snapshot; hard lock + Unlock; re-lock
+  replaces baseline; keep paycheck-deduction debts in; keep biweekly
+  monthly-equivalent; scoreboard on Debt Strategy + Dashboard + Payment
+  Schedule; Payment Schedule follows the locked strategy).
+  * ADR-095 written (docs/DECISIONS.md); SCHEMA.md updated.
+  * Migration `scripts/migrations/2026-09-03-strategy-lock-baseline.sql`
+    (+ `.verify.sql`) — 6 nullable columns on `debt_strategy_settings`,
+    additive, no backfill, no RLS change.
+  * Migration run + verified live 2026-09-03 (6 nullable columns present, all
+    rows still null = unlocked).
+  * `src/lib/strategy-lock.ts` — `isStrategyLocked` / `lockedInputs` /
+    `debtFreeDateFrom` / `monthsBetween` / `formatMonthYear` / `applyLockedOrder`
+    / `computeBaseline` / `baselineComparison` / `comparisonLabel`. Baseline
+    scalars are display-only, never fed back to the engine.
+  * `useLockStrategy` / `useUnlockStrategy` (`data-hooks.ts`) — lock writes the
+    frozen inputs + `active_strategy`/`extra_monthly_payment` (can't drift) +
+    the two baseline scalars; unlock nulls all six.
+  * `app.debt-strategy.tsx` — "Lock this plan" button (computes the baseline
+    first), a "Locked plan" scoreboard card (baseline vs live debt-free date +
+    interest, ahead/behind badge), "Unlock plan" with a `confirm()`. While
+    locked: strategy picker, extra-payment field, "Save strategy" and the
+    reorder card / "Save order" are all disabled. The whole screen's comparison
+    + payoff-order list render from the frozen order.
+  * `app.index.tsx` — "Locked plan · On track / N mo ahead/behind" line on the
+    Payoff Progress card (only when locked).
+  * `app.payment-schedule.tsx` — follows the locked strategy/extra/order,
+    "Plan locked to <strategy>" banner, header row relabelled "Locked strategy".
+  * `debt-recommended.ts` (PR3) also projects from the frozen inputs while locked.
+  * New `src/lib/strategy-lock.test.ts` (14 tests). Suite 154 → 168.
+  * typecheck / build / test green; new files lint-clean; no new lint errors in
+    touched files (repo-wide prettier debt left alone — Issue #10); routeTree
+    churn reverted.
+  * Branch `feat/strategy-lock-baseline` (ADR + migration committed as `b095a87`).

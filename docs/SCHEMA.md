@@ -403,9 +403,16 @@ Controls payoff strategy.
 ```sql
 debt_strategy_settings (
     household_id uuid primary key references households(id),
-    active_strategy text,
-    extra_monthly_payment numeric default 0,
-    updated_at timestamptz default now()
+    active_strategy text not null default 'none',
+    extra_monthly_payment numeric not null default 0,
+    updated_at timestamptz not null default now(),
+    -- ADR-095: strategy lock + baseline snapshot. All null = unlocked.
+    strategy_locked_at timestamptz,
+    locked_strategy text,
+    locked_extra_monthly_payment numeric,
+    locked_priority_order jsonb,            -- array of debt-id strings
+    baseline_debt_free_date date,           -- display only, never fed back to the engine
+    baseline_total_interest numeric         -- display only
 )
 ```
 
@@ -414,6 +421,11 @@ Examples:
 * Snowball
 * Avalanche
 * Custom Priority
+
+ADR-095: while `strategy_locked_at` is set, the Debt Strategy screen freezes the
+picker / extra payment / Custom order; projections everywhere recompute from the
+`locked_*` inputs against live balances and compare against the two `baseline_*`
+scalars to show an ahead/behind scoreboard. Re-locking overwrites all six.
 
 ---
 

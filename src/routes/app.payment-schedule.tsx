@@ -12,6 +12,7 @@ import {
   useToggleScheduleCheckoff,
 } from "@/lib/data-hooks";
 import { activeDebts, strategyKeyOf } from "@/lib/debt-payoff";
+import { applyLockedOrder, isStrategyLocked, lockedInputs } from "@/lib/strategy-lock";
 import { buildSchedule, monthKeyOf } from "@/lib/payment-schedule";
 import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { formatMoney } from "@/lib/format";
@@ -46,10 +47,16 @@ function PaymentSchedulePage() {
   const { data: checked = [] } = useScheduleCheckoffs();
   const toggle = useToggleScheduleCheckoff();
 
-  const strategy = strategyKeyOf(settings?.active_strategy);
-  const extra = Number(settings?.extra_monthly_payment ?? 0);
+  // ADR-095: a locked plan renders the frozen strategy / extra / order.
+  const locked = isStrategyLocked(settings);
+  const lockInputs = useMemo(() => lockedInputs(settings), [settings]);
+  const strategy = lockInputs ? lockInputs.strategy : strategyKeyOf(settings?.active_strategy);
+  const extra = lockInputs ? lockInputs.extra : Number(settings?.extra_monthly_payment ?? 0);
 
-  const plan = useMemo(() => activeDebts(debts), [debts]);
+  const plan = useMemo(() => {
+    const base = activeDebts(debts);
+    return lockInputs ? applyLockedOrder(base, lockInputs.order) : base;
+  }, [debts, lockInputs]);
   const schedule = useMemo(
     () => buildSchedule(plan, extra, strategy, 12),
     [plan, extra, strategy],
@@ -108,8 +115,17 @@ function PaymentSchedulePage() {
       <div className="space-y-4 p-4">
         <Card>
           <CardContent className="space-y-2 p-4 text-sm">
+            {locked ? (
+              <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                Plan locked to <span className="font-medium capitalize">{strategy}</span>. This
+                schedule follows your locked strategy — unlock it on the Debt Strategy screen to
+                change.
+              </p>
+            ) : null}
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Active strategy</span>
+              <span className="text-muted-foreground">
+                {locked ? "Locked strategy" : "Active strategy"}
+              </span>
               <span className="font-medium capitalize">{strategy}</span>
             </div>
             <div className="flex justify-between">
