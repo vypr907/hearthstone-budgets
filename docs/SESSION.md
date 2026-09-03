@@ -69,8 +69,10 @@
     `min. $85`. Partial rows read `Partial · $X left`. Date shows as `Sep 3`
     (new `shortDate()` helper). Removed now-unused `KIND_EMOJI`, `cycleLabel`,
     `Badge` import, `DEFAULT_CATEGORY_*` imports.
-  * Logo watermark kept but restyled: `h-14 w-14` / `opacity-0.09`, off the right
-    edge behind the amount, clipped by the card.
+  * Logo watermark kept and reworked (2nd pass, per Steven): oversized
+    `h-28 w-28` / `opacity-0.08`, centred at 56% of card width so it lands in the
+    gap between text and amount, taller than the row so the card crops it top and
+    bottom (a "window").
   * typecheck / build / `npm test` (124) green; lint clean on the touched file;
     headless-browser check at 390px — no page overflow, watermark previewed with
     a simulated logo (`scratchpad/shot.mjs`, `shot2.mjs`).

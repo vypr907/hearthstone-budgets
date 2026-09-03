@@ -13,10 +13,12 @@
     column, the 🧾/💳 kind emoji, and the colored billing-cycle pill are gone.
     Billing cycle lives in the detail view (matches the Bills-list card redesign).
   * Date format is now `Sep 3` (`shortDate()` helper), not `09-03`.
-* **Institution logo watermark kept** (Steven's ask) — moved to a larger, fainter
-  mark (`h-14 w-14`, `opacity-0.09`) bleeding off the right edge behind the
-  amount, clipped by the card, instead of the old 20%-opacity mark behind the
-  name that PR #46 had to fight for space.
+* **Institution logo watermark kept** (Steven's ask) and reworked into an
+  oversized mark (`h-28 w-28`, `opacity-0.08`) centred at 56% of the card width —
+  it sits in the gap between the text block and the amount, and is taller than
+  the row so the card crops it top and bottom ("a little window to see the
+  watermark beyond"). Was a 20%-opacity mark behind the name that PR #46 had to
+  fight for space.
 * Presentation only — no schema, query, or logic change; the tap-to-advance
   circle, filters, sort and group controls are untouched. `npm run typecheck` /
   `npm run build` / `npm test` (124) all green; lint clean on the touched file.
