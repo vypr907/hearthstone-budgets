@@ -1,3 +1,55 @@
+## 2026-09-03 — Everything row redesign — "Option A / Clean ledger" (no ADR)
+
+* **`src/routes/app.everything.tsx` row layout reworked.** From the reviewed
+  design canvas (three options; Steven picked "A — Clean ledger"):
+  * Name + bold amount on the top line; a single muted meta line below reads
+    **`Status · date`** (e.g. `Pending · Sep 3`) — the status *word* now shows on
+    every row, not just "Overdue". An overdue row reads `Overdue · <date>` in red.
+  * A partially-paid cycle shows **`Partial · $X left`** (the remaining figure
+    replaces the date) instead of the old separate red "still owed this cycle"
+    line.
+  * **Debts** render `min. $85` (muted "min." prefix); bills stay `$85`.
+  * Category is now only a **3px left edge** on the card — the category emoji
+    column, the 🧾/💳 kind emoji, and the colored billing-cycle pill are gone.
+    Billing cycle lives in the detail view (matches the Bills-list card redesign).
+  * Date format is now `Sep 3` (`shortDate()` helper), not `09-03`.
+* **Institution logo watermark kept** (Steven's ask) and reworked into an
+  oversized mark (`h-28 w-28`, `opacity-0.08`) centred at 60% of the card width —
+  it sits in the gap between the text block and the amount, and is taller than
+  the row so the card crops it top and bottom ("a little window to see the
+  watermark beyond"). Was a 20%-opacity mark behind the name that PR #46 had to
+  fight for space.
+* Presentation only — no schema, query, or logic change; the tap-to-advance
+  circle, filters, sort and group controls are untouched. `npm run typecheck` /
+  `npm run build` / `npm test` (124) all green; lint clean on the touched file.
+  Verified in a headless browser (viewport 390): no page horizontal overflow,
+  rows render, watermark treatment checked with a simulated logo.
+* Folded into **PR #46** alongside the dialog-overflow fix (same file, same area).
+* Still deferred, now filed as Issues: the urgency-based grouping (Overdue → Due
+  this period → Later → Paid, **#47**) and the shrink-on-scroll FAB (**#48**).
+
+## 2026-09-01 — Fix: detail dialogs & Everything rows clipped content (no ADR)
+
+* **Detail dialogs no longer overflow horizontally.** Root cause: `DialogContent`
+  is `display: grid` and its child wrappers had the default `min-width: auto`, so
+  the 2-column `DetailGrid` forced the body to ~508px inside a 375–512px dialog
+  → a horizontal scrollbar (bill dialogs) or a hard right-column clip (debt
+  dialogs, which carried `overflow-x-hidden`). Fix: `[&>*]:min-w-0` on the base
+  `DialogContent` (`src/components/ui/dialog.tsx`) — verified in-browser to bring
+  `scrollWidth` from 556 back to the box width at every viewport.
+* Debt dialogs dropped the `w-[calc(100vw-1.5rem)]` override (a foot-gun — `100vw`
+  counts the scrollbar gutter); all bill/debt detail + edit dialogs now share
+  `max-h-[90vh] overflow-y-auto overflow-x-hidden`.
+* **Everything screen row:** the bill/debt name was crushed to 0px on phones
+  (line 1 packed date + name + an "Overdue" badge into ~110px). The name now
+  gets its own line; the date, kind, cycle pill, "Overdue" badge and
+  "still owed" note moved to a wrapping meta line; the fixed-width cycle pill and
+  the oversized category-emoji column were trimmed. Name column: 0px → ~135px at
+  375px wide.
+* `src/routes/app.tsx` — `overflow-x-hidden` on the app shell so no screen can
+  push a page-level horizontal scrollbar again.
+* Presentation only — no schema, query, or logic change; 124 tests still green.
+
 ## 2026-09-01 — ADR-093: "Log In" action on institution & debt detail
 
 * New `src/components/InstitutionLoginButton.tsx` — a "Log In" button on the

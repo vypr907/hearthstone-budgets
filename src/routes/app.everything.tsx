@@ -16,7 +16,6 @@ import { currentPayPeriod, currentMonthWindow, dueInPeriod, dateInPeriod } from 
 import { todayISO } from "@/lib/snapshot";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -29,11 +28,7 @@ import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
 import { useInstitutionIndex } from "@/components/ObligationIcon";
-import {
-  categoryVisual,
-  DEFAULT_CATEGORY_COLOR,
-  DEFAULT_CATEGORY_ICON,
-} from "@/lib/visual-meta";
+import { categoryVisual } from "@/lib/visual-meta";
 import { SectionLabel } from "@/components/SectionLabel";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -63,9 +58,6 @@ export const Route = createFileRoute("/app/everything")({
   component: EverythingPage,
 });
 
-/** Emoji markers replace the old "Bill" / "Debt" text label. */
-const KIND_EMOJI = { Bill: "🧾", Debt: "💳" } as const;
-
 type Row = {
   id: string;
   kind: "Bill" | "Debt";
@@ -92,15 +84,11 @@ const STATE_LABEL: Record<LedgerState, string> = {
   cleared: "Cleared",
 };
 
-function cycleLabel(cycle: string | null): string {
-  if (!cycle) return "—";
-  if (cycle === "one_time") return "Invoice";
-  return cycle
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+/** "2026-09-03" → "Sep 3". Billing cycle now lives in the detail view (ADR-less, Option A). */
+function shortDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-
 
 function EverythingPage() {
   const { data: bills = [] } = useBills();
@@ -386,84 +374,77 @@ function EverythingPage() {
                 ) : null}
                 {list.map((r) => {
                   const paid = r.state === "cleared";
-                  const { Icon, className: stateColor } = stateVisual(r.state);
+                  const { Icon, className: stateColor, label: stateLabel } = stateVisual(r.state);
                   const cat = r.category_id ? categoryById[r.category_id] : null;
-                  const visual = categoryVisual(cat);
+                  // Option A: category is a 3px left edge only — no edge when uncategorized.
+                  const edgeColor = cat ? categoryVisual(cat).color : "transparent";
+                  // A partially-paid cycle shows what's left instead of the due date.
+                  const partialLeft =
+                    r.info.clearedSum > 0 && r.info.remaining > 0
+                      ? formatMoney(r.info.remaining)
+                      : null;
+                  const metaTail = partialLeft
+                    ? `${partialLeft} left`
+                    : r.due_date
+                      ? shortDate(r.due_date)
+                      : null;
                   return (
-                    <Card key={`${r.kind}-${r.id}`}>
-                      <CardContent className="flex items-center gap-3 p-3">
+                    <Card key={`${r.kind}-${r.id}`} className="overflow-hidden">
+                      <CardContent
+                        className="relative flex items-center gap-3 p-3.5"
+                        style={{ borderLeft: `3px solid ${edgeColor}` }}
+                      >
+                        {r.logoUrl ? (
+                          <img
+                            src={r.logoUrl}
+                            alt=""
+                            aria-hidden
+                            loading="lazy"
+                            // Oversized watermark: taller than the row so the card
+                            // crops it (a "window"), centred at 60% width so it
+                            // lands in the gap between the text and the amount.
+                            className="pointer-events-none absolute left-[60%] top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 select-none object-contain opacity-[0.08]"
+                          />
+                        ) : null}
                         <button
                           type="button"
-                          aria-label={`${r.name}: ${r.state} — tap to advance`}
+                          aria-label={`${r.name}: ${stateLabel} — tap to advance`}
                           disabled={busy}
                           onClick={() => handleTap(r)}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border disabled:opacity-50"
+                          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-card disabled:opacity-50"
                         >
                           <Icon className={`h-6 w-6 ${stateColor}`} />
                         </button>
-
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center">
-                          <span
-                            className="text-2xl leading-none"
-                            title={cat?.name ?? "Uncategorized"}
-                          >
-                            {visual.icon}
-                          </span>
-                        </div>
 
                         <button
                           type="button"
                           onClick={() => openDetail(r)}
                           className="relative min-w-0 flex-1 overflow-hidden text-left"
                         >
-                          <div className="relative flex items-center gap-2">
-                            {r.due_date ? (
-                              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                                {r.due_date.slice(5)}
-                              </span>
-                            ) : null}
-                            <div className="relative min-w-0 flex-1">
-                              {r.logoUrl ? (
-                                <img
-                                  src={r.logoUrl}
-                                  alt=""
-                                  aria-hidden
-                                  loading="lazy"
-                                  className="pointer-events-none absolute inset-y-0 left-0 my-auto h-10 w-10 select-none object-contain opacity-25"
-                                />
-                              ) : null}
-                              <p
-                                className={`relative truncate font-medium ${paid ? "line-through text-muted-foreground" : ""}`}
-                              >
-                                {r.name}
-                              </p>
-                            </div>
-                            {r.overdue ? (
-                              <Badge variant="destructive" className="ml-auto shrink-0 text-[11px]">
-                                Overdue
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <div className="relative mt-1 flex items-center gap-2">
-                            <span aria-label={r.kind} title={r.kind} className="text-base leading-none">
-                              {KIND_EMOJI[r.kind]}
-                            </span>
-                            <span
-                              className="inline-flex w-24 shrink-0 items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-normal text-white opacity-60"
-                              style={{ backgroundColor: visual.color }}
-                            >
-                              {cycleLabel(r.cycle)}
-                            </span>
-                            {r.info.clearedSum > 0 && r.info.remaining > 0 ? (
-                              <p className="relative min-w-0 truncate text-xs font-medium text-destructive">
-                                {formatMoney(r.info.remaining)} still owed this cycle
-                              </p>
-                            ) : null}
-                          </div>
+                          <p
+                            className={`truncate font-medium ${paid ? "text-muted-foreground line-through" : ""}`}
+                          >
+                            {r.name}
+                          </p>
+                          <p
+                            className={`mt-1 truncate text-[13px] ${
+                              r.overdue ? "font-medium text-destructive" : "text-muted-foreground"
+                            }`}
+                          >
+                            {r.overdue ? "Overdue" : stateLabel}
+                            {metaTail ? ` · ${metaTail}` : ""}
+                          </p>
                         </button>
 
-                        <div className="flex w-20 shrink-0 justify-end">
-                          <p className="font-semibold tabular-nums">{formatMoney(r.amount)}</p>
+                        <div className="relative shrink-0 text-right">
+                          <p className="font-semibold tabular-nums">
+                            {r.kind === "Debt" ? (
+                              <span className="text-xs font-normal text-muted-foreground">
+                                min.{" "}
+                              </span>
+                            ) : null}
+                            {formatMoney(r.amount)}
+                          </p>
                         </div>
                       </CardContent>
                     </Card>

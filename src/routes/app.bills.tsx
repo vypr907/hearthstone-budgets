@@ -396,7 +396,7 @@ export function BillDetailDialog({
   const institution = institutions.find((i) => i.id === bill.institution_id);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between gap-2 pr-6">
             <span className="min-w-0 truncate">{bill.name}</span>
@@ -889,7 +889,7 @@ export function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onCl
   }
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit bill" : "Add bill"}</DialogTitle>
         </DialogHeader>
@@ -1311,7 +1311,7 @@ function AutoTransferDialog({
   }
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit auto-transfer" : "Add auto-transfer"}</DialogTitle>
         </DialogHeader>

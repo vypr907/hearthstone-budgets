@@ -46,3 +46,38 @@
     `routeTree.gen.ts` import-order churn the build regenerated.
   - Next step: manual check on the dev server (button shows only with a
     login_url; hint only for Google-auth institutions).
+- Fix: detail dialogs & Everything rows clipped content (presentation only, no ADR).
+  - `src/components/ui/dialog.tsx`: `[&>*]:min-w-0` on base `DialogContent` —
+    root fix for the horizontal overflow (grid children had `min-width:auto`, so
+    the 2-col `DetailGrid` forced the body to ~508px inside a 375–512px dialog).
+    Verified headless: dialog `scrollWidth` 556 → box width at 375 and 1280.
+  - `app.debts.tsx` (4 dialogs): dropped `w-[calc(100vw-1.5rem)]`; converged all
+    bill/debt dialogs on `max-h-[90vh] overflow-y-auto overflow-x-hidden`.
+  - `app.everything.tsx`: name on its own line, meta chips wrap, trimmed the
+    fixed cycle-pill width + category-emoji column. Name column 0px → ~135px @375.
+  - `app.tsx`: `overflow-x-hidden` on the app shell.
+  - typecheck/build/`npm test` (124) all green; no new lint errors on touched
+    files. Verified with headless-browser checks (`scratchpad/verify2.mjs`).
+  - Deferred (Steven to discuss): broader Everything visual redesign — watermark
+    logo, leading-icon treatment, cycle-pill style, FAB overlapping scrolled rows.
+- Everything row redesign — "Option A / Clean ledger" (presentation only, no ADR).
+  Built a 3-option design canvas for review; Steven picked A and asked to keep the
+  institution-logo watermark. `src/routes/app.everything.tsx` only:
+  * Row is now circle · (name + bold amount) · `Status · date` meta line ·
+    3px category left edge. Dropped the category-emoji column, the 🧾/💳 kind
+    emoji, and the colored cycle pill (cycle → detail view). Debts read
+    `min. $85`. Partial rows read `Partial · $X left`. Date shows as `Sep 3`
+    (new `shortDate()` helper). Removed now-unused `KIND_EMOJI`, `cycleLabel`,
+    `Badge` import, `DEFAULT_CATEGORY_*` imports.
+  * Logo watermark kept and reworked (2nd pass, per Steven): oversized
+    `h-28 w-28` / `opacity-0.08`, centred at 60% of card width so it lands in the
+    gap between text and amount, taller than the row so the card crops it top and
+    bottom (a "window").
+  * typecheck / build / `npm test` (124) green; lint clean on the touched file;
+    headless-browser check at 390px — no page overflow, watermark previewed with
+    a simulated logo (`scratchpad/shot.mjs`, `shot2.mjs`).
+  * Folded into PR #46 (same file/area as the dialog-overflow fix). Threw away
+    the `app.everything-preview.tsx` route + its routeTree churn.
+  * PR #46 repushed + body updated to cover both changes.
+  * Deferred canvas pieces filed as Issues #47 (urgency grouping) and #48
+    (shrink-on-scroll FAB).
