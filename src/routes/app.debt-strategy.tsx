@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   useDebts,
   useDebtStrategySettings,
+  useSaveDebtPriorityOrder,
   useSaveDebtStrategySettings,
   useTransactions,
 } from "@/lib/data-hooks";
@@ -21,6 +23,7 @@ import {
   type StrategyKey,
 } from "@/lib/debt-payoff";
 import { formatMoney } from "@/lib/format";
+import { move } from "@/lib/reorder";
 
 export const Route = createFileRoute("/app/debt-strategy")({
   head: () => ({
@@ -94,6 +97,45 @@ function DebtStrategyPage() {
       toast.error((e as Error).message);
     }
   };
+
+  // ADR-094: editable Custom payoff order. `order` is a list of debt ids; it is
+  // re-seeded from the DB only when the debt SET changes (add / remove / pay
+  // off), so a local reorder survives until saved.
+  const savePriority = useSaveDebtPriorityOrder();
+  const [order, setOrder] = useState<string[]>([]);
+  const [orderDirty, setOrderDirty] = useState(false);
+  const orderedIdsFromDb = useMemo(
+    () => [...plan].sort((a, b) => a.priority - b.priority).map((d) => d.id),
+    [plan],
+  );
+  useEffect(() => {
+    setOrder((prev) => {
+      const sameSet =
+        prev.length === orderedIdsFromDb.length &&
+        prev.every((id) => orderedIdsFromDb.includes(id));
+      return sameSet ? prev : orderedIdsFromDb;
+    });
+    setOrderDirty(false);
+  }, [orderedIdsFromDb]);
+  const orderRows = order
+    .map((id) => plan.find((d) => d.id === id))
+    .filter((d): d is (typeof plan)[number] => !!d);
+  function moveRow(i: number, dir: -1 | 1) {
+    const next = move(order, i, dir);
+    if (next !== order) {
+      setOrder(next as string[]);
+      setOrderDirty(true);
+    }
+  }
+  async function onSaveOrder() {
+    try {
+      await savePriority.mutateAsync(order);
+      setOrderDirty(false);
+      toast.success("Payoff order saved");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   const totalBalance = plan.reduce((s, d) => s + d.balance, 0);
   const totalMinimums = plan.reduce((s, d) => s + d.minimum, 0);
@@ -216,6 +258,62 @@ function DebtStrategyPage() {
             <Button className="h-12 w-full" disabled={save.isPending} onClick={onSave}>
               Save strategy
             </Button>
+
+            <div className="space-y-2 pt-2">
+              <div className="flex items-baseline justify-between px-1">
+                <h2 className="text-sm font-semibold">Custom payoff order</h2>
+                {orderDirty ? (
+                  <span className="text-xs text-muted-foreground">unsaved changes</span>
+                ) : null}
+              </div>
+              <p className="px-1 text-xs text-muted-foreground">
+                Sets each debt's priority. Only used while the active strategy is Custom; new debts
+                are added to the end.
+              </p>
+              <div className="space-y-2">
+                {orderRows.map((d, i) => (
+                  <Card key={d.id}>
+                    <CardContent className="flex items-center gap-2 p-3">
+                      <span className="w-5 shrink-0 text-right text-sm font-semibold text-muted-foreground tabular-nums">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-medium">{d.name}</span>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {formatMoney(d.balance)}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 shrink-0"
+                        disabled={i === 0 || savePriority.isPending}
+                        aria-label={`Move ${d.name} up`}
+                        onClick={() => moveRow(i, -1)}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 shrink-0"
+                        disabled={i === orderRows.length - 1 || savePriority.isPending}
+                        aria-label={`Move ${d.name} down`}
+                        onClick={() => moveRow(i, 1)}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <Button
+                className="h-11 w-full"
+                variant={orderDirty ? "default" : "outline"}
+                disabled={!orderDirty || savePriority.isPending}
+                onClick={onSaveOrder}
+              >
+                Save order
+              </Button>
+            </div>
 
             <h2 className="px-1 pt-2 text-sm font-semibold">
               Payoff order — {STRATEGIES.find((s) => s.key === active)?.label}

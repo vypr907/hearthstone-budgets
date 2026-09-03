@@ -3527,7 +3527,9 @@ Payment Schedule discarded it and showed only the raw minimum, hiding the point
 of a snowball. The duplicated `orderFor` meant a filter change could silently
 drift between the two screens.
 
-Status: Decided 2026-09-03. Implemented 2026-09-03 (PR1: advance exclusion,
+Status: Decided 2026-09-03. Implemented 2026-09-03 — PR1: advance exclusion,
 monthly-equivalent minimums, `orderFor` / `strategyKeyOf` refactor, engine unit
-tests). Editable `priority_order` (PR2) and the recommended-payment surface
-(PR3) to follow. No schema change.
+tests. PR2: editable `priority_order` (`useSaveDebtPriorityOrder` writes a dense
+`1..N`; `DebtDialog` auto-assigns `max + 1` on INSERT; reorder card on the Debt
+Strategy screen; `src/lib/reorder.ts`). Recommended-payment surface (PR3) to
+follow. No schema change.
