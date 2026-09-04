@@ -1,3 +1,125 @@
+## 2026-09-04 — Dashboard Simple view: Income card polish + institution-breakdown bugfix (ADR-096 addenda)
+
+* **Fixed**: the Spend section's institution-by-institution breakdown was
+  including bill/debt payments that happen to share a spending category with
+  real spending (e.g. an ATT or Google One bill filed under "Home & Garden"
+  alongside genuine Home & Garden spending) — reported by the user via
+  screenshot. `SimpleSpendTile`'s breakdown matched on `category_id` alone;
+  now also skips any transaction with `linked_bill_id`/`linked_debt_id` set,
+  mirroring the same distinction `actualByCategoryInRange` already makes for
+  the tile's own total. Reproduced and confirmed fixed live against the TEST
+  household.
+* **"Income this pay period" is more visually prominent** — its own card with
+  a green-tinted header (`color-mix`, matching the Bills/Debts
+  `StatusBreakdownCard` convention), an icon, and a bigger figure. A new
+  centered line above it shows the pay period's date range
+  (`formatWindow(period.start, period.end)`, reusing the existing helper).
+
+## 2026-09-04 — Verification sweep: Issues #4, #5, #6, #7, #8
+
+* No code changes — closed **#4**, **#5**, **#6**, **#8** and partially
+  **#7** by driving each through Playwright against the TEST household
+  (ADR-083), with every piece of seeded fixture data cleaned up and verified
+  removed afterward.
+* **#4**: the out-of-order backdating warning fires with the exact expected
+  message; proceeding still saves correctly.
+* **#6**: the full pay → clear → undo (Reset this cycle) cycle correctly
+  rebuilds `cycle_amount_due` from a still-active bill adjustment ($100, not
+  `bills.amount`'s $80) — confirmed in the DB and, after a fresh reload, in
+  the UI.
+* **#8**: Bills list card redesign, `budgetRingColor()` states, the amber
+  pending arc, tappable split-line paid/due/remaining/pending detail, and a
+  deduction-funded obligation's own informational split line (not $0.00) all
+  confirmed working.
+* **#7** (left open for its remaining enhancement item): confirmed an
+  HSA/FSA-funded overdue item lands in its own "HSA / FSA" sub-list;
+  approximated the mobile eyeball with a 430px Playwright viewport — the
+  nested collapsible layout holds up.
+* **#5**: full auto-transfer lifecycle — Process (correct transfer pair,
+  signs, shared `transfer_group_id`, only the credit leg tagged
+  `linked_auto_transfer_id`, `next_due_date` advanced), Undo (both legs
+  reversed, due date reverted), and a paused auto-transfer showing zero
+  Process buttons — all verified exactly per ADR-081.
+* Found and filed a new bug along the way, **#60**: expanding a budget
+  tile's split line throws a React invalid-DOM-nesting warning (a real
+  `<button>` nested inside another `<button>`, `BudgetTile`/
+  `BudgetSplitLines`).
+
+## 2026-09-04 — Dashboard Simple/More Info view (ADR-096)
+
+* **New Simple/More Info toggle** beneath the Combined Spendable hero
+  (`Switch`, remembered per device via `localStorage`, defaults to Simple).
+  "More Info" is the existing Dashboard, unchanged, wrapped in a
+  conditional. "Simple" is a condensed per-pay-period summary: Income,
+  Bills/Debts (total + paid so far/remaining/pending/overdue via a new
+  `StatusBreakdownCard`, with a colored header, an `ItemBar`, and a
+  `HelpButton` explaining "Overdue"), and Spend (11 custom category groups,
+  reusing `BudgetTotals` and a new `SimpleSpendTile`).
+* The category-group mapping (`SIMPLE_SPEND_GROUP`) is a new, independent
+  mapping from `categories.parent_category` — confirmed with the user and
+  documented with its full table (and the two intentional exceptions where
+  it follows `parent_category` instead of the user's literal wording) in
+  ADR-096.
+* `SimpleSpendTile`'s tap-to-expand shows an institution-by-institution
+  spend breakdown (mirroring `app.spending-by-place.tsx`'s row) instead of
+  `BudgetTile`'s Spending/Bills/Debts split — `BudgetTile` itself is
+  untouched, so More Info's own "Budget vs actual" card is unaffected.
+* All in `src/routes/app.index.tsx`; no schema change, no new files.
+  Verified live in-browser against the TEST household throughout, including
+  a refinement pass after first use (bigger toggle, dropped a redundant
+  Spendable row, "Remaining" row on Bills/Debts).
+
+## 2026-09-04 — Account detail dialog, closing #56
+
+* Accounts get the same full detail dialog Bills/Debts/Institutions already
+  have: `AccountDetailDialog` / `AccountBalanceHistory` /
+  `AccountAllTransactions` in `src/routes/app.accounts.tsx`, colocated with
+  the route like the other three. No schema change — balance snapshots,
+  institution login URL, and transaction history were all already reachable
+  through existing hooks.
+* Shows full metadata (type, institution, owner, card last-4, credit limit,
+  notes), the ADR-093 `InstitutionLoginButton`, complete balance-snapshot
+  history, and every transaction on the account (capped at 20 with a "Show
+  all N" expand). Account cards are now click-to-open like Bills/Debts/
+  Institutions rows; Edit, Log balance, and Recent Activity clicks got
+  `stopPropagation` so they keep working independently, and Log balance
+  reuses the existing `LogBalanceDialog` instance.
+* No new ADR — a UI composition of already-decided patterns, matching how
+  the other three detail dialogs shipped. Verified live in-browser against
+  the TEST household. Issue #56 closed.
+
+## 2026-09-04 — Bill-side historical payment dialog, closing #57 (ADR-084 addendum)
+
+* Bills get the same "log a historical payment" capability debts already
+  had (ADR-084): new `LogBillPaymentDialog`
+  (`src/components/LogBillPaymentDialog.tsx`) + `useLogBillPayment()` /
+  `isWithinCurrentBillCycle()` / `billCycleWindowStart()`
+  (`src/lib/payments.ts`).
+* Date/account/amount/status only — no fee lines, no balance to reduce
+  (bills carry no running principal like debts). Monthly bills use the
+  ADR-086 calendar-month window; non-monthly keep the rolling
+  `next_due_date` window; one-time bills are always in-cycle.
+* New tests in `payments.test.ts` (4 cases — suite 177 → 181). Verified live
+  in-browser against the TEST household: hint text correctly switches
+  between "Applies to the current cycle…" and "Historical — ledger only…"
+  based on the picked date. Issue #57 closed.
+
+## 2026-09-04 — Instacash (MoneyLion) reconciliation complete, closing #58
+
+* Traced the ~$234.90 residual noted below to a missing 6/20/2026 $620
+  advance that was never entered in the ledger; both the 7/17 ($443.03) and
+  7/20 ($234.90) repayments went to it, with a ~$57.93 fee bundled into the
+  7/17 charge (never counted toward the balance — same treatment as the
+  8/14 Cleo Express Fee).
+* New migrations `scripts/migrations/2026-09-04-instacash-reconcile.sql`
+  (+ `.verify.sql`) and `-dedupe.sql` (+ `.verify.sql`, cleaning up 3 rows
+  from an accidental double-run of the first script): add the missing
+  advance + `debt_adjustments` row, and re-link + split the 7/17 payment
+  into $385.10 principal + $57.93 fee.
+* SQL run + verified live: 12 Instacash transactions, no duplicates,
+  advances $3,020.00 − principal repayments $2,420.00 = $600.00, matching
+  the stored `remaining_balance` exactly. Issue #58 closed.
+
 ## 2026-09-04 — Advance historical payments, Cleo/Instacash cleanup, credit categories (ADR-084 / ADR-056 addenda)
 
 * **Logging an old payment on a cash-advance debt no longer wrecks the current
