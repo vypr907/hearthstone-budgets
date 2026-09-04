@@ -69,3 +69,33 @@
   — that code path directly reuses `InstitutionLoginButton`/`LogoLabel`
   exactly as Bills/Debts/Institutions already do, so not considered a gap.
   Not yet committed.
+
+- **Dashboard Simple/More Info toggle (ADR-096).** New `Switch` beneath the
+  Combined Spendable hero, remembered per device (`localStorage`, default
+  Simple). "More Info" is the existing Dashboard unchanged, wrapped in a
+  conditional. "Simple" is a new condensed per-pay-period card set: Income /
+  Spendable, Bills/Debts (total + paid so far/pending/overdue via
+  `StatusBreakdownCard`, new), and Spend (11 custom category groups, reusing
+  the existing `BudgetTotals`/`BudgetTile`/`BudgetSplitLines` components
+  unchanged with a differently-grouped `BudgetGroup[]` — tap-to-expand
+  transaction drill-down comes for free). All in `src/routes/app.index.tsx`
+  — no new files, no schema change.
+  - Confirmed with the user: overdue reuses the existing household-wide Past
+    Due figure (ADR-049), and the category-group mapping follows existing
+    `parent_category` on the two cases that conflicted with the user's
+    literal wording (Software & Tech → Fun, Shopping → Misc) — see ADR-096
+    for the full mapping table and rationale.
+  - `tsc --noEmit` and full test suite (181 tests, unchanged — no new pure
+    logic needing its own test file) clean. Verified live in-browser against
+    the TEST household (Playwright): toggle switches views and persists
+    across reload, Income/Spendable/Bills/Debts figures render, Bills/Debts
+    overdue sub-totals ($215.00 / $375.00) exactly match the existing "Past
+    due" card's $590.00 total split by kind — cross-verified correct. Spend
+    section renders empty (TEST household has zero `spending_budgets` rows —
+    confirmed via the read-only MCP, not a bug). Debts "Paid so far" reads
+    $0.00 on a debt the "Still owed this period" card shows as partially
+    paid — investigated and confirmed correct: `deriveCycleInfo`'s ledger
+    walk excludes a payment dated before the cycle's current due-date
+    window once that window has passed, same documented stored-vs-derived
+    divergence as ADR-085, not a bug introduced here. No console errors, no
+    stray data. Not yet committed.

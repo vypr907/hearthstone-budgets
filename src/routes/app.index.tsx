@@ -44,12 +44,18 @@ import { useHouseholdDeductions } from "@/lib/income-hooks";
 import { useIncomeEvents, useIncomeSources } from "@/lib/income-hooks";
 import {
   actualByCategoryInRange,
+  eventAmount,
   eventDate,
+  inRange,
   obligationsInRange,
   periodRange,
 } from "@/lib/paycheck-budget";
+import { deriveCycleInfo } from "@/lib/ledger-state";
+import type { Obligation } from "@/lib/paycheck-budget";
+import type { Bill, Debt, Transaction } from "@/lib/supabase";
 import { categoryVisual, AUTO_TRANSFER_ICON } from "@/lib/visual-meta";
 import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { AlertCircle, ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 import { EmojiIcon, ItemBar, ProgressRing, budgetRingColor, emojiFor, itemColor } from "@/components/viz";
 import { BudgetSplitLines } from "@/components/BudgetSplitLines";
@@ -75,6 +81,82 @@ const CHART_COLORS = [
   "var(--chart-5)",
 ];
 
+/**
+ * Dashboard "Simple" view (ADR-096): a condensed per-category grouping for
+ * the Spend section, independent of `categories.parent_category`. Anything
+ * not listed here falls to "Misc". Follows existing parent_category on the
+ * two cases that would otherwise conflict with it (Software & Tech stays
+ * with its Entertainment siblings under Fun; Shopping stays with its Misc
+ * siblings) — confirmed with the user rather than assumed.
+ */
+const SIMPLE_SPEND_GROUP: Record<string, string> = {
+  "Dining & Drinks": "Food",
+  "Groceries": "Food",
+  "Snacks & Drinks": "Food",
+  "Entertainment": "Fun",
+  "Gaming": "Fun",
+  "Hobbies": "Fun",
+  "Software & Tech": "Fun",
+  "Trip": "Fun",
+  "Green": "Green",
+  "Kitten": "Kitten",
+  "Auto & Transport": "Car",
+  "Home & Garden": "Home & Garden",
+  "Health & Wellness": "Personal",
+  "Medical": "Personal",
+  "Personal Care": "Personal",
+  "Pets": "Pets",
+  "Smoking": "Puff",
+  "Vaping": "Puff",
+  "Emergency Fund": "Savings",
+  "General": "Savings",
+  "Gifts/Holidays": "Savings",
+  "Taxes": "Savings",
+  "Travel": "Savings",
+  "Vehicle": "Savings",
+};
+
+function simpleSpendGroupFor(categoryName: string | null | undefined): string {
+  return SIMPLE_SPEND_GROUP[categoryName ?? ""] ?? "Misc";
+}
+
+const DASHBOARD_VIEW_KEY = "dashboard-view";
+
+/**
+ * ADR-096: for the Simple view's Bills/Debts cards — of what's due this
+ * period, how much is already paid (cleared) vs. pending vs. overdue.
+ * "Overdue" is the existing household-wide Past Due figure (ADR-049),
+ * filtered to this kind — a different scope than "due this period", so the
+ * three sub-figures aren't guaranteed to sum to `total`.
+ */
+function obligationStatusTotals(
+  kind: "bill" | "debt",
+  total: number,
+  items: (Bill | Debt)[],
+  periodObligations: Obligation[],
+  transactions: Transaction[],
+  overdue: { kind: "Bill" | "Debt"; amount: number }[],
+): { total: number; paid: number; pending: number; overdue: number } {
+  const today = todayISO();
+  const byId = new Map(items.map((it) => [it.id, it]));
+  let paid = 0;
+  let pending = 0;
+  for (const o of periodObligations) {
+    if (o.kind !== kind) continue;
+    const item = byId.get(o.id);
+    if (!item) continue;
+    const info = deriveCycleInfo(toPayable(kind, item), transactions, today);
+    if (info.state === "cleared") paid += info.due;
+    else if (info.state === "partial") paid += info.clearedSum;
+    if (info.pending) pending += Math.abs(Number(info.pending.amount ?? 0));
+  }
+  const overdueKind = kind === "bill" ? "Bill" : "Debt";
+  const overdueAmount = overdue
+    .filter((o) => o.kind === overdueKind)
+    .reduce((s, o) => s + o.amount, 0);
+  return { total, paid, pending, overdue: overdueAmount };
+}
+
 
 export const Route = createFileRoute("/app/")({
   head: () => ({
@@ -99,6 +181,16 @@ export const Route = createFileRoute("/app/")({
 });
 
 function Dashboard() {
+  /** ADR-096: Simple/More Info toggle, remembered per device. */
+  const [view, setView] = useState<"simple" | "more">(() => {
+    if (typeof window === "undefined") return "simple";
+    return window.localStorage.getItem(DASHBOARD_VIEW_KEY) === "more" ? "more" : "simple";
+  });
+  function setViewPersist(v: "simple" | "more") {
+    setView(v);
+    window.localStorage.setItem(DASHBOARD_VIEW_KEY, v);
+  }
+
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useDebts();
   const { data: strategySettings } = useDebtStrategySettings();
@@ -623,6 +715,95 @@ function Dashboard() {
 
   const overdueTotal = overdue.reduce((sum, o) => sum + o.amount, 0);
 
+  /* ---------------- ADR-096: Simple view data ---------------- */
+
+  /** Every income event landing inside the current pay period, across all sources. */
+  const incomeThisPeriod = useMemo(
+    () =>
+      events
+        .filter((e) => inRange(eventDate(e), period.start, period.end))
+        .reduce((s, e) => s + eventAmount(e), 0),
+    [events, period],
+  );
+
+  /**
+   * Bills/Debts due this period, broken into paid so far / pending / overdue.
+   * "Overdue" reuses the existing Past Due figure above (ADR-049) — a
+   * different scope (missed cycles before this period) than "due this
+   * period", so these four numbers won't necessarily add up to the total;
+   * that's consistent with how the rest of the Dashboard already treats them.
+   */
+  const billsStatus = useMemo(
+    () => obligationStatusTotals("bill", periodTotals.bills, bills, periodObligations, transactions, overdue),
+    [periodTotals.bills, bills, periodObligations, transactions, overdue],
+  );
+  const debtsStatus = useMemo(
+    () => obligationStatusTotals("debt", periodTotals.debts, debts, periodObligations, transactions, overdue),
+    [periodTotals.debts, debts, periodObligations, transactions, overdue],
+  );
+
+  /**
+   * Spend section: mirrors `budgetChart` below but spending-only, grouped by
+   * `SIMPLE_SPEND_GROUP` instead of `parent_category`.
+   */
+  const simpleSpendGroups = useMemo(() => {
+    const actualByCategory = actualByCategoryInRange(
+      transactions.filter((t) => (t.status ?? "cleared") !== "pending"),
+      bills,
+      debts,
+      categories,
+      period.start,
+      period.end,
+    );
+    const pendingByCategory = actualByCategoryInRange(
+      transactions.filter((t) => (t.status ?? "cleared") === "pending"),
+      bills,
+      debts,
+      categories,
+      period.start,
+      period.end,
+    );
+    const byId = new Map(categories.map((c) => [c.id, c]));
+    const groups = new Map<string, BudgetGroup>();
+    for (const b of budgets) {
+      if (!b.category_id) continue;
+      const cat = byId.get(b.category_id);
+      if (!cat || categoryDomain(cat) !== "spending") continue;
+      const name = simpleSpendGroupFor(cat.name);
+      const g = groups.get(name) ?? {
+        name,
+        budgeted: 0,
+        spendingBudgeted: 0,
+        billsBudgeted: 0,
+        debtsBudgeted: 0,
+        actual: 0,
+        spendingSpent: 0,
+        billsSpent: 0,
+        debtsSpent: 0,
+        spendingPending: 0,
+        billsPending: 0,
+        debtsPending: 0,
+        deductedBudgeted: 0,
+        deductedSpent: 0,
+        deductedPending: 0,
+        categoryIds: [] as string[],
+        periodStart: period.start,
+        periodEnd: period.end,
+      };
+      g.categoryIds.push(b.category_id);
+      const budgeted = Number(b.budgeted_amount || 0);
+      const spent = actualByCategory.get(b.category_id)?.spendingSpent ?? 0;
+      const pending = pendingByCategory.get(b.category_id)?.spendingSpent ?? 0;
+      g.spendingBudgeted += budgeted;
+      g.budgeted += budgeted;
+      g.spendingSpent += spent;
+      g.actual += spent;
+      g.spendingPending += pending;
+      groups.set(name, g);
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [budgets, transactions, categories, bills, debts, period]);
+
   /**
    * ADR-081: auto-transfers not yet processed this cycle, deliberately kept
    * off the "Past due" list above — there's no vendor and nothing is
@@ -797,6 +978,66 @@ function Dashboard() {
           </div>
         </div>
 
+        <div className="flex items-center justify-center gap-3">
+          <span
+            className={
+              view === "simple" ? "text-sm font-semibold" : "text-sm text-muted-foreground"
+            }
+          >
+            Simple
+          </span>
+          <Switch
+            checked={view === "more"}
+            onCheckedChange={(v) => setViewPersist(v ? "more" : "simple")}
+            aria-label="Dashboard detail level"
+          />
+          <span
+            className={
+              view === "more" ? "text-sm font-semibold" : "text-sm text-muted-foreground"
+            }
+          >
+            More Info
+          </span>
+        </div>
+
+        {view === "simple" ? (
+          <div className="space-y-4">
+            <Card>
+              <CardContent className="space-y-2 p-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    Income this {period.label}
+                  </span>
+                  <span className="font-semibold">{formatMoney(incomeThisPeriod)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">Spendable</span>
+                  <span className="font-semibold">{formatMoney(spendable.total)}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <StatusBreakdownCard title="Bills" status={billsStatus} />
+            <StatusBreakdownCard title="Debts" status={debtsStatus} />
+
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Spend
+                </p>
+                <BudgetTotals rows={simpleSpendGroups} />
+                <div className="mt-3 space-y-2">
+                  {simpleSpendGroups.map((g, i) => (
+                    <BudgetTile key={g.name} group={g} index={i} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
+
+        {view === "more" ? (
+          <>
         <Link to="/app/paycheck">
           <Card className="active:bg-muted/60">
             <CardContent className="flex items-center gap-3 p-4">
@@ -1264,6 +1505,8 @@ function Dashboard() {
             </CardContent>
           </Card>
         )}
+          </>
+        ) : null}
       </div>
     </>
   );
@@ -1312,6 +1555,50 @@ function BudgetTotals({ rows }: { rows: BudgetGroup[] }) {
         className="mt-2"
       />
     </div>
+  );
+}
+
+/** ADR-096: Simple view's Bills/Debts total + paid/pending/overdue rows. */
+function StatusBreakdownCard({
+  title,
+  status,
+}: {
+  title: string;
+  status: { total: number; paid: number; pending: number; overdue: number };
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-2 p-4 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            {title}
+          </span>
+          <span className="text-lg font-extrabold tabular-nums">
+            {formatMoney(status.total)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between border-t pt-2">
+          <span className="text-muted-foreground">Paid so far</span>
+          <span className="font-medium tabular-nums">{formatMoney(status.paid)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Pending</span>
+          <span className="font-medium tabular-nums">{formatMoney(status.pending)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Overdue</span>
+          <span
+            className={
+              status.overdue > 0.005
+                ? "font-medium tabular-nums text-destructive"
+                : "font-medium tabular-nums"
+            }
+          >
+            {formatMoney(status.overdue)}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

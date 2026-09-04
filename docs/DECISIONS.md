@@ -3655,3 +3655,47 @@ disabled while locked), a "Locked plan" line on the Dashboard Payoff Progress
 card, and the Payment Schedule screen following the locked strategy/order.
 `src/lib/debt-recommended.ts` (ADR-094 PR3) also projects from the frozen
 inputs while locked. `src/lib/strategy-lock.test.ts` (14 tests). ADR-094 PR4.
+
+## ADR-096: Dashboard Simple / More Info Toggle
+Decision:
+The Dashboard gains a Simple/More Info toggle (`Switch`, remembered per
+device in `localStorage`) beneath the Combined Spendable hero. "More Info" is
+the existing Dashboard, unchanged, wrapped in a conditional. "Simple" is a
+condensed per-pay-period summary: Income this period (every income event in
+range, all sources, `inRange`/`eventAmount` from `paycheck-budget.ts`),
+Spendable (existing `spendable.total`), Bills/Debts (`periodTotals.bills`/
+`.debts` — total due this period — plus paid so far / pending / overdue),
+and Spend (budgeted vs. spent, broken into 11 categories groups, reusing the
+existing `BudgetTotals`/`BudgetTile`/`BudgetSplitLines` components unchanged
+by feeding them a differently-grouped `BudgetGroup[]`).
+
+"Paid so far" / "pending" per bill/debt come from `deriveCycleInfo` (ADR-036)
+— the same ledger-derived state used everywhere else in the app, not the
+stored `cycle_paid_to_date` column, so it can legitimately read $0 paid on an
+item the "Still owed this period" card (which uses the stored column) shows
+as partially paid, when a payment predates the cycle's current due-date
+window (ADR-085's documented stored-vs-derived divergence — not new to this
+feature). "Overdue" reuses the existing household-wide Past Due figure
+(ADR-049), filtered by kind — a different scope than "due this period," so
+the three sub-figures aren't guaranteed to sum to the total.
+
+The Spend section's 11 groups (Food, Fun, Green, Kitten, Car, Home & Garden,
+Personal, Pets, Puff, Savings, Misc) are a new mapping
+(`SIMPLE_SPEND_GROUP`, `src/routes/app.index.tsx`), independent of
+`categories.parent_category` — a category not listed falls to Misc. Confirmed
+with the user: two categories keep their existing `parent_category` grouping
+rather than the user's literal wording (Software & Tech → Fun, with its
+Entertainment siblings; Shopping → Misc, with its Misc siblings); every other
+grouping is a deliberate finer split than `parent_category` (e.g. Green and
+Kitten get their own buckets despite sharing a DB parent with Health/Personal
+categories).
+Reason:
+The full Dashboard has grown into ten-plus cards; a quick-glance mode was
+requested for a per-paycheck at-a-glance view without navigating away. Reusing
+`BudgetTile`/`BudgetTotals`/`BudgetSplitLines` for the Spend section means the
+Simple view's category tiles get tap-to-expand transaction drill-down for
+free. The category-group mapping is a real, non-obvious business decision
+(not derivable from any existing field), hence its own ADR rather than a
+SESSION.md-only note.
+Status: Decided 2026-09-04. Implemented — `src/routes/app.index.tsx` only, no
+schema change, no new files.
