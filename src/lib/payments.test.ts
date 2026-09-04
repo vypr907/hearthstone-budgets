@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   advanceMinimumPaymentPatch,
   advanceReactivationPatch,
+  billCycleWindowStart,
   isAdvanceDisbursement,
   isFeeTransaction,
   isPreAdvanceHistoricalPayment,
+  isWithinCurrentBillCycle,
   rebuiltCycleAmountDue,
 } from "./payments";
 import type { Bill, BillAdjustment, Debt, Transaction } from "./supabase";
@@ -144,6 +146,34 @@ const bill = (over: Partial<Bill> = {}): Bill =>
     is_variable_amount: false,
     ...over,
   }) as Bill;
+
+describe("isWithinCurrentBillCycle / billCycleWindowStart (ADR-086, issue #57)", () => {
+  const TODAY = "2026-09-04";
+
+  it("monthly: the cycle is the calendar month regardless of due day", () => {
+    const monthly = bill({ billing_cycle: "monthly", next_due_date: "2026-09-21" });
+    expect(billCycleWindowStart(monthly, TODAY)).toBe("2026-09-01");
+    expect(isWithinCurrentBillCycle(monthly, "2026-09-03", TODAY)).toBe(true);
+    expect(isWithinCurrentBillCycle(monthly, "2026-08-03", TODAY)).toBe(false);
+  });
+
+  it("monthly: resets on the 1st even for an early-in-month due day", () => {
+    const monthly = bill({ billing_cycle: "monthly", next_due_date: "2026-09-03" });
+    expect(isWithinCurrentBillCycle(monthly, "2026-09-01", TODAY)).toBe(true);
+  });
+
+  it("non-monthly: rolling window one cycle back from next_due_date", () => {
+    const biweekly = bill({ billing_cycle: "biweekly", next_due_date: "2026-09-04" });
+    expect(billCycleWindowStart(biweekly, TODAY)).toBe("2026-08-21");
+    expect(isWithinCurrentBillCycle(biweekly, "2026-08-25", TODAY)).toBe(true);
+    expect(isWithinCurrentBillCycle(biweekly, "2026-08-15", TODAY)).toBe(false);
+  });
+
+  it("one-time: every date is in-cycle (ADR-048, no historical concept)", () => {
+    const invoice = bill({ billing_cycle: "one_time", next_due_date: "2026-06-01" });
+    expect(isWithinCurrentBillCycle(invoice, "2026-01-01", TODAY)).toBe(true);
+  });
+});
 
 const adj = (over: Partial<BillAdjustment> = {}): BillAdjustment =>
   ({

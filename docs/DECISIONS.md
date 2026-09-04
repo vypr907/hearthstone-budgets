@@ -3155,6 +3155,28 @@ Transactions next to repayments (still tagged `transfer_group_id` for
 `deriveCycleInfo` cycle math, the Debt Strategy payment-history tally, and the
 Correct/Reverse actions. Existing deposits backfilled by the same script.
 
+Addendum (2026-09-04, Issue #57): **bill equivalent — "Log a payment to this
+bill".** Bills had no historical-backfill path; the only options were the live
+Submit/Clear flow (always applies to the current cycle) or the arrears-directed
+`ArrearsPaymentAction`. Adding a missed past payment required raw SQL (the
+2026-09-04 Cleo Plus 8/3 backfill). `LogBillPaymentDialog` +
+`useLogBillPayment()` (`src/lib/payments.ts`) mirror the debt version's shape —
+one form: date, paying account, amount, status — but simpler: bills carry no
+running principal balance for a historical payment to reduce, and no fee/interest
+lines (out of scope for this issue). The date decides behaviour via
+`isWithinCurrentBillCycle(bill, date)` / `billCycleWindowStart(bill, today)`
+(new, `src/lib/payments.ts`): a monthly bill's window is the *calendar month
+containing `today`* per ADR-086 (resets on the 1st, independent of due day); a
+non-monthly bill keeps the `next_due_date`-anchored rolling window (mirrors
+`debtCycleWindowStart`, kept separate rather than shared since the debt version
+predates ADR-086 and doesn't apply its calendar-month rule); a one-time bill
+(ADR-048) has no historical concept — every date is in-cycle. An in-cycle date
+runs the normal `applyClearedPayment()` path; an elapsed-cycle date writes a
+plain `linked_bill_id` ledger row and leaves the bill's cycle fields untouched.
+Rendered on the Bills detail panel next to `PastDueEditor`, same placement
+pattern as the debt dialog. Tests: `isWithinCurrentBillCycle` /
+`billCycleWindowStart` in `payments.test.ts` (monthly, non-monthly, one-time).
+
 ## ADR-085: Debt Detail Reads Ledger-Derived Cycle State; Cycle Window + Pay Period Fields
 Decision: The Debt detail panel derives "Payment status", "Paid this cycle" and
 "Still owed this cycle" from `deriveCycleInfo` (ADR-036) rather than the stored

@@ -62,6 +62,7 @@ import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
 import { SetAsideAction } from "@/components/SetAsideAction";
+import { LogBillPaymentDialog } from "@/components/LogBillPaymentDialog";
 import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
 import { billCycleDue, toPayable } from "@/lib/payments";
@@ -478,6 +479,7 @@ export function BillDetailDialog({
               {monthLabel(targetMonthKey)}, use its Correct or Reverse action below.
             </p>
           )}
+          <LogBillPaymentDialog bill={bill} />
           <PastDueEditor bill={bill} />
           {isCurrentView ? <SetAsideAction bill={bill} /> : null}
           {/* ADR-058: bill adjustments section */}

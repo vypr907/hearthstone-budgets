@@ -1361,6 +1361,95 @@ export function useLogDebtPayment() {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Log a bill payment (historical or current cycle) — ADR-084 addendum       */
+/* (bill equivalent of the debt version above)                               */
+/* ------------------------------------------------------------------------ */
+
+export type LogBillPaymentInput = {
+  bill: Bill;
+  accountId: string;
+  amount: number;
+  /** Payment date (YYYY-MM-DD). Decides in-cycle vs elapsed-cycle handling. */
+  date: string;
+  status: "pending" | "cleared";
+  /** priorCyclesArrears(payable) from arrears.ts — only used for the in-cycle path. */
+  priorArrears: number;
+};
+
+/**
+ * Start of the bill's current cycle window. ADR-086: a monthly bill's cycle is
+ * the calendar month containing `today`, not a window hung off next_due_date —
+ * it resets on the 1st regardless of the due day. Non-monthly bills keep the
+ * next_due_date-anchored rolling window (mirrors debtCycleWindowStart).
+ */
+export function billCycleWindowStart(bill: Bill, today = todayISO()): string {
+  const cycle = (bill.billing_cycle ?? "monthly").toLowerCase().replace(/[\s_-]/g, "");
+  if (cycle === "monthly") return `${today.slice(0, 7)}-01`;
+  const due = bill.next_due_date ? String(bill.next_due_date).slice(0, 10) : null;
+  if (!due) return `${today.slice(0, 7)}-01`;
+  return shiftDateSafe(due, bill.billing_cycle, -1, bill.cycle_interval_days);
+}
+
+/**
+ * ADR-048: a one-time bill has a single open cycle with no historical concept —
+ * every date is "in cycle". Otherwise: on/after the cycle's window start.
+ */
+export function isWithinCurrentBillCycle(bill: Bill, date: string, today = todayISO()): boolean {
+  const cycle = (bill.billing_cycle ?? "monthly").toLowerCase().replace(/[\s_-]/g, "");
+  if (cycle === "onetime") return true;
+  return date >= billCycleWindowStart(bill, today);
+}
+
+/**
+ * Issue #57 / bill equivalent of `useLogDebtPayment`: one form, one write for
+ * a (possibly backdated) bill payment. A date inside the current cycle window
+ * runs the normal `applyClearedPayment()` path; an elapsed-cycle date writes a
+ * plain ledger row and leaves the bill's own cycle fields untouched — bills
+ * have no running balance for a historical payment to reduce, unlike debts.
+ */
+export function useLogBillPayment() {
+  const { householdId } = useAuth();
+  const done = useAfterPayment();
+  return useMutation({
+    mutationFn: async ({ bill, accountId, amount, date, status, priorArrears }: LogBillPaymentInput) => {
+      const p = toPayable("bill", bill);
+      const amt = Math.abs(Number(amount) || 0);
+      if (amt <= 0.005) throw new Error("Enter an amount");
+      const inCycle = isWithinCurrentBillCycle(bill, date);
+
+      let resolvedDueDate: string | null = null;
+      // Payable-first (ADR-037): the bill row moves before any ledger row exists.
+      if (inCycle) {
+        if (status === "cleared") {
+          const res = await applyClearedPayment(p, amt, priorArrears ?? 0, date);
+          resolvedDueDate = res.resolved_due_date ?? null;
+        } else {
+          await updateRow("bills", bill.id, { payment_status: "pending" });
+        }
+      }
+      // Elapsed cycle: ledger-only — current cycle counters/status/due date untouched.
+
+      const { error } = await supabase.from("transactions").insert({
+        household_id: householdId,
+        account_id: accountId,
+        category_id: p.category_id,
+        amount: -amt,
+        status,
+        description: `Bill payment · ${bill.name}`,
+        transaction_date: date,
+        linked_bill_id: bill.id,
+        resolved_cycle_due_date: resolvedDueDate,
+        institution_id: p.institution_id,
+      });
+      if (error) throw error;
+
+      return { inCycle };
+    },
+    onSuccess: done,
+  });
+}
+
+/* ------------------------------------------------------------------------ */
 /* Sync stored status columns to the ledger-derived state                    */
 /* ------------------------------------------------------------------------ */
 

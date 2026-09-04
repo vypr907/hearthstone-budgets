@@ -24,3 +24,19 @@
     id. Both scripts run + verified live 2026-09-04: 12 Instacash
     transactions, no duplicates, advances $3,020.00 − repaid $2,420.00 =
     $600.00, matching the stored `remaining_balance`. Issue #58 closed.
+
+- **Issue #57 — "Log a historical bill payment" dialog (ADR-084 addendum).**
+  Bill equivalent of `LogDebtPaymentDialog`: new `LogBillPaymentDialog`
+  (`src/components/LogBillPaymentDialog.tsx`) + `useLogBillPayment()` /
+  `isWithinCurrentBillCycle()` / `billCycleWindowStart()` (`src/lib/payments.ts`).
+  Date/account/amount/status only — no fee lines, no balance to reduce (bills
+  don't carry a running principal like debts). Monthly bills use the
+  ADR-086 calendar-month window; non-monthly keep the rolling
+  `next_due_date`-anchored window; one-time bills are always in-cycle.
+  Wired into `app.bills.tsx` next to `PastDueEditor`. New tests in
+  `payments.test.ts` (4 cases: monthly, monthly-early-due-day, non-monthly,
+  one-time) — suite 177 → 181, `tsc --noEmit` clean.
+  Verified live in-browser (TEST household, Playwright): dialog renders,
+  hint text correctly switches between "Applies to the current cycle…" and
+  "Historical — ledger only…" based on the picked date; no console errors;
+  no stray data left behind. Not yet committed.
