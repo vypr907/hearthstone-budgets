@@ -120,5 +120,47 @@
     breakdown (TEST household had no institutions/budgets otherwise);
     confirmed the tile expands to "TEST Grocery Co · $42.50 · 100%"
     correctly, then deleted all three fixture rows and confirmed zero
-    remain. No console errors. Committed + pushed (`ed731bc` was the base
-    toggle; this refinement not yet committed).
+    remain. No console errors. Committed + pushed (`790a9a7`).
+
+- **Verification sweep — Issues #4, #5, #6, #7, #8 (no code changes).** Closed
+  #56's loop (added the missing closing summary comment, matching #58's
+  pattern) then worked through every verification-capable open issue via
+  Playwright against the TEST household (ADR-083), each with seeded
+  fixture data cleaned up afterward:
+  - **#4 closed** — backdated debt-adjustment warning fires with the exact
+    expected message; proceeding still saves correctly.
+  - **#6 closed** — full pay → clear → undo (Reset this cycle) cycle:
+    `cycle_amount_due` correctly rebuilds from the still-active adjustment
+    ($100, not `bills.amount` $80) after reset, both in the DB and (after a
+    fresh reload) in the UI. Noted a ~1s client-cache lag right after
+    confirming reset where the dialog can show a stale pre-adjustment
+    figure — not a data bug.
+  - **#8 closed** — Bills list card redesign confirmed (colored icon chip,
+    cycle detail-only, amount inline, status chips on their own row).
+    Seeded a combined scenario (spending budget + cleared + pending +
+    payroll-deduction spend) to confirm `budgetRingColor` states, the
+    amber pending arc, tappable split-line paid/due/remaining/pending
+    detail, and that a deduction-funded obligation gets its own
+    informational split line instead of reading $0.00 — all confirmed.
+    **Found and filed a new bug, #60**: expanding a budget tile's split
+    line throws a React "button cannot be a descendant of button" console
+    warning (`BudgetTile`'s outer element and `BudgetSplitLines`' drill-down
+    icon are both real `<button>`s, one nested inside the other).
+  - **#7 partially closed (comment only, left open)** — confirmed an
+    HSA/FSA-funded overdue item correctly lands in its own "HSA / FSA"
+    sub-list (flipped a deduction's `kind`, reverted after); approximated
+    the mobile eyeball with a 430px Playwright viewport — nested
+    collapsible layout holds up. Left open for its remaining enhancement
+    item (surface deduction `kind` on `app.income-source.$id.tsx` list
+    rows — real code work, not verification).
+  - **#5 closed** — full auto-transfer lifecycle: seeded a temporary
+    second account + auto-transfer, Process → correct transfer pair
+    (signs, shared `transfer_group_id`, only the credit leg tagged
+    `linked_auto_transfer_id`, `next_due_date` advanced), Undo → both
+    legs deleted and due date reverted, paused auto-transfer → confirmed
+    zero "Process transfer" buttons render. Temporary account +
+    auto-transfer deleted afterward.
+  - All seeded fixture data (accounts, transactions, budgets, auto-transfers,
+    and every temporarily-flipped field) verified removed/reverted after
+    each check — TEST household confirmed back to its baseline state.
+    No code changes this session; only GitHub issue comments/closures.
