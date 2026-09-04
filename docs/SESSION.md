@@ -179,3 +179,14 @@
   plain spend and a same-category bill payment, both tagged to different
   institutions) and confirmed only the plain-spend institution now
   appears; fixture data deleted afterward, confirmed clean.
+
+- **Dashboard Simple view — Income card polish + pay-period range (ADR-096
+  addendum).** Per user request: "Income this pay period" moved into its
+  own card with a green-tinted header, icon, and bigger figure (more
+  noticeable, matching the Bills/Debts `StatusBreakdownCard` color
+  convention). Added a centered pay-period date-range line
+  (`formatWindow(period.start, period.end)`, reusing the existing helper)
+  between the toggle and the Income card. `tsc --noEmit` and full test
+  suite (181 tests) clean. Verified live in-browser against the TEST
+  household: renders "Aug 21 – Sep 4, 2026" correctly, Income card reads
+  clearly with the green tint. Not yet committed.

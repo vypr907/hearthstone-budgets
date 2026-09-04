@@ -3740,3 +3740,14 @@ in the breakdown loop, mirroring the same distinction
 `actualByCategoryInRange` already makes. Reported by the user via a
 screenshot (`planning/image.png`) showing ATT and Google One next to Fred
 Meyers under "Home & Garden."
+
+Addendum (2026-09-04): **Income card + pay-period range.** The Income row
+moved out of the plain Income/Spendable card into its own card with a
+green-tinted header (`color-mix(in oklab, var(--state-cleared) 15%,
+transparent)`, same convention as the Bills/Debts `StatusBreakdownCard`
+headers), an icon, and a larger `text-2xl` figure — more visually
+prominent per the user's request. A new centered line
+(`formatWindow(period.start, period.end)`, existing helper from
+`src/lib/format.ts`, already used for "Pay period"/"Cycle window" fields
+elsewhere) sits between the toggle and the Income card, showing the pay
+period's date range (e.g. "Aug 21 – Sep 4, 2026").

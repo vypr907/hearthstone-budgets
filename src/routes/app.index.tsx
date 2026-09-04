@@ -20,7 +20,7 @@ import {
 } from "@/lib/data-hooks";
 import { deriveAutoTransferState, isAutoTransferOverdue } from "@/lib/auto-transfers";
 import { baselineComparison, comparisonLabel } from "@/lib/strategy-lock";
-import { formatMoney, isDateOverdue, debtDueDate } from "@/lib/format";
+import { formatMoney, formatWindow, isDateOverdue, debtDueDate } from "@/lib/format";
 import {
   accountInMemberView,
   accountTypeIs,
@@ -1014,14 +1014,28 @@ function Dashboard() {
 
         {view === "simple" ? (
           <div className="space-y-4">
-            <Card>
-              <CardContent className="p-4 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">
-                    Income this {period.label}
-                  </span>
-                  <span className="font-semibold">{formatMoney(incomeThisPeriod)}</span>
-                </div>
+            <p className="text-center text-sm text-muted-foreground">
+              {formatWindow(period.start, period.end)}
+            </p>
+
+            <Card className="overflow-hidden">
+              <CardContent
+                className="flex items-center justify-between p-4"
+                style={{ backgroundColor: "color-mix(in oklab, var(--state-cleared) 15%, transparent)" }}
+              >
+                <span
+                  className="flex items-center gap-2 text-base font-bold"
+                  style={{ color: "var(--state-cleared)" }}
+                >
+                  <span aria-hidden>💵</span>
+                  Income this {period.label}
+                </span>
+                <span
+                  className="text-2xl font-extrabold tabular-nums"
+                  style={{ color: "var(--state-cleared)" }}
+                >
+                  {formatMoney(incomeThisPeriod)}
+                </span>
               </CardContent>
             </Card>
 
