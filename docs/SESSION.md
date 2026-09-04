@@ -98,4 +98,27 @@
     walk excludes a payment dated before the cycle's current due-date
     window once that window has passed, same documented stored-vs-derived
     divergence as ADR-085, not a bug introduced here. No console errors, no
-    stray data. Not yet committed.
+    stray data. Committed + pushed (`ed731bc`).
+
+- **Dashboard Simple view refinement pass (ADR-096 addendum).** Seven
+  tweaks after first using the shipped toggle: bigger/wider toggle
+  (`scale-125` switch, `text-base` clickable labels); dropped the redundant
+  "Spendable" row from the Income card; `StatusBreakdownCard` (Bills/Debts)
+  gained a colored header band + icon + bigger title, an `ItemBar` (paid/
+  pending vs. total), a "Remaining" row (`Total − Paid`, matching
+  `billRemainingOwed`/`debtRemainingOwed`), and a `HelpButton` on "Overdue"
+  reusing the existing Past Due wording; the Spend section's tiles switched
+  from `BudgetTile` to a new `SimpleSpendTile` whose expansion shows an
+  institution-by-institution breakdown (mirrors `app.spending-by-place.tsx`'s
+  row) instead of the Spending/Bills/Debts split — `BudgetTile` itself is
+  untouched, More Info's own "Budget vs actual" card still uses it unchanged
+  (confirmed live).
+  - `tsc --noEmit` and full test suite (181 tests) clean. Verified live
+    in-browser against the TEST household (Playwright): seeded a temporary
+    institution + spending_budgets row + one transaction via
+    `scripts/test-db.mjs` (ADR-083) to actually exercise the institution
+    breakdown (TEST household had no institutions/budgets otherwise);
+    confirmed the tile expands to "TEST Grocery Co · $42.50 · 100%"
+    correctly, then deleted all three fixture rows and confirmed zero
+    remain. No console errors. Committed + pushed (`ed731bc` was the base
+    toggle; this refinement not yet committed).

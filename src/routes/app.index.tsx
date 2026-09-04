@@ -13,6 +13,7 @@ import {
   useCategories,
   useDebts,
   useDebtStrategySettings,
+  useInstitutions,
   useLatestBalances,
   useSpendingBudgets,
   useTransactions,
@@ -51,6 +52,7 @@ import {
   periodRange,
 } from "@/lib/paycheck-budget";
 import { deriveCycleInfo } from "@/lib/ledger-state";
+import { internalTransferIds } from "@/lib/internal-transfers";
 import type { Obligation } from "@/lib/paycheck-budget";
 import type { Bill, Debt, Transaction } from "@/lib/supabase";
 import { categoryVisual, AUTO_TRANSFER_ICON } from "@/lib/visual-meta";
@@ -978,47 +980,53 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-3">
-          <span
+        <div className="flex items-center justify-center gap-4 py-1">
+          <button
+            type="button"
+            onClick={() => setViewPersist("simple")}
             className={
-              view === "simple" ? "text-sm font-semibold" : "text-sm text-muted-foreground"
+              view === "simple"
+                ? "text-base font-semibold"
+                : "text-base text-muted-foreground"
             }
           >
             Simple
+          </button>
+          <span className="scale-125">
+            <Switch
+              checked={view === "more"}
+              onCheckedChange={(v) => setViewPersist(v ? "more" : "simple")}
+              aria-label="Dashboard detail level"
+            />
           </span>
-          <Switch
-            checked={view === "more"}
-            onCheckedChange={(v) => setViewPersist(v ? "more" : "simple")}
-            aria-label="Dashboard detail level"
-          />
-          <span
+          <button
+            type="button"
+            onClick={() => setViewPersist("more")}
             className={
-              view === "more" ? "text-sm font-semibold" : "text-sm text-muted-foreground"
+              view === "more"
+                ? "text-base font-semibold"
+                : "text-base text-muted-foreground"
             }
           >
             More Info
-          </span>
+          </button>
         </div>
 
         {view === "simple" ? (
           <div className="space-y-4">
             <Card>
-              <CardContent className="space-y-2 p-4 text-sm">
+              <CardContent className="p-4 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">
                     Income this {period.label}
                   </span>
                   <span className="font-semibold">{formatMoney(incomeThisPeriod)}</span>
                 </div>
-                <div className="flex items-center justify-between border-t pt-2">
-                  <span className="text-muted-foreground">Spendable</span>
-                  <span className="font-semibold">{formatMoney(spendable.total)}</span>
-                </div>
               </CardContent>
             </Card>
 
-            <StatusBreakdownCard title="Bills" status={billsStatus} />
-            <StatusBreakdownCard title="Debts" status={debtsStatus} />
+            <StatusBreakdownCard title="Bills" icon="🧾" accent="var(--chart-1)" status={billsStatus} />
+            <StatusBreakdownCard title="Debts" icon="🏦" accent="var(--chart-2)" status={debtsStatus} />
 
             <Card>
               <CardContent className="p-4">
@@ -1028,7 +1036,13 @@ function Dashboard() {
                 <BudgetTotals rows={simpleSpendGroups} />
                 <div className="mt-3 space-y-2">
                   {simpleSpendGroups.map((g, i) => (
-                    <BudgetTile key={g.name} group={g} index={i} />
+                    <SimpleSpendTile
+                      key={g.name}
+                      group={g}
+                      index={i}
+                      transactions={transactions}
+                      period={period}
+                    />
                   ))}
                 </div>
               </CardContent>
@@ -1558,35 +1572,59 @@ function BudgetTotals({ rows }: { rows: BudgetGroup[] }) {
   );
 }
 
-/** ADR-096: Simple view's Bills/Debts total + paid/pending/overdue rows. */
+/** ADR-096: Simple view's Bills/Debts total + paid/pending/overdue/remaining. */
 function StatusBreakdownCard({
   title,
+  icon,
+  accent,
   status,
 }: {
   title: string;
+  icon: string;
+  accent: string;
   status: { total: number; paid: number; pending: number; overdue: number };
 }) {
+  const paidPct = status.total > 0 ? Math.min(100, (status.paid / status.total) * 100) : 0;
+  const pendingPct = status.total > 0 ? (status.pending / status.total) * 100 : 0;
+  const remaining = Math.max(0, status.total - status.paid);
   return (
-    <Card>
+    <Card className="overflow-hidden">
+      <div
+        className="flex items-center justify-between px-4 py-3"
+        style={{ backgroundColor: `color-mix(in oklab, ${accent} 15%, transparent)` }}
+      >
+        <span className="flex items-center gap-2 text-base font-bold" style={{ color: accent }}>
+          <span aria-hidden>{icon}</span>
+          {title}
+        </span>
+        <span className="text-lg font-extrabold tabular-nums" style={{ color: accent }}>
+          {formatMoney(status.total)}
+        </span>
+      </div>
       <CardContent className="space-y-2 p-4 text-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            {title}
-          </span>
-          <span className="text-lg font-extrabold tabular-nums">
-            {formatMoney(status.total)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between border-t pt-2">
+        <ItemBar value={paidPct} pendingValue={pendingPct} color={budgetRingColor(status.paid, status.total)} />
+        <div className="flex items-center justify-between pt-1">
           <span className="text-muted-foreground">Paid so far</span>
           <span className="font-medium tabular-nums">{formatMoney(status.paid)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Remaining</span>
+          <span className="font-medium tabular-nums">{formatMoney(remaining)}</span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground">Pending</span>
           <span className="font-medium tabular-nums">{formatMoney(status.pending)}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Overdue</span>
+          <span className="flex items-center gap-1 text-muted-foreground">
+            Overdue
+            <HelpButton>
+              &apos;Remaining&apos; above is what&apos;s left of the total due
+              this period. &apos;Overdue&apos; is different: money still owed
+              from cycles before this period — {title.toLowerCase()} that
+              already missed a due date.
+            </HelpButton>
+          </span>
           <span
             className={
               status.overdue > 0.005
@@ -1719,6 +1757,141 @@ function BudgetTile({ group: g, index: i }: { group: BudgetGroup; index: number 
               dateTo: g.periodEnd,
             }}
           />
+        </div>
+      ) : null}
+    </button>
+  );
+}
+
+/**
+ * ADR-096: Simple view's category tile — same collapsed ring/header as
+ * `BudgetTile` (spending-only, so its budgeted/actual numbers already read
+ * correctly with no bills/debts to mix in), but expands to an
+ * institution-by-institution spend breakdown instead of `BudgetSplitLines`,
+ * matching `app.spending-by-place.tsx`'s row exactly.
+ */
+function SimpleSpendTile({
+  group: g,
+  index: i,
+  transactions,
+  period,
+}: {
+  group: BudgetGroup;
+  index: number;
+  transactions: Transaction[];
+  period: { start: string; end: string };
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: institutions = [] } = useInstitutions();
+  const pct = g.budgeted ? Math.min(100, (g.actual / g.budgeted) * 100) : g.actual > 0 ? 100 : 0;
+  const pendingPct = g.budgeted ? (g.spendingPending / g.budgeted) * 100 : 0;
+  const over = g.budgeted > 0 && g.actual > g.budgeted;
+  const spentNoBudget = g.budgeted === 0 && g.actual > 0;
+  const color = budgetRingColor(g.actual, g.budgeted);
+
+  const byPlace = useMemo(() => {
+    if (!open) return [];
+    const categoryIds = new Set(g.categoryIds);
+    const internal = internalTransferIds(transactions);
+    const byId = new Map<string, number>();
+    for (const t of transactions) {
+      if (!t.institution_id || !t.category_id || !categoryIds.has(t.category_id)) continue;
+      if (t.transfer_group_id && internal.has(t.transfer_group_id)) continue;
+      const date = (t.transaction_date ?? "").slice(0, 10);
+      if (!(date >= period.start && date < period.end)) continue;
+      const spent = -Number(t.amount ?? 0);
+      if (spent <= 0) continue;
+      byId.set(t.institution_id, (byId.get(t.institution_id) ?? 0) + spent);
+    }
+    return [...byId.entries()]
+      .map(([id, amount]) => ({ id, amount, institution: institutions.find((inst) => inst.id === id) ?? null }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [open, g.categoryIds, transactions, period, institutions]);
+  const byPlaceTotal = byPlace.reduce((s, r) => s + r.amount, 0);
+
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      className="w-full rounded-[14px] bg-muted/40 p-3 text-left active:bg-muted"
+      aria-expanded={open}
+    >
+      <div className="flex items-center gap-2">
+        <ProgressRing value={pct} pendingValue={pendingPct} color={color} size={44} />
+
+        <div className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1 text-sm font-medium">
+            <span aria-hidden>{emojiFor(g.name)}</span>
+            <span className="truncate">{g.name}</span>
+          </span>
+          <span
+            className={
+              over || spentNoBudget
+                ? "text-xs uppercase tracking-widest text-destructive"
+                : "text-xs uppercase tracking-widest text-muted-foreground"
+            }
+          >
+            {over
+              ? `${formatMoney(g.actual - g.budgeted)} over`
+              : spentNoBudget
+                ? `${formatMoney(g.actual)} spent`
+                : `${formatMoney(g.budgeted - g.actual)} left`}
+          </span>
+        </div>
+      </div>
+      {open ? (
+        <div className="mt-2 space-y-2">
+          <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+            {formatMoney(g.actual)} of {formatMoney(g.budgeted)} budgeted
+          </p>
+          {byPlace.length === 0 ? (
+            <p className="rounded-lg bg-muted/50 p-2 text-xs text-muted-foreground">
+              No institution-tagged spending yet this period.
+            </p>
+          ) : (
+            byPlace.map((r, idx) => {
+              const share = byPlaceTotal > 0 ? (r.amount / byPlaceTotal) * 100 : 0;
+              const placeColor = itemColor(idx);
+              return (
+                <div key={r.id} className="space-y-1" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-2">
+                    {r.institution?.logo_url ? (
+                      <img
+                        src={r.institution.logo_url}
+                        alt=""
+                        className="h-6 w-6 rounded-full object-contain"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-xs"
+                        style={{ backgroundColor: `${placeColor}33` }}
+                      >
+                        🏪
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-xs">
+                      {r.institution?.name ?? "Unknown place"}
+                    </span>
+                    <span className="text-xs font-semibold tabular-nums">
+                      {formatMoney(r.amount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${Math.max(2, share)}%`, backgroundColor: placeColor }}
+                      />
+                    </div>
+                    <span className="w-8 text-right text-[10px] text-muted-foreground">
+                      {share.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       ) : null}
     </button>

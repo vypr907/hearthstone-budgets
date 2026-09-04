@@ -3699,3 +3699,30 @@ free. The category-group mapping is a real, non-obvious business decision
 SESSION.md-only note.
 Status: Decided 2026-09-04. Implemented — `src/routes/app.index.tsx` only, no
 schema change, no new files.
+
+Addendum (2026-09-04): **refinement pass after first use.** Toggle enlarged
+(`scale-125` switch, `text-base` labels, clickable labels) and the redundant
+"Spendable" row dropped from the Income card (the hero above already shows
+Combined Spendable). `StatusBreakdownCard` (Bills/Debts) gained a colored
+header band (`color-mix(in oklab, <accent> 15%, transparent)`, matching the
+existing `app.more.tsx`/`app.bills.tsx` tint convention) with an icon and a
+bigger/bolder title, an `ItemBar` (paid/pending vs. total, reusing the same
+component `BudgetTotals`/`BudgetSplitLines` already use), a new "Remaining"
+row (`Total − Paid`, matching `billRemainingOwed`/`debtRemainingOwed`'s
+existing definition — pending doesn't reduce it), and a `HelpButton` on
+"Overdue" reusing the exact wording already on the Dashboard's Past Due
+section.
+
+The Spend section's tiles switched from the shared `BudgetTile` to a new
+**`SimpleSpendTile`** — same collapsed ring/header (still spending-only, so
+the numbers read correctly with no bills/debts noise), but tapping it shows
+an institution-by-institution breakdown of that group's spending this period
+instead of `BudgetTile`'s `BudgetSplitLines` (Spending/Bills/Debts split,
+pointless here since Simple's groups are spending-only). The breakdown
+mirrors `app.spending-by-place.tsx`'s row exactly (logo/icon, name, amount,
+proportional share bar), filtering `transactions` to the group's
+`categoryIds` within the period and excluding internal transfers via
+`internalTransferIds` (ADR-089) — computed inline in the tile, not extracted,
+since nothing else needs a category-set + custom-date-range version of
+Spending by Place's logic. `BudgetTile` itself is untouched — More Info's
+"Budget vs actual" card still uses it unchanged.
