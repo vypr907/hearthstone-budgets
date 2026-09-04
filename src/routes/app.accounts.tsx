@@ -5,6 +5,7 @@ import { SectionLabel } from "@/components/SectionLabel";
 import { AppHeader } from "@/components/AppHeader";
 import { TransactionTitle } from "@/components/TransactionTitle";
 import {
+  useAccountBalances,
   useAccounts,
   useCategories,
   useInstitutions,
@@ -16,6 +17,15 @@ import { formatMoney, accountLast4 } from "@/lib/format";
 import { computeBalances } from "@/lib/balances";
 import { useHouseholdMembers, memberLabel } from "@/lib/household";
 import { groupLedgerRows } from "@/lib/split-groups";
+import {
+  DetailGrid,
+  DetailItem,
+  DetailMoney,
+  DetailText,
+  LogoLabel,
+  ValueChip,
+} from "@/components/detail";
+import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +49,7 @@ import {
 import { Pencil, Plus, Search, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Account, Institution, Transaction } from "@/lib/supabase";
+import type { Account, AccountBalance, Institution, Transaction } from "@/lib/supabase";
 import { format, parseISO } from "date-fns";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 import { TransactionDetail } from "@/routes/app.transactions";
@@ -76,6 +86,7 @@ function AccountsPage() {
   const [logging, setLogging] = useState<Account | null>(null);
   /** Reuses the Transactions screen detail dialog for recent-activity rows. */
   const [detail, setDetail] = useState<Transaction | null>(null);
+  const [viewing, setViewing] = useState<Account | null>(null);
 
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<"name" | "current" | "type">("name");
@@ -241,7 +252,11 @@ function AccountsPage() {
           {rows.map((a) => {
             const b = balances[a.id];
             return (
-              <Card key={a.id}>
+              <Card
+                key={a.id}
+                className="cursor-pointer"
+                onClick={() => setViewing(a)}
+              >
                 <CardContent className="p-3">
                   <div className="flex items-start gap-3">
                     <ObligationIcon
@@ -274,7 +289,10 @@ function AccountsPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => setEditing(a)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditing(a);
+                      }}
                       aria-label="Edit"
                     >
                       <Pencil className="h-4 w-4" />
@@ -295,15 +313,20 @@ function AccountsPage() {
                     </div>
                   </div>
 
-                  <RecentActivity
-                    rows={recentByAccount[a.id] ?? []}
-                    institutionById={institutionById}
-                    onSelect={setDetail}
-                  />
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <RecentActivity
+                      rows={recentByAccount[a.id] ?? []}
+                      institutionById={institutionById}
+                      onSelect={setDetail}
+                    />
+                  </div>
                   <Button
                     variant="outline"
                     className="mt-2 h-10 w-full"
-                    onClick={() => setLogging(a)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLogging(a);
+                    }}
                   >
                     <TrendingUp className="mr-2 h-4 w-4" /> Log new balance
                   </Button>
@@ -317,7 +340,254 @@ function AccountsPage() {
       <AccountDialog account={editing} onClose={() => setEditing(null)} />
       <LogBalanceDialog account={logging} onClose={() => setLogging(null)} />
       <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />
+      <AccountDetailDialog
+        account={viewing}
+        institution={viewing ? institutionById[viewing.institution_id ?? ""] : null}
+        owner={viewing?.owner_member_id ? memberById[viewing.owner_member_id] : null}
+        jointFallback={members.length > 1}
+        balance={viewing ? balances[viewing.id] : undefined}
+        transactions={viewing ? (recentByAccount[viewing.id] ?? []) : []}
+        institutionById={institutionById}
+        onClose={() => setViewing(null)}
+        onEdit={(a) => {
+          setViewing(null);
+          setEditing(a);
+        }}
+        onLogBalance={(a) => setLogging(a)}
+      />
     </>
+  );
+}
+
+/**
+ * Issue #56: full account detail — metadata, ADR-093 login button, balance
+ * snapshot history, and the complete transaction list (not just recent).
+ */
+function AccountDetailDialog({
+  account,
+  institution,
+  owner,
+  jointFallback,
+  balance,
+  transactions,
+  institutionById,
+  onClose,
+  onEdit,
+  onLogBalance,
+}: {
+  account: Account | null;
+  institution?: Institution | null;
+  owner?: { display_name?: string | null } | null;
+  jointFallback: boolean;
+  balance?: { current: number; spendable: number };
+  transactions: Transaction[];
+  institutionById: Record<string, Institution>;
+  onClose: () => void;
+  onEdit: (a: Account) => void;
+  onLogBalance: (a: Account) => void;
+}) {
+  const { data: history = [] } = useAccountBalances(account?.id);
+  const [txDetail, setTxDetail] = useState<Transaction | null>(null);
+
+  if (!account) return null;
+  const last4 = accountLast4(account.account_number);
+
+  return (
+    <>
+      <Dialog open onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ObligationIcon
+                institution={institution}
+                name={`${account.name} ${account.account_type ?? ""}`}
+                fallback="🏛️"
+                size={28}
+              />
+              {account.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <DetailGrid>
+              <DetailMoney label="Current balance" value={balance?.current} />
+              <DetailMoney label="Spendable balance" value={balance?.spendable} />
+              <DetailItem label="Type" value={<ValueChip value={account.account_type} />} />
+              <DetailItem
+                label="Institution"
+                value={
+                  <LogoLabel
+                    name={institution?.name}
+                    logoUrl={institution?.logo_url}
+                    type={institution?.institution_type}
+                  />
+                }
+              />
+              <DetailItem
+                label="Owner"
+                value={owner ? memberLabel(owner) : jointFallback ? "Joint / shared" : "—"}
+              />
+              <DetailItem label="Card / account #" value={last4 ? `•••${last4}` : "—"} />
+              <DetailMoney label="Credit limit" value={account.credit_limit} />
+            </DetailGrid>
+            <InstitutionLoginButton institution={institution} />
+            <DetailText label="Notes" value={account.notes} />
+            <AccountBalanceHistory history={history} />
+            <AccountAllTransactions
+              rows={transactions}
+              institutionById={institutionById}
+              onSelect={setTxDetail}
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="h-11" onClick={() => onLogBalance(account)}>
+              <TrendingUp className="mr-2 h-4 w-4" /> Log balance
+            </Button>
+            <Button variant="outline" className="h-11" onClick={() => onEdit(account)}>
+              <Pencil className="mr-2 h-4 w-4" /> Edit
+            </Button>
+            <Button className="h-11" onClick={onClose}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <TransactionDetail transaction={txDetail} onClose={() => setTxDetail(null)} />
+    </>
+  );
+}
+
+/** Reverse-chronological list of logged balance snapshots for one account. */
+function AccountBalanceHistory({ history }: { history: AccountBalance[] }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Balance history
+      </p>
+      {history.length === 0 ? (
+        <p className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+          No snapshots logged yet.
+        </p>
+      ) : (
+        <div className="divide-y rounded-md border">
+          {history.map((h) => (
+            <div key={h.id} className="flex items-center justify-between px-2 py-1.5 text-sm">
+              <span className="text-muted-foreground">
+                {format(parseISO(h.as_of_date), "MMM d, yyyy")}
+              </span>
+              <span className="tabular-nums font-medium">{formatMoney(Number(h.balance))}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Every transaction linked to an account, capped then expandable — unlike
+ * `RecentActivity`'s 5/25-tier preview, this is the account's full ledger.
+ */
+function AccountAllTransactions({
+  rows,
+  institutionById,
+  onSelect,
+}: {
+  rows: Transaction[];
+  institutionById: Record<string, Institution>;
+  onSelect: (t: Transaction) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { data: categories = [] } = useCategories();
+  const entries = useMemo(() => groupLedgerRows(rows), [rows]);
+  const [openSplits, setOpenSplits] = useState<Record<string, boolean>>({});
+
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        All transactions
+      </p>
+      {entries.length === 0 ? (
+        <p className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+          No transactions yet.
+        </p>
+      ) : (
+        <div className="rounded-md border">
+          {(expanded ? entries : entries.slice(0, 20)).map((entry) => {
+            const t = entry.head;
+            return (
+              <div
+                key={entry.key}
+                onClick={() => onSelect(t)}
+                className="cursor-pointer border-b px-2 py-2 text-sm last:border-b-0"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate">
+                      <TransactionTitle
+                        transaction={t}
+                        placeName={t.institution_id ? institutionById[t.institution_id]?.name : null}
+                      />
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(parseISO(t.transaction_date), "MMM d, yyyy")}
+                      {t.status === "pending" ? " · pending" : ""}
+                      {entry.isSplit ? ` · split (${entry.rows.length})` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {t.transfer_group_id ? <Badge variant="outline">Transfer</Badge> : null}
+                    <p
+                      className={`tabular-nums font-medium ${
+                        entry.total < 0 ? "" : "text-primary"
+                      } ${t.status === "pending" ? "opacity-60" : ""}`}
+                    >
+                      {formatMoney(entry.total)}
+                    </p>
+                  </div>
+                </div>
+                {entry.isSplit ? (
+                  <>
+                    <button
+                      className="mt-1 text-xs text-muted-foreground underline decoration-dotted"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenSplits((prev) => ({ ...prev, [entry.key]: !prev[entry.key] }));
+                      }}
+                    >
+                      {openSplits[entry.key] ? "Hide breakdown" : "Show breakdown"}
+                    </button>
+                    {openSplits[entry.key] ? (
+                      <div className="mt-1 divide-y divide-border/50 rounded-md border">
+                        {entry.rows.map((line) => (
+                          <div
+                            key={line.id}
+                            className="flex items-center justify-between px-2 py-1 text-xs"
+                          >
+                            <span className="truncate">
+                              {categories.find((c) => c.id === line.category_id)?.name ??
+                                "No category"}
+                            </span>
+                            <span className="tabular-nums">{formatMoney(Number(line.amount))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            );
+          })}
+          {entries.length > 20 && !expanded ? (
+            <button
+              className="w-full px-2 py-2 text-xs text-muted-foreground underline decoration-dotted"
+              onClick={() => setExpanded(true)}
+            >
+              Show all {entries.length} transactions
+            </button>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -40,3 +40,32 @@
   hint text correctly switches between "Applies to the current cycle…" and
   "Historical — ledger only…" based on the picked date; no console errors;
   no stray data left behind. Not yet committed.
+
+- **Issue #56 — AccountDetailDialog.** Accounts get the same full detail
+  dialog Bills/Debts/Institutions already have — new `AccountDetailDialog` /
+  `AccountBalanceHistory` / `AccountAllTransactions` in
+  `src/routes/app.accounts.tsx` (colocated with the route, same convention as
+  `BillDetailDialog`/`DebtDetailDialog`). No schema change and, per the user,
+  no new ADR (confirmed this is a UI composition of already-decided patterns,
+  same as the other three detail dialogs). Shows full metadata (type,
+  institution via `LogoLabel`, owner, card last-4, credit limit, notes), the
+  ADR-093 `InstitutionLoginButton`, complete balance-snapshot history
+  (`useAccountBalances`, already a full-history hook — no cap needed, live
+  data tops out at 4 snapshots/account), and every transaction on the account
+  (capped at 20 with a "Show all N" expand — live data has one account at 241
+  transactions, so unconditional rendering was rejected). The account card is
+  now click-to-open like Bills/Debts/Institutions rows; the Edit pencil,
+  "Log new balance" button and Recent Activity row clicks got
+  `stopPropagation` so they still work independently. "Log balance" in the
+  new dialog's footer reuses the existing `LogBalanceDialog` instance via the
+  parent's own state rather than creating a second one. `tsc --noEmit` and
+  full test suite (181 tests) clean — no new pure-function logic, so no new
+  test file. Verified live in-browser (TEST household, Playwright): dialog
+  opens, all metadata renders, balance history shows the real snapshot,
+  transaction list renders and a row opens `TransactionDetail` stacked
+  correctly, Log balance stacks and prefills correctly, Edit handoff closes
+  the detail dialog and opens the prefilled `AccountDialog` form. Not
+  exercised against an institution-linked account (TEST household has none)
+  — that code path directly reuses `InstitutionLoginButton`/`LogoLabel`
+  exactly as Bills/Debts/Institutions already do, so not considered a gap.
+  Not yet committed.
