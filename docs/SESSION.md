@@ -164,3 +164,18 @@
     and every temporarily-flipped field) verified removed/reverted after
     each check — TEST household confirmed back to its baseline state.
     No code changes this session; only GitHub issue comments/closures.
+
+- **Dashboard Simple view — institution-breakdown bugfix (ADR-096
+  addendum).** User reported (screenshot, `planning/image.png`) that the
+  "Home & Garden" spend category's expansion listed ATT and Google One
+  (both bills) alongside Fred Meyers (real spending) — the total already
+  correctly excluded bill money, but the institution list didn't.
+  `SimpleSpendTile`'s `byPlace` breakdown matched on `category_id` alone;
+  fixed by also skipping any transaction with `linked_bill_id`/
+  `linked_debt_id` set, mirroring the same distinction
+  `actualByCategoryInRange` already makes for the tile's own total.
+  `tsc --noEmit` and full test suite (181 tests) clean. Reproduced live
+  against the TEST household (seeded a spending category with both a
+  plain spend and a same-category bill payment, both tagged to different
+  institutions) and confirmed only the plain-spend institution now
+  appears; fixture data deleted afterward, confirmed clean.

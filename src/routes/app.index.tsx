@@ -1796,6 +1796,11 @@ function SimpleSpendTile({
     const byId = new Map<string, number>();
     for (const t of transactions) {
       if (!t.institution_id || !t.category_id || !categoryIds.has(t.category_id)) continue;
+      // Plain spending only — a bill/debt payment can carry the same
+      // category_id as this group's spending categories (e.g. an ATT bill
+      // filed under "Home & Garden"), but its money isn't spending, same
+      // distinction actualByCategoryInRange already makes for the ring/total.
+      if (t.linked_bill_id || t.linked_debt_id) continue;
       if (t.transfer_group_id && internal.has(t.transfer_group_id)) continue;
       const date = (t.transaction_date ?? "").slice(0, 10);
       if (!(date >= period.start && date < period.end)) continue;

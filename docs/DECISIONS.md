@@ -3726,3 +3726,17 @@ proportional share bar), filtering `transactions` to the group's
 since nothing else needs a category-set + custom-date-range version of
 Spending by Place's logic. `BudgetTile` itself is untouched — More Info's
 "Budget vs actual" card still uses it unchanged.
+
+Addendum (2026-09-04): **bugfix — the institution breakdown was including
+bill/debt payments.** A bill/debt payment transaction can carry the same
+`category_id` as a group's spending categories (e.g. a real household's ATT
+or Google One bill filed under "Home & Garden" alongside real Home & Garden
+spending), and `SimpleSpendTile`'s institution breakdown matched on
+`category_id` alone — so it wrongly listed the bill's institution next to
+genuine spending places, even though the tile's own total already correctly
+excluded that money (via `actualByCategoryInRange`'s `spendingSpent` field).
+Fixed by skipping any transaction with `linked_bill_id`/`linked_debt_id` set
+in the breakdown loop, mirroring the same distinction
+`actualByCategoryInRange` already makes. Reported by the user via a
+screenshot (`planning/image.png`) showing ATT and Google One next to Fred
+Meyers under "Home & Garden."
