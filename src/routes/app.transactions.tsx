@@ -7,6 +7,7 @@ import {
   useUpsertTransaction,
   useDeleteTransaction,
   useDeleteTransferPair,
+  useSetTransferFee,
   useAccounts,
   useCategories,
   useBills,
@@ -629,6 +630,7 @@ export function TransactionDetail({
   const upsert = useUpsertTransaction();
   const del = useDeleteTransaction();
   const delTransferPair = useDeleteTransferPair();
+  const setTransferFee = useSetTransferFee();
   const editLinked = useEditLinkedTransaction();
 
 
@@ -643,6 +645,15 @@ export function TransactionDetail({
         : [],
     [allTransactions, transaction?.split_group_id],
   );
+  // ADR-097: a transfer's optional fee, found by the transfer's own group id
+  // living in the fee row's split_group_id (never transfer_group_id itself).
+  const transferFeeRow = useMemo(
+    () =>
+      transaction?.transfer_group_id
+        ? (allTransactions.find((t) => t.split_group_id === transaction.transfer_group_id) ?? null)
+        : null,
+    [allTransactions, transaction?.transfer_group_id],
+  );
 
   const [edit, setEdit] = useState(false);
   const [amount, setAmount] = useState("");
@@ -653,6 +664,8 @@ export function TransactionDetail({
   const [categoryId, setCategoryId] = useState("none");
   // ADR-053: place/institution re-tag (Group 7 Part 3)
   const [institutionId, setInstitutionId] = useState("none");
+  // ADR-097: blank means "no fee" — prefilled from any existing paired fee row.
+  const [feeInput, setFeeInput] = useState("");
 
   const key = transaction?.id ?? "";
   const [lastKey, setLastKey] = useState("");
@@ -666,6 +679,7 @@ export function TransactionDetail({
     setAccountId(transaction.account_id ?? "none");
     setCategoryId(transaction.category_id ?? "none");
     setInstitutionId(transaction.institution_id ?? "none");
+    setFeeInput(transferFeeRow ? String(Math.abs(Number(transferFeeRow.amount))) : "");
   }
   if (!transaction && lastKey !== "") setLastKey("");
 
@@ -674,9 +688,12 @@ export function TransactionDetail({
   // genuine category split (one account, N category lines, not a paycheck).
   // A paycheck / deduction / multi-account group is edited one row at a time
   // through the normal single-row path below.
+  // ADR-097: require > 1 row — a split_group_id shared by no other row (e.g.
+  // a solo transfer fee) isn't a real split and falls through to the plain
+  // single-transaction editor below instead.
   if (
     transaction.split_group_id &&
-    groupRows.length > 0 &&
+    groupRows.length > 1 &&
     isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds)
   )
     return <SplitTransactionDetail transaction={transaction} onClose={onClose} />;
@@ -698,9 +715,11 @@ export function TransactionDetail({
     );
 
 
+  // ADR-097: same > 1 guard as above — a solo split_group_id row is not a
+  // paycheck deposit either.
   const isPaycheckDeposit =
     !!transaction.split_group_id &&
-    groupRows.length > 0 &&
+    groupRows.length > 1 &&
     !isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds);
   const depositAccountCount = isPaycheckDeposit
     ? new Set(groupRows.map((r) => r.account_id ?? null)).size
@@ -737,6 +756,16 @@ export function TransactionDetail({
       ? accountName(transferPair.account_id)
       : accountName(transaction.account_id)
     : null;
+  // ADR-097: the fee always debits the from-account, regardless of which leg
+  // this detail view happens to be open on.
+  const transferFromAccountId = transferPair
+    ? Number(transaction.amount) < 0
+      ? transaction.account_id
+      : transferPair.account_id
+    : null;
+  const transferFromAccountInstitutionId = transferFromAccountId
+    ? (accounts.find((a) => a.id === transferFromAccountId)?.institution_id ?? null)
+    : null;
 
   async function save() {
     try {
@@ -770,6 +799,19 @@ export function TransactionDetail({
         category_id: categoryId === "none" ? null : categoryId,
         institution_id: institutionId === "none" ? null : institutionId,
       });
+      // ADR-097: sync the transfer's paired fee (add/change/remove) alongside
+      // this leg's own edit — independent of which leg is currently open.
+      if (transaction!.transfer_group_id && transferFromAccountId) {
+        await setTransferFee.mutateAsync({
+          transferGroupId: transaction!.transfer_group_id,
+          fromAccountId: transferFromAccountId,
+          existingFee: transferFeeRow,
+          fee: feeInput ? Number(feeInput) : undefined,
+          label: description.trim() || "Transfer",
+          institutionId: transferFromAccountInstitutionId,
+          date,
+        });
+      }
       toast.success("Transaction updated");
       onClose();
     } catch (e) {
@@ -852,6 +894,14 @@ export function TransactionDetail({
                 <>
                   <DetailItem label="From" value={transferFromAccount} />
                   <DetailItem label="To" value={transferToAccount} />
+                  <DetailItem
+                    label="Fee"
+                    value={
+                      transferFeeRow
+                        ? formatMoney(Math.abs(Number(transferFeeRow.amount)))
+                        : "None"
+                    }
+                  />
                 </>
               ) : (
                 <DetailItem
@@ -906,6 +956,25 @@ export function TransactionDetail({
                 />
               </div>
             </div>
+            {transferPair ? (
+              <div>
+                <Label htmlFor="tx-transfer-fee">Fee (optional)</Label>
+                <Input
+                  id="tx-transfer-fee"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={feeInput}
+                  onChange={(e) => setFeeInput(e.target.value)}
+                  className="h-11"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Debited from {transferFromAccount} on top of the transfer amount. Clear
+                  this field to remove the fee.
+                </p>
+              </div>
+            ) : null}
             <div>
               <Label>Description</Label>
               <Input
@@ -944,8 +1013,11 @@ export function TransactionDetail({
             </div>
             {/* ADR-047 addendum: paycheck deposit rows carry no category or
                 place by design — hide the controls so a stray tag can't be
-                added while correcting an amount. */}
-            {!transaction.split_group_id && (
+                added while correcting an amount. ADR-097: gated on
+                isPaycheckDeposit specifically (not "has a split_group_id"),
+                since a solo transfer-fee row also carries a split_group_id
+                but does have — and needs to keep — its own category. */}
+            {!isPaycheckDeposit && (
               <>
                 <div>
                   <Label>Category</Label>

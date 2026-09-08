@@ -22,7 +22,13 @@ import {
 import { advanceDate, needsEnvelope } from "./format";
 import { assertCategorySplitRows } from "./split-groups";
 import { useAuth } from "./auth-context";
-import { advanceMinimumPaymentPatch, advanceReactivationPatch } from "./payments";
+import {
+  advanceMinimumPaymentPatch,
+  advanceReactivationPatch,
+  insertFeeTransaction,
+  deletePairedFees,
+  hasFee,
+} from "./payments";
 import { nextPayDate } from "./paycheck-budget";
 import { useIncomeSources, useIncomeEvents } from "./income-hooks";
 import { debtPayoffDatePatch } from "./debt-payoff-state";
@@ -919,6 +925,12 @@ export function useDeleteBillAdjustment() {
  * negative on the from-account, positive on the to-account.
  * Uses saveWithOptionalColumns so transfer_group_id is dropped gracefully
  * pre-migration (same pattern as institution_id on regular transactions).
+ *
+ * ADR-097: an optional fee writes a third, unlinked row on the from-account
+ * (reusing ADR-046's `insertFeeTransaction`), paired to the pair via
+ * `split_group_id` — never `transfer_group_id`, which must stay a clean
+ * one-negative/one-positive pair (see `transferPair` lookup in
+ * app.transactions.tsx and `internalTransferIds` in internal-transfers.ts).
  */
 export function useSaveTransfer() {
   const { householdId } = useAuth();
@@ -932,6 +944,10 @@ export function useSaveTransfer() {
       transferDate: string;
       /** ADR-064: optional category applied to both rows of the pair. */
       categoryId?: string | null;
+      /** ADR-097: extra amount debited only from the from-account. */
+      fee?: number;
+      /** ADR-097: from-account's institution, carried onto the fee row (ADR-065 pattern). */
+      feeInstitutionId?: string | null;
     }) => {
       if (args.fromAccountId === args.toAccountId) {
         throw new Error("From and to accounts must be different");
@@ -959,6 +975,17 @@ export function useSaveTransfer() {
         { ...base, account_id: args.toAccountId, amount: args.amount } as Record<string, unknown>,
         async (p) => supabase.from("transactions").insert(p).select("*").single(),
       );
+      // ADR-097: no-ops when args.fee is unset/under the ADR-046 threshold.
+      await insertFeeTransaction(
+        householdId,
+        args.description?.trim() || "Transfer",
+        args.feeInstitutionId,
+        args.fromAccountId,
+        args.fee,
+        "cleared",
+        groupId,
+        args.transferDate,
+      );
       return groupId;
     },
     onSuccess: () => {
@@ -968,16 +995,72 @@ export function useSaveTransfer() {
   });
 }
 
-/** ADR-056: delete both sides of a transfer by transfer_group_id. */
+/**
+ * ADR-056: delete both sides of a transfer by transfer_group_id.
+ * ADR-097: also delete its paired fee row, if any (same split_group_id).
+ */
 export function useDeleteTransferPair() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (transferGroupId: string) => {
+      await deletePairedFees(transferGroupId);
       const { error } = await supabase
         .from("transactions")
         .delete()
         .eq("transfer_group_id", transferGroupId);
       if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
+/**
+ * ADR-097 addendum: add, change, or remove a transfer's paired fee row after
+ * the fact, from the transfer's own detail view — not just at creation time
+ * (`useSaveTransfer`). Reuses the same `insertFeeTransaction`/`hasFee` ADR-046
+ * machinery; `existingFee` (found by the caller via `split_group_id ===
+ * transferGroupId`) decides insert vs. update vs. delete.
+ */
+export function useSetTransferFee() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      transferGroupId: string;
+      fromAccountId: string;
+      existingFee: Transaction | null;
+      /** New fee amount; unset/blank/under threshold means "remove the fee". */
+      fee: number | undefined;
+      label: string;
+      institutionId: string | null | undefined;
+      date: string;
+    }) => {
+      if (hasFee(args.fee)) {
+        if (args.existingFee) {
+          const { error } = await supabase
+            .from("transactions")
+            .update({ amount: -Math.abs(Number(args.fee)) })
+            .eq("id", args.existingFee.id);
+          if (error) throw error;
+        } else {
+          await insertFeeTransaction(
+            householdId,
+            args.label,
+            args.institutionId,
+            args.fromAccountId,
+            args.fee,
+            "cleared",
+            args.transferGroupId,
+            args.date,
+          );
+        }
+      } else if (args.existingFee) {
+        const { error } = await supabase.from("transactions").delete().eq("id", args.existingFee.id);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });

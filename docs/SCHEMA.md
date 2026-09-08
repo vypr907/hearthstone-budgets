@@ -105,7 +105,9 @@ categories (
     id uuid primary key default gen_random_uuid(),
     household_id uuid references households(id) on delete cascade,
     name text not null,
-    domain text,                    -- DB-enforced check, see Domain Values below
+    domain text not null,           -- DB-enforced check, see Domain Values below
+                                     -- (verified NOT NULL live 2026-09-08, ADR-097 —
+                                     -- this doc previously showed it as nullable)
     parent_category text,           -- ADR-067: free text, not a self-referencing FK
     created_at timestamptz default now()
 )
@@ -723,6 +725,11 @@ sharing one `transfer_group_id` (negative on the from-account, positive on
 the to-account). A debt advance writes one deposit transaction (tagged with
 `transfer_group_id`) paired with a `debt_adjustments` row — see below —
 rather than a second linked transaction.
+
+ADR-097: a transfer may also carry an optional fee — a third, plain
+transaction on the from-account (no `transfer_group_id`), reusing ADR-046's
+fee mechanism and paired to the transfer via `split_group_id` instead (set
+to the same UUID as the pair's `transfer_group_id`). No schema change.
 
 ---
 

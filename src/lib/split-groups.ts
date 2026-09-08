@@ -89,28 +89,39 @@ export function assertCategorySplitRows(
 }
 
 export function groupLedgerRows(rows: Transaction[]): LedgerEntry[] {
+  // ADR-097: a split_group_id shared by only one row (e.g. a solo transfer
+  // fee, paired to its transfer via split_group_id but with no sibling row
+  // in the ledger) isn't a real split — treat it exactly like an ungrouped
+  // row instead of showing a "Split · 1" card with nothing to break down.
+  const groupSize = new Map<string, number>();
+  for (const t of rows) {
+    const gid = t.split_group_id ?? null;
+    if (gid) groupSize.set(gid, (groupSize.get(gid) ?? 0) + 1);
+  }
+
   const out: LedgerEntry[] = [];
   const byGroup = new Map<string, LedgerEntry>();
   for (const t of rows) {
     const gid = t.split_group_id ?? null;
-    if (!gid) {
+    const isRealGroup = !!gid && (groupSize.get(gid) ?? 0) > 1;
+    if (!isRealGroup) {
       out.push({ key: t.id, head: t, rows: [t], total: Number(t.amount ?? 0), isSplit: false });
       continue;
     }
-    const existing = byGroup.get(gid);
+    const existing = byGroup.get(gid!);
     if (existing) {
       existing.rows.push(t);
       existing.total += Number(t.amount ?? 0);
       continue;
     }
     const entry: LedgerEntry = {
-      key: gid,
+      key: gid!,
       head: t,
       rows: [t],
       total: Number(t.amount ?? 0),
       isSplit: true,
     };
-    byGroup.set(gid, entry);
+    byGroup.set(gid!, entry);
     out.push(entry);
   }
   return out;

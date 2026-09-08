@@ -37,6 +37,29 @@ describe("internalTransferIds", () => {
   });
 });
 
+describe("ADR-097 transfer fee row", () => {
+  it("is not counted as an internal transfer leg (paired via split_group_id, not transfer_group_id)", () => {
+    const rows = [
+      tx({ amount: -100, transfer_group_id: "g1" }), // from-leg
+      tx({ amount: 100, transfer_group_id: "g1" }), // to-leg
+      tx({ amount: -3, split_group_id: "g1", category_id: savings.id, description: "Fee: Transfer" }),
+    ];
+    const internal = internalTransferIds(rows);
+    expect([...internal]).toEqual(["g1"]);
+    expect(isInternalTransfer(rows[2], internal)).toBe(false);
+  });
+
+  it("counts as real spend in combinedActualByCategory alongside its excluded transfer pair", () => {
+    const rows = [
+      tx({ amount: -100, category_id: savings.id, transfer_group_id: "g1" }),
+      tx({ amount: 100, category_id: savings.id, transfer_group_id: "g1" }),
+      tx({ amount: -3, category_id: savings.id, split_group_id: "g1", description: "Fee: Transfer" }),
+    ];
+    const out = combinedActualByCategory(rows, [], [], [savings], "2026-08-01");
+    expect(out.get(savings.id)?.spendingSpent).toBe(3);
+  });
+});
+
 describe("ADR-089 transfers in spending math", () => {
   const rows = [
     tx({ amount: -300, category_id: savings.id, transfer_group_id: "g1" }),

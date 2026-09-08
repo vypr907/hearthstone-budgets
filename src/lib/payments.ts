@@ -477,7 +477,7 @@ async function findLinkedTransaction(p: Payable, status?: string) {
 }
 
 /** Whether a fee amount is large enough to write its own ledger row (ADR-046). */
-function hasFee(fee: number | undefined): boolean {
+export function hasFee(fee: number | undefined): boolean {
   return Math.abs(Number(fee) || 0) >= 0.005;
 }
 
@@ -485,7 +485,7 @@ function hasFee(fee: number | undefined): boolean {
  * ADR-046: fees land in the household's "Fees" category. Auto-create it if it
  * doesn't exist so fee rows are always categorised.
  */
-async function feeCategoryId(householdId: string | null | undefined) {
+export async function feeCategoryId(householdId: string | null | undefined) {
   let feeCatId = (await supabase
     .from("categories")
     .select("id")
@@ -495,7 +495,10 @@ async function feeCategoryId(householdId: string | null | undefined) {
   if (!feeCatId && householdId) {
     const { data: created, error: catErr } = await supabase
       .from("categories")
-      .insert({ household_id: householdId, name: "Fees" })
+      // ADR-069: domain is NOT NULL live (docs/SCHEMA.md undersells this) — a
+      // fee is real spending, so it gets the "spending" domain like any other
+      // spending category.
+      .insert({ household_id: householdId, name: "Fees", domain: "spending" })
       .select("id")
       .single();
     if (catErr) throw catErr;
@@ -507,22 +510,27 @@ async function feeCategoryId(householdId: string | null | undefined) {
 
 /**
  * ADR-046: fees ride alongside a payment as their own ledger row so they hit the
- * account balance without ever counting toward the bill/debt cycle.
+ * account balance without ever counting toward the bill/debt cycle. Reused by
+ * ADR-097 for transfer fees (label/institutionId taken from the caller instead
+ * of a Payable, since a transfer has no bill/debt to read them from).
  *
  * ADR-046 fix: the fee is PAIRED to its payment via `split_group_id` (never via
  * linked_bill_id/linked_debt_id) so cycle math — clearedSum, state derivation,
  * debt balance reversal — never sees it. That keeps clearing, reversing and
  * deleting atomic: any operation on the payment propagates to its fee.
  */
-async function insertFeeTransaction(
+export async function insertFeeTransaction(
   householdId: string | null | undefined,
-  p: Payable,
+  /** e.g. a bill/debt's name, or a transfer's description. Used in "Fee: <label>". */
+  label: string,
+  /** e.g. a bill/debt's institution_id, or a transfer's from-account institution. */
+  institutionId: string | null | undefined,
   accountId: string,
   fee: number | undefined,
   status: "pending" | "cleared",
-  /** Shared with the payment row so the pair stays atomic (ADR-046). */
+  /** Shared with the paired row(s) so the group stays atomic. */
   splitGroupId?: string | null,
-  /** Matches the paired payment's date; defaults to today when omitted. */
+  /** Matches the paired row's date; defaults to today when omitted. */
   date?: string,
 ) {
   if (!hasFee(fee)) return;
@@ -534,12 +542,12 @@ async function insertFeeTransaction(
     category_id: feeCatId ?? null,
     amount: -amt,
     status,
-    description: `Fee: ${p.name}`,
+    description: `Fee: ${label}`,
     transaction_date: date || todayISO(),
-    // Paired to the payment, NOT linked to the payable — see ADR-046 note above.
+    // Paired to the payment/transfer, NOT linked to the payable — see ADR-046 note above.
     split_group_id: splitGroupId ?? null,
-    // ADR-065: inherit the payable's own institution, same as the payment row.
-    institution_id: p.institution_id,
+    // ADR-065: inherit the paired row's own institution.
+    institution_id: institutionId,
   });
   if (error) throw error;
 }
@@ -560,10 +568,11 @@ async function clearPairedFees(splitGroupId: string | null | undefined) {
 }
 
 /**
- * Delete every fee row paired with a payment (same split_group_id). Called on
- * undo/reset so a reversed payment takes its fee with it.
+ * Delete every fee row paired with a payment or transfer (same
+ * split_group_id). Called on undo/reset (and ADR-097 transfer delete) so a
+ * reversed payment/transfer takes its fee with it.
  */
-async function deletePairedFees(splitGroupId: string | null | undefined) {
+export async function deletePairedFees(splitGroupId: string | null | undefined) {
   if (!splitGroupId) return;
   const { error } = await supabase
     .from("transactions")
@@ -650,7 +659,7 @@ export function useMarkSubmitted() {
       });
       if (error) throw error;
 
-      await insertFeeTransaction(householdId, p, accountId, fee, "pending", groupId, date);
+      await insertFeeTransaction(householdId, p.name, p.institution_id, accountId, fee, "pending", groupId, date);
 
       const owed = payableRemainingOwed(p) - amt;
       return owed > 0.005 ? { remaining_owed: owed } : {};
@@ -720,7 +729,7 @@ export function useMarkCleared() {
           institution_id: p.institution_id,
         });
         if (error) throw error;
-        await insertFeeTransaction(householdId, p, accountId, fee, "cleared", groupId, date);
+        await insertFeeTransaction(householdId, p.name, p.institution_id, accountId, fee, "cleared", groupId, date);
       }
 
       return result;

@@ -137,6 +137,8 @@ export function AddTransactionFab() {
   const [fromAccountId, setFromAccountId] = useState("");
   const [toAccountId, setToAccountId] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
+  /** ADR-097: optional extra amount debited only from the from-account. */
+  const [transferFee, setTransferFee] = useState("");
   const [transferDescription, setTransferDescription] = useState("");
   /** ADR-064: one optional category for the transfer pair as a whole. */
   const [transferCategoryId, setTransferCategoryId] = useState(NO_CATEGORY);
@@ -183,6 +185,7 @@ export function AddTransactionFab() {
     setFromAccountId("");
     setToAccountId("");
     setTransferAmount("");
+    setTransferFee("");
     setTransferDescription("");
     setTransferCategoryId(NO_CATEGORY);
   }
@@ -205,6 +208,8 @@ export function AddTransactionFab() {
       toast.error("From and to accounts must be different");
       return;
     }
+    const fee = Number(transferFee) > 0 ? Number(transferFee) : undefined;
+    const fromAccount = accounts.find((a) => a.id === fromAccountId);
     try {
       await saveTransfer.mutateAsync({
         fromAccountId,
@@ -213,6 +218,8 @@ export function AddTransactionFab() {
         description: transferDescription.trim() || null,
         transferDate: txDate,
         categoryId: transferCategoryId === NO_CATEGORY ? null : transferCategoryId,
+        fee,
+        feeInstitutionId: fromAccount?.institution_id ?? null,
       });
       toast.success("Transfer recorded");
       reset();
@@ -444,6 +451,26 @@ export function AddTransactionFab() {
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
                   />
+                </div>
+
+                {/* ADR-097: optional instant-transfer-style fee, e.g. Venmo. */}
+                <div className="space-y-2">
+                  <Label htmlFor="xfer-fee">Fee (optional)</Label>
+                  <Input
+                    id="xfer-fee"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    className="h-12"
+                    placeholder="0.00"
+                    value={transferFee}
+                    onChange={(e) => setTransferFee(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Charged to the from-account on top of the transfer amount — tracked
+                    separately as a fee, so the to-account only receives the amount above.
+                  </p>
                 </div>
 
                 <p className="text-xs text-muted-foreground">

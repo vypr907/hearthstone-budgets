@@ -140,3 +140,31 @@ describe("groupLedgerRows still collapses a paycheck group", () => {
     expect(entries[0].total).toBe(3160);
   });
 });
+
+// ADR-097: a split_group_id shared by no other row (e.g. a solo transfer fee,
+// paired to its transfer via split_group_id rather than transfer_group_id)
+// isn't a real split — must render like any other plain, ungrouped row.
+describe("groupLedgerRows treats a solo split_group_id as ungrouped (ADR-097)", () => {
+  it("a lone row with a split_group_id is not marked isSplit", () => {
+    const solo = row({ split_group_id: "fee-pair", amount: -3 });
+    const entries = groupLedgerRows([solo]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].isSplit).toBe(false);
+    expect(entries[0].key).toBe(solo.id);
+    expect(entries[0].rows).toEqual([solo]);
+  });
+
+  it("a real split group and an unrelated solo split_group_id row are classified independently", () => {
+    const splitA = row({ account_id: "a", split_group_id: "split-1", category_id: "c1" });
+    const splitB = row({ account_id: "a", split_group_id: "split-1", category_id: "c2" });
+    const soloFee = row({ split_group_id: "fee-pair", amount: -3 });
+    const entries = groupLedgerRows([splitA, splitB, soloFee]);
+    expect(entries).toHaveLength(2);
+    const grouped = entries.find((e) => e.key === "split-1")!;
+    expect(grouped.isSplit).toBe(true);
+    expect(grouped.rows).toHaveLength(2);
+    const solo = entries.find((e) => e.key === soloFee.id)!;
+    expect(solo.isSplit).toBe(false);
+    expect(solo.rows).toEqual([soloFee]);
+  });
+});
