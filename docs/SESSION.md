@@ -119,8 +119,57 @@
     institution-less by design (the $332.83 non-Eats "Uber" ride charge —
     not confirmed to be UberEats specifically), 1 got tagged to the existing
     UberEats institution (the $59.75 dining Uber charge, per the user).
-  - Not yet run: this is real "Our Household" data and the Supabase MCP is
-    read-only, so the user needs to run the migration in the Supabase SQL
-    Editor themselves, then the verify script.
-  - Next step: user runs the migration + verify script; re-confirm via MCP
-    afterward.
+  - User ran the migration in the Supabase SQL Editor. Re-verified all 5
+    verify-script checks plus a full re-run of the reconciler against a
+    fresh live snapshot — 161 rows added exactly as expected, the $1,254.45
+    outlier and Milestone payment landed correctly, all 4 institutions
+    created exactly once, and only the deliberately-excluded Rent row
+    remained unmatched. Committed and pushed (`f5d51fc`).
+
+- **Bug found post-commit: 13 duplicate inserts, reported by the user**
+  (North Pole Alehouse "$9 drinks with MK" already existed, migration added
+  a second "SQ *NORTH POLE ALEHOUS" row for it). Root cause: the migration's
+  matching used a ±1 day date tolerance to decide "already logged," but real
+  Venmo card purchases can clear 2-5 days after the date the household
+  entered manually — so 13 CSV events that were genuinely already in the
+  ledger (just dated a few days differently than Venmo's own statement)
+  looked "missing" and got re-inserted.
+  - Found and fixed the *right* set through several failed approaches, worth
+    recording so the mistake isn't repeated: (1) naive amount+institution
+    proximity search over-triggered on repeat merchants (Pixel Flow's
+    frequent $2.10 charges) — too noisy; (2) widening the matcher's date
+    window naively let unrelated same-amount rows "steal" matches meant for
+    a different merchant (a random -$20 purchase almost got confused for the
+    unique Milestone debt payment); (3) bucket-counting by amount alone
+    conflated coincidentally-equal amounts across unrelated merchants; (4) a
+    "prefer oldest row" tie-break *sounded* right but picked a wrong pairing
+    for repeat merchants (McDonald's $6.70) because it ignored date
+    proximity entirely. The fix that finally held up: bucket by
+    (institution_id, amount), then within each bucket let pre-existing rows
+    claim their closest-date real CSV event *before* migration rows are
+    considered — cross-validated by simulating the removal and re-running
+    the audit twice (zero duplicates, zero new gaps, stable across ±5/±15/
+    ±30 day windows).
+  - Also caught a real transcription typo while validating: the audit
+    script had the wrong id for the "Little Owl Cafe" institution (copy
+    error, one hex group wrong) — harmless here (no migration row existed
+    for that merchant to misclassify) but was quietly causing 2 false
+    "unresolved" rows in the sanity check. Fixed in both the throwaway audit
+    script and the permanent tool.
+  - Result: `scripts/migrations/2026-09-08-venmo-reconcile-dedupe.sql` (+
+    `.verify.sql`) — 13 deletes, one per confirmed duplicate, each with a
+    comment identifying its pre-existing counterpart. Not yet run.
+  - **Permanently fixed the reusable tool** (`scripts/reconcile-venmo-csv.mjs`,
+    meant for future monthly reconciliation passes) so this can't recur the
+    same way: widened its window from ±1 to ±5 days, added an
+    institution_id constraint for purchase-type CSV rows (extensible
+    `MERCHANT_INSTITUTIONS` table in the script — add new merchants there as
+    they show up in future statements), and fixed the tie-break to prefer
+    closest date rather than array order or creation time. Documented a
+    known residual limitation in the tool's own docblock: very frequent
+    same-amount repeat charges in one statement can still occasionally
+    produce an over-cautious false "missing" flag (never a false match) due
+    to single-pass chronological processing rather than a fully optimal
+    bipartite match — call out for a quick manual glance, not auto-trusted.
+  - Next step: user reviews and runs the dedupe migration + verify script;
+    re-confirm via MCP afterward, same as the original migration.
