@@ -33,3 +33,8 @@ not tasks:
   more months behind under-reports until each due day passes. A full fix needs
   `computeArrears` to read the linked transaction ledger — a larger signature
   change, deferred as its own task.
+- **Transfer titles ("Source -> Destination") only render on the
+  Transactions screen** (ADR-098). `app.accounts.tsx`'s two per-account
+  transaction lists still show the plain description/place title — they only
+  have one account's rows in scope, not the cross-account list needed to
+  find the other leg. Revisit if that gap turns out to matter in practice.

@@ -1,3 +1,153 @@
+## 2026-09-09 — Bugfix: GCI bill stuck "Partial" after a manual mark-paid
+
+* GCI (a variable-amount bill) showed $60.48 still owed and status Partial
+  right after being marked paid for the full $64.51 charge. Root cause:
+  `bills.amount` (the standing figure that pre-fills the "Amount owed this
+  cycle" prompt) was stale at $124.99 and wasn't overwritten at submit time,
+  so `ensureCycleAmount()` (`src/lib/payments.ts` — only ever writes
+  `cycle_amount_due` when it's null, never overwrites an existing value)
+  locked the cycle target at $124.99 instead of $64.51. Not a code bug — the
+  variable-bill prompt is designed to be edited per cycle (ADR-018/019); this
+  cycle it wasn't.
+* Fix applied as a data migration
+  (`scripts/migrations/2026-09-09-gci-cycle-fix.sql`): resets
+  `cycle_paid_to_date`/`cycle_amount_due`, advances `next_due_date` one month,
+  and tags the payment's `resolved_cycle_due_date` — the same resolve
+  `applyClearedPayment()` would have performed with the correct target. Run
+  and verified live. `bills.amount` intentionally left at $124.99 per the
+  user, since GCI's real amount varies every cycle anyway.
+
+## 2026-09-09 — Classic Checking (USAA) + USAA Savings reconciliation
+
+* Reconciled both accounts against direct USAA bank exports. New reusable
+  `scripts/reconcile-usaa-csv.mjs`, reusing the Venmo reconciler's date-window
+  + subset-sum matching algorithm for a simpler CSV shape (plain dates, no fee
+  column). Found and fixed 2 merchant-regex false negatives while tuning (an
+  over-broad `Tilt` rule hid real transfer-leg matches; an `ATT PAYMENT` rule
+  matched inside an overdraft fee's own description, mistagging it).
+* Interviewed the user through every real discrepancy: two GCI linked-bill
+  payments (8/20 $385.52 retry after an 8/4 bounce+reversal, 9/8 $64.51) and
+  one Flex bill payment (7/16 $14.99) left for the user to mark paid in-app
+  rather than raw-inserted, since a ledger-only insert can't update a bill's
+  `cycle_paid_to_date`/`next_due_date` the way the app's own payment flow
+  does; a 6-line "$100 MoneyLion" CSV batch confirmed to be the same $600
+  advance already logged; an 8/13 paycheck corrected from $1,810.00 to
+  $1,809.38.
+* Mid-review discovery: the account's whole 7/16–7/17 "missing activity"
+  cluster turned out to be real transfers between Classic Checking and USAA
+  Savings ($500 and $105 on 7/16, a $254.60 overdraft-protection pull on
+  7/17) once the user supplied a second export for the savings account —
+  logged as proper transfer pairs (ADR-056), titles auto-rendering via
+  ADR-098. USAA Savings itself had one more gap, an untracked $60 P&C
+  insurance payment.
+* Result: `scripts/migrations/2026-09-09-usaa-reconcile.sql` (+
+  `.verify.sql`) — 1 correction, 9 plain-transaction inserts, 3 transfer
+  pairs. Run and verified live.
+
+## 2026-09-09 — ADR-100: transactions.cleared_date
+
+* Transactions gain a second date. `transaction_date` keeps meaning "when
+  logged/submitted"; new nullable `cleared_date` is when it actually posted
+  at the bank. Set automatically equal to the entered date for anything
+  written directly as cleared (manual entries, transfers, splits, reversals,
+  historical logged payments); explicitly prompted (default today, editable)
+  only at the pending→cleared transition — previously that transition
+  (`useMarkCleared`) flipped `status` without recording a date at all.
+* The pending→cleared checkbox on Bills/Debts/Everything (previously
+  instant, no dialog) now shows a small "Cleared date" confirm first; the
+  Pending screen's existing confirm gained the same field inline; the
+  Transactions detail views gained an editable "Cleared date" field so it
+  can be corrected after the fact. Ledger rows show both dates when they
+  differ.
+* `src/lib/balances.ts` / `src/lib/net-worth.ts` now compare a cleared
+  transaction's `cleared_date` (not `transaction_date`) against a balance
+  anchor's `as_of_date` — the actual fix for bank-matching accuracy.
+  Deliberately unchanged: cycle-window attribution (`ledger-state.ts`) and
+  Dashboard/Spending period bucketing stay on `transaction_date`.
+* Migration `scripts/migrations/2026-09-09-transactions-cleared-date.sql`
+  (adds the column, backfills every existing cleared row) run and verified
+  live — 0 cleared rows missing a `cleared_date`.
+
+## 2026-09-09 — ADR-098/099: transfer titles, institution type taxonomy, Fix Institution Logins
+
+* **ADR-097 addendum** — opening a transfer's fee row directly now shows a
+  clickable link back to the transfer (previously only the transfer→fee
+  direction existed).
+* **ADR-098** — a transfer transaction (either leg) now always titles itself
+  "`<Source> → <Destination>`"; a manual description is kept as a smaller
+  subtitle instead of replacing the title. Wired into the Transactions
+  screen's list and detail view; deliberately not wired into Accounts'
+  per-account transaction lists (noted in `docs/TODO.md`).
+* **ADR-099** — added 13 institution types (`restaurant`, `grocery_store`,
+  `gas_station`, `liquor_store`, `department_store`, `specialty_store`,
+  `venue`, `game`, `app`, `dispensary`, `personal_care`, `employer`,
+  `delivery`), reclassifying ~55 institutions out of a catch-all `other`. New
+  `/app/fix-institution-logins` screen lists institutions with no
+  `login_url`, alongside the existing Fix Places screen.
+* **Bugfix found running the reclass migration**: `institution_type` turned
+  out to be DB-enforced via a check constraint scoped to the original 9
+  values — both ADR-099 and a code comment had incorrectly assumed no DB
+  constraint existed, never verified live before writing. Fixed with a
+  constraint-widening migration (run first), `docs/SCHEMA.md` corrected to
+  document the constraint. All migrations run and verified live.
+
+## 2026-09-09 — Steph Checking transfer + Nature's Releaf reconciliation follow-up
+
+* Removed a leftover duplicate "Xfer to Steph" transfer (8/1) predating the
+  Venmo dedupe passes below.
+* Rebuilt all 4 Nature's Releaf ATM cash-out dates as 3-line category splits
+  (cash + Nature's Releaf ATM fee + Venmo network fee) instead of lump-sum
+  rows, and collapsed a genuine duplicate (the 8/30 event had been recorded
+  twice — an incomplete lump on 8/30 and a correct split mis-dated 8/31).
+  Both migrations run and verified live.
+
+## 2026-09-08 — Venmo statement reconciliation (Jul 1 – Sep 8) + two dedupe passes
+
+* Compared 3 Venmo monthly statement CSVs against the "Venmo - Steven"
+  account's 148 logged transactions via a new reusable tool
+  (`scripts/reconcile-venmo-csv.mjs`, ±day date-window + subset-sum amount
+  matching). **Key finding**: all three Venmo statements fail to
+  self-balance (the CSV export omits some incoming activity from its
+  itemized list while still reflecting it in the balance) — per the user,
+  this pass only reconciles outgoing activity, where the CSVs are fully
+  itemized and trustworthy.
+* Interviewed the user through every real discrepancy rather than guessing:
+  category defaults for ambiguous multi-purpose merchants, ~15 per-merchant
+  corrections, destination accounts for every transfer, 6 merchants needing
+  new institutions (4 created, 1 left institution-less, 1 tagged to an
+  existing institution), a matcher-tolerance bug caught and fixed mid-session
+  (an unrelated two-charge sum coincidentally matched a transfer within the
+  old <1¢ tolerance). Result: 142-statement migration, run and verified live,
+  committed (`f5d51fc`).
+* **Dedupe pass 1** (bug found post-commit): 13 duplicate inserts, root
+  caused to a ±1-day matching tolerance that was too tight for real Venmo
+  card-clearing delays (2–5 days). Fixed the reusable tool at the source
+  (widened to ±5 days, added a per-merchant institution constraint to stop
+  wide-window false matches, fixed the tie-break to prefer closest date) so
+  the mistake can't recur; 13-row dedupe migration run and verified live.
+* **Dedupe pass 2** (found while investigating a wrong account balance): 3
+  more duplicates the first pass's single-row matching couldn't see, because
+  the real event was already logged in a *different shape* — a bill+fee pair
+  totaling the same amount, a lump-sum row instead of two CSV line items, and
+  (Nature's Releaf) a household-confirmed $2.50 network fee the CSV doesn't
+  itemize under its own line. 6-row dedupe migration run and verified live;
+  recomputed account balance moved closer to the real figure but not exact —
+  flagged as a residual open thread, not chased further this session.
+
+## 2026-09-08 — ADR-097: Optional fee on manual Transfers
+
+* Transfers can now carry an optional fee (Venmo-style instant-transfer fee,
+  where more leaves the source account than lands at the destination) —
+  reuses ADR-046's bill/debt fee mechanism verbatim: a third, unlinked
+  transaction on the from-account, paired via `split_group_id` (never
+  `transfer_group_id`, which stays a clean two-row pair).
+* Same-session addendum: fixed a general bug where any `split_group_id`
+  shared by exactly one row (not just a transfer fee) was misclassified as a
+  real split everywhere it was checked, causing a cosmetic "Split · 1
+  categories" wart; and added the ability to add/change/remove a transfer's
+  fee after the fact from its own detail view, not just at creation time.
+* Verified end-to-end against the TEST household (ADR-083) both times.
+
 ## 2026-09-04 — Dashboard Simple view: Income card polish + institution-breakdown bugfix (ADR-096 addenda)
 
 * **Fixed**: the Spend section's institution-by-institution breakdown was
