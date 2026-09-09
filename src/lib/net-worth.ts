@@ -12,7 +12,10 @@ export type NetWorthPoint = {
 /**
  * Balance for one account as of `date`: the most recent snapshot on or before
  * that date (or starting_balance when there is none), plus every cleared
- * transaction dated after that snapshot and on or before `date`.
+ * transaction that had posted by `date` — ADR-100: compared by `cleared_date`
+ * (falling back to `transaction_date` for any row that predates the feature),
+ * not the date it was logged, so this matches what the bank itself would have
+ * shown as of that date.
  */
 export function balanceAsOf(
   account: Account,
@@ -34,7 +37,7 @@ export function balanceAsOf(
   for (const t of transactions) {
     if (t.account_id !== account.id) continue;
     if (t.status !== "cleared") continue;
-    const d = t.transaction_date.slice(0, 10);
+    const d = (t.cleared_date ?? t.transaction_date).slice(0, 10);
     if (d > day) continue;
     if (since && d <= since) continue;
     delta += Number(t.amount || 0);

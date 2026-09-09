@@ -36,6 +36,9 @@ import { useMarkCleared, toPayable } from "@/lib/payments";
 import { priorCyclesArrears } from "@/lib/arrears";
 import { formatMoney } from "@/lib/format";
 import { groupLedgerRows, type LedgerEntry } from "@/lib/split-groups";
+import { todayISO } from "@/lib/snapshot";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/app/pending")({
   head: () => ({
@@ -74,6 +77,9 @@ function PendingPage() {
   const [groupBy, setGroupBy] = useState("none");
   const [confirm, setConfirm] = useState<LedgerEntry | null>(null);
   const [busy, setBusy] = useState(false);
+  // ADR-100: the date this actually clears — defaults to today, reset each
+  // time the confirm dialog opens.
+  const [clearDate, setClearDate] = useState(todayISO());
 
   const accountName = useMemo(() => {
     const m: Record<string, string> = {};
@@ -147,7 +153,7 @@ function PendingPage() {
     return null;
   }
 
-  async function clearEntry(e: LedgerEntry) {
+  async function clearEntry(e: LedgerEntry, clearedDate: string) {
     const t = e.head;
     setBusy(true);
     try {
@@ -159,6 +165,7 @@ function PendingPage() {
         await markCleared.mutateAsync({
           payable,
           accountId: t.account_id!,
+          clearedDate,
           priorArrears: priorCyclesArrears(payable),
         });
       } else if (t.linked_debt_id && debtById[t.linked_debt_id]) {
@@ -166,6 +173,7 @@ function PendingPage() {
         await markCleared.mutateAsync({
           payable,
           accountId: t.account_id!,
+          clearedDate,
           priorArrears: priorCyclesArrears(payable),
         });
       } else {
@@ -175,6 +183,7 @@ function PendingPage() {
             id: row.id,
             amount: Number(row.amount),
             status: "cleared",
+            cleared_date: clearedDate,
           });
         }
       }
@@ -252,7 +261,10 @@ function PendingPage() {
                         <button
                           type="button"
                           className="flex w-full items-center justify-between gap-3 p-4 text-left"
-                          onClick={() => setConfirm(e)}
+                          onClick={() => {
+                            setClearDate(todayISO());
+                            setConfirm(e);
+                          }}
                         >
                           <div className="min-w-0 space-y-1">
                             <p className="truncate text-sm font-semibold">
@@ -306,13 +318,23 @@ function PendingPage() {
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="pending-clear-date">Cleared date</Label>
+            <Input
+              id="pending-clear-date"
+              type="date"
+              className="h-11"
+              value={clearDate}
+              onChange={(e) => setClearDate(e.target.value)}
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={busy}
               onClick={(ev) => {
                 ev.preventDefault();
-                if (confirm) void clearEntry(confirm);
+                if (confirm) void clearEntry(confirm, clearDate);
               }}
             >
               {busy ? "Clearing…" : "Mark cleared"}

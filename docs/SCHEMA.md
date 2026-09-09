@@ -1000,3 +1000,35 @@ so `deriveCycleInfo`-style ledger-state logic (a stripped-down version lives in
 `src/lib/auto-transfers.ts`'s `deriveAutoTransferState`) can find it and compare against
 the auto-transfer's due amount, the same way it does for a bill's single-sided payment.
 The debit (source) leg stays a plain, unlinked transfer leg like any other transfer.
+
+## transactions.cleared_date (ADR-100)
+
+```sql
+transactions (
+    ...
+    cleared_date date  -- ADR-100: when this actually posted/cleared at the
+                        -- bank; null for a still-pending row
+)
+```
+
+`transaction_date` means "when this was logged/initiated/submitted" and never
+changes on a later status transition. `cleared_date` is the date a bank
+statement would actually show — set automatically equal to the entered date
+whenever a row is written directly with `status: 'cleared'` (manual cleared
+entries, transfers, splits, reversals, corrections, historical logged
+payments), and explicitly prompted for (defaulting to today, editable)
+specifically at the pending → cleared transition — the one moment "today" is
+real new information distinct from the row's own `transaction_date`.
+
+Backfilled for every pre-existing `cleared` row (`cleared_date =
+transaction_date`) by the migration that added the column, so it's reliably
+non-null for every cleared row going forward — `src/lib/balances.ts` and
+`src/lib/net-worth.ts` still keep a defensive `?? transaction_date` fallback,
+but it should never be load-bearing post-backfill. Both of those now compare
+a cleared transaction's `cleared_date` (not `transaction_date`) against a
+balance anchor's `as_of_date`, matching what the bank itself would have
+posted by that date. Deliberately **not** used by `src/lib/ledger-state.ts`'s
+`deriveCycleInfo()` (cycle-window attribution stays on `transaction_date` —
+which cycle a payment resolves reflects when it was recorded, not whenever
+the bank got around to posting it) or by Dashboard/Spending's period
+bucketing, for the same reason.

@@ -274,6 +274,8 @@ export type Transaction = {
   institution_id?: string | null;
   /** ADR-075: due date this transaction's clear resolved, when it resolved one. */
   resolved_cycle_due_date?: string | null;
+  /** ADR-100: when this actually posted/cleared at the bank — null until cleared. */
+  cleared_date?: string | null;
   created_at: string;
   updated_at: string;
 };

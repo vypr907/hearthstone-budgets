@@ -66,6 +66,15 @@ export type PayInput = {
   /** Payment date; defaults to today when omitted — lets a payment be backdated. */
   date?: string;
   /**
+   * ADR-100: the date this payment actually cleared/posted — only meaningful
+   * for useMarkCleared, and only when clearing a row that was already
+   * pending (the one moment "today" is real new information distinct from
+   * `date`, which is that row's original transaction_date). Defaults to
+   * today when omitted. A direct clear (no prior pending row) has no
+   * separate prompt for this — `date` is used for both columns.
+   */
+  clearedDate?: string;
+  /**
    * ADR-076: the payable's arrears owed strictly from cycles before the
    * current one (`priorCyclesArrears()`, arrears.ts) — only meaningful for
    * useMarkCleared, which threads it into applyClearedPayment's overflow
@@ -532,6 +541,8 @@ export async function insertFeeTransaction(
   splitGroupId?: string | null,
   /** Matches the paired row's date; defaults to today when omitted. */
   date?: string,
+  /** ADR-100: when inserted directly as "cleared", the date it cleared — defaults to `date`. Ignored for a "pending" insert. */
+  clearedDate?: string,
 ) {
   if (!hasFee(fee)) return;
   const amt = Math.abs(Number(fee) || 0);
@@ -544,6 +555,7 @@ export async function insertFeeTransaction(
     status,
     description: `Fee: ${label}`,
     transaction_date: date || todayISO(),
+    cleared_date: status === "cleared" ? (clearedDate || date || todayISO()) : null,
     // Paired to the payment/transfer, NOT linked to the payable — see ADR-046 note above.
     split_group_id: splitGroupId ?? null,
     // ADR-065: inherit the paired row's own institution.
@@ -556,11 +568,11 @@ export async function insertFeeTransaction(
  * Clear every pending fee row paired with a payment (same split_group_id).
  * Called when a submitted payment is marked cleared so the fee clears too.
  */
-async function clearPairedFees(splitGroupId: string | null | undefined) {
+async function clearPairedFees(splitGroupId: string | null | undefined, clearedDate: string) {
   if (!splitGroupId) return;
   const { error } = await supabase
     .from("transactions")
-    .update({ status: "cleared" })
+    .update({ status: "cleared", cleared_date: clearedDate })
     .eq("status", "pending")
     .eq("split_group_id", splitGroupId)
     .ilike("description", "Fee:%");
@@ -684,16 +696,21 @@ export function useMarkCleared() {
       cycleAmount,
       fee,
       date,
+      clearedDate,
       priorArrears,
     }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const requested = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       const existing = await findLinkedTransaction(p, "pending");
       const clearedAmount = existing ? Math.abs(Number(existing.amount ?? requested)) : requested;
+      // ADR-100: the date this actually cleared — explicit `clearedDate` when
+      // clearing an already-pending row, else the entered `date` (a direct
+      // clear/insert has one date shared by both columns).
+      const effectiveClearedDate = clearedDate || date || todayISO();
 
       // Update the bill/debt FIRST: if that fails we bail out before touching the
       // ledger, instead of stranding a cleared transaction with no effect.
-      const result = await applyClearedPayment(p, clearedAmount, priorArrears ?? 0, date || todayISO());
+      const result = await applyClearedPayment(p, clearedAmount, priorArrears ?? 0, effectiveClearedDate);
 
       // ADR-075: this write happens after applyClearedPayment already ran, so
       // it's not caught by that function's own bulk tag — tag it here if this
@@ -703,13 +720,14 @@ export function useMarkCleared() {
           .from("transactions")
           .update({
             status: "cleared",
+            cleared_date: effectiveClearedDate,
             ...(result.resolved_due_date ? { resolved_cycle_due_date: result.resolved_due_date } : {}),
           })
           .eq("id", existing.id);
         if (error) throw error;
         // ADR-046: a fee submitted alongside this payment is still pending —
         // clear it too so it doesn't strand when the payment clears.
-        await clearPairedFees(existing.split_group_id);
+        await clearPairedFees(existing.split_group_id, effectiveClearedDate);
       } else {
         // Direct clear (no prior submit): insert a cleared payment, paired with
         // any fee entered on this clear via split_group_id. No fee → no group.
@@ -722,6 +740,7 @@ export function useMarkCleared() {
           status: "cleared",
           description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
           transaction_date: date || todayISO(),
+          cleared_date: effectiveClearedDate,
           [linkColumn(p.kind)]: p.id,
           split_group_id: groupId,
           resolved_cycle_due_date: result.resolved_due_date ?? null,
@@ -729,7 +748,17 @@ export function useMarkCleared() {
           institution_id: p.institution_id,
         });
         if (error) throw error;
-        await insertFeeTransaction(householdId, p.name, p.institution_id, accountId, fee, "cleared", groupId, date);
+        await insertFeeTransaction(
+          householdId,
+          p.name,
+          p.institution_id,
+          accountId,
+          fee,
+          "cleared",
+          groupId,
+          date,
+          effectiveClearedDate,
+        );
       }
 
       return result;
@@ -961,6 +990,7 @@ export function useReversePayment() {
         status: "cleared",
         description: `Reversed: ${payable.name} payment`,
         transaction_date: date || todayISO(),
+        cleared_date: date || todayISO(),
         [linkColumn(payable.kind)]: payable.id,
         institution_id: transaction.institution_id ?? payable.institution_id,
       });
@@ -1060,6 +1090,9 @@ export function useCorrectPayment() {
         .update({
           amount: Number(transaction.amount) < 0 ? -amount : amount,
           transaction_date: date,
+          // ADR-100: this only ever corrects an already-cleared row with one
+          // date field — move cleared_date along with it.
+          cleared_date: date,
           account_id: accountId,
         })
         .eq("id", transaction.id);
@@ -1138,6 +1171,8 @@ export type EditLinkedTransactionInput = {
   amount: number;
   date: string;
   status: "pending" | "cleared";
+  /** ADR-100: the date this actually cleared — only meaningful when `status` is "cleared". */
+  clearedDate?: string | null;
   accountId: string | null;
   categoryId?: string | null;
   institutionId?: string | null;
@@ -1178,15 +1213,22 @@ export function useEditLinkedTransaction() {
           if (untagError) throw untagError;
         }
       }
+      // ADR-100: the date this actually cleared — the edit form's own
+      // clearedDate when given, else whatever the row already had (a plain
+      // amount/account edit on an already-cleared row), else the entered
+      // date (a fresh pending→cleared transition with no explicit pick).
+      const effectiveClearedDate = input.clearedDate || transaction.cleared_date || input.date;
+
       if (willClear) {
         const mid = await fetchPayable(kind, payableId);
-        await applyClearedPayment(mid, newAmount, 0, input.date);
+        await applyClearedPayment(mid, newAmount, 0, effectiveClearedDate);
       }
 
       const patch: Record<string, unknown> = {
         amount: sign * newAmount,
         transaction_date: input.date,
         status: input.status,
+        cleared_date: willClear ? effectiveClearedDate : null,
         account_id: input.accountId,
         description: input.description ?? null,
       };
@@ -1336,6 +1378,7 @@ export function useLogDebtPayment() {
           status,
           description: `Debt payment · ${debt.name}`,
           transaction_date: date,
+          cleared_date: status === "cleared" ? date : null,
           linked_debt_id: debt.id,
           split_group_id: groupId,
           resolved_cycle_due_date: resolvedDueDate,
@@ -1356,6 +1399,7 @@ export function useLogDebtPayment() {
           // (clearPairedFees / deletePairedFees) so they follow the payment.
           description: `Fee: ${debt.name} · ${l.type}${l.note ? ` — ${l.note}` : ""}`,
           transaction_date: date,
+          cleared_date: status === "cleared" ? date : null,
           split_group_id: groupId,
           institution_id: p.institution_id,
         }));
@@ -1446,6 +1490,7 @@ export function useLogBillPayment() {
         status,
         description: `Bill payment · ${bill.name}`,
         transaction_date: date,
+        cleared_date: status === "cleared" ? date : null,
         linked_bill_id: bill.id,
         resolved_cycle_due_date: resolvedDueDate,
         institution_id: p.institution_id,

@@ -659,6 +659,8 @@ export function useSaveSplitTransaction() {
       splitGroupId?: string | null;
       accountId: string;
       transactionDate: string;
+      /** ADR-100: the date this cleared, when `status` is "cleared" — defaults to `transactionDate`. */
+      clearedDate?: string;
       description: string | null;
       status: "pending" | "cleared";
       lines: SplitLine[];
@@ -676,6 +678,8 @@ export function useSaveSplitTransaction() {
       // of a 1-row group (bug fix: 1-line groups couldn't be edited again,
       // since the split editor requires >=2 lines to save).
       const singleLine = args.lines.length === 1;
+      const clearedDate =
+        args.status === "cleared" ? args.clearedDate || args.transactionDate : null;
       const rows = args.lines.map((l) => ({
         household_id: householdId,
         account_id: args.accountId,
@@ -684,6 +688,7 @@ export function useSaveSplitTransaction() {
         status: args.status,
         description: args.description,
         transaction_date: args.transactionDate,
+        cleared_date: clearedDate,
         split_group_id: singleLine ? null : groupId,
       }));
       const { error } = await supabase.from("transactions").insert(rows);
@@ -961,6 +966,8 @@ export function useSaveTransfer() {
         status: "cleared" as const,
         description: args.description,
         transaction_date: args.transferDate,
+        // ADR-100: transfers are always inserted cleared — one date for both columns.
+        cleared_date: args.transferDate,
         transfer_group_id: groupId,
         category_id: args.categoryId ?? null,
       };

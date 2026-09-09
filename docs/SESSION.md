@@ -336,3 +336,56 @@
     since real spending/time has moved since it was noted. Flagged as an open
     thread — revisit if the household wants to chase the account-balance
     discrepancy again.
+
+- **Two dates on transactions: transaction_date vs. cleared_date (ADR-100,
+  2026-09-09).** Planned via `/plan`, approved, implemented. New nullable
+  `transactions.cleared_date date` — `transaction_date` keeps meaning "when
+  logged"; `cleared_date` is when it actually posted at the bank, matching
+  what a statement shows. Set automatically = the entered date for anything
+  written directly as cleared (manual entries, transfers, splits, reversals,
+  corrections, historical logged payments); explicitly prompted (default
+  today, editable) only at the pending → cleared transition, which is the one
+  moment that's genuinely new information.
+  - Confirmed live before writing anything: `useMarkCleared`
+    (`src/lib/payments.ts`) flips `status` on an already-pending row without
+    touching any date — a payment submitted 9/9, cleared 9/12, kept showing
+    9/9 forever.
+  - Code: `src/lib/payments.ts` (`useMarkCleared`, `clearPairedFees`,
+    `insertFeeTransaction`, `useEditLinkedTransaction`, `useReversePayment`,
+    `useCorrectPayment`, `useLogDebtPayment`, `useLogBillPayment` — every
+    write site that touches `transaction_date` now also resolves
+    `cleared_date`), `src/lib/data-hooks.ts` (`useSaveTransfer`,
+    `useSaveSplitTransaction`), `src/lib/supabase.ts` (`Transaction` type).
+  - UX change, called out explicitly: `src/lib/pay-flow.tsx`'s one-tap
+    pending→cleared checkbox (Bills/Debts/Everything) was instant with zero
+    dialog — it now shows a small "Cleared date" confirm (defaults to today)
+    first. `app.pending.tsx`'s existing "Mark cleared?" confirm gained the
+    same field inline (no new dialog needed there). `TransactionDetail`/
+    `SplitTransactionDetail`/`LinkedGroupDetail` (`app.transactions.tsx`)
+    each gained an editable "Cleared date" field next to Status, so it can be
+    corrected after the fact too, not just set once.
+  - Display: ledger list rows and the two per-account activity lists
+    (`app.transactions.tsx`, `app.accounts.tsx`) show `cleared_date` next to
+    `transaction_date` only when set and different — avoids showing the same
+    date twice for the common case.
+  - Balance math switched to match: `src/lib/balances.ts` (`computeBalances`)
+    and `src/lib/net-worth.ts` (`balanceAsOf`) now compare a cleared
+    transaction's `cleared_date` (not `transaction_date`) against a balance
+    anchor's `as_of_date` — the actual fix for bank-matching accuracy, per
+    the user's choice between that and a display-only rollout. Deliberately
+    NOT changed: `src/lib/ledger-state.ts`'s cycle-window attribution
+    (`deriveCycleInfo`) and Dashboard/Spending period bucketing both stay on
+    `transaction_date` — cycle/budget attribution should reflect when a
+    payment was recorded, not whenever the bank got around to posting it.
+  - Verified: `tsc --noEmit` clean, `vitest` 185/185 passing, `vite build`
+    clean (no route changes this time, `routeTree.gen.ts` untouched).
+    **Not verified in a live browser session** — no Claude-in-Chrome/
+    Playwright access; could not click through the new "Cleared date"
+    confirm dialogs or the edit-form fields against the TEST household.
+  - Migration `scripts/migrations/2026-09-09-transactions-cleared-date.sql`
+    (+ `.verify.sql`) — adds the column, backfills every existing `cleared`
+    row (`cleared_date = transaction_date`). Not yet run.
+  - Next step: user runs the migration, re-verify via MCP; user (or a future
+    session with browser access) smoke-tests: submit a payment pending
+    today, clear it a few days later with a picked date, confirm both dates
+    show in the ledger and the account balance reflects the cleared date.

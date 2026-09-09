@@ -71,6 +71,15 @@ export function usePayFlow() {
   const [feeValue, setFeeValue] = useState("");
   // Payment date, defaulting to today — lets a payment be backdated.
   const [dateValue, setDateValue] = useState(todayISO());
+  // ADR-100: confirm step for clearing an already-pending payment — the one
+  // moment a distinct "cleared date" (vs. the pending row's own date) is real
+  // new information. Defaults to today, editable.
+  const [confirmClear, setConfirmClear] = useState<{
+    payable: Payable;
+    accountId: string;
+    amount?: number;
+  } | null>(null);
+  const [clearDateValue, setClearDateValue] = useState(todayISO());
 
   const busy = submit.isPending || clear.isPending || undo.isPending || reset.isPending;
 
@@ -82,6 +91,7 @@ export function usePayFlow() {
     cycleAmount?: number,
     fee?: number,
     date?: string,
+    clearedDate?: string,
   ) {
     try {
       const res = (await (action === "submitted" ? submit : clear).mutateAsync({
@@ -91,6 +101,7 @@ export function usePayFlow() {
         cycleAmount,
         fee,
         date,
+        clearedDate,
         // ADR-076: only meaningful for "cleared" — submit never resolves a cycle.
         priorArrears: action === "cleared" ? priorCyclesArrears(payable) : undefined,
       })) as { next_due_date?: string | null; remaining_owed?: number } | undefined;
@@ -175,7 +186,10 @@ export function usePayFlow() {
         );
         return;
       }
-      void perform(payable, "cleared", accountId);
+      // ADR-100: confirm the cleared date (defaults to today) instead of
+      // clearing instantly — the account is already known here.
+      setClearDateValue(todayISO());
+      setConfirmClear({ payable, accountId });
       return;
     }
     // unpaid or partial: submit a new (possibly partial) payment.
@@ -227,6 +241,15 @@ export function usePayFlow() {
                 onClick={() => {
                   const c = choice!;
                   setChoice(null);
+                  // ADR-100: this picker is only ever reached to resolve an
+                  // unknown account while clearing a pending payment — route
+                  // through the cleared-date confirm instead of clearing
+                  // instantly (mirrors the known-account path in tap()).
+                  if (c.action === "cleared") {
+                    setClearDateValue(todayISO());
+                    setConfirmClear({ payable: c.payable, accountId: a.id, amount: c.amount });
+                    return;
+                  }
                   void perform(c.payable, c.action, a.id, c.amount, c.cycleAmount, c.fee, c.date);
                 }}
               >
@@ -467,6 +490,54 @@ export function usePayFlow() {
     </Dialog>
   );
 
+  // ADR-100: confirm the cleared date before actually clearing a pending
+  // payment — lightweight (just the date), distinct from the fuller
+  // amountPrompt dialog used for submitting a new pending payment.
+  const clearConfirm = (
+    <Dialog open={!!confirmClear} onOpenChange={(o) => !o && setConfirmClear(null)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Mark {confirmClear?.payable.name} cleared?</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="clear-date">Cleared date</Label>
+          <Input
+            id="clear-date"
+            type="date"
+            className="h-11"
+            value={clearDateValue}
+            onChange={(e) => setClearDateValue(e.target.value)}
+          />
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" className="h-12" onClick={() => setConfirmClear(null)}>
+            Cancel
+          </Button>
+          <Button
+            className="h-12"
+            disabled={busy}
+            onClick={() => {
+              const c = confirmClear!;
+              setConfirmClear(null);
+              void perform(
+                c.payable,
+                "cleared",
+                c.accountId,
+                c.amount,
+                undefined,
+                undefined,
+                undefined,
+                clearDateValue,
+              );
+            }}
+          >
+            {busy ? "Clearing…" : "Mark cleared"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   return {
     start,
     tap,
@@ -477,6 +548,7 @@ export function usePayFlow() {
         {picker}
         {amountPrompt}
         {resetConfirm}
+        {clearConfirm}
       </>
     ),
   };

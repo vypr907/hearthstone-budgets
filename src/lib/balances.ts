@@ -14,6 +14,13 @@ export type AccountBalanceInfo = {
  * Anchor = latest account_balances snapshot, else starting_balance.
  * Current  = anchor + cleared transactions dated after the anchor.
  * Spendable = anchor + cleared AND pending transactions after the anchor.
+ *
+ * ADR-100: a cleared transaction is compared by when it actually cleared
+ * (`cleared_date`), not when it was logged — matches what a bank statement
+ * would show as of the anchor's `as_of_date`. Falls back to `transaction_date`
+ * for any row that predates this feature (should be rare/never post-backfill).
+ * A pending transaction has no cleared_date by definition, so it stays on
+ * `transaction_date` — its only meaningful date.
  */
 export function computeBalances(
   accounts: Account[],
@@ -29,9 +36,14 @@ export function computeBalances(
     let pending = 0;
     for (const t of transactions) {
       if (t.account_id !== a.id) continue;
-      if (since && t.transaction_date.slice(0, 10) <= since) continue;
-      if (t.status === "cleared") cleared += Number(t.amount || 0);
-      else if (t.status === "pending") pending += Number(t.amount || 0);
+      if (t.status === "cleared") {
+        const d = (t.cleared_date ?? t.transaction_date).slice(0, 10);
+        if (since && d <= since) continue;
+        cleared += Number(t.amount || 0);
+      } else if (t.status === "pending") {
+        if (since && t.transaction_date.slice(0, 10) <= since) continue;
+        pending += Number(t.amount || 0);
+      }
     }
     out[a.id] = {
       anchor,

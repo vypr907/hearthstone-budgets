@@ -17,6 +17,7 @@ import {
   useDeleteSplitTransaction,
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
+import { todayISO } from "@/lib/snapshot";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -537,6 +538,10 @@ function TransactionsPage() {
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                         <span>{t.transaction_date}</span>
+                        {/* ADR-100: only worth a second date when it's set and differs. */}
+                        {t.cleared_date && t.cleared_date !== t.transaction_date ? (
+                          <span>· cleared {t.cleared_date}</span>
+                        ) : null}
                         {!perRow && t.account_id && accountName[t.account_id] ? (
                           <span>· {accountName[t.account_id]}</span>
                         ) : null}
@@ -691,6 +696,10 @@ export function TransactionDetail({
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
   const [status, setStatus] = useState("pending");
+  // ADR-100: the date this actually cleared — only meaningful (and shown)
+  // when status is "cleared". Seeded from the row's own cleared_date, or
+  // today when the edit flips status from pending to cleared.
+  const [clearedDate, setClearedDate] = useState("");
   const [accountId, setAccountId] = useState("none");
   const [categoryId, setCategoryId] = useState("none");
   // ADR-053: place/institution re-tag (Group 7 Part 3)
@@ -707,6 +716,7 @@ export function TransactionDetail({
     setDescription(transaction.description ?? "");
     setDate(transaction.transaction_date.slice(0, 10));
     setStatus(transaction.status ?? "pending");
+    setClearedDate(transaction.cleared_date?.slice(0, 10) ?? todayISO());
     setAccountId(transaction.account_id ?? "none");
     setCategoryId(transaction.category_id ?? "none");
     setInstitutionId(transaction.institution_id ?? "none");
@@ -837,6 +847,7 @@ export function TransactionDetail({
           amount: Math.abs(Number(amount)),
           date,
           status: status as "pending" | "cleared",
+          clearedDate: status === "cleared" ? clearedDate || todayISO() : null,
           accountId: accountId === "none" ? null : accountId,
           categoryId: categoryId === "none" ? null : categoryId,
           institutionId: institutionId === "none" ? null : institutionId,
@@ -852,6 +863,7 @@ export function TransactionDetail({
         status: status as "pending" | "cleared",
         description: description || null,
         transaction_date: date,
+        cleared_date: status === "cleared" ? clearedDate || todayISO() : null,
         account_id: accountId === "none" ? null : accountId,
         category_id: categoryId === "none" ? null : categoryId,
         institution_id: institutionId === "none" ? null : institutionId,
@@ -936,6 +948,9 @@ export function TransactionDetail({
             <DetailGrid>
               <DetailItem label="Amount" value={formatMoney(Number(transaction.amount))} />
               <DetailItem label="Date" value={transaction.transaction_date} />
+              {transaction.status === "cleared" && (
+                <DetailItem label="Cleared date" value={transaction.cleared_date ?? "—"} />
+              )}
               <DetailItem
                 label="Status"
                 value={
@@ -1075,6 +1090,17 @@ export function TransactionDetail({
                 </SelectContent>
               </Select>
             </div>
+            {status === "cleared" && (
+              <div>
+                <Label>Cleared date</Label>
+                <Input
+                  type="date"
+                  value={clearedDate}
+                  onChange={(e) => setClearedDate(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+            )}
             <div>
               <Label>Account</Label>
               <Select value={accountId} onValueChange={setAccountId}>
@@ -1202,6 +1228,8 @@ function SplitTransactionDetail({
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
   const [status, setStatus] = useState("cleared");
+  // ADR-100: shared by every line of the group, same as `date`.
+  const [clearedDate, setClearedDate] = useState("");
   const [accountId, setAccountId] = useState("");
 
   const [lastKey, setLastKey] = useState("");
@@ -1211,6 +1239,7 @@ function SplitTransactionDetail({
     setDescription(transaction.description ?? "");
     setDate(transaction.transaction_date.slice(0, 10));
     setStatus(transaction.status ?? "cleared");
+    setClearedDate(transaction.cleared_date?.slice(0, 10) ?? todayISO());
     setAccountId(transaction.account_id ?? "");
     setRows(
       lines.map((l) => ({
@@ -1237,6 +1266,7 @@ function SplitTransactionDetail({
         splitGroupId: groupId,
         accountId,
         transactionDate: date,
+        clearedDate: status === "cleared" ? clearedDate || todayISO() : undefined,
         description: description || null,
         status: status as "pending" | "cleared",
         lines: kept.map((r) => ({
@@ -1277,6 +1307,9 @@ function SplitTransactionDetail({
             <DetailGrid>
               <DetailItem label="Total" value={formatMoney(total)} />
               <DetailItem label="Date" value={transaction.transaction_date} />
+              {transaction.status === "cleared" && (
+                <DetailItem label="Cleared date" value={transaction.cleared_date ?? "—"} />
+              )}
               <DetailItem
                 label="Status"
                 value={
@@ -1337,6 +1370,17 @@ function SplitTransactionDetail({
                 </Select>
               </div>
             </div>
+            {status === "cleared" && (
+              <div>
+                <Label>Cleared date</Label>
+                <Input
+                  type="date"
+                  value={clearedDate}
+                  onChange={(e) => setClearedDate(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+            )}
             <div>
               <Label>Account</Label>
               <Select value={accountId} onValueChange={setAccountId}>
@@ -1431,6 +1475,8 @@ function LinkedGroupDetail({
   const [payAmount, setPayAmount] = useState("");
   const [date, setDate] = useState("");
   const [status, setStatus] = useState("cleared");
+  // ADR-100: shared by the payment line and every fee line, same as `date`.
+  const [clearedDate, setClearedDate] = useState("");
   const [accountId, setAccountId] = useState("");
   const [description, setDescription] = useState("");
   const [lines, setLines] = useState<FeeLine[]>([]);
@@ -1443,6 +1489,7 @@ function LinkedGroupDetail({
     setPayAmount(String(Math.abs(Number(linkedRow.amount ?? 0))));
     setDate(linkedRow.transaction_date.slice(0, 10));
     setStatus(linkedRow.status ?? "cleared");
+    setClearedDate(linkedRow.cleared_date?.slice(0, 10) ?? todayISO());
     setAccountId(linkedRow.account_id ?? "");
     setDescription(linkedRow.description ?? "");
     setRemoved([]);
@@ -1474,6 +1521,7 @@ function LinkedGroupDetail({
       return;
     }
     try {
+      const effectiveClearedDate = status === "cleared" ? clearedDate || todayISO() : null;
       await editLinked.mutateAsync({
         transaction: linkedRow,
         kind: payable.kind,
@@ -1481,6 +1529,7 @@ function LinkedGroupDetail({
         amount: Math.abs(Number(payAmount)),
         date,
         status: status as "pending" | "cleared",
+        clearedDate: effectiveClearedDate,
         accountId,
         description: description || null,
       });
@@ -1492,6 +1541,7 @@ function LinkedGroupDetail({
           amount: sign * value,
           status: status as "pending" | "cleared",
           transaction_date: date,
+          cleared_date: effectiveClearedDate,
           account_id: accountId,
           category_id: line.categoryId === NO_SPLIT_CATEGORY ? null : line.categoryId,
           description: line.description || `Fee: ${payable.name}`,
@@ -1525,6 +1575,9 @@ function LinkedGroupDetail({
             <DetailGrid>
               <DetailItem label="Total" value={formatMoney(total)} />
               <DetailItem label="Date" value={linkedRow.transaction_date} />
+              {linkedRow.status === "cleared" && (
+                <DetailItem label="Cleared date" value={linkedRow.cleared_date ?? "—"} />
+              )}
               <DetailItem
                 label="Status"
                 value={
@@ -1617,6 +1670,17 @@ function LinkedGroupDetail({
                 </Select>
               </div>
             </div>
+            {status === "cleared" && (
+              <div>
+                <Label>Cleared date</Label>
+                <Input
+                  type="date"
+                  value={clearedDate}
+                  onChange={(e) => setClearedDate(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+            )}
             <div>
               <Label>Description</Label>
               <Input

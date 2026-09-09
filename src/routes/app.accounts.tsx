@@ -530,6 +530,10 @@ function AccountAllTransactions({
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {format(parseISO(t.transaction_date), "MMM d, yyyy")}
+                      {/* ADR-100: only worth a second date when it's set and differs. */}
+                      {t.cleared_date && t.cleared_date !== t.transaction_date
+                        ? ` · cleared ${format(parseISO(t.cleared_date), "MMM d, yyyy")}`
+                        : ""}
                       {t.status === "pending" ? " · pending" : ""}
                       {entry.isSplit ? ` · split (${entry.rows.length})` : ""}
                     </p>
@@ -637,6 +641,10 @@ function RecentActivity({
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {format(parseISO(t.transaction_date), "MMM d")}
+                  {/* ADR-100: only worth a second date when it's set and differs. */}
+                  {t.cleared_date && t.cleared_date !== t.transaction_date
+                    ? ` · cleared ${format(parseISO(t.cleared_date), "MMM d")}`
+                    : ""}
                   {t.status === "pending" ? " · pending" : ""}
                   {entry.isSplit ? ` · split (${entry.rows.length})` : ""}
                 </p>
