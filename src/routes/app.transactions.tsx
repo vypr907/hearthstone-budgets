@@ -153,6 +153,27 @@ function TransactionsPage() {
     for (const i of institutions) m[i.id] = i.name;
     return m;
   }, [institutions]);
+  // ADR-098: resolve each transfer leg's own "<Source> -> <Destination>"
+  // pair once, keyed by transaction id, instead of a per-row find().
+  const transferTitleAccounts = useMemo(() => {
+    const legsByGroup: Record<string, Transaction[]> = {};
+    for (const t of transactions) {
+      if (!t.transfer_group_id) continue;
+      (legsByGroup[t.transfer_group_id] ||= []).push(t);
+    }
+    const m: Record<string, { from: string; to: string }> = {};
+    for (const legs of Object.values(legsByGroup)) {
+      const from = legs.find((l) => Number(l.amount) < 0);
+      const to = legs.find((l) => Number(l.amount) >= 0);
+      if (!from || !to) continue;
+      const pair = {
+        from: accountName[from.account_id ?? ""] ?? "—",
+        to: accountName[to.account_id ?? ""] ?? "—",
+      };
+      for (const l of legs) m[l.id] = pair;
+    }
+    return m;
+  }, [transactions, accountName]);
 
   const rows = useMemo(() => {
     let out = transactions;
@@ -510,6 +531,8 @@ function TransactionsPage() {
                         <TransactionTitle
                           transaction={t}
                           placeName={t.institution_id ? institutionName[t.institution_id] : null}
+                          transferFromAccount={transferTitleAccounts[t.id]?.from}
+                          transferToAccount={transferTitleAccounts[t.id]?.to}
                         />
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -608,7 +631,11 @@ function TransactionsPage() {
         ))}
       </div>
 
-      <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />
+      <TransactionDetail
+        transaction={detail}
+        onClose={() => setDetail(null)}
+        onOpenTransaction={setDetail}
+      />
     </>
   );
 }
@@ -616,9 +643,13 @@ function TransactionsPage() {
 export function TransactionDetail({
   transaction,
   onClose,
+  onOpenTransaction,
 }: {
   transaction: Transaction | null;
   onClose: () => void;
+  /** Opens another transaction's own detail view in place of this one — used
+   *  by the transfer-fee reverse link below. */
+  onOpenTransaction?: (t: Transaction) => void;
 }) {
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
@@ -766,6 +797,32 @@ export function TransactionDetail({
   const transferFromAccountInstitutionId = transferFromAccountId
     ? (accounts.find((a) => a.id === transferFromAccountId)?.institution_id ?? null)
     : null;
+  // ADR-097 addendum: the reverse of transferFeeRow above — opening a
+  // transfer's fee row directly (not via its parent transfer leg) had no way
+  // back. A fee row's split_group_id equals its transfer's transfer_group_id,
+  // so look up either leg of that transfer the same way.
+  const linkedTransferLeg =
+    !transferPair && transaction.split_group_id
+      ? (allTransactions.find((t) => t.transfer_group_id === transaction.split_group_id) ?? null)
+      : null;
+  const linkedTransferOtherLeg =
+    linkedTransferLeg && linkedTransferLeg.transfer_group_id
+      ? (allTransactions.find(
+          (t) =>
+            t.transfer_group_id === linkedTransferLeg.transfer_group_id &&
+            t.id !== linkedTransferLeg.id,
+        ) ?? null)
+      : null;
+  const linkedTransferFromAccount = linkedTransferLeg
+    ? Number(linkedTransferLeg.amount) < 0
+      ? accountName(linkedTransferLeg.account_id)
+      : accountName(linkedTransferOtherLeg?.account_id)
+    : null;
+  const linkedTransferToAccount = linkedTransferLeg
+    ? Number(linkedTransferLeg.amount) < 0
+      ? accountName(linkedTransferOtherLeg?.account_id)
+      : accountName(linkedTransferLeg.account_id)
+    : null;
 
   async function save() {
     try {
@@ -864,7 +921,12 @@ export function TransactionDetail({
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            <TransactionTitle transaction={transaction} placeName={placeName} />
+            <TransactionTitle
+              transaction={transaction}
+              placeName={placeName}
+              transferFromAccount={transferFromAccount}
+              transferToAccount={transferToAccount}
+            />
           </DialogTitle>
         </DialogHeader>
 
@@ -907,6 +969,24 @@ export function TransactionDetail({
                 <DetailItem
                   label="Account"
                   value={accounts.find((a) => a.id === transaction.account_id)?.name ?? "—"}
+                />
+              )}
+              {linkedTransferLeg && (
+                <DetailItem
+                  label="Transfer"
+                  value={
+                    onOpenTransaction ? (
+                      <button
+                        type="button"
+                        className="text-left underline decoration-dotted underline-offset-2"
+                        onClick={() => onOpenTransaction(linkedTransferLeg)}
+                      >
+                        {linkedTransferFromAccount} → {linkedTransferToAccount}
+                      </button>
+                    ) : (
+                      `${linkedTransferFromAccount} → ${linkedTransferToAccount}`
+                    )
+                  }
                 />
               )}
               <DetailItem

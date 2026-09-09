@@ -3868,3 +3868,106 @@ cascades to remove all 3 rows.
    Category is editable, then cleared the fee via the from-leg's edit form
    and confirmed the fee row was deleted while both transfer legs were
    untouched.
+
+2026-09-09 addendum — fee row links back to its transfer:
+The 2026-09-08 addendum above made `TransactionDetail`'s transfer leg show
+its paired fee (`transferFeeRow`, via `split_group_id === transfer_group_id`).
+The reverse direction was still missing: opening the fee row itself showed a
+plain single-account transaction with no indication it belonged to a
+transfer at all. Fixed with the mirror-image lookup — `linkedTransferLeg`
+finds a row whose `transfer_group_id` equals this row's own `split_group_id`
+(only attempted when this row isn't itself a transfer leg), resolves both
+account names the same way `transferFromAccount`/`transferToAccount` already
+do, and renders a "Transfer" `DetailItem` in the same slot the plain
+"Account" item would otherwise occupy. It's a clickable link (new optional
+`onOpenTransaction` prop on `TransactionDetail`, wired at its one call site
+in `app.transactions.tsx` to `setDetail`) that opens that transfer leg's own
+detail view in place. No schema change; no change to the bill/debt payment-
+fee shape (ADR-046), which was already bidirectionally visible as a real
+2-row `split_group_id` group via `groupLedgerRows`/`isPaymentWithFeesGroup`.
+
+Status: Decided 2026-09-09. Implemented 2026-09-09.
+
+## ADR-098: Transfer Transaction Titles Show Source -> Destination
+
+Decision:
+Either leg of a transfer (`transactions.transfer_group_id` set, ADR-056) titles itself
+`"<Source account> → <Destination account>"` instead of falling back to generic
+"Transaction" text or showing only whatever manual description was typed. This always
+wins over the normal place-based title (ADR-053/063) for a transfer row. Any manual
+description (e.g. "Xfer to Steph") is kept, rendered as the same small italic subtitle
+already used for a place's description — nothing the user typed is lost, it just no
+longer stands in as the whole title.
+
+Reason:
+A transfer's two legs often carry no description at all (nothing to describe — the
+"place" is just the other account), which previously rendered as the unhelpful literal
+string "Transaction" in both the ledger list and the detail dialog. Source/destination is
+the one piece of information that's always true and always useful for a transfer,
+regardless of whether a description was entered.
+
+Implementation: `TransactionTitle` (`src/components/TransactionTitle.tsx`) gains two
+optional props, `transferFromAccount`/`transferToAccount`; when both are present and
+`transaction.transfer_group_id` is set, it renders the arrow format ahead of every other
+branch. The two callers resolve the names differently since they have different data in
+hand: `TransactionDetail` (`app.transactions.tsx`) already computes
+`transferFromAccount`/`transferToAccount` for its own From/To detail items and just passes
+them through; the ledger list builds a one-time memoized map
+(`transferTitleAccounts`, keyed by transaction id) from the full transaction list instead
+of an O(n) lookup per row. `src/routes/app.accounts.tsx`'s two per-account transaction
+lists (`AccountAllTransactions`, `RecentActivity`) are NOT wired up — they only receive a
+single account's `rows`, not the full cross-account transaction list needed to find the
+other leg, and already show a "Transfer" badge next to the amount as a weaker signal.
+Revisit if that gap turns out to matter in practice.
+
+Status: Decided 2026-09-09. Implemented 2026-09-09.
+
+## ADR-099: Institution Type Taxonomy Expansion + Fix Institution Logins Screen
+
+Decision:
+Add 13 new `institution_type` values to the client-side allowed list
+(`INSTITUTION_TYPES` in `src/components/InstitutionDialog.tsx` — free text, no DB
+constraint): `restaurant`, `grocery_store`, `gas_station`, `liquor_store`,
+`department_store`, `specialty_store`, `venue`, `game`, `app`, `dispensary`,
+`personal_care`, `employer`, `delivery`. Matching icon/color entries added to
+`INSTITUTION_TYPE_META` (`src/lib/visual-meta.ts`). Existing institutions previously
+typed `other` (or, for UberEats, `subscription`) are reclassified into these where a
+clear match exists — see `scripts/migrations/2026-09-09-institution-type-reclass.sql`
+for the full per-institution mapping, decided interactively with the user rather than
+guessed. A handful of genuinely ambiguous names (Dept of Education, DFAS, Gavora's,
+Lacey Miller, MoneyLion, The Sheet Code) are deliberately left as `other`.
+
+Also adds a new "Fix Institution Logins" screen (`/app/fix-institution-logins`),
+grouped alongside the existing "Fix Places" screen (`/app/fix-places`) in the More
+page's icon grid (`src/routes/app.more.tsx`) — there is no nested "Fix" submenu, both
+just sit in the same flat list. It lists every institution with no `login_url` and lets
+the user fix it in place with an inline URL field, same shape as `FixPlacesPage`.
+
+Reason:
+`other` had become a catch-all for roughly half the household's ~130 institutions —
+restaurants, grocery/gas/liquor stores, apps, a dispensary, a barbershop, an employer,
+and delivery platforms were all indistinguishable in filters and reports. `delivery` is
+deliberately a business-kind classification, independent of whether a given UberEats
+transaction is the household's driving income or its occasional dining spend — that
+split is already handled by category/domain and amount sign (ADR-069), not
+institution_type, so one type serves both directions cleanly. Institutions missing a
+login_url had no dedicated fix flow, unlike the equivalent gap already solved for
+transactions without a place (ADR-053/063's Fix Places).
+
+Status: Decided 2026-09-09. Implemented 2026-09-09 (code). Data reclassification SQL
+written, pending the user running it manually per ADR-083.
+
+Correction (same day): the reclassification migration failed —
+`institutions.institution_type` turned out to be DB-enforced via a check
+constraint (`institutions_institution_type_check`), scoped to exactly the
+original 9 values. Both this ADR's Decision text above and
+`INSTITUTION_TYPES`'s own comment in `InstitutionDialog.tsx` incorrectly
+stated there was no DB constraint — never verified against the live schema
+before writing the migration, same category of doc drift as ADR-097's
+`categories.domain` correction. Fixed with a schema migration,
+`scripts/migrations/2026-09-09-institution-type-check-constraint.sql`
+(drops and recreates the constraint with all 22 values), which must run
+**before** the reclassification migration. The failed reclass attempt's
+transaction rolled back cleanly — verified live via MCP that 0 institutions
+ended up outside the original 9 values, so no partial/corrupt state resulted.
+`docs/SCHEMA.md`'s institutions section updated to document the constraint.

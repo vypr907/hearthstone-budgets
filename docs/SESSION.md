@@ -173,3 +173,166 @@
     bipartite match — call out for a quick manual glance, not auto-trusted.
   - Next step: user reviews and runs the dedupe migration + verify script;
     re-confirm via MCP afterward, same as the original migration.
+  - User ran the dedupe. Re-verified: all 13 ids gone, "drinks with MK" the
+    sole survivor, row count 296. Full reconciler re-run clean.
+
+- **Second dedupe pass, found while investigating a wrong account balance**
+  (user reported app showing -$156, real balance ~$72.13). Root cause: the
+  first dedupe only caught duplicates where one existing row matched a
+  migration row's amount exactly — it missed 3 cases where the real event
+  was already recorded in a *different shape*:
+  - **Finch** (-$10.54, 8/4): already tracked as a recurring Bill —
+    "Bill payment · Finch" (-$9.99) + "Fee: Finch" (-$0.55) on 8/6 already
+    total exactly $10.54. Found by checking every `split_group_id` pair's
+    combined total against every migration row's amount+institution
+    (a self-join, not caught by the single-row bucket check from the first
+    dedupe).
+  - **UberEats** (-$25.28 + -$7.31, both 8/18): the household had logged
+    this as one lump-sum row (-$32.59, 8/19) instead of two separate CSV
+    line items.
+  - **Nature's Releaf** (-$63/-$63/-$43 on 8/18, 8/21, 8/22): interviewed
+    the user on why these were off by a consistent $2.50 from the
+    pre-existing $65.50/$65.50/$45.50 entries rather than assuming — these
+    are ATM cash pulls at the dispensary ($60/$60/$40 cash + $3 Nature's
+    Releaf surcharge, both inside Venmo's own "$63/$63/$43" statement
+    line) plus a separate $2.50 Venmo network fee that Venmo's CSV doesn't
+    itemize under that line at all. So the household's original entries
+    were already complete and correct; the CSV-exact migration rows were
+    the (incomplete) duplicates, not corrections. A 4th CSV Nature's Releaf
+    row (8/30, -$63) has no pre-existing counterpart at all and was left
+    alone as a genuine new entry.
+  - Result: `scripts/migrations/2026-09-08-venmo-reconcile-dedupe2.sql` (+
+    `.verify.sql`), 6 deletes. Verified the same way as before: simulated
+    the removal and re-ran the reconciler — the 6 CSV rows correctly
+    reappear as expected false-negative "missing" flags (the tool's
+    single-row matching can't see a multi-row/lump-sum match), nothing else
+    changed.
+  - Recomputed balance math (`src/lib/balances.ts`'s formula: anchor +
+    cleared txns after the anchor's `as_of_date`): anchor $21.03 (snapshot
+    dated 8/14) + cleared-after-anchor moves from -$177.84 to -$34.29 pre
+    → +$34.29 post, giving a new current balance of **$55.32** — much
+    closer to the real ~$72.13 but not exact yet. Flagged to the user as a
+    residual gap to watch for after running this migration; may indicate
+    more of the same "multi-row/lump-sum" blind spot elsewhere, or the
+    anchor snapshot itself needing a look.
+  - Next step: user reviews and runs dedupe2 + its verify script (including
+    the verify script's own balance-recompute query); re-confirm via MCP;
+    check whether $55.32 vs ~$72.13 residual gap needs another pass.
+
+- **Steph Checking transfer duplicate + Nature's Releaf reconciliation
+  (2026-09-09), real "Our Household" data.** User-driven review, independent
+  of the dedupe/dedupe2 passes above (touches no overlapping rows).
+  - Confirmed via read-only MCP: 4 Venmo↔Steph One Checking transfer pairs
+    exist in the window; the 8/1 pair (`e9d23fdc.../cac58274...`) is a plain
+    duplicate with no matching Venmo statement line — the two 8/7 pairs
+    already correctly model "-$25.44 leaves Venmo / +$25.00 arrives" via
+    ADR-097 (transfer leg $25/$25 + separate -$0.44 from-account fee), and
+    8/13 has no fee, matching Venmo. Migration:
+    `scripts/migrations/2026-09-09-steph-xfer-dedupe.sql` (+ `.verify.sql`) —
+    2 deletes. Not yet run.
+  - Nature's Releaf: the 4 Venmo statement lines (8/18, 8/21, 8/22, 8/30 —
+    $65.50/$65.50/$45.50/$65.50) decompose into cash ($60 or $40) + a $3
+    Nature's Releaf ATM fee + a $2.50 Venmo network fee, per the user. Also
+    found a genuine duplicate: the 8/30 event was recorded twice — once as an
+    incomplete $63 lump (missing the Venmo fee) on 8/30, once as a correct
+    $65.50 2-line split mis-dated 8/31. Rebuilt all 4 dates as 3-line category
+    splits (cash + 2 fee lines, one shared `split_group_id` per date) —
+    reusing the existing category-split mechanism verbatim rather than
+    ADR-046/097's fee-transaction pattern, since a category split already
+    gives bidirectional visibility (the "Show breakdown" toggle) with zero
+    code changes; the fee-transaction pattern would have needed a new reverse
+    link for what's really a single-account, 3-part purchase, not a two-
+    account transfer. Migration:
+    `scripts/migrations/2026-09-09-natures-releaf-split.sql` (+
+    `.verify.sql`) — 6 deletes, 12 inserts. Net effect: 8/18/8/21/8/22
+    restructured only (same totals); 8/30 total drops $63 (removes the
+    double-count) — should further close the balance gap flagged in the
+    dedupe2 entry above. Not yet run.
+  - Next step: user runs both migrations (either order, independent of each
+    other and of dedupe2) in the Supabase SQL Editor; re-verify via MCP
+    afterward per each `.verify.sql`, including re-checking the Venmo account
+    balance gap.
+
+- **Fee ↔ transfer bidirectional link, transfer titles, institution type
+  taxonomy + Fix Institution Logins screen (2026-09-09).** Code changes,
+  planned and approved via `/plan`, verified with `tsc --noEmit`, `vitest`
+  (185/185 passing), and `vite build` (also regenerated `routeTree.gen.ts`
+  for the new route) — all clean. **Not verified in a live browser session**:
+  no Claude-in-Chrome/Playwright access this session: could not log into the
+  TEST household and click through the new screen or a real transfer/fee
+  transaction. Flagging per CLAUDE.md — user should smoke-test before
+  trusting this over Windows AppLocker's build restriction.
+  - ADR-097 addendum: `TransactionDetail` (`app.transactions.tsx`) gained
+    `linkedTransferLeg`/`linkedTransferOtherLeg` — opening a transfer's fee
+    row directly now shows a clickable "Transfer" detail item back to the
+    transfer (new optional `onOpenTransaction` prop, wired to `setDetail`).
+    The forward direction (transfer leg → its fee) already existed.
+  - ADR-098 (new): `TransactionTitle` (`src/components/TransactionTitle.tsx`)
+    gained `transferFromAccount`/`transferToAccount` props — a transfer leg
+    now always titles itself "`<Source> → <Destination>`", with any manual
+    description kept as the existing italic subtitle. Wired at both callers
+    in `app.transactions.tsx` (ledger list via a new memoized
+    `transferTitleAccounts` map, and the detail dialog via its existing
+    `transferFromAccount`/`transferToAccount`). Deliberately NOT wired into
+    `app.accounts.tsx`'s two per-account transaction lists — they only have
+    one account's rows in scope, not the cross-account list needed to find
+    the other leg; noted as a known gap in the ADR rather than scope-crept.
+  - ADR-099 (new): added 13 institution types (`restaurant`, `grocery_store`,
+    `gas_station`, `liquor_store`, `department_store`, `specialty_store`,
+    `venue`, `game`, `app`, `dispensary`, `personal_care`, `employer`,
+    `delivery`) to `INSTITUTION_TYPES`
+    (`src/components/InstitutionDialog.tsx`) + icon/color entries in
+    `INSTITUTION_TYPE_META` (`src/lib/visual-meta.ts`). Reclassification
+    mapping for ~55 existing institutions (built from the live list, refined
+    through an interactive round — several corrections: Cat Soup → game not
+    restaurant, Thumbs Up by Gnap → restaurant, McPeaks → liquor_store, Three
+    Bears Alaska stays one institution typed grocery_store despite having
+    both a gas-station and a grocery/department-store location in real life)
+    written to `scripts/migrations/2026-09-09-institution-type-reclass.sql`
+    (+ `.verify.sql`). 6 institutions deliberately left `other` as genuinely
+    ambiguous. Not yet run.
+  - New screen `/app/fix-institution-logins`
+    (`src/routes/app.fix-institution-logins.tsx`): lists institutions with no
+    `login_url`, inline URL input + save, same visual pattern as
+    `FixPlacesPage`. Added to the More page's icon grid next to "Fix Places"
+    (`src/routes/app.more.tsx`).
+  - Next step: user runs the institution-type-reclass migration; user (or a
+    future session with browser access) smoke-tests the new screen, a
+    transfer's title on both legs, and opening a fee row's reverse link.
+
+- **Bug found running the above: institution_type reclass migration failed
+  on its first UPDATE** (2026-09-09) — `ERROR: 23514: new row for relation
+  "institutions" violates check constraint
+  "institutions_institution_type_check"`. Root cause: `institution_type` IS
+  DB-enforced (scoped to the original 9 values), contradicting what
+  `InstitutionDialog.tsx`'s own comment and ADR-099 claimed ("no schema
+  constraint — UI list only") — never verified against the live schema
+  before writing that comment or the migration. Confirmed via MCP the failed
+  transaction rolled back cleanly (0 institutions ended up outside the
+  original 9 values — no partial/corrupt state).
+  - Fix: new schema migration
+    `scripts/migrations/2026-09-09-institution-type-check-constraint.sql` (+
+    `.verify.sql`) drops and recreates the constraint with all 22 values.
+    Must run **before** (re-)running `2026-09-09-institution-type-reclass.sql`.
+  - Docs corrected: `InstitutionDialog.tsx`'s `INSTITUTION_TYPES` comment,
+    `docs/SCHEMA.md`'s institutions section (now documents the constraint and
+    its 22 current values), and ADR-099 (correction addendum).
+  - Next step: user runs the constraint migration, then re-runs the
+    institution-type-reclass migration + its verify script.
+  - **User ran both (constraint fix + reclass) — verified clean via MCP**:
+    institution_type counts match exactly (restaurant 25, grocery_store 3,
+    gas_station 3, liquor_store 3, department_store 4, specialty_store 5,
+    venue 1, game 5, app 2, dispensary 1, personal_care 1, employer 1,
+    delivery 2), `other` down to 6, UberEats confirmed `delivery`. User also
+    separately ran dedupe2, the Steph transfer dedupe, and the Nature's
+    Releaf split — all re-verified clean via MCP: 8/1 Steph duplicate gone,
+    all 4 Nature's Releaf dates are correct 3-line splits totaling
+    $65.50/$65.50/$45.50/$65.50.
+  - Recomputed Venmo balance (anchor $21.03 + cleared-after-anchor $120.97):
+    **$142.00** — further from the ~$72.13 real-world figure than the $55.32
+    tracked after the first dedupe pass, moved the wrong direction. Not
+    investigated further this session (outside what was asked); likely the
+    ~$72.13 reference is now stale rather than a bug in today's migrations,
+    since real spending/time has moved since it was noted. Flagged as an open
+    thread — revisit if the household wants to chase the account-balance
+    discrepancy again.

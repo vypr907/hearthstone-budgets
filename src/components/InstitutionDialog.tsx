@@ -39,7 +39,14 @@ import { ChevronDown } from "lucide-react";
 
 import { formatMoney } from "@/lib/format";
 
-/** Allowed institution_type values (no schema constraint — UI list only). */
+/**
+ * Allowed institution_type values. Also DB-enforced via a check constraint
+ * (`institutions_institution_type_check`) — this list and the constraint
+ * must be kept in sync; see the migration in
+ * scripts/migrations/2026-09-09-institution-type-check-constraint.sql
+ * (ADR-099 correction — this file previously and incorrectly claimed there
+ * was no DB constraint).
+ */
 export const INSTITUTION_TYPES = [
   "bank",
   "credit_card",
@@ -49,6 +56,21 @@ export const INSTITUTION_TYPES = [
   "medical",
   "utility",
   "subscription",
+  // ADR-099: restaurant/retail/leisure taxonomy, added to replace an
+  // over-broad "other" bucket for merchant-type institutions.
+  "restaurant",
+  "grocery_store",
+  "gas_station",
+  "liquor_store",
+  "department_store",
+  "specialty_store",
+  "venue",
+  "game",
+  "app",
+  "dispensary",
+  "personal_care",
+  "employer",
+  "delivery",
   "other",
 ];
 

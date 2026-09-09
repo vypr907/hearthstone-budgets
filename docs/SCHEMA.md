@@ -163,6 +163,21 @@ institutions (
 )
 ```
 
+`institution_type` is DB-enforced via a check constraint
+(`institutions_institution_type_check`) — corrected 2026-09-09 (ADR-099):
+this doc and `INSTITUTION_TYPES`'s own comment in
+`src/components/InstitutionDialog.tsx` previously claimed it was UI-list-only
+with no DB constraint; verified live to be wrong (a reclassification
+migration failed against it). Current 22 allowed values: `bank`,
+`credit_card`, `lendor_lessor`, `financial`, `tool`, `medical`, `utility`,
+`subscription`, `restaurant`, `grocery_store`, `gas_station`,
+`liquor_store`, `department_store`, `specialty_store`, `venue`, `game`,
+`app`, `dispensary`, `personal_care`, `employer`, `delivery`, `other`. Keep
+the constraint and `INSTITUTION_TYPES` in sync — adding a new type needs
+both an app-side array update and a
+`scripts/migrations/*.sql` constraint migration (see
+`2026-09-09-institution-type-check-constraint.sql` for the pattern).
+
 ## Important Rules
 
 * Never store passwords.

@@ -79,6 +79,20 @@ const INSTITUTION_TYPE_META: Record<string, { icon: string; color: string }> = {
   retailer: { icon: "🛍️", color: "#ef4444" },
   government: { icon: "🏛️", color: "#64748b" },
   investment: { icon: "📈", color: "#22c55e" },
+  // ADR-099
+  restaurant: { icon: "🍔", color: "#ef4444" },
+  grocery_store: { icon: "🛒", color: "#22c55e" },
+  gas_station: { icon: "⛽", color: "#f59e0b" },
+  liquor_store: { icon: "🍺", color: "#a855f7" },
+  department_store: { icon: "🛍️", color: "#ef4444" },
+  specialty_store: { icon: "📦", color: "#f97316" },
+  venue: { icon: "🎉", color: "#ec4899" },
+  game: { icon: "🎮", color: "#6366f1" },
+  app: { icon: "📱", color: "#0ea5e9" },
+  dispensary: { icon: "🌱", color: "#22c55e" },
+  personal_care: { icon: "💇", color: "#ec4899" },
+  employer: { icon: "💼", color: "#64748b" },
+  delivery: { icon: "🚕", color: "#f97316" },
 };
 
 /** "credit_card" / "credit card" → "Credit Card". */
