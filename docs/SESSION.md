@@ -389,3 +389,86 @@
     session with browser access) smoke-tests: submit a payment pending
     today, clear it a few days later with a picked date, confirm both dates
     show in the ledger and the account balance reflects the cleared date.
+
+- **Classic Checking (USAA) + USAA Savings reconciliation (2026-09-09)**,
+  real "Our Household" data. Planned via `/plan`. User supplied a direct
+  bank export, `planning/transactions_USAAnew.csv` (79 rows, 7/16-9/8).
+  - New reusable tool `scripts/reconcile-usaa-csv.mjs`, modeled on
+    `scripts/reconcile-venmo-csv.mjs`'s matching algorithm (date-window
+    candidates + 1-3-row subset-sum) but adapted for this simpler CSV shape
+    (plain dates, no fee column) and a per-account merchant→institution
+    table. Snapshot pulled via MCP to `planning/app-usaa-transactions.json`
+    (82 rows, whole account history).
+  - Found and fixed 2 false-negative regex bugs while tuning against the
+    first run (58/79 matched → still 58/79, but the *right* 58, with real
+    gaps left instead of tool noise): (1) a bare `/TILT/i` rule wrongly
+    institution-constrained "Tilt Transfer" CSV rows, hiding matches against
+    the app's plain (institution_id-null) 2-sided transfer legs — narrowed
+    to `/TILT (FINANCE|ADVANCE)/i`. (2) `/ATT\s+PAYMENT/i` matched inside
+    "OD FEE - ITEM PAID - ACH - ATT PAYMENT" (the fee's own description
+    embeds the merchant that triggered it), wrongly tagging an overdraft
+    fee as an AT&T charge — fixed by checking OD FEE first, and by removing
+    an equally-broad `Flex` rule that hid a valid Rent-via-Flex match (Flex
+    bills sometimes post under the landlord's institution, not Flex's own).
+  - Interviewed the user through every real discrepancy (not guessed):
+    GCI's two missing linked-bill payments (8/20 $385.52 — the real retry
+    after an 8/4 payment bounced and was reversed — and 9/8 $64.51) left
+    OUT of the migration on the user's call, since a raw ledger insert
+    can't update `bills.cycle_paid_to_date`/`next_due_date` the way marking
+    it paid in the app does — **user will mark both paid in-app**. Same
+    reasoning applies to a third item found mid-review, a $14.99 Flex bill
+    payment missing on 7/16 (the recurring bill already exists,
+    `linked_bill_id 512df8ee...`) — **also left for the user to mark paid
+    in-app**, flagged explicitly since it wasn't part of the original
+    GCI question.
+  - The 8/28 six-line "$100 MoneyLion" CSV batch confirmed to be the same
+    single $600 advance already logged — excluded.
+  - 8/13 paycheck corrected from $1,810.00 to $1,809.38 (matches every
+    other logged ASRC Federal paycheck exactly).
+  - **Mid-interview discovery**: the 7/16-7/17 "USAA Funds Transfer"/
+    "OD Advance Transfer" cluster turned out to be real transfers between
+    Classic Checking and USAA Savings — the user supplied a second export,
+    `planning/transactions_USAAsavings.csv`, confirming $500
+    Checking→Savings and $105 Savings→Checking on 7/16, and a $254.60
+    Savings→Checking overdraft-protection pull on 7/17. Logged as proper
+    ADR-056 transfer pairs (description left null — ADR-098's title
+    auto-renders "Source → Destination"). USAA Savings itself had one more
+    gap, a $60 USAA P&C Insurance payment on 7/17 (a third, separate P&C
+    payment alongside the two already logged on Checking).
+  - Remaining genuine gaps added: first-ever paycheck for this account
+    (7/16, $1,809.38), 4 previously-untracked Tilt cash-advance charges
+    (household has no Tilt debt — logged as plain Fees-categorized
+    transactions, same treatment as OD fees), one untracked Brewster's
+    Restaurant charge (8/19, $39.58), and the 8/13 OD-fee-window-refund/fee
+    pair (nets to $0, logged anyway per the user for a complete ledger).
+  - Result: `scripts/migrations/2026-09-09-usaa-reconcile.sql` (+
+    `.verify.sql`) — 1 update (paycheck correction), 9 plain-transaction
+    inserts across both accounts, 3 transfer pairs (6 rows). Not yet run.
+  - Next step: user runs the migration + verify script; re-verify via MCP;
+    user marks the 3 flagged linked-bill payments (GCI x2, Flex x1) paid
+    in-app at their real dates/amounts; re-run the reconciler against a
+    fresh snapshot to confirm clean.
+
+- **Bug found post-migration: GCI stuck "Partial" after the user marked the
+  9/8 $64.51 payment paid** (2026-09-09) — app showed $60.48 still owed.
+  Root-caused via MCP, not guessed: GCI's `bills.amount` (the standing/
+  typical figure that pre-fills the "Amount owed this cycle" prompt for a
+  variable bill) is stale at $124.99 — matches neither real amount seen
+  this cycle ($385.52 August, $64.51 September). The pre-filled $124.99
+  wasn't overwritten when the user submitted, so `ensureCycleAmount()`
+  (`src/lib/payments.ts:629-638`, only writes `cycle_amount_due` when it
+  was null — never overwrites an existing value) locked the cycle target
+  at $124.99; $124.99 - $64.51 = exactly the $60.48 shortfall reported.
+  Not a code bug — the variable-bill prompt is designed to be edited per
+  cycle (ADR-018/019); this cycle it wasn't. `bills.amount` left alone per
+  the user (GCI's real amount varies every cycle regardless).
+  - Fix: `scripts/migrations/2026-09-09-gci-cycle-fix.sql` (+
+    `.verify.sql`) — applies the same resolve `applyClearedPayment()` would
+    have performed with the correct $64.51 target: `cycle_paid_to_date`/
+    `cycle_amount_due` reset, `payment_status` → unpaid, `next_due_date`
+    advanced one month (2026-09-05 → 2026-10-05, via
+    `src/lib/format.ts`'s `shiftDate`/`addMonths`), and the 9/8 payment
+    transaction tagged `resolved_cycle_due_date = 2026-09-05` (ADR-075),
+    matching how every other resolved GCI payment is tagged. Not yet run.
+  - Next step: user runs this migration + verify script; re-verify via MCP
+    that GCI shows fully paid / correct next due date in the app.
