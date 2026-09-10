@@ -1341,6 +1341,40 @@ edited row's account (real incident: the 2026-08-27 "ASRC Federal" paycheck).
 Cross-ref: ADR-044 (category splits), ADR-055 / ADR-068 (deduction deposits).
 No schema change.
 
+**2026-09-10 addendum — a split may land BEFORE the pay date (negative
+`day_offset`).** Real paychecks don't deposit every split on the same day: a
+household's fixed transfers can arrive a day or two early while the remainder
+lands on (or near) the official pay date. The recommended pattern is to anchor
+`income_events.expected_date` / `actual_date` on the **official** pay date and
+express each split's real arrival as a signed `day_offset` — negative for early,
+positive for late. `income_source_splits.day_offset` is `integer NOT NULL default
+0` and always allowed negatives; this only wires the rest of the stack to expect
+them:
+
+- `useMarkIncomeReceived` `shift()` (`src/lib/income-hooks.ts`) now delegates to
+  the new `addDaysISO(date, days)` in `src/lib/format.ts`, which parses/re-formats
+  from local date components (the house pattern, cf. `shiftDate`). The old inline
+  `new Date(\`${date}T00:00:00\`)` + `setDate()` + `toISOString().slice(0,10)`
+  could drift a day across a timezone boundary once the offset was non-zero
+  (harmless while every offset was 0).
+- Every auto-created deposit **and** deduction row now sets `cleared_date` per
+  ADR-100 — split/remainder rows to their own shifted posting date, fallback and
+  deduction rows to the base pay date. Before this, `useMarkIncomeReceived` was
+  the one `status:'cleared'` writer that never set `cleared_date`; the first
+  paycheck received after ADR-100 shipped (2026-09-10) left 7 rows with a null
+  `cleared_date`. Balances / net worth tolerate it via `?? transaction_date`;
+  those 7 pre-existing rows are not backfilled by this change.
+- Split editor (`src/routes/app.income-source.$id.tsx` `SplitDialog`): field
+  relabelled "Days relative to pay date", helper text for negatives, writes
+  `day_offset: 0` (not `null`) when blank. Row summaries and the Paycheck
+  screen's read-only splits card now read "Nd early" / "Nd late".
+
+Known limitation (also in docs/TODO.md): an early split's `transaction_date`
+falls in the previous pay-period / calendar-month window. Pay-period income is
+summed from `income_events.actual_amount`, not deposit rows, so budgets are
+unaffected — but any `transaction_date`-bucketed view shows the early deposit one
+bucket back. Inherent to the offset model. No schema change.
+
 ## ADR-048: Invoices as one-time charges with optional payment plans
 Decision:
 `debt_type = 'invoice'` is modelled as a real dated charge rather than a

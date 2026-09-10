@@ -9,6 +9,7 @@ import {
 } from "./supabase";
 import { useAuth } from "./auth-context";
 import { applyDeductionFundedPayments } from "./deduction-funding";
+import { addDaysISO } from "./format";
 
 export function useIncomeSources() {
   const { householdId } = useAuth();
@@ -191,13 +192,9 @@ export function useMarkIncomeReceived() {
       if (existing && existing.length > 0) return { deposits: 0 };
 
       const label = `Paycheck: ${args.sourceName ?? "Income"}`;
-      // ADR-047: a split may land a day or two after the pay date.
-      const shift = (days: number | null | undefined) => {
-        if (!days) return date;
-        const d = new Date(`${date}T00:00:00`);
-        d.setDate(d.getDate() + days);
-        return d.toISOString().slice(0, 10);
-      };
+      // ADR-047: a split may land a day or two off the pay date. A negative
+      // day_offset means it arrives early (ADR-047 follow-up 2026-09-10).
+      const shift = (days: number | null | undefined) => (days ? addDaysISO(date, days) : date);
 
       const rows: Array<{
         household_id: string;
@@ -206,6 +203,7 @@ export function useMarkIncomeReceived() {
         status: "cleared";
         description: string;
         transaction_date: string;
+        cleared_date: string;
         split_group_id: string;
       }> = [];
 
@@ -224,13 +222,15 @@ export function useMarkIncomeReceived() {
 
         for (const s of fixed) {
           if (s.account_id && Number(s.amount ?? 0) > 0) {
+            const posted = shift(s.day_offset);
             rows.push({
               household_id: householdId!,
               account_id: s.account_id,
               amount: Number(s.amount ?? 0),
               status: "cleared",
               description: label,
-              transaction_date: shift(s.day_offset),
+              transaction_date: posted,
+              cleared_date: posted,
               split_group_id: event.id,
             });
           }
@@ -238,13 +238,15 @@ export function useMarkIncomeReceived() {
         if (remainder?.account_id) {
           const left = Math.round((amount - fixedTotal) * 100) / 100;
           if (left > 0) {
+            const posted = shift(remainder.day_offset);
             rows.push({
               household_id: householdId!,
               account_id: remainder.account_id,
               amount: left,
               status: "cleared",
               description: label,
-              transaction_date: shift(remainder.day_offset),
+              transaction_date: posted,
+              cleared_date: posted,
               split_group_id: event.id,
             });
           }
@@ -268,6 +270,7 @@ export function useMarkIncomeReceived() {
           status: "cleared",
           description: label,
           transaction_date: date,
+          cleared_date: date,
           split_group_id: event.id,
         });
       }
@@ -304,6 +307,7 @@ export function useMarkIncomeReceived() {
             status: "cleared",
             description: `Deduction: ${d.name}`,
             transaction_date: date,
+            cleared_date: date,
             split_group_id: event.id,
           });
         }

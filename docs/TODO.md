@@ -38,3 +38,11 @@ not tasks:
   transaction lists still show the plain description/place title — they only
   have one account's rows in scope, not the cross-account list needed to
   find the other leg. Revisit if that gap turns out to matter in practice.
+- **An early paycheck split (negative `day_offset`, ADR-047 2026-09-10) posts
+  its `transaction_date` in the previous pay-period / calendar-month window.**
+  Pay-period income is summed from `income_events.actual_amount`, not deposit
+  rows, so budgets and period totals are unaffected; running balances use
+  `cleared_date ?? transaction_date` and stay correct. Only a
+  `transaction_date`-bucketed view shows the early deposit one bucket back.
+  Inherent to anchoring on the official pay date and expressing earliness as an
+  offset.

@@ -404,7 +404,9 @@ function SplitsCard({ sourceId }: { sourceId: string }) {
                   {(s.split_type ?? "fixed").toLowerCase() === "remainder"
                     ? "Remainder of the paycheck"
                     : formatMoney(Number(s.amount ?? 0))}
-                  {s.day_offset ? ` · +${s.day_offset}d` : ""}
+                  {s.day_offset
+                    ? ` · ${Math.abs(s.day_offset)}d ${s.day_offset < 0 ? "early" : "late"}`
+                    : ""}
                 </span>
               </button>
               <Button
@@ -469,13 +471,15 @@ function SplitDialog({
   function submit() {
     if (!accountId) return toast.error("Pick an account");
     if (type !== "remainder" && !Number(amount)) return toast.error("Enter an amount");
+    const dayOffset = offset.trim() === "" ? 0 : Math.trunc(Number(offset));
+    if (Number.isNaN(dayOffset)) return toast.error("Days offset must be a whole number");
     onSave({
       ...(split?.id ? { id: split.id } : {}),
       income_source_id: sourceId,
       account_id: accountId,
       split_type: type,
       amount: type === "remainder" ? null : Number(amount),
-      day_offset: offset ? Number(offset) : null,
+      day_offset: dayOffset,
       sort_order: split?.sort_order ?? 0,
     });
   }
@@ -531,13 +535,16 @@ function SplitDialog({
             </div>
           )}
           <div>
-            <Label>Days after pay date (optional)</Label>
+            <Label>Days relative to pay date (optional)</Label>
             <Input
               type="number"
               value={offset}
               onChange={(e) => setOffset(e.target.value)}
               className="h-11"
             />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Negative = lands early. e.g. −2 posts two days before the pay date.
+            </p>
           </div>
         </div>
         <DialogFooter>

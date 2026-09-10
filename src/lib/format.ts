@@ -149,6 +149,21 @@ export function shiftDate(
   ).padStart(2, "0")}`;
 }
 
+/**
+ * Add a whole number of calendar days to a "YYYY-MM-DD" date, returning
+ * "YYYY-MM-DD". `days` may be negative (shift earlier). Parses and re-formats
+ * from local date components — never `toISOString()`, which would drift a day
+ * for dates west/east of UTC.
+ */
+export function addDaysISO(date: string, days: number): string {
+  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
+  const base = new Date(y, m - 1, d);
+  base.setDate(base.getDate() + Math.trunc(days || 0));
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(
+    base.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 /** Advance an ISO date by one billing-cycle interval. */
 export function advanceDate(
   date: string,

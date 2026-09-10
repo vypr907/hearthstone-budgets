@@ -657,6 +657,30 @@ create index if not exists transactions_institution_id_idx
   on public.transactions (institution_id);
 notify pgrst, 'reload schema';
 ```
+## income_source_splits (ADR-024 / ADR-047)
+
+The deposit template for an income source: how a received paycheck is broken
+across accounts. `useMarkIncomeReceived` creates one cleared `transactions` row
+per fixed split plus one for the remainder (`actual_amount` − Σ fixed amounts),
+all sharing `split_group_id = income_events.id`.
+
+```sql
+income_source_splits (
+    id uuid primary key default gen_random_uuid(),
+    income_source_id uuid not null references income_sources(id) on delete cascade,
+    account_id uuid not null references accounts(id),
+    label text,                             -- optional display label (unused today)
+    split_type text not null,               -- 'fixed' | 'remainder' (one remainder per source)
+    amount numeric,                         -- fixed splits only; null for the remainder
+    day_offset integer not null default 0,  -- posting date vs pay date; NEGATIVE = lands early (ADR-047 2026-09-10)
+    time_of_day text,                       -- present in DB, DORMANT: not read/written/documented anywhere
+    sort_order integer not null default 0
+)
+```
+
+No `household_id` — scoped through `income_source_id`. No RLS policy of its own
+in this doc; access follows the parent `income_sources` join.
+
 ## income_source_deductions (ADR-055)
 
 Deductions taken from a paycheck before it reaches spendable accounts (HSA,

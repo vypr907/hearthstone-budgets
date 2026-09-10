@@ -997,7 +997,9 @@ function PeriodBudget({
                 <span>
                   {accounts.find((a) => a.id === s.account_id)?.name ?? "Unassigned"}
                   {s.day_offset ? (
-                    <span className="ml-2 text-xs text-muted-foreground">day +{s.day_offset}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {Math.abs(s.day_offset)}d {s.day_offset < 0 ? "early" : "late"}
+                    </span>
                   ) : null}
                 </span>
                 <span className="font-medium">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { priorSetAsideThisMonth } from "./format";
+import { addDaysISO, priorSetAsideThisMonth } from "./format";
 
 type TxLike = Parameters<typeof priorSetAsideThisMonth>[0][number];
 
@@ -60,5 +60,32 @@ describe("priorSetAsideThisMonth (ADR-038 addendum)", () => {
     expect(
       priorSetAsideThisMonth([tx({ amount: -120 })], "Car Insurance", "g1", TODAY)?.amount,
     ).toBe(120);
+  });
+});
+
+describe("addDaysISO (ADR-047 2026-09-10 — early paycheck splits)", () => {
+  it("shifts a paycheck split back by a negative day_offset", () => {
+    // Official pay date Friday 2026-09-11; split lands 2 days early.
+    expect(addDaysISO("2026-09-11", -2)).toBe("2026-09-09");
+    expect(addDaysISO("2026-09-11", -1)).toBe("2026-09-10");
+  });
+
+  it("shifts forward for a positive offset", () => {
+    expect(addDaysISO("2026-09-11", 3)).toBe("2026-09-14");
+  });
+
+  it("returns the same date for a zero offset", () => {
+    expect(addDaysISO("2026-09-11", 0)).toBe("2026-09-11");
+  });
+
+  it("crosses month and year boundaries", () => {
+    expect(addDaysISO("2026-09-01", -1)).toBe("2026-08-31");
+    expect(addDaysISO("2026-01-01", -1)).toBe("2025-12-31");
+    expect(addDaysISO("2026-02-28", 1)).toBe("2026-03-01"); // 2026 is not a leap year
+  });
+
+  it("ignores a time component on the input and truncates fractional days", () => {
+    expect(addDaysISO("2026-09-11T00:00:00", -2)).toBe("2026-09-09");
+    expect(addDaysISO("2026-09-11", -1.9)).toBe("2026-09-10");
   });
 });
