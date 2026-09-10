@@ -28,3 +28,64 @@
   - Next step: user sets ASRC Federal splits to `day_offset` −2 / −2 / −1 in the
     app and starts dating ASRC pay events on the official Friday; optional
     verification pass against the TEST household per the plan.
+
+- **One Checking (x0801) reconciliation vs Jul + Aug 2026 statements — analysis
+  pass.** First reconcile of account `40124cdf-…` against its own OnePay PDFs.
+  No ADR (data-only, per the USAA-reconcile / 2026-08-24 OnePay-fix precedent).
+  - New (all gitignored `planning/` scratch): `2026-07.pdf`, `2026-08.pdf`
+    (user-supplied); `build-one-statement-csv.mjs` → `one-checking-statement.csv`
+    (Checking-section lines, both months tie to the printed TOTAL: Jul −$712.96,
+    Aug −$56.42); `app-one-checking.json` (MCP snapshot); `one-reconcile-report.txt`;
+    `one-reconcile-findings.md`.
+  - New committed: `scripts/reconcile-one-csv.mjs` — adapted from
+    `scripts/reconcile-usaa-csv.mjs` (±7-day window, subset-sum 1–3, merchant→
+    institution map, `--json-missing`).
+  - Findings: app under-recorded **−$583** of July outflow (nothing logged
+    before Jul 17) and **−$28** of August. Current displayed balance was
+    ≈ −$600.71 vs Aug 31 statement ending $43.70.
+  - Interview: transfer/round-up legs → the real One pocket (cross-referenced
+    against the 24 pocket statement pages); bill/debt-linked July items flagged
+    for in-app marking, not inserted; August kept as-is (lump/split entries) per
+    the user; 2 Aug orphans explained as tx-date vs cleared-date; Jul 2 +$100 →
+    Steven's Savings.
+  - Written: `scripts/migrations/2026-09-10-one-checking-reconcile.sql`
+    (+ `.verify.sql`) via `planning/gen-one-migration.mjs` — 37 plain inserts,
+    25 transfer pairs, 1 OnePay advance leg, 3 corrections (paycheck re-date,
+    DoubleWood, 1 dup delete), and 8 `account_balances` anchors (One Checking
+    7/31 $100.12 + 8/31 $43.70; 6 pockets at 8/31). No ADR. Not yet run — user
+    applies it manually in the Supabase SQL Editor, then the `.verify.sql`.
+  - Residuals (documented in the .sql header; anchors keep balances exact):
+    July span reaches ~−$690 of −$712.96 once the 10 flagged bill/debt items
+    are marked in-app (→ **#62**); August reconciled to ~$6, a deeper pass
+    (Sunrise Bagel, an Amazon dup, 8/31→Sept items, pocket reconciles) is
+    **#61**. OnePay Advance debt needs no change (July cycle nets $0).
+  - **Applied 2026-09-10** — user ran the migration in the Supabase SQL Editor.
+    All 6 verify checks pass: 37 plain rows + advance + 25 balanced transfer
+    pairs in; paycheck re-dated, DoubleWood fixed, dup `6713eac2` deleted;
+    July span −$280.58, August −$50.24 (both as projected); One Checking
+    `current` now **$119.15** (was ≈ −$600.71). Pockets sit at their Aug 31
+    statement endings.
+  - Follow-up `scripts/migrations/2026-09-10-one-checking-reconcile-fix.sql`
+    (+ `.verify.sql`): the 4 items the main migration couldn't identify, now
+    resolved from the user — USAA $100 (cancelled-Auto arrears), Grant $76.42
+    ($75 advance + $1.42 fee split), Grant sub $9.99, BowCredit $34.95 (all
+    plain Financial expenses / a split, tagged USAA / Grant); plus deletes 2
+    duplicate −$5.26 rows and pulls the Aaron's Club/KFC cleared_date to 7/31.
+  - **Both migrations applied + all 6 #62 in-app marks done (2026-09-10).**
+    July span **−$706.08** vs statement −$712.96; August −$24.17; One Checking
+    balance **$119.15**. Cleo debt held at $55.00. #62 closed.
+  - **August line reconcile (#61, part 1)** —
+    `scripts/migrations/2026-09-11-one-checking-august-reconcile.sql`
+    (+ `.verify.sql`), built from a full 210-line pass
+    (`planning/aug-reconcile.mjs`). Deletes 8 dup rows — incl. **3 round-up
+    pairs the 2026-09-10 migration wrongly re-added** (the app already had them)
+    — re-adds the 8/2 Snapchat that `-fix.sql` wrongly deleted, inserts 7
+    absent Sunrise Bagel charges + net-zero Obligo/BowCredit pairs, and moves a
+    −$8.38 Fred Meyer to its 8/1 statement date.
+  - **Applied 2026-09-11, all checks clean.** August span **−$57.14** vs
+    statement −$56.42 (within $0.72); July **−$697.70**; One Checking balance
+    holds at **$119.15**. One Checking reconcile is done.
+  - Remaining on **#61**: 3 loose ends in the user's own entries (the Aug 21–22
+    Aaron's cluster −434.03/−97.10/−9.20/−39.46 vs statement −$540.33; Stash
+    Aug 4 −$3 vs statement −$12; `d7029670` −$60 unidentified), and the 24 One
+    savings-pocket reconciles.
