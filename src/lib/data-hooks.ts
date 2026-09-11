@@ -22,16 +22,9 @@ import {
 import { advanceDate, needsEnvelope } from "./format";
 import { assertCategorySplitRows } from "./split-groups";
 import { useAuth } from "./auth-context";
-import {
-  advanceMinimumPaymentPatch,
-  advanceReactivationPatch,
-  insertFeeTransaction,
-  deletePairedFees,
-  hasFee,
-} from "./payments";
+import { insertFeeTransaction, deletePairedFees, hasFee } from "./payments";
 import { nextPayDate } from "./paycheck-budget";
 import { useIncomeSources, useIncomeEvents } from "./income-hooks";
-import { debtPayoffDatePatch } from "./debt-payoff-state";
 
 /** Normalized domain comparison — stored values vary in case/whitespace. */
 export function categoryDomain(c: { domain?: string | null } | undefined | null) {
@@ -763,19 +756,33 @@ export function useAddDebtAdjustment() {
     }) => {
       const affectsBalance = args.affectsBalance !== false; // default true
       if (affectsBalance) {
-        const next = Math.max(
-          0,
-          Number(args.debt.remaining_balance ?? 0) + args.amount,
-        );
-        const { error: debtError } = await supabase
-          .from("debts")
-          .update({
-            remaining_balance: next,
-            ...advanceMinimumPaymentPatch(args.debt, next),
-            ...debtPayoffDatePatch(args.debt, next, args.adjustmentDate),
-          })
-          .eq("id", args.debt.id);
+        // ADR-101: atomic RPC — see useCreateAdvance for why.
+        const { error: debtError } = await supabase.rpc("apply_debt_adjustment", {
+          p_debt_id: args.debt.id,
+          p_amount: args.amount,
+          p_effective_date: args.adjustmentDate,
+        });
         if (debtError) throw debtError;
+      }
+      // ADR-102: mirror onto the debt's linked_account_id, when it has one —
+      // same sign flip as a payment (a charge that increases what's owed is
+      // money leaving the real account; a credit that decreases it is money
+      // coming back). No linked_debt_id: this must stay invisible to
+      // cycle-progress math, same reasoning as the advance mirror.
+      let mirrorTransactionId: string | null = null;
+      if (affectsBalance && args.debt.linked_account_id) {
+        const mirror = await saveWithOptionalColumns<Transaction>(
+          {
+            household_id: householdId!,
+            account_id: args.debt.linked_account_id,
+            amount: -args.amount,
+            status: "cleared",
+            description: args.description ?? args.adjustmentType,
+            transaction_date: args.adjustmentDate,
+          } as Record<string, unknown>,
+          async (p) => supabase.from("transactions").insert(p).select("*").single(),
+        );
+        mirrorTransactionId = mirror.id;
       }
       const { error } = await supabase.from("debt_adjustments").insert({
         household_id: householdId,
@@ -785,6 +792,7 @@ export function useAddDebtAdjustment() {
         description: args.description,
         adjustment_date: args.adjustmentDate,
         affects_balance: affectsBalance,
+        mirror_transaction_id: mirrorTransactionId,
       });
       if (error) throw error;
     },
@@ -801,19 +809,13 @@ export function useDeleteDebtAdjustment() {
   return useMutation({
     mutationFn: async (args: { adjustment: DebtAdjustment; debt: Debt }) => {
       // ADR-058: record-only adjustments never touched the balance — don't reverse.
-      if (args.adjustment.affects_balance !== false) {
-        const next = Math.max(
-          0,
-          Number(args.debt.remaining_balance ?? 0) - Number(args.adjustment.amount ?? 0),
-        );
-        const { error: debtError } = await supabase
-          .from("debts")
-          .update({
-            remaining_balance: next,
-            ...advanceMinimumPaymentPatch(args.debt, next),
-            ...debtPayoffDatePatch(args.debt, next, args.adjustment.adjustment_date),
-          })
-          .eq("id", args.debt.id);
+      // ADR-101: atomic RPC — see useCreateAdvance for why.
+      if (args.adjustment.affects_balance !== false && Number(args.adjustment.amount ?? 0) !== 0) {
+        const { error: debtError } = await supabase.rpc("apply_debt_adjustment", {
+          p_debt_id: args.debt.id,
+          p_amount: -Number(args.adjustment.amount ?? 0),
+          p_effective_date: args.adjustment.adjustment_date,
+        });
         if (debtError) throw debtError;
       }
       const { error } = await supabase
@@ -821,10 +823,21 @@ export function useDeleteDebtAdjustment() {
         .delete()
         .eq("id", args.adjustment.id);
       if (error) throw error;
+      // ADR-102: clean up the mirror transaction this adjustment wrote onto
+      // the debt's linked_account_id, if any.
+      if (args.adjustment.mirror_transaction_id) {
+        const { error: mirrorError } = await supabase
+          .from("transactions")
+          .delete()
+          .eq("id", args.adjustment.mirror_transaction_id);
+        if (mirrorError) throw mirrorError;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["debt_adjustments"] });
       qc.invalidateQueries({ queryKey: ["debts"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
     },
   });
 }
@@ -1119,31 +1132,48 @@ export function useCreateAdvance() {
         } as Record<string, unknown>,
         async (p) => supabase.from("transactions").insert(p).select("*").single(),
       );
+      // ADR-102: when this debt's balance actually lives on a real account
+      // (e.g. "Dave ExtraCash"), mirror the withdrawal leg there too — same
+      // transfer_group_id as the deposit above, so useDeleteAdvance's
+      // delete-by-group already cleans both up, and the transfer-title UI
+      // (ADR-098) shows "Source -> Destination" for real. No linked_debt_id
+      // on this leg: it must stay invisible to cycle-progress math (that's
+      // what the deposit leg + debt_adjustments row are for).
+      if (args.debt.linked_account_id) {
+        await saveWithOptionalColumns<Transaction>(
+          {
+            household_id: householdId!,
+            account_id: args.debt.linked_account_id,
+            amount: -args.amount,
+            status: "cleared",
+            description: `Advance: ${args.debt.name}`,
+            transaction_date: args.advanceDate,
+            transfer_group_id: groupId,
+          } as Record<string, unknown>,
+          async (p) => supabase.from("transactions").insert(p).select("*").single(),
+        );
+      }
       // Step 2: update debt remaining_balance (ADR-037: payable row first).
-      const next = Math.max(0, Number(args.debt.remaining_balance ?? 0) + args.amount);
-      // ADR-066: an advance against a paid-off advance-type debt reactivates
-      // it in the same write, rather than staying "paid off" and hidden.
-      // advanceReactivationPatch also resets the stale payment_status /
-      // cycle_paid_to_date from the last payoff (fresh cycle).
-      const reactivation = advanceReactivationPatch(args.debt);
+      // ADR-101: atomic RPC, not a client-computed read-then-write — two
+      // advances logged close together must both actually add up instead of
+      // the second silently overwriting the first's effect. Reactivation,
+      // the minimum_payment mirror, and the due-date-fill-if-blank all move
+      // server-side with it, computed from the same atomic snapshot.
       // ADR-056 addendum: a one-time smart default, same as the debt form —
       // an advance against a biweekly advance-type debt with no due date yet
-      // fills it from the household's next paycheck. Never overwrites a due
-      // date that's already set (no ongoing resync).
-      const needsDueDate =
+      // fills it from the household's next paycheck. The RPC only applies
+      // this if next_due_date is *currently* (atomically) still blank.
+      const eligibleForDueDateFill =
         args.debt.debt_type === "advance" &&
-        (args.debt.billing_cycle ?? "").toLowerCase() === "biweekly" &&
-        !args.debt.next_due_date;
-      const nextDue = needsDueDate ? nextPayDate(sources, events, args.advanceDate) : null;
-      const { error: debtError } = await supabase
-        .from("debts")
-        .update({
-          remaining_balance: next,
-          ...advanceMinimumPaymentPatch(args.debt, next),
-          ...reactivation,
-          ...(nextDue ? { next_due_date: nextDue } : {}),
-        })
-        .eq("id", args.debt.id);
+        (args.debt.billing_cycle ?? "").toLowerCase() === "biweekly";
+      const nextDue = eligibleForDueDateFill
+        ? nextPayDate(sources, events, args.advanceDate)
+        : null;
+      const { error: debtError } = await supabase.rpc("apply_debt_advance", {
+        p_debt_id: args.debt.id,
+        p_amount: args.amount,
+        p_next_due_date_if_blank: nextDue,
+      });
       if (debtError) throw debtError;
       // Step 3: insert debt_adjustments row.
       const { error: adjError } = await supabase.from("debt_adjustments").insert({
@@ -1178,19 +1208,16 @@ export function useDeleteAdvance() {
   return useMutation({
     mutationFn: async (args: { adjustment: DebtAdjustment; debt: Debt }) => {
       // Step 1: reverse debt balance (ADR-037 ordering — payable first).
-      const next = Math.max(
-        0,
-        Number(args.debt.remaining_balance ?? 0) - Number(args.adjustment.amount ?? 0),
-      );
-      const { error: debtError } = await supabase
-        .from("debts")
-        .update({
-          remaining_balance: next,
-          ...advanceMinimumPaymentPatch(args.debt, next),
-          ...debtPayoffDatePatch(args.debt, next, args.adjustment.adjustment_date),
-        })
-        .eq("id", args.debt.id);
-      if (debtError) throw debtError;
+      // ADR-101: atomic RPC — see useCreateAdvance for why.
+      const amt = Number(args.adjustment.amount ?? 0);
+      if (amt !== 0) {
+        const { error: debtError } = await supabase.rpc("apply_debt_adjustment", {
+          p_debt_id: args.debt.id,
+          p_amount: -amt,
+          p_effective_date: args.adjustment.adjustment_date,
+        });
+        if (debtError) throw debtError;
+      }
       // Step 2: delete the adjustment row.
       const { error: adjError } = await supabase
         .from("debt_adjustments")

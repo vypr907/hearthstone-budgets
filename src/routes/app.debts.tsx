@@ -778,6 +778,8 @@ export function DebtDialog({
   const [fundingDeductionId, setFundingDeductionId] = useState("none");
   /** ADR-074: the account this debt is usually paid from. */
   const [usualPaymentAccountId, setUsualPaymentAccountId] = useState("none");
+  /** ADR-102: the real account this debt's balance actually lives on, if any. */
+  const [linkedAccountId, setLinkedAccountId] = useState("none");
   const [name, setName] = useState("");
   const [remaining, setRemaining] = useState("");
   const [original, setOriginal] = useState("");
@@ -845,6 +847,7 @@ export function DebtDialog({
     setInvoiceNumber(debt?.invoice_number ?? "");
     setFundingDeductionId(debt?.funding_deduction_id ?? "none");
     setUsualPaymentAccountId(debt?.usual_payment_account_id ?? "none");
+    setLinkedAccountId(debt?.linked_account_id ?? "none");
     setNameTouched(!!debt?.name);
     setRemainingTouched(!!debt?.id);
     setMinPayTouched(!!debt?.id);
@@ -989,6 +992,7 @@ export function DebtDialog({
               date_paid_off: datePaidOff,
             }),
         usual_payment_account_id: usualPaymentAccountId2,
+        linked_account_id: linkedAccountId !== "none" ? linkedAccountId : null,
         starting_balance: startingBalance,
         // Interest rate is optional; the column is NOT NULL default 0, so a
         // blank field stores 0 (a null insert is rejected).
@@ -1179,6 +1183,33 @@ export function DebtDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          {/* ADR-102: when this debt's balance actually lives on a real
+              account (a credit line like "Dave ExtraCash"), linking it here
+              makes every advance/fee/repayment also post a mirror
+              transaction there, so the account's own history stays real. */}
+          <div>
+            <Label>Linked account (optional)</Label>
+            <Select value={linkedAccountId} onValueChange={setLinkedAccountId}>
+              <SelectTrigger className="h-14 text-base">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="py-3 text-base">
+                  Not linked
+                </SelectItem>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id} className="py-3 text-base">
+                    {accountLabel(a)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              If this debt is really a real account (e.g. a credit line),
+              linking it here mirrors every advance, fee, and repayment onto
+              that account's own transaction history.
+            </p>
           </div>
           {/* ADR-052: invoice reference number drives the auto-composed name. */}
           {isInvoice ? (

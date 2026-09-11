@@ -140,6 +140,8 @@ export type Debt = {
   funding_deduction_id?: string | null;
   /** ADR-074: the account this debt is usually paid from. */
   usual_payment_account_id?: string | null;
+  /** ADR-102: the real account this debt's balance actually lives on, when one exists. */
+  linked_account_id?: string | null;
 
   created_at: string;
   updated_at: string;
@@ -291,6 +293,8 @@ export type DebtAdjustment = {
   adjustment_date: string;
   /** ADR-058: when false the row is record-only and does not modify remaining_balance. Default true. */
   affects_balance?: boolean | null;
+  /** ADR-102: the mirror transaction this adjustment wrote onto the debt's linked_account_id, if any. */
+  mirror_transaction_id?: string | null;
   created_at?: string | null;
 };
 

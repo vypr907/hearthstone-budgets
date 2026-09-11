@@ -4085,3 +4085,91 @@ forever with no record anywhere of 9/12.
 Status: Decided 2026-09-09. Implemented 2026-09-09. Migration
 `scripts/migrations/2026-09-09-transactions-cleared-date.sql` (+ `.verify.sql`)
 written, pending the user running it manually per ADR-083.
+
+## ADR-101: Atomic Debt-Balance RPCs for Advance Draws and Adjustments
+
+Decision:
+Replace the client-side read-remaining_balance-then-write-absolute-value pattern in
+`useCreateAdvance` and `useAddDebtAdjustment` (`src/lib/data-hooks.ts`) with two new
+Postgres functions, `apply_debt_advance` and `apply_debt_adjustment` (both `security
+invoker`, `scripts/migrations/2026-09-11-atomic-debt-balance-rpcs.sql`), that do the
+entire debt-row update — `remaining_balance`, the `minimum_payment` mirror for
+`debt_type='advance'`, ADR-066 reactivation, the payoff-date patch, and the
+due-date-fill-if-blank — in one atomic `UPDATE` statement, so concurrent calls against
+the same debt row always serialize correctly instead of overwriting each other.
+`useLogDebtPayment`'s historical/out-of-cycle branch now also calls
+`apply_debt_adjustment` with a negative amount (same shape as an adjustment).
+
+Reason:
+Two real incidents of silent balance corruption from this exact race — OnePay Advance
+on 2026-08-24, and Dave ExtraCash on 2026-09-11 (2 advances + 2 fees entered 20-90
+seconds apart; only one of each pair's effect survived, and the same race also stopped
+the debt's cycle from resolving, so `next_due_date` never rolled forward). The existing
+code only soft-warns about backdating (`confirmIfBackdated` in `app.debts.tsx`) but does
+nothing about same-day/near-simultaneous entries, which is what actually happened both
+times. Deliberately NOT covered: `applyClearedPayment`'s in-cycle branch (normal debt
+payment logging — shortfall/cycle-satisfied/arrears/due-date-roll branching, a
+materially bigger rewrite) and `useReversePayment` (one-off, user-invoked per specific
+transaction, not a realistic race target).
+
+Addendum (2026-09-11): end-to-end verification (a Playwright run against the TEST
+household — two advances, a fee, then a payment, all through the real UI) immediately
+reproduced a live instance of the uncovered gap above: `useLogDebtPayment`'s in-cycle
+branch was still computing from the `debt` object the payment form had captured on open,
+so a payment logged shortly after those advances silently paid down the *pre-advance*
+balance instead of the current one ($40 instead of the correct $83). This is a normal
+"draw, then pay" session, not a rare double-click — worth closing now rather than
+deferring with the rest of the in-cycle rewrite. Fix: `useLogDebtPayment`
+(`src/lib/payments.ts`) now re-fetches the debt row immediately before calling
+`applyClearedPayment`, shrinking the staleness window from "however long the page had
+been open" to one round trip. Not a full fix — `applyClearedPayment` itself is still not
+atomic, so two payments fired within that same round trip could still race — tracked as
+GitHub Issue #66 along with the rest of the deferred `applyClearedPayment` rewrite.
+Re-ran the same Playwright verification after the addendum: balance, mirrors, and
+`debt_adjustments.mirror_transaction_id` all correct.
+
+Status: Decided 2026-09-11. Implemented 2026-09-11.
+
+## ADR-102: Debts Can Link to a Real Account (Mirrored Ledger)
+
+Decision:
+Add `debts.linked_account_id` (nullable uuid, no FK — this table has none today) and
+`debt_adjustments.mirror_transaction_id` (same). When a debt has a `linked_account_id`
+set, every balance-changing flow now also writes a mirror transaction onto that account,
+in addition to its existing ledger effect — never carrying `linked_debt_id` on the mirror
+leg, so it stays invisible to `deriveCycleInfo`'s cycle-progress math (that's what the
+existing linked-and-counted rows are for):
+- **Advance draws** (`useCreateAdvance`): the existing deposit leg (positive, into the
+  chosen destination account) gets a sibling — negative, on `linked_account_id`, same
+  `transfer_group_id`. `useDeleteAdvance` already deletes by `transfer_group_id`, so it
+  needed no change to clean up both legs.
+- **Adjustments/fees** (`useAddDebtAdjustment`): a new mirror transaction (sign flipped
+  from the adjustment amount) on `linked_account_id`; its id is stored on the
+  `debt_adjustments` row (`mirror_transaction_id`) so `useDeleteDebtAdjustment` can clean
+  it up too.
+- **Repayments** (`useLogDebtPayment`): the existing "Debt payment" transaction gets a
+  `transfer_group_id` (new — it previously only had `split_group_id`, for fee-pairing;
+  the two coexist without conflict) paired with a positive credit mirror on
+  `linked_account_id`.
+
+`null` for every debt with no backing account (e.g. OnePay Advance, which has none) —
+those are completely unaffected. First (only, so far) debt to get one: Dave ExtraCash,
+linked to its own real "Dave ExtraCash" credit account
+(`scripts/migrations/2026-09-11-debt-linked-account.sql`).
+
+Reason:
+The user found that "Dave ExtraCash" existed as both a `debts` row (drives the payment
+UI, cycles, due dates) and an `accounts` row (a real credit line with its own balance)
+that were only connected by matching names — the account never received a single
+transaction, so it couldn't be used to verify anything against a real Dave statement.
+General column rather than a Dave-specific hack, since any future debt with a real
+backing account (any advance/credit-line product with its own "account" entry) hits the
+same gap.
+
+Not covered: reversing/repair-deleting a mirrored repayment doesn't yet clean up its
+mirror leg — `useReversePayment` and `useDeleteLinkedTransaction` are generic and don't
+know about `transfer_group_id` pairing the way `useDeleteAdvance` already does. Tracked
+as GitHub Issue #65. Also not covered: no UI picker to set `linked_account_id` on a debt
+yet — set via migration for now, same as Dave.
+
+Status: Decided 2026-09-11. Implemented 2026-09-11.

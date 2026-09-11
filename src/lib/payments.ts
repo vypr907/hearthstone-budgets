@@ -1328,7 +1328,7 @@ export function useLogDebtPayment() {
   const done = useAfterPayment();
   return useMutation({
     mutationFn: async ({
-      debt,
+      debt: staleDebt,
       accountId,
       principal,
       date,
@@ -1337,6 +1337,21 @@ export function useLogDebtPayment() {
       priorArrears,
       newestAdvanceDate,
     }: LogDebtPaymentInput) => {
+      // ADR-101 addendum: applyClearedPayment's in-cycle branch isn't
+      // atomic (full cycle-satisfied/arrears/due-date-roll logic — too big a
+      // rewrite for that pass), but a fresh fetch right before using it
+      // closes the most common real trigger: a normal "draw an advance, then
+      // pay" session where the form's debt prop was captured before the
+      // advance landed. Doesn't make concurrent submissions safe, but the
+      // window shrinks from "however long the page has been open" to one
+      // round trip.
+      const { data: fresh, error: freshErr } = await supabase
+        .from("debts")
+        .select("*")
+        .eq("id", staleDebt.id)
+        .single();
+      if (freshErr) throw freshErr;
+      const debt = fresh as Debt;
       const p = toPayable("debt", debt);
       const amt = Math.abs(Number(principal) || 0);
       const extras = (lines ?? []).filter((l) => Math.abs(Number(l.amount) || 0) >= 0.005);
@@ -1355,19 +1370,29 @@ export function useLogDebtPayment() {
             const res = await applyClearedPayment(p, amt, priorArrears ?? 0, date);
             resolvedDueDate = res.resolved_due_date ?? null;
           } else if (!ledgerOnly) {
-            // Historical: balance only. Cycle counters, status and due date stay put.
-            const remaining = Number(debt.remaining_balance ?? 0);
-            const nextBalance = Math.max(0, remaining - amt);
-            await updateRow("debts", debt.id, {
-              remaining_balance: nextBalance,
-              ...advanceMinimumPaymentPatch(debt, nextBalance),
-              ...debtPayoffDatePatch(debt, nextBalance, date),
+            // Historical: balance only. Cycle counters, status and due date
+            // stay put. ADR-101: atomic RPC, same shape as a debt adjustment
+            // with a negative amount.
+            const { error } = await supabase.rpc("apply_debt_adjustment", {
+              p_debt_id: debt.id,
+              p_amount: -amt,
+              p_effective_date: date,
             });
+            if (error) throw error;
           }
         } else if (inCycle) {
           await updateRow("debts", debt.id, { payment_status: "pending" });
         }
       }
+
+      // ADR-102: when this debt's balance lives on a real account (e.g.
+      // "Dave ExtraCash"), pair the payment with a mirror credit there —
+      // same transfer_group_id, so the transfer-title UI (ADR-098) shows
+      // "Checking -> Dave ExtraCash" and the linked account's history
+      // actually reflects the repayment. No linked_debt_id on the mirror:
+      // the real payment row above already carries it, and cycle math must
+      // only count that one, not both.
+      const mirrorGroupId = amt > 0.005 && debt.linked_account_id ? crypto.randomUUID() : null;
 
       if (amt > 0.005) {
         const { error } = await supabase.from("transactions").insert({
@@ -1382,6 +1407,22 @@ export function useLogDebtPayment() {
           linked_debt_id: debt.id,
           split_group_id: groupId,
           resolved_cycle_due_date: resolvedDueDate,
+          institution_id: p.institution_id,
+          transfer_group_id: mirrorGroupId,
+        });
+        if (error) throw error;
+      }
+
+      if (mirrorGroupId && debt.linked_account_id) {
+        const { error } = await supabase.from("transactions").insert({
+          household_id: householdId,
+          account_id: debt.linked_account_id,
+          amount: amt,
+          status,
+          description: `Debt payment · ${debt.name}`,
+          transaction_date: date,
+          cleared_date: status === "cleared" ? date : null,
+          transfer_group_id: mirrorGroupId,
           institution_id: p.institution_id,
         });
         if (error) throw error;

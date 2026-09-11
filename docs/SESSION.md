@@ -207,4 +207,91 @@
     North Pole AK", no matching institution existed by that name; McPeaks
     is the user's most common institution for this category pairing).
     Not yet applied — user runs it manually.
-  - All of the above: not yet committed/pushed.
+  - All of the above: committed and pushed (589fed2).
+  - **Dave ExtraCash debt corruption diagnosed + fixed.** User logged 2×$50
+    advances + 2×$5 overdraft fees on 9/4 (20-90s apart); only $55 (one $50 +
+    one $5) landed instead of $110, and `next_due_date` stayed stuck at 8/27
+    instead of rolling to 9/10. Root cause: the already-known bug class at
+    `app.debts.tsx:1551` ("found via the OnePay Advance incident,
+    2026-08-24") — every debt-balance mutation (`useCreateAdvance`,
+    `useAddDebtAdjustment`, `applyClearedPayment`) computes
+    `next = <browser's currently-held remaining_balance> + amount` and writes
+    that absolute value, never an atomic DB increment; two mutations close
+    together silently overwrite each other. `debt_adjustments` (an
+    independent insert-per-event log, immune to the bug) durably showed all
+    4 real 9/4 events summing to exactly $110, matching the user's own
+    expectation, and confirmed the same race hit the second 8/27 payment
+    too (should have satisfied that cycle and rolled the due date to 9/10).
+    `scripts/migrations/2026-09-11-dave-extracash-fix.sql` (+ `.verify.sql`)
+    sets remaining_balance/minimum_payment to 110.00, cycle_paid_to_date to
+    0, payment_status to unpaid, next_due_date to 2026-09-10. Not yet
+    applied. Also flagged: "Dave ExtraCash" the real `accounts` row (credit
+    type) never receives any transactions — by design, matching every other
+    advance-type debt (OnePay Advance has no backing account at all); the
+    debt's own `remaining_balance` is the sole source of truth.
+  - **ADR-101: atomic debt-balance RPCs** (user: "fix it properly now" — 2nd
+    time this race has bitten, OnePay 8/24 + Dave today).
+    `scripts/migrations/2026-09-11-atomic-debt-balance-rpcs.sql` (+
+    `.verify.sql`, SCHEMA CHANGE) adds `apply_debt_advance` /
+    `apply_debt_adjustment` (`security invoker`) — the entire debt-row update
+    (balance, minimum_payment mirror, ADR-066 reactivation, payoff-date
+    patch, due-date-fill-if-blank) in one atomic `UPDATE`, so concurrent
+    calls on the same row always serialize instead of overwriting each
+    other. Converted `useCreateAdvance`, `useAddDebtAdjustment`,
+    `useDeleteDebtAdjustment`, `useDeleteAdvance` (data-hooks.ts) and
+    `useLogDebtPayment`'s historical branch (payments.ts) to call these
+    instead of client-side read-then-write. Removed now-unused
+    `advanceReactivationPatch` import. NOT covered (too big a rewrite for
+    this pass): `applyClearedPayment`'s in-cycle branch, `useReversePayment`.
+  - **ADR-102: debts can link to a real account** (user: "actually wire it
+    up" + "general column", both explicitly confirmed).
+    `scripts/migrations/2026-09-11-debt-linked-account.sql` (+
+    `.verify.sql`, SCHEMA CHANGE) adds `debts.linked_account_id` +
+    `debt_adjustments.mirror_transaction_id` (no FK, matches this table's
+    existing convention), sets Dave ExtraCash's link. When set, every
+    balance-changing flow now also writes a mirror transaction on that
+    account (never `linked_debt_id`-tagged, so cycle math can't double-count
+    it): advance draws share the deposit leg's `transfer_group_id` (so
+    `useDeleteAdvance`'s existing delete-by-group needed no change);
+    adjustments/fees get their own mirror, id stored on the
+    `debt_adjustments` row for `useDeleteDebtAdjustment` to clean up;
+    repayments gain a `transfer_group_id` (new — coexists with the existing
+    `split_group_id` used for fee-pairing) paired with a credit mirror.
+    Filed **#65**: `useReversePayment` / `useDeleteLinkedTransaction` don't
+    know about this pairing yet, so reversing/repair-deleting a mirrored
+    repayment orphans its mirror leg — not yet triggered against real data.
+    No UI picker yet to set `linked_account_id` on a debt (done via
+    migration for now, same as Dave).
+  - `tsc --noEmit` clean, `npm test` 190/190 pass throughout. User applied
+    all 3 migrations (verified via MCP: functions exist as `security
+    invoker`, columns exist, Dave ExtraCash reads $110/9-10/linked
+    correctly).
+  - **UI picker added**: `app.debts.tsx`'s Edit Debt dialog gains a "Linked
+    account (optional)" `Select`, right below "Usual payment account" — sets
+    `linked_account_id` for any debt, not just Dave.
+  - **End-to-end verified via Playwright against the TEST household**
+    (`scripts/smoke/.pw/verify-debt-mirroring.mjs`, cleanup is
+    timestamp/query-based so a mid-script failure can't orphan data — this
+    mattered: an earlier version of the script itself left orphaned rows
+    across a few failed attempts before the selectors were right, all
+    cleaned up and confirmed via MCP). Linked "TEST Debt Advance" to a
+    throwaway account via the new picker, fired 2 advances back-to-back (the
+    exact race that hit Dave ExtraCash), one fee, one payment — first run
+    caught a real bug (see below), second run: balance $83 exactly as
+    expected (50+20+20+3-10), 4 correct mirror transactions, none carrying
+    `linked_debt_id`, `debt_adjustments.mirror_transaction_id` set
+    correctly. Restored the TEST debt and deleted everything created.
+  - **ADR-101 addendum**: the Playwright run exposed a live instance of the
+    gap already flagged as deliberately uncovered — `useLogDebtPayment`'s
+    in-cycle branch (`applyClearedPayment`) was still using the stale `debt`
+    object the payment form captured on open, so a payment logged shortly
+    after the two advances paid down the *pre-advance* balance ($40 instead
+    of $83). Since "draw, then pay" is a normal session, not a rare
+    double-click, fixed now rather than fully deferred:
+    `useLogDebtPayment` re-fetches the debt row immediately before calling
+    `applyClearedPayment`. Not a full fix (`applyClearedPayment` itself
+    still isn't atomic) — filed **#66** for the remaining, much smaller
+    window, tracking the eventual full rewrite. Re-ran the same Playwright
+    verification after the fix: all green.
+  - **Committed and pushed** (all of ADR-101, ADR-102, the Dave fix, the
+    September Checking fixes, and the linked-account UI picker together).
