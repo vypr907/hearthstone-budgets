@@ -89,3 +89,44 @@
     Aaron's cluster −434.03/−97.10/−9.20/−39.46 vs statement −$540.33; Stash
     Aug 4 −$3 vs statement −$12; `d7029670` −$60 unidentified), and the 24 One
     savings-pocket reconciles.
+  - **3 loose ends resolved (#61, part 2)** — user interview against their own
+    Aaron's receipts. Aaron's: the 8/20 "first Aarons" charge is $434.03 =
+    $394.57 paid + $39.46 Protection Plus (same paid+fee split shape as the
+    existing Dresser entries) — the ledger's `Debt payment · Aarons` leg had
+    the full $434.03 instead of the $394.57 paid portion, double-counting the
+    fee leg already recorded beside it. Stash: statement itself shows the ACH
+    went from −$3 (Jul) to −$12 (Aug) — a real price change. `d7029670`: user
+    confirms a real 8/30 gas purchase; matches the statement's Aug 31 "FRED M
+    FUEL #9224 −$60.00" line exactly — `cleared_date` moved to 8/31.
+    `scripts/migrations/2026-09-11-one-checking-aaron-stash-fredmeyer-fix.sql`
+    (+ `.verify.sql`) — 3 updates, no inserts/deletes, no ADR (data-only).
+    Aaron's + Dresser now sum to exactly the Aug 22 statement's −$540.33.
+    **Applied 2026-09-11**, all verify checks pass (Aaron's cluster sums to
+    exactly −$540.33; Stash −$12.00; gas charge cleared 8/31; balance holds
+    at $119.15). One Checking otherwise fully reconciled; only the 24 One
+    savings-pocket reconciles remain on #61.
+  - **24 One pocket reconciles done (#61, part 3 — issue closed).** Discovered
+    the OnePay statement PDFs have a real text layer (`poppler-utils` installed
+    this session) — `pdftotext -layout` + `planning/parse-one-statement.py`
+    parses every account's Transaction History programmatically instead of
+    hand-transcribing. Every one of the 26 One accounts' parsed transactions
+    sum to its printed statement TOTAL exactly, both months — a hard
+    transcription tripwire. Of the 24 non-Checking pockets, only 6 had any
+    Jul/Aug activity (Steven's Savings, Emergency, Food, Games, kitten's
+    playroom, Pay Autosave — the same 6 the 2026-09-10 migration already
+    anchored); the other 18 are verified $0.00 in both the statement and the
+    app for both months — nothing to do there.
+    `scripts/migrations/2026-09-11-one-pockets-reconcile.sql` (+
+    `.verify.sql`, `planning/diff-pockets.py` /
+    `planning/verify-pocket-fixes.py`): date fixes (Emergency's 7/29→7/10,
+    kitten's playroom's 7/18→7/17), missing same-day wash legs and interest
+    postings inserted, a Pay Autosave amount fix ($30→$5, a mis-entered
+    Aug-1 Autosave row), and — the big find — an 8/29 duplicate-$50-transfer
+    cluster spanning Checking + Pay Autosave + Savings (the app had 4 "$50
+    Internal Transfer" pairs landing in Checking that day; Checking's own
+    statement shows only 2). All 6 active pockets now reconcile to their
+    OnePay statement net to the penny, both months; existing 8/31 anchors
+    needed no changes. **Applied 2026-09-11**, all verify checks pass against
+    the live schema (all 6 active pockets reconcile to the penny; dup rows
+    gone; Checking 8/29 shows exactly 2 $50 transfer legs). **Issue #61
+    closed.**
