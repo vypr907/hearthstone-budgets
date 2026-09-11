@@ -100,6 +100,35 @@ function AccountsPage() {
     [members],
   );
 
+  const accountName = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const a of accounts) m[a.id] = a.name;
+    return m;
+  }, [accounts]);
+  // ADR-098 addendum: same cross-account transfer-title resolution the
+  // Transactions screen uses, now shared here too — these lists only ever
+  // had a single account's rows in hand before, so a transfer's other leg
+  // was unreachable.
+  const transferTitleAccounts = useMemo(() => {
+    const legsByGroup: Record<string, Transaction[]> = {};
+    for (const t of transactions) {
+      if (!t.transfer_group_id) continue;
+      (legsByGroup[t.transfer_group_id] ||= []).push(t);
+    }
+    const m: Record<string, { from: string; to: string }> = {};
+    for (const legs of Object.values(legsByGroup)) {
+      const from = legs.find((l) => Number(l.amount) < 0);
+      const to = legs.find((l) => Number(l.amount) >= 0);
+      if (!from || !to) continue;
+      const pair = {
+        from: accountName[from.account_id ?? ""] ?? "—",
+        to: accountName[to.account_id ?? ""] ?? "—",
+      };
+      for (const l of legs) m[l.id] = pair;
+    }
+    return m;
+  }, [transactions, accountName]);
+
 
   const accountTypes = useMemo(
     () => [...new Set(accounts.map((a) => a.account_type).filter(Boolean))].sort() as string[],
@@ -317,6 +346,7 @@ function AccountsPage() {
                     <RecentActivity
                       rows={recentByAccount[a.id] ?? []}
                       institutionById={institutionById}
+                      transferTitleAccounts={transferTitleAccounts}
                       onSelect={setDetail}
                     />
                   </div>
@@ -348,6 +378,7 @@ function AccountsPage() {
         balance={viewing ? balances[viewing.id] : undefined}
         transactions={viewing ? (recentByAccount[viewing.id] ?? []) : []}
         institutionById={institutionById}
+        transferTitleAccounts={transferTitleAccounts}
         onClose={() => setViewing(null)}
         onEdit={(a) => {
           setViewing(null);
@@ -371,6 +402,7 @@ function AccountDetailDialog({
   balance,
   transactions,
   institutionById,
+  transferTitleAccounts,
   onClose,
   onEdit,
   onLogBalance,
@@ -382,6 +414,7 @@ function AccountDetailDialog({
   balance?: { current: number; spendable: number };
   transactions: Transaction[];
   institutionById: Record<string, Institution>;
+  transferTitleAccounts: Record<string, { from: string; to: string }>;
   onClose: () => void;
   onEdit: (a: Account) => void;
   onLogBalance: (a: Account) => void;
@@ -435,6 +468,7 @@ function AccountDetailDialog({
             <AccountAllTransactions
               rows={transactions}
               institutionById={institutionById}
+              transferTitleAccounts={transferTitleAccounts}
               onSelect={setTxDetail}
             />
           </div>
@@ -490,10 +524,12 @@ function AccountBalanceHistory({ history }: { history: AccountBalance[] }) {
 function AccountAllTransactions({
   rows,
   institutionById,
+  transferTitleAccounts,
   onSelect,
 }: {
   rows: Transaction[];
   institutionById: Record<string, Institution>;
+  transferTitleAccounts: Record<string, { from: string; to: string }>;
   onSelect: (t: Transaction) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -526,6 +562,8 @@ function AccountAllTransactions({
                       <TransactionTitle
                         transaction={t}
                         placeName={t.institution_id ? institutionById[t.institution_id]?.name : null}
+                        transferFromAccount={transferTitleAccounts[t.id]?.from}
+                        transferToAccount={transferTitleAccounts[t.id]?.to}
                       />
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -599,10 +637,12 @@ function AccountAllTransactions({
 function RecentActivity({
   rows,
   institutionById,
+  transferTitleAccounts,
   onSelect,
 }: {
   rows: Transaction[];
   institutionById: Record<string, Institution>;
+  transferTitleAccounts: Record<string, { from: string; to: string }>;
   onSelect: (t: Transaction) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -637,6 +677,8 @@ function RecentActivity({
                   <TransactionTitle
                     transaction={t}
                     placeName={t.institution_id ? institutionById[t.institution_id]?.name : null}
+                    transferFromAccount={transferTitleAccounts[t.id]?.from}
+                    transferToAccount={transferTitleAccounts[t.id]?.to}
                   />
                 </p>
                 <p className="text-xs text-muted-foreground">

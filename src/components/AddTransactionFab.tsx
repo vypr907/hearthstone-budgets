@@ -259,6 +259,7 @@ export function AddTransactionFab() {
             categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
             amount: n > 0 ? -Number(r.amount) : Number(r.amount),
           })),
+          institutionId: merchantId,
         });
         toast.success("Split transaction added");
         reset();

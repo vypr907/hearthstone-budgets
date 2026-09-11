@@ -3956,6 +3956,18 @@ Revisit if that gap turns out to matter in practice.
 
 Status: Decided 2026-09-09. Implemented 2026-09-09.
 
+Addendum (2026-09-11): the Accounts & Balances gap above did turn out to matter — wired
+up. `AccountsPage` (`app.accounts.tsx`) now builds the same `transferTitleAccounts` map
+(keyed off its own already-fetched full `useTransactions()` list, same shape as the
+Transactions screen's) and threads it through `RecentActivity`, `AccountAllTransactions`,
+and the `AccountDetailDialog` that hosts the latter. All three transfer legs now render
+"Source → Destination" regardless of which screen they're viewed from. No data change —
+this is purely a rendering gap; every existing `transfer_group_id` pair already had both
+legs in the database. Verified in-browser (Playwright against a throwaway TEST-household
+account + transfer pair, cleaned up after): both `RECENT ACTIVITY` and `ALL TRANSACTIONS`
+on the Accounts screen now show the arrow, matching the Transactions screen. Status:
+Implemented 2026-09-11.
+
 ## ADR-099: Institution Type Taxonomy Expansion + Fix Institution Logins Screen
 
 Decision:

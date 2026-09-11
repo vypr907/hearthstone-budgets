@@ -664,6 +664,7 @@ export function useSaveSplitTransaction() {
       description: string | null;
       status: "pending" | "cleared";
       lines: SplitLine[];
+      institutionId?: string | null;
     }) => {
       const groupId = args.splitGroupId ?? crypto.randomUUID();
       if (args.splitGroupId) {
@@ -690,6 +691,7 @@ export function useSaveSplitTransaction() {
         transaction_date: args.transactionDate,
         cleared_date: clearedDate,
         split_group_id: singleLine ? null : groupId,
+        institution_id: args.institutionId ?? null,
       }));
       const { error } = await supabase.from("transactions").insert(rows);
       if (error) throw error;

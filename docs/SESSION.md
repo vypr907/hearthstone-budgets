@@ -130,3 +130,81 @@
     the live schema (all 6 active pockets reconcile to the penny; dup rows
     gone; Checking 8/29 shows exactly 2 $50 transfer legs). **Issue #61
     closed.**
+  - **OnePay Advance repayment fee + display-bug triage + live Sept balance
+    gap.** User's `-$225.00` repayment (`e63a2cfa`, 9/9) was correctly sized —
+    per every prior cycle, the fee is a separate unlinked leg, not part of
+    the linked amount. Confirmed `payments.ts:283` (`applyClearedPayment`)
+    only moves `remaining_balance` for linked rows, so adding a plain
+    unlinked `-$6.75` fee is risk-free. Filed **#63**: `ReversePaymentButton`
+    (`payments.ts:947`) doesn't special-case `isAdvanceDisbursement` on the
+    Transactions page the way `app.debts.tsx:1507` does on the Debts page —
+    reversing an advance draw there would double-add to `remaining_balance`
+    instead of undoing it. Traced the transfer-title ("X → Y") and split
+    "Transaction"-fallback rendering to `TransactionTitle.tsx` — root cause
+    not pinned down (several plausible candidates: the known Accounts-page
+    limitation, single-leg advance rows, or `institution_id`-null standalone
+    inserts) pending a concrete example from the user.
+  - Live-reconciled One Checking against the user's real-time OnePay feed
+    (Sept 1-11, no statement yet). Found + fixed 3 gaps:
+    `scripts/migrations/2026-09-11-one-checking-september-fixes.sql`
+    (+ `.verify.sql`) — missing Sunrise Bagel -$16.00 (9/2), missing OnePay
+    Advance fee -$6.75 (9/9, the item above), and a 1-day date slip on a
+    $36.00 transfer. **Applied 2026-09-11.**
+  - Even after those 3, the ledger nets to $78.40 vs. the user's confirmed
+    real raw balance of $13.14 — a **$65.26 gap neither side could find**:
+    ruled out pending/holds, wrong account, safe-to-spend vs. raw balance,
+    future-dated/duplicate transactions, split-math errors, and a user
+    hand-check of every visible line from 8/28 to today against bank
+    screenshots. Per user decision: same migration sets a fresh 9/11 anchor
+    at the real $13.14 (current balance correct going forward); the gap
+    itself is tracked as **#64** to revisit once the September statement
+    closes and a full penny-for-penny reconcile is possible.
+  - **Display-bug follow-up, resolved.** The $50/$36 transfers not showing
+    "X → Y" were the already-documented Accounts & Balances limitation
+    (ADR-098/TODO.md) — user confirmed that's the screen. The split
+    ($31.96, "Snacks & Drinks" + "Smoking") showing generic "Transaction" was
+    a real bug: traced to `AddTransactionFab.tsx`'s split-submission path
+    (`submitExpense`, `mode === "split"` branch) never forwarding the
+    selected Place (`merchantId`) into `useSaveSplitTransaction` — unlike the
+    plain-expense/income paths a few lines down, which do. Confirmed via
+    query: 134/169 split rows in "Our Household" have an institution (from
+    other creation paths, e.g. fee/debt-payment splits); the 35 without are
+    exactly the ones made through this manual split flow. Fixed (user asked
+    for it now, not deferred):
+    - `src/lib/data-hooks.ts` — `useSaveSplitTransaction` now accepts
+      `institutionId` and stamps it on every inserted row.
+    - `src/components/AddTransactionFab.tsx` — passes `merchantId` through.
+    - `src/routes/app.transactions.tsx` (`SplitTransactionDetail`) — also
+      passes `transaction.institution_id` through on save, fixing a related
+      pre-existing bug where *editing* an existing split (delete + re-insert
+      via the same hook) silently wiped out whatever institution it already
+      had.
+    No schema change, no ADR (bug fix, not a design decision).
+    `tsc --noEmit` clean, `npm test` 190/190 pass.
+  - **Transfer titles now render on Accounts & Balances too** (ADR-098
+    addendum — the user pushed back that "not a bug, just a known
+    limitation" wasn't good enough; wired it up). `app.accounts.tsx`'s
+    `AccountsPage` now builds the same `transferTitleAccounts` map the
+    Transactions screen uses (off its own already-fetched full transaction
+    list) and threads it through `RecentActivity`, `AccountAllTransactions`,
+    and `AccountDetailDialog`. Removed the now-stale TODO.md limitation
+    entry. **Verified in-browser**: one-time Playwright smoke-test setup
+    (`scripts/smoke/.pw/`, per its README) against the TEST household — a
+    throwaway second account + transfer pair, confirmed "Source → Destination"
+    renders on both Recent Activity and All Transactions (screenshots), no
+    console errors, Transactions screen unaffected, then cleaned up (0 rows
+    left, confirmed via MCP). `tsc --noEmit` clean, 190/190 tests pass.
+  - **Retroactive backfill for the split-institution bug.**
+    `scripts/migrations/2026-09-11-split-institution-backfill.sql` (+
+    `.verify.sql`). Of 35 "Our Household" split rows missing an institution,
+    only 4 groups (8 rows) actually show the bare "Transaction" fallback —
+    the other 27 are paycheck/deduction splits with a description, already
+    displaying fine. Backfilled the 4: two 9/1 ATM-withdrawal+fee splits →
+    Nature's Releaf LLC (matches the existing cash-withdrawal-at-dispensary
+    pattern), one 8/27 gas+snack split → Fred Meyers, and the $31.96
+    9/3 Snacks & Drinks/Smoking split (the one screenshotted) → McPeaks per
+    user confirmation (OnePay's feed shows it as "General Store Badge,
+    North Pole AK", no matching institution existed by that name; McPeaks
+    is the user's most common institution for this category pairing).
+    Not yet applied — user runs it manually.
+  - All of the above: not yet committed/pushed.

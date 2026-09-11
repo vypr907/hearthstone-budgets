@@ -1273,6 +1273,7 @@ function SplitTransactionDetail({
           categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
           amount: sign * Math.abs(Number(r.amount)),
         })),
+        institutionId: transaction.institution_id,
       });
       // A group edited down to one line is no longer a split (bug fix: this
       // also repairs fee-less payments that were wrongly tagged as 1-line

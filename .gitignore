@@ -39,5 +39,9 @@ dist-ssr
 nextquestion.md
 planning/
 
+# Throwaway Playwright sub-package for scripts/smoke/ (see its README) —
+# regenerated per-session, never committed.
+scripts/smoke/.pw/
+
 # Local backups
 *.local.backup.md
