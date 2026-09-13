@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountInMemberView } from "./balances";
+import { accountInMemberView, isSpendableAccount, spendableContribution } from "./balances";
 import { netWorthTrend } from "./net-worth";
 import type { Account, AccountBalance, Transaction } from "./supabase";
 
@@ -27,6 +27,40 @@ describe("accountInMemberView (ADR-088)", () => {
   it("an unknown viewer sees everything (aggregate is never understated)", () => {
     expect(accountInMemberView(mine, undefined)).toBe(true);
     expect(accountInMemberView(mine, null)).toBe(true);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* ADR-103: a "cash" account counts as spendable                       */
+/* ------------------------------------------------------------------ */
+
+describe("isSpendableAccount / spendableContribution (ADR-103 cash accounts)", () => {
+  const cash = (over: Partial<Account>): Account =>
+    ({
+      id: "cash-1",
+      household_id: "h",
+      institution_id: null,
+      name: "Cash",
+      account_type: "cash",
+      starting_balance: 0,
+      is_spendable: true,
+      credit_limit: null,
+      notes: null,
+      created_at: "2026-01-01",
+      updated_at: "2026-01-01",
+      ...over,
+    }) as Account;
+
+  it("a cash account with is_spendable=true counts as spendable", () => {
+    expect(isSpendableAccount(cash({}))).toBe(true);
+  });
+
+  it("a cash account with is_spendable=false does not", () => {
+    expect(isSpendableAccount(cash({ is_spendable: false }))).toBe(false);
+  });
+
+  it("contributes its raw balance, same as checking (no credit-limit math)", () => {
+    expect(spendableContribution(cash({}), 42.5)).toBe(42.5);
   });
 });
 

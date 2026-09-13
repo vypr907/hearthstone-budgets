@@ -30,6 +30,7 @@ export type LedgerGroupKind =
   | "category-split"
   | "paycheck"
   | "payment-with-fees"
+  | "cash-back-purchase"
   | "linked-or-multi";
 
 /**
@@ -44,12 +45,23 @@ export function isPaymentWithFeesGroup(rows: Transaction[]): boolean {
   return linked.length === 1 && rows.length > 1;
 }
 
+/**
+ * ADR-103: a split_group_id that IS some transfer's transfer_group_id is a
+ * Cash Back purchase — one or more categorized rows on the from-account,
+ * paired to a Cash transfer (generalizes ADR-097's single fee-row pairing to
+ * N categorized lines). Not a genuine category split: the whole-group split
+ * editor doesn't know about the paired transfer, so this must fall through
+ * to the per-row editor (which already shows the "linked transfer" banner
+ * for any row carrying a split_group_id, regardless of group size).
+ */
 export function classifyLedgerGroup(
   rows: Transaction[],
   groupId: string,
   incomeEventIds: ReadonlySet<string>,
+  transferGroupIds: ReadonlySet<string> = new Set(),
 ): LedgerGroupKind {
   if (incomeEventIds.has(groupId)) return "paycheck";
+  if (transferGroupIds.has(groupId)) return "cash-back-purchase";
   const accounts = new Set(rows.map((r) => r.account_id ?? null));
   const hasLinked = rows.some((r) => r.linked_bill_id || r.linked_debt_id);
   if (isPaymentWithFeesGroup(rows)) return "payment-with-fees";
@@ -63,8 +75,9 @@ export function isCategorySplitGroup(
   rows: Transaction[],
   groupId: string,
   incomeEventIds: ReadonlySet<string>,
+  transferGroupIds?: ReadonlySet<string>,
 ): boolean {
-  return classifyLedgerGroup(rows, groupId, incomeEventIds) === "category-split";
+  return classifyLedgerGroup(rows, groupId, incomeEventIds, transferGroupIds) === "category-split";
 }
 
 /**

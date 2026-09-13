@@ -58,7 +58,7 @@ export function computeBalances(
 const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
 
 /** Account types that may count toward the combined spendable total. */
-export const SPENDABLE_TYPES = ["checking", "credit"];
+export const SPENDABLE_TYPES = ["checking", "credit", "cash"];
 /** Never counted as spendable, regardless of is_spendable. */
 export const EXCLUDED_TYPES = ["savings", "invest", "retirement", "hsa", "lpfsa"];
 

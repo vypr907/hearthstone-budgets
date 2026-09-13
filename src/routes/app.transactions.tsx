@@ -674,6 +674,18 @@ export function TransactionDetail({
     () => new Set(incomeEvents.map((e) => e.id)),
     [incomeEvents],
   );
+  // ADR-103: transfer_group_ids in play, so a Cash Back purchase group (a
+  // split_group_id that IS some transfer's transfer_group_id) is never
+  // mistaken for a genuine category split.
+  const transferGroupIds = useMemo(
+    () =>
+      new Set(
+        allTransactions
+          .map((t) => t.transfer_group_id)
+          .filter((g): g is string => !!g),
+      ),
+    [allTransactions],
+  );
   const groupRows = useMemo(
     () =>
       transaction?.split_group_id
@@ -735,7 +747,7 @@ export function TransactionDetail({
   if (
     transaction.split_group_id &&
     groupRows.length > 1 &&
-    isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds)
+    isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds, transferGroupIds)
   )
     return <SplitTransactionDetail transaction={transaction} onClose={onClose} />;
   // ADR-091: a payment + fee group (one linked row, one account) gets its own
@@ -761,7 +773,7 @@ export function TransactionDetail({
   const isPaycheckDeposit =
     !!transaction.split_group_id &&
     groupRows.length > 1 &&
-    !isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds);
+    !isCategorySplitGroup(groupRows, transaction.split_group_id, incomeEventIds, transferGroupIds);
   const depositAccountCount = isPaycheckDeposit
     ? new Set(groupRows.map((r) => r.account_id ?? null)).size
     : 0;
@@ -903,7 +915,7 @@ export function TransactionDetail({
       return;
     }
     const msg = isPaycheckDeposit
-      ? "Delete this deposit? The other deposits in this paycheck are not affected."
+      ? "Delete this row? The other rows in this grouped entry are not affected."
       : "Delete this transaction?";
     if (!confirm(msg)) return;
     try {

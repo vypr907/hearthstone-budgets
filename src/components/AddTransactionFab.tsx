@@ -25,10 +25,12 @@ import {
   useCategories,
   useDebts,
   useInstitutions,
+  useSaveCashBack,
   useSaveSplitTransaction,
   useSaveTransfer,
   useUpsertTransaction,
 } from "@/lib/data-hooks";
+import { useCurrentMember } from "@/lib/household";
 import { categoryVisual } from "@/lib/visual-meta";
 import { Switch } from "@/components/ui/switch";
 import { PlacePicker } from "@/components/PlacePicker";
@@ -55,8 +57,8 @@ function todayISO() {
 const NO_CATEGORY = "__none__";
 const NO_LINK = "__none__";
 
-/** Entry mode for the Add Transaction dialog. ADR-069 adds "income". */
-type TxMode = "expense" | "split" | "transfer" | "income";
+/** Entry mode for the Add Transaction dialog. ADR-069 adds "income"; ADR-103 adds "cashback". */
+type TxMode = "expense" | "split" | "transfer" | "income" | "cashback";
 
 /** Shared large, icon-based category dropdown (ADR-054 visual pass). */
 function CategorySelect({
@@ -113,6 +115,8 @@ export function AddTransactionFab() {
   const save = useUpsertTransaction();
   const saveSplit = useSaveSplitTransaction();
   const saveTransfer = useSaveTransfer();
+  const saveCashBack = useSaveCashBack();
+  const currentMember = useCurrentMember();
   const qc = useQueryClient();
 
   /** Current entry mode. */
@@ -143,6 +147,16 @@ export function AddTransactionFab() {
   /** ADR-064: one optional category for the transfer pair as a whole. */
   const [transferCategoryId, setTransferCategoryId] = useState(NO_CATEGORY);
 
+  // --- Cash Back state (ADR-103) ---
+  /** The account the whole register swipe hit — cash back leaves here too. */
+  const [cbAccountId, setCbAccountId] = useState("");
+  /** Which household member's Cash account the cash back lands in. */
+  const [cbCashAccountId, setCbCashAccountId] = useState("");
+  const [cbAmount, setCbAmount] = useState("");
+  const [cbDescription, setCbDescription] = useState("");
+  const [cbMerchantId, setCbMerchantId] = useState<string | null>(null);
+  const [cbPurchaseRows, setCbPurchaseRows] = useState<SplitRow[]>([emptySplitRow()]);
+
   /** ADR-069: expense/split/transfer see spending categories only. */
   const sortedCategories = useMemo(
     () =>
@@ -159,6 +173,17 @@ export function AddTransactionFab() {
         .filter((c) => categoryDomain(c) === "income")
         .sort((a, b) => a.name.localeCompare(b.name)),
     [categories],
+  );
+
+  /** ADR-103: Cash-type accounts, one per household member. */
+  const cashAccounts = useMemo(
+    () => accounts.filter((a) => (a.account_type ?? "").trim().toLowerCase() === "cash"),
+    [accounts],
+  );
+  /** Defaults the Cash Back destination to the signed-in member's own wallet. */
+  const defaultCashAccountId = useMemo(
+    () => cashAccounts.find((a) => a.owner_member_id === currentMember?.id)?.id ?? cashAccounts[0]?.id ?? "",
+    [cashAccounts, currentMember?.id],
   );
 
   const { data: institutions = [] } = useInstitutions();
@@ -188,6 +213,12 @@ export function AddTransactionFab() {
     setTransferFee("");
     setTransferDescription("");
     setTransferCategoryId(NO_CATEGORY);
+    setCbAccountId("");
+    setCbCashAccountId("");
+    setCbAmount("");
+    setCbDescription("");
+    setCbMerchantId(null);
+    setCbPurchaseRows([emptySplitRow()]);
   }
 
   async function submitTransfer() {
@@ -309,6 +340,58 @@ export function AddTransactionFab() {
   }
 
   /**
+   * ADR-103: a blended register swipe — part purchase, part cash back. Writes
+   * a Checking -> Cash transfer pair for the cash-back amount plus one or
+   * more categorized purchase rows on the same account, so the purchase
+   * counts as spend once and the cash-back leg counts as spend never (it's
+   * a transfer, not money leaving the household).
+   */
+  async function submitCashBack() {
+    if (!cbAccountId) {
+      toast.error("Pick an account");
+      return;
+    }
+    const cashAccountId = cbCashAccountId || defaultCashAccountId;
+    if (!cashAccountId) {
+      toast.error("Pick a Cash account");
+      return;
+    }
+    if (cbAccountId === cashAccountId) {
+      toast.error("The account and Cash account must be different");
+      return;
+    }
+    const cashAmt = Number(cbAmount);
+    if (!cbAmount || !Number.isFinite(cashAmt) || cashAmt <= 0) {
+      toast.error("Enter a positive cash back amount");
+      return;
+    }
+    const lines = cbPurchaseRows.filter((r) => Number(r.amount));
+    if (lines.length === 0) {
+      toast.error("Add at least one purchase line — for a plain cash withdrawal, use Transfer instead");
+      return;
+    }
+    try {
+      await saveCashBack.mutateAsync({
+        fromAccountId: cbAccountId,
+        cashAccountId,
+        cashAmount: cashAmt,
+        purchaseLines: lines.map((r) => ({
+          categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
+          amount: Number(r.amount),
+        })),
+        description: cbDescription.trim() || null,
+        institutionId: cbMerchantId,
+        date: txDate,
+      });
+      toast.success("Cash Back entry added");
+      reset();
+      setOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  /**
    * ADR-069: ad-hoc income (side income, reimbursement, refund, gift). Always
    * stored as a positive amount — mode is chosen, never inferred from the sign.
    */
@@ -341,7 +424,8 @@ export function AddTransactionFab() {
     }
   }
 
-  const isBusy = save.isPending || saveSplit.isPending || saveTransfer.isPending;
+  const isBusy =
+    save.isPending || saveSplit.isPending || saveTransfer.isPending || saveCashBack.isPending;
 
   return (
     <>
@@ -366,6 +450,7 @@ export function AddTransactionFab() {
                   ["expense", "Expense"],
                   ["income", "Income"],
                   ["transfer", "Transfer"],
+                  ["cashback", "Cash Back"],
                 ] as const
               ).map(([m, labelText]) => {
                 const active =
@@ -497,6 +582,93 @@ export function AddTransactionFab() {
                     placeholder="e.g. Move to savings"
                     value={transferDescription}
                     onChange={(e) => setTransferDescription(e.target.value)}
+                  />
+                </div>
+              </>
+            ) : mode === "cashback" ? (
+              /* ---- Cash Back fields (ADR-103) ---- */
+              <>
+                <div className="space-y-2">
+                  <Label>Account</Label>
+                  <Select value={cbAccountId} onValueChange={setCbAccountId}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Pick an account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {accountLabel(a, institutionName[a.institution_id ?? ""])}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    The account this swipe hit — the purchase and the cash back both
+                    leave from here.
+                  </p>
+                </div>
+
+                <SplitLinesEditor
+                  rows={cbPurchaseRows}
+                  categories={sortedCategories}
+                  total={splitRowsTotal(cbPurchaseRows)}
+                  onChange={setCbPurchaseRows}
+                />
+
+                <div className="space-y-2">
+                  <Label htmlFor="cb-amount">Cash back amount</Label>
+                  <Input
+                    id="cb-amount"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    className="h-12"
+                    placeholder="0.00"
+                    value={cbAmount}
+                    onChange={(e) => setCbAmount(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Goes to Cash account</Label>
+                  <Select
+                    value={cbCashAccountId || defaultCashAccountId}
+                    onValueChange={setCbCashAccountId}
+                  >
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Pick a Cash account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cashAccounts.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {cashAccounts.length === 0 ? (
+                    <p className="text-xs text-destructive">
+                      No Cash account yet — add one from the Accounts screen first
+                      (account type "Cash").
+                    </p>
+                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    Not spent yet — just moved to cash. Only counts as spend once you
+                    log what you actually bought with it.
+                  </p>
+                </div>
+
+                <PlacePicker value={cbMerchantId} onChange={setCbMerchantId} />
+
+                <div className="space-y-2">
+                  <Label htmlFor="cb-desc">Description (optional)</Label>
+                  <Input
+                    id="cb-desc"
+                    className="h-12"
+                    placeholder="e.g. Snacks + cash back at Fred's"
+                    value={cbDescription}
+                    onChange={(e) => setCbDescription(e.target.value)}
                   />
                 </div>
               </>
@@ -653,16 +825,20 @@ export function AddTransactionFab() {
                   ? submitTransfer
                   : mode === "income"
                     ? submitIncome
-                    : submitExpense
+                    : mode === "cashback"
+                      ? submitCashBack
+                      : submitExpense
               }
             >
               {mode === "transfer"
                 ? "Save transfer"
                 : mode === "income"
                   ? "Save income"
-                  : mode === "split"
-                    ? "Save split transaction"
-                    : "Save transaction"}
+                  : mode === "cashback"
+                    ? "Save Cash Back entry"
+                    : mode === "split"
+                      ? "Save split transaction"
+                      : "Save transaction"}
             </Button>
           </DialogFooter>
         </DialogContent>

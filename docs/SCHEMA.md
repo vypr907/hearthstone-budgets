@@ -218,6 +218,13 @@ accounts (
 )
 ```
 
+`account_type` carries no DB check constraint (unlike `institution_type`,
+ADR-099) — the allowed set lives only in `AccountDialog.tsx`'s
+`ACCOUNT_TYPES`. ADR-103: `"cash"` is a real type used for physical cash —
+one `accounts` row per household member (`owner_member_id` set, not joint),
+no `institution_id`. `src/lib/balances.ts`'s `SPENDABLE_TYPES` includes
+`"cash"` so it counts toward the spendable-money total like checking.
+
 ---
 
 # account_balances
@@ -769,6 +776,17 @@ ADR-097: a transfer may also carry an optional fee — a third, plain
 transaction on the from-account (no `transfer_group_id`), reusing ADR-046's
 fee mechanism and paired to the transfer via `split_group_id` instead (set
 to the same UUID as the pair's `transfer_group_id`). No schema change.
+
+ADR-103: "Cash Back" generalizes that same fee-pairing to N categorized
+purchase rows instead of one fixed-category amount — a blended register
+swipe (part purchase, part cash back) writes a transfer pair (checking to a
+Cash account) plus one or more plain purchase rows on the from-account,
+`split_group_id` = the pair's `transfer_group_id`. `classifyLedgerGroup`
+(`src/lib/split-groups.ts`) treats a `split_group_id` that is also some
+transfer's `transfer_group_id` as `"cash-back-purchase"`, never a genuine
+category split, regardless of how many purchase rows share it. No schema
+change; see ADR-103 for why (double-counting a cash withdrawal that's later
+spent) and `useDeleteTransferPair` in `data-hooks.ts` for cleanup.
 
 ---
 

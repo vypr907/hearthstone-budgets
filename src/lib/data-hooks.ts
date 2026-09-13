@@ -22,7 +22,7 @@ import {
 import { advanceDate, needsEnvelope } from "./format";
 import { assertCategorySplitRows } from "./split-groups";
 import { useAuth } from "./auth-context";
-import { insertFeeTransaction, deletePairedFees, hasFee } from "./payments";
+import { insertFeeTransaction, insertCashBackPurchaseRows, deletePairedFees, hasFee } from "./payments";
 import { nextPayDate } from "./paycheck-budget";
 import { useIncomeSources, useIncomeEvents } from "./income-hooks";
 
@@ -1019,13 +1019,16 @@ export function useSaveTransfer() {
 
 /**
  * ADR-056: delete both sides of a transfer by transfer_group_id.
- * ADR-097: also delete its paired fee row, if any (same split_group_id).
+ * ADR-097 / ADR-103: also delete any row paired to it via split_group_id —
+ * a transfer fee or a Cash Back purchase line are the only things that ever
+ * carry a transfer's own group id in their split_group_id, so this is a
+ * plain superset of the old "Fee:%"-only cleanup.
  */
 export function useDeleteTransferPair() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (transferGroupId: string) => {
-      await deletePairedFees(transferGroupId);
+      await supabase.from("transactions").delete().eq("split_group_id", transferGroupId);
       const { error } = await supabase
         .from("transactions")
         .delete()
@@ -1035,6 +1038,73 @@ export function useDeleteTransferPair() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
+/**
+ * ADR-103: "Cash Back" combo — a transfer pair (checking -> Cash) plus one or
+ * more categorized purchase rows on the from-account, sharing the transfer's
+ * own group id via `split_group_id`. Solves double-counting a blended
+ * register swipe (part purchase, part cash back): the purchase rows count as
+ * spend once via the normal category path; the transfer pair is excluded
+ * from spend like any internal transfer (`internalTransferIds`); spending
+ * the cash later is just a normal transaction on the Cash account.
+ */
+export function useSaveCashBack() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      fromAccountId: string;
+      cashAccountId: string;
+      cashAmount: number;
+      purchaseLines: SplitLine[];
+      description: string | null;
+      institutionId?: string | null;
+      date: string;
+    }) => {
+      if (args.fromAccountId === args.cashAccountId) {
+        throw new Error("The account and Cash account must be different");
+      }
+      if (!args.cashAmount || args.cashAmount <= 0) {
+        throw new Error("Enter a positive cash back amount");
+      }
+      if (!args.purchaseLines.length) {
+        throw new Error("Add at least one purchase line — for a plain cash withdrawal, use Transfer instead");
+      }
+      const groupId = crypto.randomUUID();
+      const base = {
+        household_id: householdId!,
+        status: "cleared" as const,
+        description: args.description,
+        transaction_date: args.date,
+        cleared_date: args.date,
+        transfer_group_id: groupId,
+      };
+      await saveWithOptionalColumns<Transaction>(
+        { ...base, account_id: args.fromAccountId, amount: -args.cashAmount } as Record<string, unknown>,
+        async (p) => supabase.from("transactions").insert(p).select("*").single(),
+      );
+      await saveWithOptionalColumns<Transaction>(
+        { ...base, account_id: args.cashAccountId, amount: args.cashAmount } as Record<string, unknown>,
+        async (p) => supabase.from("transactions").insert(p).select("*").single(),
+      );
+      await insertCashBackPurchaseRows(
+        householdId,
+        args.fromAccountId,
+        groupId,
+        args.purchaseLines,
+        args.description,
+        args.institutionId,
+        args.date,
+      );
+      return groupId;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+      qc.invalidateQueries({ queryKey: ["spending_actuals"] });
     },
   });
 }

@@ -100,6 +100,41 @@ describe("classifyLedgerGroup (ADR-047 addendum)", () => {
   });
 });
 
+// ADR-103: a Cash Back purchase group's split_group_id IS some transfer's
+// transfer_group_id — must never be treated as a genuine category split,
+// even though it looks exactly like one otherwise (one account, no links).
+describe("classifyLedgerGroup / isCategorySplitGroup (ADR-103 Cash Back)", () => {
+  const TRANSFERS = new Set(["grp"]);
+
+  it("one account, no links, but the id is a transfer_group_id → cash-back-purchase", () => {
+    const rows = [
+      row({ account_id: "a", category_id: "c1" }),
+      row({ account_id: "a", category_id: "c2" }),
+    ];
+    expect(classifyLedgerGroup(rows, "grp", EVENTS, TRANSFERS)).toBe("cash-back-purchase");
+    expect(isCategorySplitGroup(rows, "grp", EVENTS, TRANSFERS)).toBe(false);
+  });
+
+  it("a single purchase line is still cash-back-purchase, not category-split", () => {
+    const rows = [row({ account_id: "a", category_id: "c1" })];
+    expect(classifyLedgerGroup(rows, "grp", EVENTS, TRANSFERS)).toBe("cash-back-purchase");
+  });
+
+  it("same shape with no matching transfer_group_id → ordinary category-split", () => {
+    const rows = [
+      row({ account_id: "a", category_id: "c1" }),
+      row({ account_id: "a", category_id: "c2" }),
+    ];
+    expect(classifyLedgerGroup(rows, "grp", EVENTS, new Set())).toBe("category-split");
+    expect(classifyLedgerGroup(rows, "grp", EVENTS)).toBe("category-split");
+  });
+
+  it("paycheck classification wins over a coincidental transfer_group_id match", () => {
+    const rows = [row({ account_id: "a" }), row({ account_id: "b" })];
+    expect(classifyLedgerGroup(rows, "evt-1", EVENTS, new Set(["evt-1"]))).toBe("paycheck");
+  });
+});
+
 describe("assertCategorySplitRows", () => {
   it("throws on a multi-account group", () => {
     expect(() =>

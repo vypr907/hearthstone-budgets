@@ -513,6 +513,40 @@ export async function insertFeeTransaction(
 }
 
 /**
+ * ADR-103: the purchase side of a "Cash Back" combo entry — one or more
+ * categorized rows on the from-account, paired to a Cash transfer via
+ * `split_group_id = <the transfer's transfer_group_id>`. Generalizes
+ * `insertFeeTransaction` above from one fixed-category amount to N
+ * caller-categorized lines; always written (never a no-op like the fee
+ * helper), since a Cash Back entry with no purchase lines is just a
+ * plain transfer.
+ */
+export async function insertCashBackPurchaseRows(
+  householdId: string | null | undefined,
+  accountId: string,
+  groupId: string,
+  lines: { categoryId: string | null; amount: number }[],
+  description: string | null,
+  institutionId: string | null | undefined,
+  date: string,
+) {
+  const rows = lines.map((l) => ({
+    household_id: householdId,
+    account_id: accountId,
+    category_id: l.categoryId,
+    amount: -Math.abs(Number(l.amount) || 0),
+    status: "cleared" as const,
+    description,
+    transaction_date: date,
+    cleared_date: date,
+    split_group_id: groupId,
+    institution_id: institutionId ?? null,
+  }));
+  const { error } = await supabase.from("transactions").insert(rows);
+  if (error) throw error;
+}
+
+/**
  * Clear every pending fee row paired with a payment (same split_group_id).
  * Called when a submitted payment is marked cleared so the fee clears too.
  */

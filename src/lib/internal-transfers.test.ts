@@ -60,6 +60,37 @@ describe("ADR-097 transfer fee row", () => {
   });
 });
 
+describe("ADR-103 Cash Back combo", () => {
+  // Fred's: an $8.50 snack plus $100 cash back in one swipe. Generalizes the
+  // ADR-097 fee-row test above from one fixed-category amount to N
+  // categorized purchase lines sharing the transfer's own group id.
+  it("the purchase line counts as spend once; the cash-back transfer legs never count", () => {
+    const rows = [
+      tx({ amount: -100, account_id: "checking", transfer_group_id: "g1" }),
+      tx({ amount: 100, account_id: "cash", transfer_group_id: "g1" }),
+      tx({ amount: -8.5, category_id: savings.id, account_id: "checking", split_group_id: "g1" }),
+    ];
+    const internal = internalTransferIds(rows);
+    expect(isInternalTransfer(rows[2], internal)).toBe(false);
+    const out = combinedActualByCategory(rows, [], [], [savings], "2026-08-01");
+    expect(out.get(savings.id)?.spendingSpent).toBe(8.5);
+  });
+
+  it("later spending the withdrawn cash counts once more, never the original $100 twice", () => {
+    const rows = [
+      tx({ amount: -100, account_id: "checking", transfer_group_id: "g1" }),
+      tx({ amount: 100, account_id: "cash", transfer_group_id: "g1" }),
+      tx({ amount: -8.5, category_id: savings.id, account_id: "checking", split_group_id: "g1" }),
+      // Days later: $50 of that cash spent at the movies, logged as a plain
+      // transaction on the Cash account.
+      tx({ amount: -50, category_id: savings.id, account_id: "cash", transaction_date: "2026-08-10" }),
+    ];
+    const out = combinedActualByCategory(rows, [], [], [savings], "2026-08-01");
+    // 8.50 purchase + 50 spent from cash = 58.50 — never 108.50 or 158.50.
+    expect(out.get(savings.id)?.spendingSpent).toBe(58.5);
+  });
+});
+
 describe("ADR-089 transfers in spending math", () => {
   const rows = [
     tx({ amount: -300, category_id: savings.id, transfer_group_id: "g1" }),

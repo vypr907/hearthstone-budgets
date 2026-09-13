@@ -327,3 +327,59 @@
     payments on the same debt row correctly sum instead of one clobbering
     the other, cycle resolves exactly once). TEST household confirmed clean
     afterward. `tsc --noEmit` clean, `npm test` 190/190. **Issue #66 done.**
+- **Cash tracking — "Cash Back" combo entries (ADR-103).** Interviewed the
+  user (plan mode) to design a fix for double-counting a blended register
+  swipe (part purchase, part cash back — e.g. buy a snack, pull $100 cash
+  back, then later spend that cash), previously entered as a same-account
+  split whose cash-back portion counted as spend twice. Verified live via
+  the read-only Supabase MCP first: no `cash`-type account existed yet; the
+  "Cash & Checks" category had exactly 2 transactions ($60, 2026-07-02).
+  - `src/lib/payments.ts` — new `insertCashBackPurchaseRows`, a sibling of
+    `insertFeeTransaction` generalized from one fixed-category fee amount to
+    N caller-categorized purchase rows.
+  - `src/lib/data-hooks.ts` — new `useSaveCashBack` (writes an ADR-056
+    transfer pair to a Cash account plus the purchase rows, same
+    `split_group_id`/`transfer_group_id` pairing as a transfer fee);
+    `useDeleteTransferPair` now deletes by either column instead of only
+    `description ILIKE 'Fee:%'` rows, so deleting a transfer also cleans up
+    a paired Cash Back purchase (or fee) — a plain superset, safe because
+    that id is never reused by a bill/debt payment+fee group.
+  - `src/lib/split-groups.ts` — `classifyLedgerGroup`/`isCategorySplitGroup`
+    take a new `transferGroupIds` set; a `split_group_id` that's also some
+    transfer's `transfer_group_id` classifies as `"cash-back-purchase"`,
+    never `"category-split"`, so a 2+-line purchase doesn't wrongly open the
+    whole-group split editor. `src/routes/app.transactions.tsx` threads that
+    set through; the existing `linkedTransferLeg` banner (built for fee
+    rows) now shows for Cash Back purchase rows for free.
+  - `src/lib/balances.ts` — `SPENDABLE_TYPES` gains `"cash"` (found: it was
+    silently missing, so a cash account would've been excluded from the
+    spendable-money total despite `is_spendable = true`).
+  - `src/components/AddTransactionFab.tsx` — new "Cash Back" mode: account,
+    purchase lines (`SplitLinesEditor`, reused as-is), cash-back amount,
+    destination Cash account (defaults to the signed-in member's own via
+    `useCurrentMember`), place, description.
+  - Tests: `split-groups.test.ts` (new classification cases),
+    `balances.test.ts` (`cash` counts as spendable), `internal-transfers.test.ts`
+    (end-to-end: the purchase line counts once, the transfer legs never
+    count, later cash-spending counts once more — never the withdrawn $100
+    twice). `tsc --noEmit` clean, `npm test` 199/199 (was 190).
+  - No schema change — `account_type`/`split_group_id`/`transfer_group_id`
+    already existed and are unconstrained enough. Wrote
+    `scripts/migrations/2026-09-13-add-cash-accounts.sql` (+ `.verify.sql`)
+    seeding the two per-member Cash accounts — data only, user runs it
+    manually in the Supabase SQL Editor per the standard workflow.
+  - **Filed Issue #68** for migrating the 2 legacy "Cash & Checks" rows.
+  - **Verified end-to-end via Playwright against the TEST household**
+    (`scripts/smoke/.pw/verify-cash-back.mjs`, ADR-083 preflight run first,
+    all green): logged in as the test user, drove the real "Cash Back" UI
+    (Snacks $8.50 + $25 cash back into a throwaway Cash account), confirmed
+    via the DB the 3 rows land correctly tagged (purchase row's
+    `split_group_id` = the transfer's `transfer_group_id`), confirmed the
+    purchase row's detail view shows the linked-transfer banner, then
+    deleted the transfer and confirmed all 3 rows — transfer pair AND the
+    paired purchase row — were removed (the widened `useDeleteTransferPair`
+    cleanup). Zero browser console errors. TEST household confirmed clean
+    afterward via the MCP (0 leftover rows). **ADR-103 implemented and
+    verified.**
+  - Next: user runs `scripts/migrations/2026-09-13-add-cash-accounts.sql`
+    to create the two real per-member Cash accounts.
