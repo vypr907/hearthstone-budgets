@@ -295,3 +295,35 @@
     verification after the fix: all green.
   - **Committed and pushed** (all of ADR-101, ADR-102, the Dave fix, the
     September Checking fixes, and the linked-account UI picker together).
+  - **Issue #66 fixed** (user: "let's fix 66", worked via plan mode — 2
+    research/design agent passes mapping every caller/dependency of
+    `applyClearedPayment` before writing SQL, given it's core cycle/arrears
+    logic with zero existing test coverage). Two new atomic Postgres
+    functions, `apply_cleared_debt_payment` / `apply_cleared_bill_payment`
+    (`scripts/migrations/2026-09-13-atomic-cleared-payment-rpcs.sql` + a
+    pure `shift_billing_date` helper porting `shiftDate`/`advanceDate` from
+    `src/lib/format.ts` — has to run inside the atomic statement, not be
+    pre-computed in JS, or the date-roll itself would still race on a stale
+    `next_due_date`), fold the full shortfall/cycle-satisfied/arrears/
+    due-date-roll state machine into one locked `UPDATE` per kind. The
+    bill's "exceeds what's owed" rejection is now enforced atomically too
+    (sentinel `RAISE EXCEPTION` rolling back the `UPDATE`). `payments.ts`'s
+    `applyClearedPayment` keeps its exact signature/return shape — all 8
+    call sites needed zero changes. `tsc --noEmit` clean, `npm test`
+    190/190. Scope boundaries (documented, not dropped): `priorArrears`
+    stays a client-computed pure-function parameter (`arrears.ts`); 5
+    sibling functions with the same racy pattern (`useMarkUnpaid`,
+    `useResetCycle`, `useReversePayment`, `rollbackClearedPayment`,
+    `useCorrectPayment`) are unconverted, filed as **#67**.
+  - Wrote `scripts/smoke/.pw/verify-cleared-payment.mjs` (7 scenarios:
+    shortfall+satisfy, monthly vs biweekly resolve, one_time closeout, bill
+    cap rejection + unchanged-row proof, arrears overflow, the actual race
+    via two concurrent RPC calls). Supabase MCP was disconnected this
+    session (needs reauth) — verified the script's failure path directly
+    against the TEST household via `test-db.mjs`'s own client instead (not
+    MCP-dependent): clean "function not found" error, correct cleanup, 0
+    rows orphaned. **User applied the migration** — full smoke-test run:
+    **34/34 checks pass**, including the race scenario (two concurrent
+    payments on the same debt row correctly sum instead of one clobbering
+    the other, cycle resolves exactly once). TEST household confirmed clean
+    afterward. `tsc --noEmit` clean, `npm test` 190/190. **Issue #66 done.**

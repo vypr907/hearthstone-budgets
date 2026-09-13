@@ -287,75 +287,37 @@ export async function applyClearedPayment(
   /** The payment's own date — used for date_paid_off, not real "today", so a backdated payment doesn't record today's date as the payoff date. */
   date: string = todayISO(),
 ): Promise<{ remaining_owed?: number; next_due_date?: string | null; resolved_due_date?: string }> {
+  // ADR-101 addendum (Issue #66): the shortfall/cycle-satisfied/arrears/
+  // due-date-roll state transition now runs as one atomic Postgres
+  // statement (apply_cleared_debt_payment / apply_cleared_bill_payment,
+  // scripts/migrations/2026-09-13-atomic-cleared-payment-rpcs.sql) instead
+  // of a client-side read-then-write — two cleared payments submitted close
+  // together on the same row now serialize instead of one clobbering the
+  // other. priorArrears stays a caller-computed parameter (see the
+  // migration header for why that's still in scope).
   if (p.kind === "debt") {
-    const debt = p.debt!;
-    const remaining = Number(debt.remaining_balance ?? 0);
-    const nextBalance = Math.max(0, remaining - clearedAmount);
-    const target = debtCycleDue(debt);
-    const previouslyPaid = Number(debt.cycle_paid_to_date ?? 0);
-    const paid = previouslyPaid + clearedAmount;
-    const cycle = (debt.billing_cycle ?? "monthly").toLowerCase();
-
-    const update: Record<string, unknown> = {
-      remaining_balance: nextBalance,
-      ...advanceMinimumPaymentPatch(debt, nextBalance),
-      ...debtPayoffDatePatch(debt, nextBalance, date),
+    const { data, error } = await supabase.rpc("apply_cleared_debt_payment", {
+      p_debt_id: p.id,
+      p_cleared_amount: clearedAmount,
+      p_date: date,
+    });
+    if (error) throw error;
+    const row = data?.[0];
+    if (row?.resolved_due_date) await tagResolvedCycle("debt", p.id, row.resolved_due_date);
+    // Only one of remaining_owed/next_due_date is ever populated, matching
+    // the two separate early-return branches this replaced.
+    return {
+      remaining_owed: row?.remaining_owed ?? undefined,
+      next_due_date: row?.remaining_owed != null ? undefined : (row?.next_due_date ?? null),
+      resolved_due_date: row?.resolved_due_date ?? undefined,
     };
-
-    if (target > 0 && paid + 0.005 < target) {
-      // Shortfall: stay pending in the same cycle so a follow-up can be submitted.
-      update.payment_status = "pending";
-      update.cycle_paid_to_date = paid;
-      await updateRow("debts", p.id, update);
-      return { remaining_owed: target - paid };
-    }
-
-    // Cycle satisfied: reset counters, and roll non-monthly debts forward.
-    update.cycle_paid_to_date = 0;
-    let nextDue: string | null = null;
-    // ADR-075: only non-monthly, non-one-time debts actually roll a due date
-    // forward — that's the only case a later payment could be misattributed to.
-    let resolvedDueDate: string | null = null;
-    if (cycle === "one_time") {
-      // ADR-048: a one-time charge never rolls — it closes out when it hits zero.
-      update.payment_status = nextBalance === 0 ? "cleared" : "unpaid";
-    } else if (cycle !== "monthly") {
-      resolvedDueDate = debt.next_due_date ?? null;
-      nextDue = advanceDate(
-        debt.next_due_date ?? todayISO(),
-        debt.billing_cycle,
-        debt.cycle_interval_days,
-      );
-      update.next_due_date = nextDue;
-      update.payment_status = "unpaid";
-    } else {
-      // Monthly debts have no next_due_date to roll; keep the cleared marker.
-      update.payment_status = "cleared";
-    }
-
-    // ADR-057/076/078: overflow beyond the cycle minimum reduces arrears —
-    // whether that arrears came from a manual opening_arrears carry-in or
-    // purely from the live missed-cycle walk. Tracked via a running
-    // arrears_paid_to_date counter (ADR-078), not opening_arrears/
-    // arrears_as_of — those can only suppress a PREFIX of the missed-cycle
-    // walk, the wrong shape for what an overflow payment consolidates.
-    const cycleCredit = target > 0 ? Math.max(0, target - previouslyPaid) : clearedAmount;
-    const overflow = Math.max(0, clearedAmount - cycleCredit);
-    if (overflow > 0.005) {
-      update.arrears_paid_to_date = Number(debt.arrears_paid_to_date ?? 0) + overflow;
-    }
-
-    await updateRow("debts", p.id, update);
-    if (resolvedDueDate) await tagResolvedCycle("debt", p.id, resolvedDueDate);
-    return { next_due_date: nextDue, resolved_due_date: resolvedDueDate ?? undefined };
   }
 
   const bill = p.bill!;
+  // Fast, friendly client-side pre-check (unchanged from before) — avoids a
+  // round trip for the obviously-invalid case. The RPC re-checks the same
+  // cap atomically and is the actual source of truth for concurrent calls.
   const dueThisCycle = billCycleDue(bill);
-
-  // ADR-057/076: bills have no prepayment-credit field — cap the payment at
-  // what's actually owed (current cycle remainder + arrears, whether that
-  // arrears is a manual opening_arrears carry-in or purely from missed cycles).
   const previouslyPaid = Number(bill.cycle_paid_to_date ?? 0);
   const remainingThisCycle = Math.max(0, dueThisCycle - previouslyPaid);
   const maxAllowed = remainingThisCycle + priorArrears;
@@ -365,41 +327,27 @@ export async function applyClearedPayment(
     );
   }
 
-  const paid = previouslyPaid + clearedAmount;
-
-  if (paid + 0.005 < dueThisCycle) {
-    await updateRow("bills", bill.id, {
-      payment_status: "pending",
-      cycle_paid_to_date: paid,
-      cycle_amount_due: dueThisCycle,
-    });
-    return { remaining_owed: dueThisCycle - paid };
+  const { data, error } = await supabase.rpc("apply_cleared_bill_payment", {
+    p_bill_id: bill.id,
+    p_cleared_amount: clearedAmount,
+    p_prior_arrears: priorArrears,
+    p_date: date,
+  });
+  if (error) {
+    const m = /CLEARED_PAYMENT_EXCEEDS_MAX ([\d.]+)/.exec(error.message ?? "");
+    if (m) {
+      throw new Error(
+        `This exceeds what the bill and its arrears currently owe (${formatMoney(Number(m[1]))}) — reduce the amount, or log the extra as a separate manual transaction.`,
+      );
+    }
+    throw error;
   }
-
-  // Cycle satisfied — compute arrears overflow before resetting.
-  const cycleCredit = remainingThisCycle;
-  const overflow = Math.max(0, clearedAmount - cycleCredit);
-  // ADR-075: the due date this resolve is about to advance past.
-  const resolvedDueDate = bill.next_due_date ?? null;
-  const billUpdate: Record<string, unknown> = {
-    payment_status: "unpaid",
-    next_due_date: advanceDate(bill.next_due_date ?? todayISO(), bill.billing_cycle, bill.cycle_interval_days),
-    cycle_paid_to_date: 0,
-    cycle_amount_due: null,
-  };
-
-  // ADR-057/076/078: reduce arrears (manual carry-in or missed-cycle-derived)
-  // by the overflow, tracked via the running arrears_paid_to_date counter —
-  // see the matching comment in the debt branch above.
-  if (overflow > 0.005) {
-    billUpdate.arrears_paid_to_date = Number(bill.arrears_paid_to_date ?? 0) + overflow;
-  }
-
-  await updateRow("bills", bill.id, billUpdate);
-  if (resolvedDueDate) await tagResolvedCycle("bill", bill.id, resolvedDueDate);
+  const row = data?.[0];
+  if (row?.resolved_due_date) await tagResolvedCycle("bill", bill.id, row.resolved_due_date);
   return {
-    next_due_date: billUpdate.next_due_date as string,
-    resolved_due_date: resolvedDueDate ?? undefined,
+    remaining_owed: row?.remaining_owed ?? undefined,
+    next_due_date: row?.remaining_owed != null ? undefined : (row?.next_due_date ?? null),
+    resolved_due_date: row?.resolved_due_date ?? undefined,
   };
 }
 

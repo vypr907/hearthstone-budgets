@@ -4128,7 +4128,43 @@ GitHub Issue #66 along with the rest of the deferred `applyClearedPayment` rewri
 Re-ran the same Playwright verification after the addendum: balance, mirrors, and
 `debt_adjustments.mirror_transaction_id` all correct.
 
-Status: Decided 2026-09-11. Implemented 2026-09-11.
+Addendum (2026-09-13, Issue #66): closed the remaining gap — `applyClearedPayment`'s
+in-cycle branch (`src/lib/payments.ts:283-404`) is now atomic too. Two new Postgres
+functions, `apply_cleared_debt_payment` and `apply_cleared_bill_payment` (both
+`security invoker`, `scripts/migrations/2026-09-13-atomic-cleared-payment-rpcs.sql`),
+port the full shortfall/cycle-satisfied/arrears-overflow/due-date-roll state machine
+into one locked `UPDATE` per kind, plus a small pure helper, `shift_billing_date`, that
+ports `shiftDate`/`advanceDate` (`src/lib/format.ts`) into SQL rather than pre-computing
+the rolled date in JS and passing it in — the whole point is that the roll has to read
+the row's *live, lock-protected* `next_due_date`, or two concurrent payments would still
+race on whose stale due date the roll is computed from. The bill branch's
+"exceeds what's owed" rejection (ADR-057/076) is now enforced atomically inside the RPC
+too (a sentinel `RAISE EXCEPTION` that rolls back the `UPDATE`), not just as a client
+pre-check. `applyClearedPayment`'s public signature and return shape are unchanged —
+all 8 call sites (`useMarkCleared`, `useEditLinkedTransaction`, `useLogDebtPayment`,
+`useLogBillPayment`, `AddTransactionFab.tsx`, `StrandedDebtRepair.tsx`,
+`StrandedBillRepair.tsx`, `deduction-funding.ts`) needed no changes.
+
+Scope boundaries carried forward deliberately, not silently dropped: `priorArrears`
+stays a client-computed parameter (`priorCyclesArrears`, `src/lib/arrears.ts`) — a pure,
+ledger-independent function of row state, and porting its multi-cycle walk to SQL is a
+separate, materially bigger change than what actually caused the two incidents. Five
+sibling functions in `payments.ts` (`useMarkUnpaid`, `useResetCycle`,
+`useReversePayment`, `rollbackClearedPayment`, `useCorrectPayment`) do the same
+"read Payable, branch, write" pattern against the same columns and are still
+unconverted — tracked as Issue #67.
+
+Verification: `scripts/smoke/.pw/verify-cleared-payment.mjs` (RPC calls directly, no UI
+timing) against the TEST household — bill shortfall-then-satisfy, monthly debt resolve
+(due date untouched, `payment_status='cleared'`), biweekly debt resolve (due date
+advances exactly 14 days), `one_time` debt closeout, a bill payment exceeding its cap
+(throws, row provably unchanged afterward), an arrears-overflow payment, and the actual
+race — two concurrent RPC calls against the same debt row, asserting the final balance
+reflects both payments (no lost update) and the cycle resolves exactly once. User applied
+the migration; full run **34/34 checks pass**, TEST household confirmed clean afterward
+(no orphaned rows).
+
+Status: Decided 2026-09-11. Implemented 2026-09-13.
 
 ## ADR-102: Debts Can Link to a Real Account (Mirrored Ledger)
 
