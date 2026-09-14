@@ -381,5 +381,8 @@
     cleanup). Zero browser console errors. TEST household confirmed clean
     afterward via the MCP (0 leftover rows). **ADR-103 implemented and
     verified.**
-  - Next: user runs `scripts/migrations/2026-09-13-add-cash-accounts.sql`
-    to create the two real per-member Cash accounts.
+  - **Committed and pushed** (`4e7a125`).
+  - **User ran the seed migration.** Verified live via the MCP: "Cash — You"
+    (`eba5d1c6…`, owner `f93a0ac9…`) and "Cash — Stephanie" (`8fa057e0…`,
+    owner `545e684e…`), both `is_spendable`/`include_in_net_worth` true, no
+    institution, $0 starting balance. **ADR-103 fully live — done.**
