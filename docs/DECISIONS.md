@@ -1694,6 +1694,29 @@ back to the sum of their outstanding `debt_adjustments` advances and clearing
 
 Status: Decided 2026-08-27. Implemented (`src/routes/app.debts.tsx`).
 
+**2026-09-14 addendum — advance creation inherits category/place from the
+debt:** `useCreateAdvance`'s deposit transaction (and, when
+`linked_account_id` is set, its mirror withdrawal leg) now carries
+`category_id`/`institution_id` inherited from the advance debt's own
+`category_id`/`institution_id` — the deposit leg gets both, the mirror leg
+gets only `institution_id` (not `category_id`, to keep a transfer leg out of
+spending-category reports). This mirrors how `useLogDebtPayment` already
+populates the same fields on a repayment via `toPayable()`
+(`src/lib/payments.ts`), so a draw and its repayment land in the same
+category/place instead of only the repayment doing so. No schema change —
+both columns already existed on `transactions`; the debt itself must have
+`category_id`/`institution_id` set (via the existing debt edit form) for
+either write path to have something to inherit.
+
+Reason:
+The deposit insert never referenced the debt's category/institution at all —
+a plain gap, not a deliberate choice. Verified live (via the read-only
+Supabase MCP): the "Advances" category and per-debt institutions already
+existed and had been set by hand on individual transactions after the fact;
+this closes the gap so new advances don't need that manual step.
+
+Status: Decided 2026-09-14. Implemented (`src/lib/data-hooks.ts`).
+
 ---
 
 ## ADR-057: Overdue-Aware Payment Allocation (Extends ADR-035, ADR-049)
@@ -3210,6 +3233,29 @@ plain `linked_bill_id` ledger row and leaves the bill's cycle fields untouched.
 Rendered on the Bills detail panel next to `PastDueEditor`, same placement
 pattern as the debt dialog. Tests: `isWithinCurrentBillCycle` /
 `billCycleWindowStart` in `payments.test.ts` (monthly, non-monthly, one-time).
+
+Addendum (2026-09-14): **revisiting "no fee/interest lines" — bill payments
+now support them too.** The 2026-09-04 scope call above left bills unable to
+record a fee alongside a payment except through the main pay-flow's Submit
+dialog (ADR-046), not "Log a payment to this bill" — surfaced by a real case
+(a Flex rent installment with its own fee, logged historically). Ported the
+debt dialog's fee-line pattern: `DebtPaymentLine` is renamed `PaymentLine`
+(`src/lib/payments.ts`, now shared), `LogBillPaymentInput` gains
+`lines: PaymentLine[]`, and `useLogBillPayment` mirrors
+`useLogDebtPayment`'s `extras` handling — a `split_group_id` groups the
+payment row with any fee/interest rows, each fee row unlinked (`linked_bill_id`
+stays null, so it's excluded from cycle credit, same as debt fee lines are
+excluded from `remaining_balance`) and categorized via `feeCategoryId()`
+(already shared, not duplicated). `LogBillPaymentDialog` gains the same
+"Fees & interest" add/line UI as `LogDebtPaymentDialog`. No change needed to
+group display/editing (`isPaymentWithFeesGroup`, `LinkedGroupDetail`) — both
+already treat bill-linked and debt-linked payment+fee groups identically.
+Verified end-to-end against the TEST household: a logged payment with a fee
+line produced two rows sharing a `split_group_id`, the fee row unlinked and
+categorized "Fees," rendering correctly in `LinkedGroupDetail`'s edit view.
+
+Status: Decided 2026-09-14. Implemented (`src/lib/payments.ts`,
+`src/components/LogBillPaymentDialog.tsx`, `src/components/LogDebtPaymentDialog.tsx`).
 
 ## ADR-085: Debt Detail Reads Ledger-Derived Cycle State; Cycle Window + Pay Period Fields
 Decision: The Debt detail panel derives "Payment status", "Paid this cycle" and

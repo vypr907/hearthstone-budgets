@@ -1188,7 +1188,9 @@ export function useCreateAdvance() {
       // Step 1: deposit transaction into the destination account. `linked_debt_id`
       // ties it to the advance debt so it shows in the debt's Recent Transactions
       // alongside repayments; `transfer_group_id` is still the tag useDeleteAdvance
-      // keys off (ADR-056 addendum).
+      // keys off. `category_id`/`institution_id` are inherited from the debt
+      // (ADR-056 addendum) — same source useLogDebtPayment already reads via
+      // toPayable(), so drawing and repaying an advance land in the same place.
       await saveWithOptionalColumns<Transaction>(
         {
           household_id: householdId!,
@@ -1199,6 +1201,8 @@ export function useCreateAdvance() {
           transaction_date: args.advanceDate,
           transfer_group_id: groupId,
           linked_debt_id: args.debt.id,
+          category_id: args.debt.category_id,
+          institution_id: args.debt.institution_id,
         } as Record<string, unknown>,
         async (p) => supabase.from("transactions").insert(p).select("*").single(),
       );
@@ -1219,6 +1223,7 @@ export function useCreateAdvance() {
             description: `Advance: ${args.debt.name}`,
             transaction_date: args.advanceDate,
             transfer_group_id: groupId,
+            institution_id: args.debt.institution_id,
           } as Record<string, unknown>,
           async (p) => supabase.from("transactions").insert(p).select("*").single(),
         );

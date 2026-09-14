@@ -386,3 +386,37 @@
     (`eba5d1c6…`, owner `f93a0ac9…`) and "Cash — Stephanie" (`8fa057e0…`,
     owner `545e684e…`), both `is_spendable`/`include_in_net_worth` true, no
     institution, $0 starting balance. **ADR-103 fully live — done.**
+  - **Advances: category+place on creation; bill payments gain fee lines.**
+    Two changes, user-requested:
+    - `useCreateAdvance` (`src/lib/data-hooks.ts`) now inherits
+      `category_id`/`institution_id` from the debt on the deposit
+      transaction (and `institution_id` only on the mirror leg) — matches
+      what `useLogDebtPayment` already did for repayments. **ADR-056
+      addendum.**
+    - `LogBillPaymentDialog` + `useLogBillPayment`
+      (`src/lib/payments.ts`) gain fee/interest lines, porting the pattern
+      from `LogDebtPaymentDialog` (`DebtPaymentLine` renamed `PaymentLine`,
+      now shared). **ADR-084 addendum**, revisiting the 2026-09-04
+      "no fee lines, out of scope" call after the user hit it on a real
+      Rent (Flex) payment.
+    - Also answered (no code): why a pending bill payment blocks a second
+      Submit-button payment (ADR-036 by design — "Log a payment to this
+      bill" isn't gated, though, and works today); and how to add a fee to
+      an already-logged lone debt payment (Reverse it, cleared only, then
+      re-log with a fee line — no in-place edit path, by ADR-091 design).
+    - `npx tsc --noEmit` clean, full `vitest` suite green (199 tests).
+      Verified end-to-end against the TEST household via a throwaway
+      Playwright script (Playwright installed locally with `--no-save`,
+      not persisted to `package.json`): recorded a real advance and
+      confirmed its transaction got both fields from the debt; logged a
+      bill payment with a fee line and confirmed the payment+fee group
+      (shared `split_group_id`, fee row unlinked/categorized "Fees")
+      renders and edits correctly in `LinkedGroupDetail`. Zero console
+      errors both times. Test mutations (the advance draw, the bill
+      payment+fee, one pre-existing fixture accidentally deleted along the
+      way) were all reversed/restored; TEST household confirmed back to
+      its prior state via the MCP.
+    - Next: none — both changes are complete and verified. User still
+      needs to set `category_id`/`institution_id` on their own advance
+      debts (via the existing debt edit form) for the ADR-056 fix to show
+      up on new draws.

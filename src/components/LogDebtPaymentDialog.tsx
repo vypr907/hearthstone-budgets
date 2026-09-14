@@ -28,7 +28,7 @@ import {
   isWithinCurrentCycle,
   toPayable,
   useLogDebtPayment,
-  type DebtPaymentLine,
+  type PaymentLine,
 } from "@/lib/payments";
 import { priorCyclesArrears } from "@/lib/arrears";
 import { formatMoney } from "@/lib/format";
@@ -43,7 +43,7 @@ const LINE_TYPES = [
   { value: "other", label: "Other charge" },
 ];
 
-type Line = DebtPaymentLine & { key: string };
+type Line = PaymentLine & { key: string };
 
 function newLine(): Line {
   return { key: crypto.randomUUID(), type: "fee", amount: 0, note: "" };

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ReceiptText } from "lucide-react";
+import { Plus, ReceiptText, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,16 +27,33 @@ import {
   isWithinCurrentBillCycle,
   toPayable,
   useLogBillPayment,
+  type PaymentLine,
 } from "@/lib/payments";
 import { priorCyclesArrears } from "@/lib/arrears";
 import { todayISO } from "@/lib/snapshot";
 import type { Bill } from "@/lib/supabase";
+
+const LINE_TYPES = [
+  { value: "fee", label: "Fee" },
+  { value: "interest", label: "Interest" },
+  { value: "late_fee", label: "Late fee" },
+  { value: "processing_fee", label: "Processing fee" },
+  { value: "other", label: "Other charge" },
+];
+
+type Line = PaymentLine & { key: string };
+
+function newLine(): Line {
+  return { key: crypto.randomUUID(), type: "fee", amount: 0, note: "" };
+}
 
 /**
  * Issue #57 / bill equivalent of `LogDebtPaymentDialog` (ADR-084). The date
  * drives the behaviour: inside the current cycle it runs like a normal
  * payment; an elapsed-cycle date (a past calendar month, for a monthly bill —
  * ADR-086) only writes the ledger row and leaves the current cycle untouched.
+ * ADR-084 addendum: fee/interest lines post their own transactions against
+ * the same account and never touch the bill's cycle/status.
  */
 export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
   const [open, setOpen] = useState(false);
@@ -53,8 +70,10 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
   const [accountId, setAccountId] = useState("");
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<"cleared" | "pending">("cleared");
+  const [lines, setLines] = useState<Line[]>([]);
 
   const inCycle = isWithinCurrentBillCycle(bill, date);
+  const linesTotal = lines.reduce((s, l) => s + (Math.abs(Number(l.amount)) || 0), 0);
 
   /** Newest ledger date, used for the out-of-order warning. */
   const mostRecentEntryDate = useMemo(() => {
@@ -70,12 +89,13 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
     setAccountId(lastAccountId || "");
     setAmount(String(billRemainingOwed(bill) || ""));
     setStatus("cleared");
+    setLines([]);
   }
 
   async function save() {
     const amt = Math.abs(Number(amount)) || 0;
-    if (amt <= 0) {
-      toast.error("Enter an amount");
+    if (amt <= 0 && linesTotal <= 0) {
+      toast.error("Enter an amount or at least one charge");
       return;
     }
     if (!accountId) {
@@ -99,6 +119,11 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
         date,
         status,
         priorArrears: priorCyclesArrears(toPayable("bill", bill)),
+        lines: lines.map(({ type, amount: lineAmount, note }) => ({
+          type,
+          amount: lineAmount,
+          note,
+        })),
       });
       toast.success(inCycle ? "Payment logged" : "Historical payment logged");
       setOpen(false);
@@ -128,7 +153,8 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
             <DialogHeader>
               <DialogTitle>Log a payment · {bill.name}</DialogTitle>
               <DialogDescription>
-                Record a payment, including an older one from a past cycle.
+                Record a payment, including an older one from a past cycle, with any fees
+                charged alongside it.
               </DialogDescription>
             </DialogHeader>
 
@@ -177,6 +203,86 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label>Fees & interest</Label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() => setLines((l) => [...l, newLine()])}
+                  >
+                    <Plus className="mr-1 h-4 w-4" /> Add line
+                  </Button>
+                </div>
+                {lines.length === 0 ? (
+                  <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                    No extra charges. Added lines post their own transactions against the same
+                    account and don't count toward this bill's cycle.
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {lines.map((l, i) => (
+                      <div key={l.key} className="flex flex-wrap items-center gap-2">
+                        <Select
+                          value={l.type}
+                          onValueChange={(v) =>
+                            setLines((prev) =>
+                              prev.map((x, xi) => (xi === i ? { ...x, type: v } : x)),
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-10 w-[9.5rem]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {LINE_TYPES.map((t) => (
+                              <SelectItem key={t.value} value={t.value}>
+                                {t.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          className="h-10 w-24"
+                          value={l.amount || ""}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((x, xi) =>
+                                xi === i ? { ...x, amount: Number(e.target.value) } : x,
+                              ),
+                            )
+                          }
+                        />
+                        <Input
+                          placeholder="Note (optional)"
+                          className="h-10 min-w-0 flex-1"
+                          value={l.note ?? ""}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((x, xi) => (xi === i ? { ...x, note: e.target.value } : x)),
+                            )
+                          }
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10 shrink-0"
+                          aria-label="Remove line"
+                          onClick={() => setLines((prev) => prev.filter((_, xi) => xi !== i))}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>

@@ -1231,7 +1231,8 @@ export function useEditLinkedTransaction() {
 /* ------------------------------------------------------------------------ */
 
 /** One fee/interest/charge line entered alongside a logged debt payment. */
-export type DebtPaymentLine = {
+/** Shared by debt and bill payments (ADR-084 addendum). */
+export type PaymentLine = {
   /** e.g. "fee", "interest", "late_fee" — free-form label used in the description. */
   type: string;
   amount: number;
@@ -1246,7 +1247,7 @@ export type LogDebtPaymentInput = {
   /** Payment date (YYYY-MM-DD). Decides in-cycle vs historical handling. */
   date: string;
   status: "pending" | "cleared";
-  lines: DebtPaymentLine[];
+  lines: PaymentLine[];
   /** priorCyclesArrears(payable) from arrears.ts — only used for the in-cycle path. */
   priorArrears: number;
   /**
@@ -1450,6 +1451,8 @@ export type LogBillPaymentInput = {
   status: "pending" | "cleared";
   /** priorCyclesArrears(payable) from arrears.ts — only used for the in-cycle path. */
   priorArrears: number;
+  /** ADR-084 addendum: fee/interest lines, same shape as debt payments. */
+  lines: PaymentLine[];
 };
 
 /**
@@ -1478,24 +1481,37 @@ export function isWithinCurrentBillCycle(bill: Bill, date: string, today = today
 
 /**
  * Issue #57 / bill equivalent of `useLogDebtPayment`: one form, one write for
- * a (possibly backdated) bill payment. A date inside the current cycle window
- * runs the normal `applyClearedPayment()` path; an elapsed-cycle date writes a
- * plain ledger row and leaves the bill's own cycle fields untouched — bills
- * have no running balance for a historical payment to reduce, unlike debts.
+ * a (possibly backdated) bill payment plus any number of fee/interest lines
+ * (ADR-084 addendum). A date inside the current cycle window runs the normal
+ * `applyClearedPayment()` path; an elapsed-cycle date writes a plain ledger
+ * row and leaves the bill's own cycle fields untouched — bills have no
+ * running balance for a historical payment to reduce, unlike debts. Fee
+ * lines never touch the bill's cycle/status, same as debt fee lines never
+ * touch remaining_balance.
  */
 export function useLogBillPayment() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ bill, accountId, amount, date, status, priorArrears }: LogBillPaymentInput) => {
+    mutationFn: async ({
+      bill,
+      accountId,
+      amount,
+      date,
+      status,
+      priorArrears,
+      lines,
+    }: LogBillPaymentInput) => {
       const p = toPayable("bill", bill);
       const amt = Math.abs(Number(amount) || 0);
-      if (amt <= 0.005) throw new Error("Enter an amount");
+      const extras = (lines ?? []).filter((l) => Math.abs(Number(l.amount) || 0) >= 0.005);
+      if (amt <= 0.005 && extras.length === 0) throw new Error("Enter an amount");
       const inCycle = isWithinCurrentBillCycle(bill, date);
+      const groupId = extras.length > 0 ? crypto.randomUUID() : null;
 
       let resolvedDueDate: string | null = null;
       // Payable-first (ADR-037): the bill row moves before any ledger row exists.
-      if (inCycle) {
+      if (amt > 0.005 && inCycle) {
         if (status === "cleared") {
           const res = await applyClearedPayment(p, amt, priorArrears ?? 0, date);
           resolvedDueDate = res.resolved_due_date ?? null;
@@ -1505,20 +1521,43 @@ export function useLogBillPayment() {
       }
       // Elapsed cycle: ledger-only — current cycle counters/status/due date untouched.
 
-      const { error } = await supabase.from("transactions").insert({
-        household_id: householdId,
-        account_id: accountId,
-        category_id: p.category_id,
-        amount: -amt,
-        status,
-        description: `Bill payment · ${bill.name}`,
-        transaction_date: date,
-        cleared_date: status === "cleared" ? date : null,
-        linked_bill_id: bill.id,
-        resolved_cycle_due_date: resolvedDueDate,
-        institution_id: p.institution_id,
-      });
-      if (error) throw error;
+      if (amt > 0.005) {
+        const { error } = await supabase.from("transactions").insert({
+          household_id: householdId,
+          account_id: accountId,
+          category_id: p.category_id,
+          amount: -amt,
+          status,
+          description: `Bill payment · ${bill.name}`,
+          transaction_date: date,
+          cleared_date: status === "cleared" ? date : null,
+          linked_bill_id: bill.id,
+          split_group_id: groupId,
+          resolved_cycle_due_date: resolvedDueDate,
+          institution_id: p.institution_id,
+        });
+        if (error) throw error;
+      }
+
+      if (extras.length > 0) {
+        const feeCatId = await feeCategoryId(householdId);
+        const rows = extras.map((l) => ({
+          household_id: householdId,
+          account_id: accountId,
+          category_id: feeCatId,
+          amount: -Math.abs(Number(l.amount) || 0),
+          status,
+          // "Fee:" prefix keeps these rows inside the ADR-046 paired-fee helpers
+          // (clearPairedFees / deletePairedFees) so they follow the payment.
+          description: `Fee: ${bill.name} · ${l.type}${l.note ? ` — ${l.note}` : ""}`,
+          transaction_date: date,
+          cleared_date: status === "cleared" ? date : null,
+          split_group_id: groupId,
+          institution_id: p.institution_id,
+        }));
+        const { error } = await supabase.from("transactions").insert(rows);
+        if (error) throw error;
+      }
 
       return { inCycle };
     },
