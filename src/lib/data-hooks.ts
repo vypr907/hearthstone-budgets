@@ -545,20 +545,39 @@ export function useDeleteInstitution() {
 
 /* ---------------- Transactions ---------------- */
 
+/**
+ * 2026-09-14: PostgREST caps an unpaginated select at its configured max
+ * rows (1000 by default) — once a household passes that many transactions,
+ * a plain `.select("*")` silently truncates to the newest 1000 (ordered by
+ * transaction_date desc), dropping every older row from every list and
+ * balance in the app with no error. Confirmed live: this household is at
+ * 1126 rows, and the 1000th lands on 2026-07-10 — everything on/before that
+ * was invisible. Paginate in fixed-size pages until a page comes back
+ * short, so the full set loads regardless of how large it grows.
+ */
+const TRANSACTIONS_PAGE_SIZE = 1000;
+
 export function useTransactions() {
   const { householdId } = useAuth();
   return useQuery({
     queryKey: ["transactions", householdId],
     enabled: !!householdId,
     queryFn: async (): Promise<Transaction[]> => {
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("household_id", householdId!)
-        .order("transaction_date", { ascending: false })
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as Transaction[];
+      const all: Transaction[] = [];
+      for (let from = 0; ; from += TRANSACTIONS_PAGE_SIZE) {
+        const { data, error } = await supabase
+          .from("transactions")
+          .select("*")
+          .eq("household_id", householdId!)
+          .order("transaction_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .range(from, from + TRANSACTIONS_PAGE_SIZE - 1);
+        if (error) throw error;
+        const page = (data ?? []) as Transaction[];
+        all.push(...page);
+        if (page.length < TRANSACTIONS_PAGE_SIZE) break;
+      }
+      return all;
     },
   });
 }

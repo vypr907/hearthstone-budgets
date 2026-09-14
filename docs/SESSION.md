@@ -515,3 +515,34 @@
   `remaining_balance`/`minimum_payment` → 100.00, `cycle_paid_to_date` → 0,
   `payment_status` → unpaid, `next_due_date` → 2026-09-24. No schema
   change, no ADR (data-only). Not yet applied — user runs it manually.
+
+- **Root-cause found: `useTransactions()` silently truncated at 1000 rows
+  once the household passed that many transactions.** User reported 3
+  backdated "Interest Earned" transactions on Dave Checking not showing in
+  Transactions or Accounts & Balances, even after a hard reload of the real
+  deployed URL (ruled out cache/stale-deploy). Diagnosed by computing the
+  exact expected balance from the DB (starting_balance + all cleared
+  transactions = $125.11) vs. what the app showed ($49.74) — a $75.37 gap
+  that exactly matches the sum of every Dave Checking transaction dated
+  2026-07-10 or earlier (the 3 new interest rows + two June Dave ExtraCash
+  advances). Confirmed live: household total is **1126** transactions;
+  `.select("*")` with no `.range()` hits PostgREST's default 1000-row cap;
+  row #1000 (ordered `transaction_date desc`) lands on exactly 2026-07-10 —
+  everything older was silently dropped from every list and balance
+  household-wide, not just this account. This had nothing to do with
+  Lovable's deploy/sync (confirmed auto-deploys from `main`) — genuinely
+  current code, just never paginated.
+  - **Fix**: `src/lib/data-hooks.ts`, `useTransactions()` now loops
+    `.range()` in 1000-row pages until a page comes back short, so the full
+    set loads regardless of household size going forward.
+  - No schema change, no ADR (bug fix). Not yet verified by `tsc`/`vitest`
+    (same AppLocker/no-Codespace constraint as earlier this session) —
+    reviewed by hand; single hook, no signature/return-shape change, only
+    caller (`useTransactions`'s many consumers) unaffected by the internal
+    pagination loop.
+  - Once deployed, the 3 interest transactions (and the 2 June Dave
+    ExtraCash advances, and ~121 other rows across the household) should
+    reappear with no data changes needed — they were never lost, just
+    unfetched. Flagged to the user: one of the 3 interest rows (7/1, $0.06)
+    is a duplicate of another (entered twice while retrying) — their call
+    whether to delete it once visible.
