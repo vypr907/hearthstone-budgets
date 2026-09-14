@@ -488,3 +488,30 @@
       Codespace `tsc`/`vitest` pass (or a Playwright smoke run against the
       TEST household, matching how the rest of ADR-058's addendum was
       verified last session) before leaning on this in production.
+
+  - **Applied by user; verified live via MCP**: bill row confirmed
+    `cycle_paid_to_date: 0`, `payment_status: unpaid`, `cycle_amount_due:
+    222.12`, `next_due_date: 2026-09-29`; transaction tagged
+    `resolved_cycle_due_date: 2026-08-29`. Committed and pushed (`8b692be`).
+- **EarnIn advance debt showing $200 remaining (should be $100) — diagnosed
+  + fixed.** User reported the ledger UI: $200 remaining, $200 min payment,
+  $100 paid this cycle, $200 past due, $100 still owed this cycle, due
+  8/27 — expected only the 9/14 $100 advance, due 9/24. Verified live via
+  the read-only MCP: `debt_adjustments` (immune to the bug, insert-per-event)
+  shows exactly two $100 advances (8/18, 9/14); the ledger shows a matching
+  -$100 cleared repayment on 8/28. Net should be $100, not $200. Root cause:
+  the 8/18 draw and 8/28 repayment both predate this month's ADR-101/#66
+  atomic-RPC fixes (applied 2026-09-11/13) — same old "browser-held balance,
+  absolute write-back" bug class, never individually repaired for this debt
+  (the Dave ExtraCash/OnePay Advance pattern). The 9/14 advance (drawn after
+  the atomic RPCs went live) correctly added $100 on top of an already-wrong
+  base. `cycle_paid_to_date` was stuck at 0 and `next_due_date` stuck at
+  8/27, confirming the 8/28 repayment never actually resolved/rolled the
+  cycle. Asked the user to confirm the expected due date — a single
+  mechanical roll of the 8/28 repayment only reaches 9/10; user confirmed
+  9/24 is EarnIn's real next repayment date (two rolls), not to be assumed.
+  Wrote `scripts/migrations/2026-09-14-earnin-cycle-fix.sql` (+
+  `.verify.sql`) — same shape as `2026-09-11-dave-extracash-fix.sql`:
+  `remaining_balance`/`minimum_payment` → 100.00, `cycle_paid_to_date` → 0,
+  `payment_status` → unpaid, `next_due_date` → 2026-09-24. No schema
+  change, no ADR (data-only). Not yet applied — user runs it manually.
