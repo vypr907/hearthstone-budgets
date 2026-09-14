@@ -1814,6 +1814,38 @@ Status: Decided 2026-08-26. Implemented 2026-08-26 (`rebuiltCycleAmountDue` +
 `fetchBillAdjustments` in payments.ts, wired into both reset paths; 12 unit
 tests in `payments.test.ts`).
 
+**2026-09-14 addendum — "Set amount owed this cycle" (variable bills):**
+Diagnosed a real case: a variable bill's "Amount owed this cycle" prompt
+(`ensureCycleAmount`, only ever asked the first time a payment is submitted
+in a cycle) got answered with a stale figure, locking `cycle_amount_due` to
+the wrong number for the whole cycle — with no way to notice or correct it
+before paying, and no clean way to fix it after except misusing the
+Adjustments panel (a delta against a real-world event, not a raw-number
+correction) or deleting/redoing real transactions via "Reset this cycle."
+
+Decision: `useSetBillCycleAmountDue()` (`src/lib/payments.ts`) writes
+`bills.cycle_amount_due` directly — a plain overwrite, works whether it's
+currently null or already set, touches nothing else (`cycle_paid_to_date`,
+transactions, `bill_adjustments`). Exposed only for
+`is_variable_amount` bills via a new `SetCycleAmountDueAction`
+(`src/components/SetCycleAmountDueAction.tsx`), rendered on the bill detail
+next to "Log a payment to this bill" (`app.bills.tsx`, current-cycle view
+only). Lets a known upcoming amount (e.g. a statement that posts before the
+due date) be set ahead of paying, and doubles as the correction tool for a
+cycle that already has the wrong figure — without a synthetic adjustment
+entry or touching real ledger rows.
+
+Reason: `bill_adjustments` (this ADR) is for real-world events with their
+own description/date/trail; using it to patch a stale internal number is a
+misuse that leaves a confusing entry with no real-world referent. This gives
+the raw number its own direct, purpose-built control instead.
+
+Status: Decided 2026-09-14. Implemented. Verified end-to-end against the
+TEST household: toggled a fixture bill variable, set its cycle amount via
+the new dialog, confirmed `cycle_amount_due` updated with no transaction or
+adjustment rows written, and that "Due this cycle" / "Still owed this
+cycle" / the Submit-payment amount all picked it up immediately.
+
 ## ADR-059: Manual Bill/Debt Allocation in Pay Periods (Resolves ADR-024's Known Limitation)
 
 Decision:

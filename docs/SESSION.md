@@ -420,3 +420,25 @@
       needs to set `category_id`/`institution_id` on their own advance
       debts (via the existing debt edit form) for the ADR-056 fix to show
       up on new draws.
+  - **Diagnosed live "still owed" discrepancies on two real bills** (via the
+    read-only Supabase MCP, no writes): Rent's was a pending payment simply
+    not cleared yet (self-resolving). ATT's was a stuck `cycle_amount_due`
+    (stale at July's $256.38 against a real, fully-cleared September
+    payment) plus a `next_due_date` that never rolled forward — the "still
+    owed this cycle" and "past due (earlier cycles)" figures were double-
+    counting the identical $39.65 gap. Explained both to the user with the
+    fix (an Adjustment for ATT's one-time correction; the new tool below
+    going forward).
+  - **New: "Set amount owed this cycle" for variable bills** — user-
+    requested after the ATT diagnosis, to stop the underlying cause from
+    recurring and to avoid misusing Adjustments as a correction tool.
+    `useSetBillCycleAmountDue()` (`src/lib/payments.ts`) + `SetCycleAmountDueAction`
+    (new file, `src/components/SetCycleAmountDueAction.tsx`), wired into
+    `app.bills.tsx`'s bill detail (current-cycle view, variable bills only).
+    **ADR-058 addendum.** `npx tsc --noEmit` clean, full `vitest` suite
+    green (199 tests). Verified end-to-end against the TEST household
+    (toggled "TEST Bill Stranded" variable, set/confirmed `cycle_amount_due`
+    via the new dialog with no transaction/adjustment rows written, "Due
+    this cycle"/Submit-payment picked it up immediately), then reverted the
+    fixture back to its original state. Zero console errors throughout.
+    - Next: none.

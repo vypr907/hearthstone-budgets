@@ -620,6 +620,25 @@ async function ensureCycleAmount(p: Payable, cycleAmount?: number): Promise<Paya
 }
 
 /**
+ * ADR-058 addendum: set a variable bill's `cycle_amount_due` directly, ahead
+ * of any payment — e.g. the statement posts a known total days before the
+ * due date. A plain overwrite (works whether the field is currently null or
+ * already set by a prior payment/prompt), no `bill_adjustments` row and no
+ * transaction — unlike that table, this isn't a real-world event with its
+ * own trail, just the raw target number. `cycle_paid_to_date` is untouched.
+ */
+export function useSetBillCycleAmountDue() {
+  const done = useAfterPayment();
+  return useMutation({
+    mutationFn: async ({ bill, amount }: { bill: Bill; amount: number }) => {
+      const value = Math.max(0, Number(amount) || 0);
+      await updateRow("bills", bill.id, { cycle_amount_due: value });
+    },
+    onSuccess: done,
+  });
+}
+
+/**
  * Mark submitted: create a pending ledger transaction for the amount being paid
  * now (which may be a partial payment) and set payment_status to 'pending'.
  * Submitting again while already pending adds another partial payment.
