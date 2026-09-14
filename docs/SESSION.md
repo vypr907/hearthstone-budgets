@@ -442,3 +442,49 @@
     this cycle"/Submit-payment picked it up immediately), then reverted the
     fixture back to its original state. Zero console errors throughout.
     - Next: none.
+- **ATT bill: diagnosed a live false "$5.39 still owed this cycle".**
+  User set "Set amount owed this cycle" (ADR-058 addendum, from last session)
+  to $216.73, saw it clear perfectly; raised it to $222.12 (the real 9/29
+  amount) and it flipped to Partial, $5.39 owed. Verified live via the
+  read-only Supabase MCP: `next_due_date` had already correctly rolled
+  8/29 → 9/29 (per the user: $216.73 was due 8/29, paid 9/1; $222.12 is due
+  9/29) — no due-date drift this time. Root cause: the $216.73 payment
+  (`e7ffe110-…`, 9/1) never got tagged `resolved_cycle_due_date` (ADR-075),
+  most likely because `cycle_amount_due` wasn't yet correctly $216.73 when it
+  cleared, so `applyClearedPayment`'s normal resolve-and-tag path never fired
+  for it. `deriveCycleInfo`'s monthly branch (ADR-086) windows the "current"
+  cycle by calendar month, so that untagged Sept-1 row kept counting against
+  September's real ($222.12, due 9/29) cycle once cycle_amount_due was set
+  correctly — the August payment and the September bill were being merged
+  into one bucket. `next_due_date` being in the future also confirms no
+  phantom arrears would result (`arrears.ts` walks off that same pointer).
+  Wrote `scripts/migrations/2026-09-14-att-cycle-tag-fix.sql` (+
+  `.verify.sql`) — same shape/fix as the 2026-09-09 GCI precedent: tags the
+  transaction `resolved_cycle_due_date = 2026-08-29`, resets
+  `bills.cycle_paid_to_date` to 0 and `payment_status` to `unpaid`;
+  `cycle_amount_due`/`next_due_date` untouched (already correct). No schema
+  change, no ADR (data-only). Not yet applied — user runs it manually.
+  - Flagged, not yet acted on: the underlying gap that let this happen —
+    `useSetBillCycleAmountDue` is a raw `cycle_amount_due` overwrite with no
+    resolve/tag/roll side effects, so if a newly-typed amount happens to
+    exactly match `cycle_paid_to_date`, the ledger displays "Cleared" without
+    ever running the atomic resolve path, leaving the cycle fragile — editing
+    the number again immediately breaks the illusion (this incident). Asked
+    the user whether to also fix that path — confirmed, fix it now.
+  - **Guarded `useSetBillCycleAmountDue`** (`src/lib/payments.ts`, ADR-058
+    addendum dated 2026-09-14): now rejects a new target at or below
+    `bill.cycle_paid_to_date` (with a message pointing at Submit/Clear or
+    Correct/Reverse instead), so the tool can no longer produce a
+    display-only "Cleared" that isn't actually resolved (due date rolled,
+    payment tagged). Values above what's already cleared — the tool's
+    documented pre-payment use case — are unaffected.
+    - **Could not verify locally**: `npx tsc --noEmit` / `npm test` are
+      blocked by this machine's AppLocker/SRP policy (documented constraint,
+      CLAUDE.md) — this machine has no Codespace access this session either
+      (ran out of usage). Reviewed the diff by hand (single early-return
+      guard clause, reuses already-imported `formatMoney`/`updateRow`, no
+      signature change — all 4 existing call sites of the hook untouched).
+      Flagging per CLAUDE.md rather than claiming verified; recommend a
+      Codespace `tsc`/`vitest` pass (or a Playwright smoke run against the
+      TEST household, matching how the rest of ADR-058's addendum was
+      verified last session) before leaning on this in production.

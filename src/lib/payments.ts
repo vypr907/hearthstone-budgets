@@ -626,12 +626,26 @@ async function ensureCycleAmount(p: Payable, cycleAmount?: number): Promise<Paya
  * already set by a prior payment/prompt), no `bill_adjustments` row and no
  * transaction — unlike that table, this isn't a real-world event with its
  * own trail, just the raw target number. `cycle_paid_to_date` is untouched.
+ *
+ * 2026-09-14 addendum: rejected once `cycle_paid_to_date` already meets or
+ * exceeds the new target. This tool never rolls `next_due_date` or tags the
+ * paying transaction's `resolved_cycle_due_date` (ADR-075) — only a real
+ * payment through Submit/Clear does that. Allowing a value at/below what's
+ * already cleared made the cycle *display* as Cleared without ever actually
+ * resolving, which unravels the moment the amount is edited again (the ATT
+ * incident this addendum fixes) and leaves `next_due_date` stuck.
  */
 export function useSetBillCycleAmountDue() {
   const done = useAfterPayment();
   return useMutation({
     mutationFn: async ({ bill, amount }: { bill: Bill; amount: number }) => {
       const value = Math.max(0, Number(amount) || 0);
+      const paid = Number(bill.cycle_paid_to_date ?? 0);
+      if (paid > 0.005 && value <= paid + 0.005) {
+        throw new Error(
+          `This cycle already has ${formatMoney(paid)} cleared toward it — setting the target at or below that wouldn't properly resolve the cycle (the due date won't roll). Log the remaining payment through Submit/Clear instead, or use Correct/Reverse on the existing payment if its amount was wrong.`,
+        );
+      }
       await updateRow("bills", bill.id, { cycle_amount_due: value });
     },
     onSuccess: done,
