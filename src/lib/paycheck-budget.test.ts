@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { projectOccurrences } from "@/lib/paycheck-budget";
+import { monthlyIncomeVsExpenses, projectOccurrences } from "@/lib/paycheck-budget";
+import type { Category, Transaction } from "@/lib/supabase";
 
 /**
  * ADR-060: projectOccurrences walks a bill/debt forward one billing cycle at a
@@ -96,5 +97,72 @@ describe("projectOccurrences", () => {
     expect(
       projectOccurrences({ billing_cycle: "monthly" }, "2026-01-31", "2026-04-01"),
     ).toEqual(["2026-02-28", "2026-03-28"]);
+  });
+});
+
+describe("monthlyIncomeVsExpenses", () => {
+  const categories: Category[] = [
+    { id: "salary", household_id: "h", name: "Salary", domain: "income", parent_category: null },
+    { id: "groceries", household_id: "h", name: "Groceries", domain: "spending", parent_category: null },
+  ];
+
+  function tx(partial: Partial<Transaction> & { amount: number; transaction_date: string }): Transaction {
+    return {
+      id: partial.id ?? crypto.randomUUID(),
+      household_id: "h",
+      account_id: null,
+      category_id: partial.category_id ?? null,
+      amount: partial.amount,
+      status: "cleared",
+      description: null,
+      transaction_date: partial.transaction_date,
+      linked_bill_id: null,
+      linked_debt_id: null,
+    } as Transaction;
+  }
+
+  it("buckets income and expenses into separate monthly totals", () => {
+    const out = monthlyIncomeVsExpenses(
+      [
+        tx({ amount: 2000, category_id: "salary", transaction_date: "2026-01-05" }),
+        tx({ amount: -300, category_id: "groceries", transaction_date: "2026-01-10" }),
+        tx({ amount: 2000, category_id: "salary", transaction_date: "2026-02-05" }),
+        tx({ amount: -150, category_id: "groceries", transaction_date: "2026-02-12" }),
+      ],
+      categories,
+      "2026-01-01",
+      "2026-12-31",
+    );
+    expect(out).toEqual([
+      { date: "2026-01-01", label: "Jan", income: 2000, expenses: 300 },
+      { date: "2026-02-01", label: "Feb", income: 2000, expenses: 150 },
+    ]);
+  });
+
+  it("excludes transactions outside the range", () => {
+    const out = monthlyIncomeVsExpenses(
+      [
+        tx({ amount: 2000, category_id: "salary", transaction_date: "2025-12-31" }),
+        tx({ amount: -300, category_id: "groceries", transaction_date: "2027-01-01" }),
+      ],
+      categories,
+      "2026-01-01",
+      "2026-12-31",
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("ignores a negative amount on an income category (e.g. a correction) rather than counting it as an expense", () => {
+    const out = monthlyIncomeVsExpenses(
+      [tx({ amount: -50, category_id: "salary", transaction_date: "2026-01-05" })],
+      categories,
+      "2026-01-01",
+      "2026-12-31",
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("returns an empty array for no matching transactions", () => {
+    expect(monthlyIncomeVsExpenses([], categories, "2026-01-01", "2026-12-31")).toEqual([]);
   });
 });

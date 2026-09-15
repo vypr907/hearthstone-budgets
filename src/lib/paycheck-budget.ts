@@ -341,3 +341,57 @@ export function actualByCategoryInRange(
   }
   return out;
 }
+
+export type MonthlyIncomeExpense = {
+  /** ISO first-of-month. */
+  date: string;
+  label: string;
+  income: number;
+  expenses: number;
+};
+
+/**
+ * Total income vs. total expenses per calendar month across [start, end)
+ * (year-in-review's own range, not a pay period). Reuses the same
+ * income-category-id `Set` `actualByCategoryInRange` builds
+ * (categories.domain === "income") rather than re-deriving it — a
+ * transaction's sign alone can't tell income from a refund/correction on an
+ * expense category, so domain is the source of truth here too.
+ */
+export function monthlyIncomeVsExpenses(
+  transactions: Transaction[],
+  categories: Category[],
+  start: string,
+  end: string,
+): MonthlyIncomeExpense[] {
+  const income = new Set(
+    categories.filter((c) => (c.domain ?? "").toLowerCase() === "income").map((c) => c.id),
+  );
+  const byMonth = new Map<string, { income: number; expenses: number }>();
+  for (const t of transactions) {
+    if (!inRange(t.transaction_date, start, end)) continue;
+    const amount = Number(t.amount || 0);
+    if (!amount) continue;
+    const categoryId = (t as { category_id?: string | null }).category_id ?? null;
+    const isIncome = !!categoryId && income.has(categoryId);
+    // A negative amount on an income category (a correction/clawback) and a
+    // positive one on an expense category (a refund) are both real, but
+    // neither is "income" or "an expense" in the sense this chart means —
+    // skip rather than mis-bucket or spuriously seed an all-zero month.
+    if (isIncome && amount <= 0) continue;
+    if (!isIncome && amount >= 0) continue;
+    const monthKey = t.transaction_date.slice(0, 7) + "-01";
+    const row = byMonth.get(monthKey) ?? { income: 0, expenses: 0 };
+    if (isIncome) row.income += amount;
+    else row.expenses += Math.abs(amount);
+    byMonth.set(monthKey, row);
+  }
+  return [...byMonth.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, v]) => ({
+      date,
+      label: new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short" }),
+      income: v.income,
+      expenses: v.expenses,
+    }));
+}
