@@ -546,3 +546,13 @@
     unfetched. Flagged to the user: one of the 3 interest rows (7/1, $0.06)
     is a duplicate of another (entered twice while retrying) — their call
     whether to delete it once visible.
+
+- **Income received QOL: Actual Date/Amount default to Expected.**
+  `src/routes/app.paycheck.tsx`'s `IncomeAdmin` "Received" checkbox now
+  seeds `actualDate`/`actualAmount` from `expectedDate`/`expectedAmount`
+  when checked and still blank (never overwrites a manual edit). Checked
+  `useMarkIncomeReceived`'s two other entry points (quick "Mark received"
+  button, deposit-prompt dialog) — both already defaulted to expected
+  values; only this dialog was blank. No schema change, no ADR. Part A of
+  a 3-part plan (tag system + Year in Review dashboard next, via two
+  parallel worktree agents).

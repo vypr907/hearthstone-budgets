@@ -1692,7 +1692,19 @@ function IncomeAdmin({
               />
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={received} onCheckedChange={(v) => setReceived(v === true)} />
+              <Checkbox
+                checked={received}
+                onCheckedChange={(v) => {
+                  const isReceived = v === true;
+                  setReceived(isReceived);
+                  // Default Actual to Expected on check — still editable, just
+                  // saves retyping when a paycheck matched exactly.
+                  if (isReceived) {
+                    setActualDate((d) => d || expectedDate);
+                    setActualAmount((a) => a || expectedAmount);
+                  }
+                }}
+              />
               Received
             </label>
             {received ? (
