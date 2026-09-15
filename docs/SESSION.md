@@ -712,3 +712,18 @@
   opens `TagDialog` and auto-selects the tag it just made via `onCreated`.
   No schema change. Verified: `tsc --noEmit` clean (same one pre-existing
   unrelated `@capacitor/browser` error), 214/214 tests pass.
+
+- **Fixed the recurring "pre-existing" `@capacitor/browser` tsc error —
+  it was never a code bug.** User asked to explain and fix the error this
+  session kept flagging as out-of-scope. Investigated (Explore agent,
+  read-only): `InstitutionLoginButton.tsx`'s dynamic `import("@capacitor/browser")`
+  (ADR-093) and its `package.json`/`package-lock.json` entries were all
+  correct — `node_modules/@capacitor/` simply didn't exist in this local
+  checkout (confirmed: every other package this session relied on via the
+  AppLocker `.bin`-bypass was present; only these two weren't). Ran
+  `npm install` in the repo root: added exactly the 2 already-locked
+  packages, zero `package-lock.json` diff (it was already exactly in
+  sync — a pure materialize, no version resolution). `tsc --noEmit` is now
+  **fully clean, zero errors** — first time this session. `vitest run`
+  still 214/214. Nothing to commit (`node_modules` gitignored,
+  `package-lock.json` unchanged) beyond this note.
