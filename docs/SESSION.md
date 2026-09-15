@@ -703,3 +703,12 @@
   category-spending chart's bar-order `.reverse()` needs a 10-second visual
   check; the app's shared chart palette fails `validate_palette.js` (pre-existing,
   worth its own follow-up issue, not fixed here).
+
+- **Tags: create a new tag inline from the picker (ADR-104 addendum).**
+  User asked to add tags from the add/edit transaction form directly,
+  rather than needing the Tags screen first. `TagDialog` gains an optional
+  `onCreated` callback (fired with the new row right after a create, not
+  an edit/delete); `TagPicker`'s popover gets a "+ New tag" button that
+  opens `TagDialog` and auto-selects the tag it just made via `onCreated`.
+  No schema change. Verified: `tsc --noEmit` clean (same one pre-existing
+  unrelated `@capacitor/browser` error), 214/214 tests pass.

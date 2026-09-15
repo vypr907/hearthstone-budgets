@@ -19,9 +19,13 @@ import type { Tag } from "@/lib/supabase";
 export function TagDialog({
   tag,
   onClose,
+  onCreated,
 }: {
   tag: Partial<Tag> | null;
   onClose: () => void;
+  /** Called with the new row right after a create (not an edit/delete) —
+   *  lets a caller like TagPicker auto-select the tag it just made. */
+  onCreated?: (tag: Tag) => void;
 }) {
   const create = useCreateTag();
   const update = useUpdateTag();
@@ -52,7 +56,8 @@ export function TagDialog({
       if (isEdit) {
         await update.mutateAsync({ id: tag!.id!, name: name.trim(), icon, color });
       } else {
-        await create.mutateAsync({ name: name.trim(), icon, color });
+        const created = await create.mutateAsync({ name: name.trim(), icon, color });
+        onCreated?.(created);
       }
       toast.success(isEdit ? "Tag updated" : "Tag added");
       onClose();
