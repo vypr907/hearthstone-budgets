@@ -13,6 +13,8 @@ export type TxPreFilter = {
   dateTo?: string;
   /** ADR-089: hide two-sided transfers so the list matches the budget figure. */
   excludeInternalTransfers?: boolean;
+  /** ADR-104: drill-down from the Tags screen. */
+  tagId?: string;
   label?: string;
 };
 

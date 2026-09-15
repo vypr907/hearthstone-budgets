@@ -60,6 +60,9 @@ import { consumeTxPreFilter } from "@/lib/tx-filter-store";
 import { internalTransferIds, isInternalTransfer } from "@/lib/internal-transfers";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { useEditLinkedTransaction, toPayable } from "@/lib/payments";
+import { useTags, useTransactionTags, useSetTransactionTags } from "@/lib/tags";
+import { TagPicker } from "@/components/TagPicker";
+import { tagVisual } from "@/lib/visual-meta";
 
 
 export const Route = createFileRoute("/app/transactions")({
@@ -90,6 +93,8 @@ function TransactionsPage() {
   const { data: categories = [] } = useCategories();
   const { data: institutions = [] } = useInstitutions();
   const { data: incomeEvents = [] } = useIncomeEvents();
+  const { data: tags = [] } = useTags();
+  const { data: txTags = {} } = useTransactionTags();
   // ADR-047 addendum: a split_group_id that IS an income_events.id is a
   // paycheck deposit group, not an ADR-044 category split.
   const incomeEventIds = useMemo(
@@ -106,6 +111,8 @@ function TransactionsPage() {
   /** Multi-category drill-down from a parent-category tile (no UI control). */
   const [categoryIds, setCategoryIds] = useState<string[] | null>(null);
   const [placeFilter, setPlaceFilter] = useState("all");
+  /** ADR-104: "all" | "none" | a tag id. */
+  const [tagFilter, setTagFilter] = useState("all");
   const [linkedFilter, setLinkedFilter] = useState("all"); // all | linked | unlinked
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -136,6 +143,10 @@ function TransactionsPage() {
     if (pre.dateFrom) setDateFrom(pre.dateFrom);
     if (pre.dateTo) setDateTo(pre.dateTo);
     if (pre.excludeInternalTransfers) setHideInternalTransfers(true);
+    if (pre.tagId) {
+      setTagFilter(pre.tagId);
+      setFiltersOpen(true);
+    }
     if (pre.label) setFilterLabel(pre.label);
   }, []);
 
@@ -193,6 +204,12 @@ function TransactionsPage() {
       out = out.filter((t) =>
         placeFilter === "none" ? !t.institution_id : t.institution_id === placeFilter,
       );
+    if (tagFilter !== "all")
+      out = out.filter((t) =>
+        tagFilter === "none"
+          ? !(txTags[t.id]?.length)
+          : (txTags[t.id] ?? []).includes(tagFilter),
+      );
     if (linkedFilter === "linked")
       out = out.filter(
         (t) => t.linked_bill_id || t.linked_debt_id || t.linked_goal_id,
@@ -235,6 +252,8 @@ function TransactionsPage() {
     categoryFilter,
     categoryIds,
     placeFilter,
+    tagFilter,
+    txTags,
     linkedFilter,
     dateFrom,
     dateTo,
@@ -276,6 +295,7 @@ function TransactionsPage() {
     status !== "all",
     categoryFilter !== "all",
     placeFilter !== "all",
+    tagFilter !== "all",
     linkedFilter !== "all",
     !!dateFrom,
     !!dateTo,
@@ -290,6 +310,7 @@ function TransactionsPage() {
     setCategoryFilter("all");
     setCategoryIds(null);
     setPlaceFilter("all");
+    setTagFilter("all");
     setLinkedFilter("all");
     setDateFrom("");
     setDateTo("");
@@ -407,6 +428,22 @@ function TransactionsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Select value={tagFilter} onValueChange={setTagFilter}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All tags</SelectItem>
+                    <SelectItem value="none">No tags</SelectItem>
+                    {tags.map((tg) => (
+                      <SelectItem key={tg.id} value={tg.id}>
+                        {tagVisual(tg).icon} {tg.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <Select value={placeFilter} onValueChange={setPlaceFilter}>
                   <SelectTrigger className="h-10">
                     <SelectValue />
@@ -551,6 +588,28 @@ function TransactionsPage() {
                         {t.institution_id && institutionName[t.institution_id] ? (
                           <span>· 🏪 {institutionName[t.institution_id]}</span>
                         ) : null}
+                        {(() => {
+                          // ADR-104: union of tags across the group's lines — a
+                          // split can carry different tags per line.
+                          const ids = [
+                            ...new Set(entry.rows.flatMap((r) => txTags[r.id] ?? [])),
+                          ];
+                          if (ids.length === 0) return null;
+                          return (
+                            <span className="flex flex-wrap gap-1">
+                              {ids.map((id) => {
+                                const tg = tags.find((x) => x.id === id);
+                                if (!tg) return null;
+                                const v = tagVisual(tg);
+                                return (
+                                  <Badge key={id} variant="outline" className="gap-0.5">
+                                    {v.icon} {tg.name}
+                                  </Badge>
+                                );
+                              })}
+                            </span>
+                          );
+                        })()}
                         {entry.isSplit ? (
                           <Badge variant="secondary">{splitBadge}</Badge>
                         ) : null}
@@ -668,6 +727,9 @@ export function TransactionDetail({
   const delTransferPair = useDeleteTransferPair();
   const setTransferFee = useSetTransferFee();
   const editLinked = useEditLinkedTransaction();
+  const { data: tags = [] } = useTags();
+  const { data: txTags = {} } = useTransactionTags();
+  const setTxTags = useSetTransactionTags();
 
 
   const incomeEventIds = useMemo(
@@ -718,6 +780,8 @@ export function TransactionDetail({
   const [institutionId, setInstitutionId] = useState("none");
   // ADR-097: blank means "no fee" — prefilled from any existing paired fee row.
   const [feeInput, setFeeInput] = useState("");
+  // ADR-104
+  const [tagIds, setTagIds] = useState<string[]>([]);
 
   const key = transaction?.id ?? "";
   const [lastKey, setLastKey] = useState("");
@@ -733,6 +797,7 @@ export function TransactionDetail({
     setCategoryId(transaction.category_id ?? "none");
     setInstitutionId(transaction.institution_id ?? "none");
     setFeeInput(transferFeeRow ? String(Math.abs(Number(transferFeeRow.amount))) : "");
+    setTagIds(txTags[transaction.id] ?? []);
   }
   if (!transaction && lastKey !== "") setLastKey("");
 
@@ -865,6 +930,7 @@ export function TransactionDetail({
           institutionId: institutionId === "none" ? null : institutionId,
           description: description || null,
         });
+        await setTxTags.mutateAsync({ transactionId: transaction!.id, tagIds });
         toast.success(`Transaction updated — ${linkedPayable.name} kept in sync`);
         onClose();
         return;
@@ -893,6 +959,7 @@ export function TransactionDetail({
           date,
         });
       }
+      await setTxTags.mutateAsync({ transactionId: transaction!.id, tagIds });
       toast.success("Transaction updated");
       onClose();
     } catch (e) {
@@ -1023,6 +1090,27 @@ export function TransactionDetail({
               <DetailItem
                 label="Place"
                 value={institutions.find((i) => i.id === transaction.institution_id)?.name ?? "—"}
+              />
+              <DetailItem
+                label="Tags"
+                value={
+                  tagIds.length === 0 ? (
+                    "—"
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {tagIds.map((id) => {
+                        const t = tags.find((tg) => tg.id === id);
+                        if (!t) return null;
+                        const v = tagVisual(t);
+                        return (
+                          <Badge key={id} variant="outline" style={{ borderColor: v.color }}>
+                            {v.icon} {t.name}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )
+                }
               />
               <DetailItem
                 label="Linked to"
@@ -1170,6 +1258,10 @@ export function TransactionDetail({
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label>Tags</Label>
+                  <TagPicker tagIds={tagIds} onChange={setTagIds} />
+                </div>
               </>
             )}
           </div>
@@ -1224,6 +1316,7 @@ function SplitTransactionDetail({
   const { data: transactions = [] } = useTransactions();
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
+  const { data: txTags = {} } = useTransactionTags();
   const saveSplit = useSaveSplitTransaction();
   const delSplit = useDeleteSplitTransaction();
 
@@ -1257,6 +1350,10 @@ function SplitTransactionDetail({
       lines.map((l) => ({
         categoryId: l.category_id ?? NO_SPLIT_CATEGORY,
         amount: String(Math.abs(Number(l.amount ?? 0))),
+        // ADR-104: seed each line's current tags from its own transaction id
+        // — required, since saveSplit deletes + re-inserts every line on
+        // save, so whatever isn't carried forward here is lost.
+        tagIds: txTags[l.id] ?? [],
       })),
     );
   }
@@ -1284,6 +1381,7 @@ function SplitTransactionDetail({
         lines: kept.map((r) => ({
           categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
           amount: sign * Math.abs(Number(r.amount)),
+          tagIds: r.tagIds,
         })),
         institutionId: transaction.institution_id,
       });

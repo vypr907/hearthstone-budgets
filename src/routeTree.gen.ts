@@ -31,6 +31,7 @@ import { Route as AppSettingsRouteImport } from './routes/app.settings'
 import { Route as AppSnapshotRouteImport } from './routes/app.snapshot'
 import { Route as AppSpendingRouteImport } from './routes/app.spending'
 import { Route as AppSpendingByPlaceRouteImport } from './routes/app.spending-by-place'
+import { Route as AppTagsRouteImport } from './routes/app.tags'
 import { Route as AppTransactionsRouteImport } from './routes/app.transactions'
 import { Route as AppIncomeSourceIdRouteImport } from './routes/app.income-source.$id'
 
@@ -144,6 +145,11 @@ const AppSpendingByPlaceRoute = AppSpendingByPlaceRouteImport.update({
   path: '/spending-by-place',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTagsRoute = AppTagsRouteImport.update({
+  id: '/tags',
+  path: '/tags',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTransactionsRoute = AppTransactionsRouteImport.update({
   id: '/transactions',
   path: '/transactions',
@@ -177,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/spending-by-place': typeof AppSpendingByPlaceRoute
+  '/app/tags': typeof AppTagsRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
   '/app/income-source/$id': typeof AppIncomeSourceIdRoute
@@ -202,6 +209,7 @@ export interface FileRoutesByTo {
   '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/spending-by-place': typeof AppSpendingByPlaceRoute
+  '/app/tags': typeof AppTagsRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app': typeof AppIndexRoute
   '/app/income-source/$id': typeof AppIncomeSourceIdRoute
@@ -229,6 +237,7 @@ export interface FileRoutesById {
   '/app/snapshot': typeof AppSnapshotRoute
   '/app/spending': typeof AppSpendingRoute
   '/app/spending-by-place': typeof AppSpendingByPlaceRoute
+  '/app/tags': typeof AppTagsRoute
   '/app/transactions': typeof AppTransactionsRoute
   '/app/': typeof AppIndexRoute
   '/app/income-source/$id': typeof AppIncomeSourceIdRoute
@@ -257,6 +266,7 @@ export interface FileRouteTypes {
     | '/app/snapshot'
     | '/app/spending'
     | '/app/spending-by-place'
+    | '/app/tags'
     | '/app/transactions'
     | '/app/'
     | '/app/income-source/$id'
@@ -282,6 +292,7 @@ export interface FileRouteTypes {
     | '/app/snapshot'
     | '/app/spending'
     | '/app/spending-by-place'
+    | '/app/tags'
     | '/app/transactions'
     | '/app'
     | '/app/income-source/$id'
@@ -308,6 +319,7 @@ export interface FileRouteTypes {
     | '/app/snapshot'
     | '/app/spending'
     | '/app/spending-by-place'
+    | '/app/tags'
     | '/app/transactions'
     | '/app/'
     | '/app/income-source/$id'
@@ -475,6 +487,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSpendingByPlaceRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/tags': {
+      id: '/app/tags'
+      path: '/tags'
+      fullPath: '/app/tags'
+      preLoaderRoute: typeof AppTagsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/transactions': {
       id: '/app/transactions'
       path: '/transactions'
@@ -511,6 +530,7 @@ interface AppRouteChildren {
   AppSnapshotRoute: typeof AppSnapshotRoute
   AppSpendingRoute: typeof AppSpendingRoute
   AppSpendingByPlaceRoute: typeof AppSpendingByPlaceRoute
+  AppTagsRoute: typeof AppTagsRoute
   AppTransactionsRoute: typeof AppTransactionsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppIncomeSourceIdRoute: typeof AppIncomeSourceIdRoute
@@ -535,6 +555,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSnapshotRoute: AppSnapshotRoute,
   AppSpendingRoute: AppSpendingRoute,
   AppSpendingByPlaceRoute: AppSpendingByPlaceRoute,
+  AppTagsRoute: AppTagsRoute,
   AppTransactionsRoute: AppTransactionsRoute,
   AppIndexRoute: AppIndexRoute,
   AppIncomeSourceIdRoute: AppIncomeSourceIdRoute,

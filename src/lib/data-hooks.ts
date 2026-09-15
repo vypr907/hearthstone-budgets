@@ -586,10 +586,12 @@ export function useUpsertTransaction() {
   const { householdId } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (t: Partial<Transaction> & { amount: number }) => {
+    mutationFn: async (t: Partial<Transaction> & { amount: number }): Promise<Transaction> => {
       const payload = { ...t, household_id: householdId } as Record<string, unknown>;
       // ADR-053: institution_id is a newer column — tolerate its absence.
-      await saveWithOptionalColumns<Transaction>(payload, async (p) =>
+      // ADR-104: returns the saved row (previously discarded) so a caller
+      // that just created a plain transaction can attach tags to its id.
+      return await saveWithOptionalColumns<Transaction>(payload, async (p) =>
         t.id
           ? await supabase.from("transactions").update(p).eq("id", t.id!).select("*").single()
           : await supabase.from("transactions").insert(p).select("*").single(),
@@ -637,7 +639,13 @@ export function useDeleteLinkedTransaction() {
 
 /* ---------------- Split transactions (ADR-044) ---------------- */
 
-export type SplitLine = { categoryId: string | null; amount: number };
+export type SplitLine = {
+  categoryId: string | null;
+  amount: number;
+  /** ADR-104: tags for this one line — the transaction_tags rows are written
+   *  against the line's own (post-insert) transaction id. */
+  tagIds?: string[];
+};
 
 /**
  * ADR-047 addendum: refuse a whole-group split write against anything that
@@ -705,14 +713,31 @@ export function useSaveSplitTransaction() {
         split_group_id: singleLine ? null : groupId,
         institution_id: args.institutionId ?? null,
       }));
-      const { error } = await supabase.from("transactions").insert(rows);
+      // ADR-104: .select("id") so each line's tags can be attached below — a
+      // single insert call returns rows in the same order they were given,
+      // so index-correlating back to args.lines is safe.
+      const { data: inserted, error } = await supabase
+        .from("transactions")
+        .insert(rows)
+        .select("id");
       if (error) throw error;
+      const tagRows = (inserted ?? []).flatMap((row, i) =>
+        (args.lines[i].tagIds ?? []).map((tag_id) => ({
+          transaction_id: (row as { id: string }).id,
+          tag_id,
+        })),
+      );
+      if (tagRows.length) {
+        const { error: tagError } = await supabase.from("transaction_tags").insert(tagRows);
+        if (tagError) throw tagError;
+      }
       return singleLine ? null : groupId;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
       qc.invalidateQueries({ queryKey: ["spending_actuals"] });
+      qc.invalidateQueries({ queryKey: ["transaction_tags"] });
     },
   });
 }
