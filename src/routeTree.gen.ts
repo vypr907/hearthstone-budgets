@@ -32,6 +32,7 @@ import { Route as AppSnapshotRouteImport } from './routes/app.snapshot'
 import { Route as AppSpendingRouteImport } from './routes/app.spending'
 import { Route as AppSpendingByPlaceRouteImport } from './routes/app.spending-by-place'
 import { Route as AppTransactionsRouteImport } from './routes/app.transactions'
+import { Route as AppYearInReviewRouteImport } from './routes/app.year-in-review'
 import { Route as AppIncomeSourceIdRouteImport } from './routes/app.income-source.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -149,6 +150,11 @@ const AppTransactionsRoute = AppTransactionsRouteImport.update({
   path: '/transactions',
   getParentRoute: () => AppRoute,
 } as any)
+const AppYearInReviewRoute = AppYearInReviewRouteImport.update({
+  id: '/year-in-review',
+  path: '/year-in-review',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppIncomeSourceIdRoute = AppIncomeSourceIdRouteImport.update({
   id: '/income-source/$id',
   path: '/income-source/$id',
@@ -178,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/app/spending': typeof AppSpendingRoute
   '/app/spending-by-place': typeof AppSpendingByPlaceRoute
   '/app/transactions': typeof AppTransactionsRoute
+  '/app/year-in-review': typeof AppYearInReviewRoute
   '/app/': typeof AppIndexRoute
   '/app/income-source/$id': typeof AppIncomeSourceIdRoute
 }
@@ -203,6 +210,7 @@ export interface FileRoutesByTo {
   '/app/spending': typeof AppSpendingRoute
   '/app/spending-by-place': typeof AppSpendingByPlaceRoute
   '/app/transactions': typeof AppTransactionsRoute
+  '/app/year-in-review': typeof AppYearInReviewRoute
   '/app': typeof AppIndexRoute
   '/app/income-source/$id': typeof AppIncomeSourceIdRoute
 }
@@ -230,6 +238,7 @@ export interface FileRoutesById {
   '/app/spending': typeof AppSpendingRoute
   '/app/spending-by-place': typeof AppSpendingByPlaceRoute
   '/app/transactions': typeof AppTransactionsRoute
+  '/app/year-in-review': typeof AppYearInReviewRoute
   '/app/': typeof AppIndexRoute
   '/app/income-source/$id': typeof AppIncomeSourceIdRoute
 }
@@ -258,6 +267,7 @@ export interface FileRouteTypes {
     | '/app/spending'
     | '/app/spending-by-place'
     | '/app/transactions'
+    | '/app/year-in-review'
     | '/app/'
     | '/app/income-source/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -283,6 +293,7 @@ export interface FileRouteTypes {
     | '/app/spending'
     | '/app/spending-by-place'
     | '/app/transactions'
+    | '/app/year-in-review'
     | '/app'
     | '/app/income-source/$id'
   id:
@@ -309,6 +320,7 @@ export interface FileRouteTypes {
     | '/app/spending'
     | '/app/spending-by-place'
     | '/app/transactions'
+    | '/app/year-in-review'
     | '/app/'
     | '/app/income-source/$id'
   fileRoutesById: FileRoutesById
@@ -482,6 +494,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTransactionsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/year-in-review': {
+      id: '/app/year-in-review'
+      path: '/year-in-review'
+      fullPath: '/app/year-in-review'
+      preLoaderRoute: typeof AppYearInReviewRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/income-source/$id': {
       id: '/app/income-source/$id'
       path: '/income-source/$id'
@@ -512,6 +531,7 @@ interface AppRouteChildren {
   AppSpendingRoute: typeof AppSpendingRoute
   AppSpendingByPlaceRoute: typeof AppSpendingByPlaceRoute
   AppTransactionsRoute: typeof AppTransactionsRoute
+  AppYearInReviewRoute: typeof AppYearInReviewRoute
   AppIndexRoute: typeof AppIndexRoute
   AppIncomeSourceIdRoute: typeof AppIncomeSourceIdRoute
 }
@@ -536,6 +556,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSpendingRoute: AppSpendingRoute,
   AppSpendingByPlaceRoute: AppSpendingByPlaceRoute,
   AppTransactionsRoute: AppTransactionsRoute,
+  AppYearInReviewRoute: AppYearInReviewRoute,
   AppIndexRoute: AppIndexRoute,
   AppIncomeSourceIdRoute: AppIncomeSourceIdRoute,
 }
