@@ -36,11 +36,23 @@ At session end, summarize docs/SESSION.md into docs/CHANGELOG.md, then clear it.
 - Don't rewrite working code unless asked.
 
 ## Known environment constraint
-Windows AppLocker/SRP blocks node_modules\.bin\* binaries (vite, tsc, likely
-Gradle). Cannot verify builds locally — do not attempt, do not suggest running
-vite/tsc directly. Flag if a task needs build verification.
-(A GitHub Codespace lifts this — `npm run build` / `tsc --noEmit` / `vitest`
-all work there.)
+Windows AppLocker/SRP blocks node_modules\.bin\* *shims* (vite, tsc, vitest,
+likely Gradle) — do not run those directly.
+**Workaround found 2026-09-15**: AppLocker only blocks the `.bin` shim
+files, not `node` invoking a package's real JS entry point directly. This
+works locally, no Codespace needed:
+- `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json`
+- `node node_modules/vitest/vitest.mjs run`
+- `node node_modules/vite/bin/vite.js` (dev server starts, but this
+  sandbox's own networking can't reach its port — `npm run dev` for a live
+  browser check still needs a Codespace or a real terminal outside the
+  sandbox)
+From inside a git worktree under `.claude/worktrees/<name>/` (no local
+`node_modules`), reach up to the main checkout's install instead:
+`node ../../../node_modules/typescript/bin/tsc ...`. Use this before
+claiming something is verified — don't default to "can't check" anymore.
+(A GitHub Codespace still works too — `npm run build` / `tsc --noEmit` /
+`vitest` / a real `npm run dev` browser check all work there.)
 
 ## Testing against the database (ADR-083 — HARD boundary)
 - Automated/E2E tests may create and mutate data ONLY in "TEST Household —
