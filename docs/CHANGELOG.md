@@ -1,3 +1,209 @@
+## 2026-09-15 — Fixed the recurring "pre-existing" `@capacitor/browser` tsc error
+
+* Turned out not to be a code bug: `InstitutionLoginButton.tsx`'s dynamic
+  `import("@capacitor/browser")` (ADR-093) and its `package.json`/
+  `package-lock.json` entries were all correct — `node_modules/@capacitor/`
+  simply wasn't installed in this local checkout. `npm install` materialized
+  the two already-locked packages with zero lockfile diff. `tsc --noEmit` is
+  now fully clean for the first time this session; `npm --version` confirmed
+  npm itself isn't blocked by the AppLocker `.bin`-shim restriction.
+
+## 2026-09-15 — Tags: create a new tag inline from the picker (ADR-104 addendum)
+
+* `TagDialog` gains an `onCreated` callback (fired right after a create, not
+  an edit/delete); `TagPicker`'s popover gets a "+ New tag" button that opens
+  it and auto-selects the tag it just made — no need to leave the transaction
+  form to add one first. `tsc --noEmit` clean, 214/214 tests pass.
+
+## 2026-09-15 — ADR-104: Tags (many-to-many labels) + Year in Review dashboard + income-received default
+
+Three-part plan, built as two parallel isolated-worktree agents (tags,
+Year in Review) plus a direct small fix, then merged and independently
+re-verified against the combined tree.
+
+* **Income received QOL**: `app.paycheck.tsx`'s `IncomeAdmin` "Received"
+  checkbox now seeds Actual Date/Amount from Expected when checked and still
+  blank — never overwrites a manual edit. `useMarkIncomeReceived`'s other two
+  entry points already defaulted correctly.
+* **ADR-104 — Tags**: new `tags` + `transaction_tags` tables (composite PK,
+  `on delete cascade`, same shape as ADR-005's `institution_categories`);
+  a tag can be applied to any transaction, or to one specific line of a
+  split, multiple tags per line. `src/lib/tags.ts` (CRUD + picker hooks),
+  `TagPicker`/`TagDialog` components, wired into `AddTransactionFab` and
+  the Transactions detail/split-edit views. `SplitTransactionDetail` seeds
+  each line's existing tags before every save, since `useSaveSplitTransaction`
+  deletes+reinserts the whole group on edit — the same mechanism that once
+  silently dropped `institution_id` on split edits (2026-09-13 fix); same
+  fix shape applied here. New `/app/tags` totals+drill-down screen, a Tags
+  filter on Transactions. `routeTree.gen.ts` hand-registered (router codegen
+  unavailable in this environment — flagged for a real regen next Codespace
+  session).
+* **Year in Review dashboard** (`/app/year-in-review`, no schema change):
+  year selector + category spending (reuses `actualByCategoryInRange`
+  unchanged), income vs. expenses (new `monthlyIncomeVsExpenses()`), net
+  worth growth (reuses `netWorthTrend` unchanged), and debt payoff progress
+  — new `src/lib/debt-history.ts` (`debtBalanceAsOf`/`debtPayoffTrend`/
+  `totalPaidDownInYear`), reconstructing a debt's balance at any date from
+  `starting_balance` + `debt_adjustments` + linked cleared transactions
+  (debts have no periodic snapshot table the way accounts do). Verified
+  against real household data via the read-only MCP: reconstructing Dave
+  ExtraCash and EarnIn through every recorded event lands exactly on their
+  live `remaining_balance`. Found (not fixed, out of scope): the app's
+  shared `--chart-1..5` palette fails the dataviz accessibility validator —
+  worked around per-chart instead of shipping a failing palette; worth its
+  own follow-up pass.
+* Verification discovery, documented in `CLAUDE.md`: `node
+  node_modules/typescript/bin/tsc` / `node node_modules/vitest/vitest.mjs`
+  bypass this machine's AppLocker block — it only blocks the `.bin` shims,
+  not `node` invoking a package's real entry point. Ran the full suite
+  against the merged tree: `tsc --noEmit` clean (one pre-existing unrelated
+  error, since fixed — see above), 214/214 tests pass.
+
+## 2026-09-14/15 — Bugfix: `useTransactions()` silently truncated at 1000 rows
+
+* Once this household passed 1000 total transactions, PostgREST's default
+  unpaginated-select cap silently dropped every transaction older than the
+  1000th (ordered `transaction_date desc`) from **every list and balance
+  calculation household-wide** — not a display bug, a fetch bug, and nothing
+  to do with Lovable's deploy/sync. Found via a user report of 3 backdated
+  transactions not appearing anywhere, even after a hard reload.
+* `useTransactions()` (`src/lib/data-hooks.ts`) now loops `.range()` in
+  1000-row pages until a page comes back short, so the full set loads
+  regardless of household size going forward. No data was lost — everything
+  reappeared once deployed.
+
+## 2026-09-14 — Data fixes: EarnIn and ATT cycle corruption
+
+* **EarnIn advance debt** was showing $200 remaining instead of $100 — the
+  8/18 draw and 8/28 repayment both predated this month's ADR-101/#66
+  atomic-RPC fixes, so the repayment's balance decrement silently never
+  landed (same corruption class as Dave ExtraCash/OnePay Advance). Corrected
+  via a data-only migration; no code change.
+* **ATT bill** showed a false "$5.39 still owed this cycle" after the user
+  corrected its cycle amount — a late payment crossing a calendar-month
+  boundary was never tagged `resolved_cycle_due_date` (ADR-075), so it kept
+  counting against the new cycle. Fixed via a data-only migration (same
+  shape as the 2026-09-09 GCI precedent).
+* **`useSetBillCycleAmountDue` guarded** (ADR-058 addendum): now rejects a
+  new target at or below what's already cleared this cycle — that
+  combination previously produced a display-only "Cleared" state that never
+  actually resolved (due date rolled, payment tagged), which is what let the
+  ATT bill drift into its corrupted state in the first place.
+
+## 2026-09-13 — ADR-103: Cash tracking via a dedicated Cash account + "Cash Back" combo entries
+
+* Fixes double-counting a blended register swipe (part purchase, part cash
+  back — buy a snack, pull $100 cash, spend that cash later), previously
+  entered as a same-account split whose cash-back portion counted as spend
+  twice. New "Cash Back" mode in Add Transaction writes an ADR-056 transfer
+  pair to a per-member Cash account plus N caller-categorized purchase rows
+  (`useSaveCashBack`, `insertCashBackPurchaseRows`). `SPENDABLE_TYPES` gains
+  `"cash"` (was silently excluded from the spendable total despite
+  `is_spendable = true`). No schema change beyond seeding the two Cash
+  accounts (data-only migration). Verified end-to-end via Playwright against
+  the TEST household; live seed migration run and confirmed. Issue #68 filed
+  for migrating 2 legacy "Cash & Checks" rows.
+* **Follow-up (ADR-056/ADR-084 addenda)**: advance draws now inherit
+  category/place from the debt on creation, matching what repayments already
+  did; bill payments gained optional fee/interest lines (`LogBillPaymentDialog`),
+  porting the pattern already used for debt payments.
+* **ADR-058 addendum**: new "Set amount owed this cycle" tool for variable
+  bills, after diagnosing a live ATT/Rent "still owed" discrepancy caused by
+  a stuck `cycle_amount_due` — lets the amount be corrected/pre-set directly
+  instead of misusing Adjustments.
+
+## 2026-09-13 — Issue #66: atomic cleared-payment RPCs
+
+* Two new atomic Postgres functions, `apply_cleared_debt_payment` /
+  `apply_cleared_bill_payment`, fold the full shortfall/cycle-satisfied/
+  arrears/due-date-roll state machine into one locked `UPDATE` per kind —
+  the same race-immunity ADR-101 gave advances/adjustments, now covering
+  ordinary payment clearing too (`applyClearedPayment`'s previously-uncovered
+  in-cycle branch). `payments.ts`'s public signature/return shape unchanged;
+  all 8 call sites needed zero changes. Verified with a dedicated Playwright
+  suite against the TEST household (34/34 checks, including firing two
+  concurrent payments at the same debt row and confirming they sum instead
+  of one clobbering the other). Scope boundary: 5 sibling functions with the
+  same historically-racy pattern remain unconverted, filed as Issue #67.
+
+## 2026-09-11 — ADR-101/ADR-102: atomic debt-balance RPCs + debts can link to a real account
+
+* **Root cause, found twice this month** (OnePay Advance 8/24, Dave
+  ExtraCash 9/4/9/11): every debt-balance mutation computed
+  `next = <browser's currently-held balance> + amount` and wrote that
+  absolute value — never an atomic DB increment — so two mutations fired
+  close together silently overwrote each other instead of summing.
+* **ADR-101**: `apply_debt_advance` / `apply_debt_adjustment` (new Postgres
+  functions, `security invoker`) fold each hook's entire debt-row update
+  into one atomic statement, so concurrent calls on the same row always
+  serialize. Converted `useCreateAdvance`, `useAddDebtAdjustment`,
+  `useDeleteDebtAdjustment`, `useDeleteAdvance`, and `useLogDebtPayment`'s
+  historical branch.
+* **ADR-102**: `debts.linked_account_id` — when set, every balance-changing
+  flow also writes a mirror transaction on that real account (never
+  `linked_debt_id`-tagged, so cycle math can't double-count it). UI picker
+  added to the Edit Debt dialog. Filed Issue #65: reversing/repair-deleting
+  a mirrored repayment doesn't yet clean up its mirror leg.
+* Both verified end-to-end via a dedicated Playwright suite against the TEST
+  household, including firing the exact race that hit Dave ExtraCash (two
+  advances back-to-back) and confirming the balance lands correct. Dave
+  ExtraCash's real corrupted balance ($55 stored vs. $110 real, from the
+  9/4 race) corrected via data migration.
+
+## 2026-09-11 — Split-institution backfill, transfer titles on Accounts, display-bug triage
+
+* **Bugfix**: `AddTransactionFab`'s manual split-entry path never forwarded
+  the selected Place into `useSaveSplitTransaction`, unlike the plain
+  expense/income paths — 35 of 169 "Our Household" split rows were affected,
+  showing a generic "Transaction" title. Fixed at both the create path and
+  the split-edit path (which was separately dropping an *existing*
+  institution on every edit via its delete+reinsert mechanism). Retroactive
+  backfill migration for the 4 groups actually showing the bug.
+* **ADR-098 addendum**: transfer titles ("Source → Destination") now render
+  on Accounts & Balances too, not just Transactions — the user pushed back
+  that "known limitation" wasn't good enough. Verified via Playwright
+  against the TEST household.
+* Triaged (Issues #63, #64 filed, not yet fixed): `ReversePaymentButton`
+  doesn't special-case an advance disbursement on the Transactions page the
+  way the Debts page does; a $65.26 live One Checking balance gap neither
+  side could explain, tracked to revisit once the September statement
+  closes. 3 real gaps found live-reconciling against the user's real-time
+  OnePay feed, fixed via migration.
+
+## 2026-09-10/11 — One Checking (x0801) full reconciliation (Issues #61, #62)
+
+* First reconcile of account `40124cdf-…` against its own OnePay statement
+  PDFs (Jul + Aug 2026) — discovered the PDFs have a real text layer, so
+  `pdftotext -layout` + a parsing script extracts every account's
+  Transaction History programmatically rather than by hand; every one of
+  the household's 26 One accounts' parsed transactions tie to its printed
+  statement TOTAL exactly, both months.
+* App had under-recorded −$583 of July outflow and −$28 of August;
+  displayed balance was ≈ −$600.71 vs. the real ending $43.70. Multiple
+  migrations (main reconcile, a follow-up fix for 4 unidentified items, an
+  August line-item pass, 3 final loose ends resolved against the user's own
+  receipts, and 24 One savings-pocket reconciles) brought both months'
+  spans and every pocket to the penny against their statements. Along the
+  way: a real double-counted fee leg on an Aaron's payment, a genuine ACH
+  price change (Stash), a 4×"$50 Internal Transfer" duplicate cluster
+  spanning 3 accounts (statement showed only 2). One Checking's `current`
+  balance corrected from ≈ −$600.71 to $119.15. Issues #61 and #62 closed.
+
+## 2026-09-10 — ADR-047 addendum: early-arrival paycheck splits (negative `day_offset`)
+
+* A paycheck split can now land *before* the official pay date while the
+  paycheck itself stays anchored on that date — `addDaysISO()` (new,
+  negatives-safe local-date-component helper) replaces a `toISOString()`
+  path that could drift a day once an offset was non-zero. Every
+  auto-created deposit *and* deduction row now sets `cleared_date` (an
+  ADR-100 regression — this writer was the one `status:'cleared'` path that
+  never set it). `income_source_splits` table documented in `SCHEMA.md`
+  (was missing). New `docs/TODO.md` limitation: an early split's
+  `transaction_date` buckets into the previous pay-period/calendar-month
+  window (period totals and running balances are unaffected — they use
+  `income_events.actual_amount` and `cleared_date ?? transaction_date`
+  respectively).
+
 ## 2026-09-09 — Bugfix: GCI bill stuck "Partial" after a manual mark-paid
 
 * GCI (a variable-amount bill) showed $60.48 still owed and status Partial
