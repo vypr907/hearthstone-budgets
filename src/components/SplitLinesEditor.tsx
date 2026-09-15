@@ -10,14 +10,16 @@ import {
 } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
 import { formatMoney } from "@/lib/format";
+import { TagPicker } from "@/components/TagPicker";
 import type { Category } from "@/lib/supabase";
 
 export const NO_SPLIT_CATEGORY = "__none__";
 
-export type SplitRow = { categoryId: string; amount: string };
+/** ADR-104: tagIds — which tags apply to this one line specifically. */
+export type SplitRow = { categoryId: string; amount: string; tagIds: string[] };
 
 export function emptySplitRow(): SplitRow {
-  return { categoryId: NO_SPLIT_CATEGORY, amount: "" };
+  return { categoryId: NO_SPLIT_CATEGORY, amount: "", tagIds: [] };
 }
 
 export function splitRowsTotal(rows: SplitRow[]) {
@@ -70,9 +72,14 @@ export function SplitLinesEditor({
             step="0.01"
             inputMode="decimal"
             placeholder="0.00"
-            className="h-11 w-28"
+            className="h-11 w-24"
             value={r.amount}
             onChange={(e) => update(i, { amount: e.target.value })}
+          />
+          <TagPicker
+            compact
+            tagIds={r.tagIds}
+            onChange={(tagIds) => update(i, { tagIds })}
           />
           <Button
             type="button"

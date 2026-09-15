@@ -235,6 +235,21 @@ export type InstitutionCategory = {
   category_id: string;
 };
 
+/** ADR-104: a free-form label a transaction (or one split line) can carry. */
+export type Tag = {
+  id: string;
+  household_id: string;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  created_at?: string | null;
+};
+
+export type TransactionTag = {
+  transaction_id: string;
+  tag_id: string;
+};
+
 export type Institution = {
   id: string;
   household_id: string;

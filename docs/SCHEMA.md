@@ -1043,6 +1043,38 @@ so `deriveCycleInfo`-style ledger-state logic (a stripped-down version lives in
 the auto-transfer's due amount, the same way it does for a bill's single-sided payment.
 The debit (source) leg stays a plain, unlinked transfer leg like any other transfer.
 
+## tags / transaction_tags (ADR-104)
+
+```sql
+tags (
+    id          uuid primary key default gen_random_uuid(),
+    household_id uuid not null references households(id) on delete cascade,
+    name        text not null,
+    icon        text,   -- emoji, optional — ADR-029 convention
+    color       text,   -- hex, optional — ADR-029 convention
+    created_at  timestamptz not null default now()
+)
+
+transaction_tags (
+    transaction_id uuid not null references transactions(id) on delete cascade,
+    tag_id         uuid not null references tags(id) on delete cascade,
+    primary key (transaction_id, tag_id)
+)
+```
+
+Same shape as `institution_categories` (ADR-005) — no own `id` on the join
+table, composite PK, both FKs `on delete cascade`. A tag applies to any
+`transactions` row, including one specific line of a split (each split line
+is its own row sharing `split_group_id` — tagging a line is just a
+`transaction_tags` row against that line's id, no new granularity concept).
+RLS on `transaction_tags` is scoped through `tags.household_id` (`exists
+(select 1 from tags where tags.id = transaction_tags.tag_id and
+is_household_member(tags.household_id))`), not through `transactions` —
+cheaper, since a household's `tags` list stays small while `transactions`
+does not (`src/lib/data-hooks.ts`'s `useTransactions()` had to add
+pagination once this household passed 1000 transactions — `useTransactionTags()`
+avoids that class of problem by never listing transaction ids at all).
+
 ## transactions.cleared_date (ADR-100)
 
 ```sql

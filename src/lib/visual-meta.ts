@@ -61,6 +61,21 @@ export function categoryVisual(category: CategoryVisualSource | null | undefined
   };
 }
 
+/** ADR-104: neutral fallback when a tag has no icon set — distinct from the
+ *  category default so a tag chip reads visually different from a category
+ *  chip even when neither has picked an icon. */
+export const DEFAULT_TAG_ICON = "🔖";
+
+/** Resolve the icon + colour to render for a tag chip. Reuses the category
+ *  icon/colour picker palettes (CATEGORY_ICONS/CATEGORY_COLORS) — one set of
+ *  choices, not a duplicated second palette. */
+export function tagVisual(tag: CategoryVisualSource | null | undefined) {
+  return {
+    icon: tag?.icon?.trim() || DEFAULT_TAG_ICON,
+    color: tag?.color?.trim() || DEFAULT_CATEGORY_COLOR,
+  };
+}
+
 /* ---------------- Institution types (code-side map, no schema) ---------------- */
 
 const INSTITUTION_TYPE_META: Record<string, { icon: string; color: string }> = {

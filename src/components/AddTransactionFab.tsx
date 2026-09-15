@@ -34,6 +34,8 @@ import { useCurrentMember } from "@/lib/household";
 import { categoryVisual } from "@/lib/visual-meta";
 import { Switch } from "@/components/ui/switch";
 import { PlacePicker } from "@/components/PlacePicker";
+import { TagPicker } from "@/components/TagPicker";
+import { useSetTransactionTags } from "@/lib/tags";
 import {
   SplitLinesEditor,
   emptySplitRow,
@@ -116,6 +118,7 @@ export function AddTransactionFab() {
   const saveSplit = useSaveSplitTransaction();
   const saveTransfer = useSaveTransfer();
   const saveCashBack = useSaveCashBack();
+  const setTags = useSetTransactionTags();
   const currentMember = useCurrentMember();
   const qc = useQueryClient();
 
@@ -136,6 +139,8 @@ export function AddTransactionFab() {
   const { data: debts = [] } = useDebts();
   /** ADR-044: split entries carry per-category lines instead of one category. */
   const [splitRows, setSplitRows] = useState<SplitRow[]>([emptySplitRow()]);
+  /** ADR-104: tags for a plain (non-split) expense/income entry. */
+  const [tagIds, setTagIds] = useState<string[]>([]);
 
   // --- Transfer state (ADR-056) ---
   const [fromAccountId, setFromAccountId] = useState("");
@@ -207,6 +212,7 @@ export function AddTransactionFab() {
     setStatus("pending");
     setTxDate(todayISO());
     setSplitRows([emptySplitRow()]);
+    setTagIds([]);
     setFromAccountId("");
     setToAccountId("");
     setTransferAmount("");
@@ -289,6 +295,7 @@ export function AddTransactionFab() {
           lines: lines.map((r) => ({
             categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
             amount: n > 0 ? -Number(r.amount) : Number(r.amount),
+            tagIds: r.tagIds,
           })),
           institutionId: merchantId,
         });
@@ -312,7 +319,7 @@ export function AddTransactionFab() {
         ? `Debt payment · ${debt.name}`
         : null;
     try {
-      await save.mutateAsync({
+      const saved = await save.mutateAsync({
         account_id: accountId,
         amount: n > 0 ? -n : n,
         category_id: categoryId === NO_CATEGORY ? null : categoryId,
@@ -323,6 +330,9 @@ export function AddTransactionFab() {
         ...(bill ? { linked_bill_id: bill.id } : {}),
         ...(debt ? { linked_debt_id: debt.id } : {}),
       });
+      if (tagIds.length) {
+        await setTags.mutateAsync({ transactionId: saved.id, tagIds });
+      }
       if ((bill || debt) && status === "cleared") {
         const payable = bill ? toPayable("bill", bill) : toPayable("debt", debt!);
         await applyClearedPayment(payable, Math.abs(n), priorCyclesArrears(payable), txDate);
@@ -406,7 +416,7 @@ export function AddTransactionFab() {
       return;
     }
     try {
-      await save.mutateAsync({
+      const saved = await save.mutateAsync({
         account_id: accountId,
         amount: n,
         category_id: categoryId === NO_CATEGORY ? null : categoryId,
@@ -415,6 +425,9 @@ export function AddTransactionFab() {
         transaction_date: txDate,
         ...(merchantId ? { institution_id: merchantId } : {}),
       });
+      if (tagIds.length) {
+        await setTags.mutateAsync({ transactionId: saved.id, tagIds });
+      }
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
       toast.success("Income added");
       reset();
@@ -771,6 +784,13 @@ export function AddTransactionFab() {
                     ) : null}
                   </div>
                 )}
+
+                {mode !== "split" ? (
+                  <div className="space-y-2">
+                    <Label>Tags (optional)</Label>
+                    <TagPicker tagIds={tagIds} onChange={setTagIds} />
+                  </div>
+                ) : null}
 
                 {mode !== "split" && mode !== "income" ? (
                   <div className="space-y-2">

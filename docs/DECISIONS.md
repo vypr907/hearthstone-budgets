@@ -4351,3 +4351,52 @@ a multi-line Cash Back purchase as a generic "Split · N categories" card (only 
 view's editor routing was fixed) — cosmetic, not a follow-up Issue yet.
 
 Status: Decided 2026-09-13. Implemented 2026-09-13.
+
+
+## ADR-104: Tags — Many-to-Many Labels on Transactions (and Split Lines)
+
+Decision:
+Add a free-form tagging system: a `tags` table (household-scoped, name +
+optional icon/color, ADR-029 convention) and a `transaction_tags` join table
+(`transaction_id`, `tag_id`, composite PK, both FKs `on delete cascade`) —
+the exact shape ADR-005 already established for `institution_categories`.
+A tag can be applied to any transaction, including one specific line of a
+multi-line split (each split line is already its own row in `transactions`
+sharing `split_group_id`, so no new sub-row concept is needed — tagging a
+line is just a `transaction_tags` row against that line's own id). A
+transaction/line may carry any number of tags (chip multi-select, not a
+single dropdown). A new `/app/tags` screen shows a running total + linked
+transaction list per tag, and lets a tag be created/edited/deleted.
+
+Tags are pure labels for v1 — no budget/target amount. That can be added to
+the `tags` table later (e.g. a nullable `target_amount` column) without
+reshaping this schema.
+
+Reason:
+User's motivating case: tracking a one-off cost (a friend's wedding dry
+cleaning) that doesn't fit the existing category model — the expense is
+legitimately "Dry Cleaning" by category, but the user also wants to see it
+(and everything else tied to that event) totaled together. The same
+mechanism generalizes to tax-deductible tracking, medical-expense tracking,
+and per-trip spend — all cases where a transaction belongs to a real
+spending category AND a cross-cutting label, and a single FK can't hold
+both. Splits need line-level tagging specifically because a single register
+swipe can mix a tagged purchase (e.g. wedding ribbon) with an untagged one
+(a snack) in the same transaction.
+
+`institution_categories` (ADR-005) already proved this exact many-to-many
+join-table shape works well in this codebase for "one thing can have several
+of another thing" — reused rather than inventing a new pattern. Scoping
+`transaction_tags` reads by the household's own (small) `tag_id` list rather
+than by a potentially-large `transaction_id` list avoids the row-limit class
+of bug just fixed in `useTransactions()` this same session (PostgREST's
+default 1000-row cap on an unpaginated select).
+
+`useSaveSplitTransaction` deletes and re-inserts every line of a split on
+every edit (the same mechanism that silently dropped `institution_id` on
+split edits before the 2026-09-13 fix) — tag ids are re-attached by the
+split editor on every save using each line's *current* tag selection
+(seeded from the existing rows when the edit form opens), so an edit never
+silently drops previously-applied tags.
+
+Status: Decided 2026-09-15. Implemented 2026-09-15.
