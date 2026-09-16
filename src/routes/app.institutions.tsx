@@ -7,7 +7,7 @@ import {
   useCategories,
   useInstitutionCategories,
   useBills,
-  useDebts,
+  useEffectiveDebts,
   useTransactions,
 } from "@/lib/data-hooks";
 import { Badge } from "@/components/ui/badge";
@@ -70,7 +70,7 @@ function InstitutionsPage() {
   const { data: latest = {} } = useLatestBalances();
   const { data: transactions = [] } = useTransactions();
   const { data: bills = [] } = useBills();
-  const { data: debts = [] } = useDebts();
+  const { data: debts = [] } = useEffectiveDebts();
   const balances = computeBalances(accounts, latest, transactions);
   const categoryName = Object.fromEntries(categories.map((c) => [c.id, c.name]));
   const [editing, setEditing] = useState<Partial<Institution> | null>(null);
@@ -219,7 +219,7 @@ function InstitutionDetail({
   const { data: categories = [] } = useCategories();
   const { data: instCats = {} } = useInstitutionCategories();
   const { data: bills = [] } = useBills();
-  const { data: debts = [] } = useDebts();
+  const { data: debts = [] } = useEffectiveDebts();
   const { data: transactions = [] } = useTransactions();
   const balances = computeBalances(accounts, latest, transactions);
   if (!institution) return null;

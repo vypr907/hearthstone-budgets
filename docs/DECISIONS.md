@@ -4286,7 +4286,77 @@ know about `transfer_group_id` pairing the way `useDeleteAdvance` already does. 
 as GitHub Issue #65. Also not covered: no UI picker to set `linked_account_id` on a debt
 yet — set via migration for now, same as Dave.
 
-Status: Decided 2026-09-11. Implemented 2026-09-11.
+**2026-09-15 addendum — extended to credit-card debts; derived balance;
+closed Issue #65:** the user wanted their credit-type `accounts` (Milestone,
+CreditOne, Mission Lane) connected to their matching `debts` rows, which had
+been tracked completely independently (the account had zero-to-few
+transactions; the debt's balance moved only via Advance/Adjustment/Payment,
+since there's no "purchase" concept anywhere in the app). Decision: once
+linked, **the account becomes the source of truth** — a purchase is logged
+as a normal expense transaction on the account (already fully supported,
+zero new code), and the debt's `remaining_balance` is *derived* from the
+account's balance, never independently written. Same "derived, never
+stored" shape this app already uses for savings-goal balances (ADR-027) and
+ledger cycle state (ADR-036/085), rather than keeping a stored column in
+sync via write-time hooks scattered across every account-mutating code
+path — this app has been bitten by exactly that class of bug twice this
+session already (Dave ExtraCash, EarnIn, both pre-atomic-RPC balance races).
+
+- `src/lib/balances.ts` — `effectiveDebtBalance(debt, accounts, latest,
+  transactions)`: `creditOwed(computeBalances(...).current)` for a linked
+  debt, else falls back to the stored `remaining_balance` unchanged — every
+  unlinked debt (the vast majority) is byte-for-byte unaffected.
+- `src/lib/data-hooks.ts` — new `useEffectiveDebts()` hydrates every linked
+  debt's `remaining_balance` with the derived value. **Display-path only**:
+  swapped in at every screen that only reads the balance (`app.index.tsx`,
+  `app.institutions.tsx`, `app.payment-schedule.tsx`, `app.snapshot.tsx`,
+  `app.debt-strategy.tsx`, `app.paycheck.tsx`, `app.pending.tsx`). Screens
+  that also trigger a mutation (`app.debts.tsx`, `app.everything.tsx`) keep
+  the **raw** `useDebts()` feeding every `toPayable()`/mutation call, since
+  several mutations (`useMarkUnpaid`, `useResetCycle`, `useReversePayment`,
+  `useCorrectPayment`, Issue #67) still compute
+  `next = debt.remaining_balance ± amount` client-side and write it back
+  absolute — a derived number there would corrupt the now-inert stored
+  column. Those two screens compute a small local display-only value
+  instead (`DebtsPage`'s `effectiveBalanceById` map; `DebtDetailDialog`'s own
+  internal `effectiveDebtBalance` call) everywhere they show a dollar
+  figure, leaving the `Debt` object itself untouched.
+- `DebtDialog` (edit form): once linked, "Remaining balance" is shown
+  read-only (the derived value) and omitted from the save payload — same
+  treatment `isAdvance` already gets, just a different owner. `minimum_payment`
+  is **not** derived — a real credit card's minimum payment is a smaller
+  required amount, not the full balance (`advanceMinimumPaymentPatch` was
+  already, and remains, gated to `debt_type === "advance"` only). The
+  Adjustments/Advances "Add" actions are hidden once linked (they'd
+  otherwise be a silent no-op against a balance nothing reads anymore; a
+  credit card has no real "advance" concept either way).
+- `src/lib/debt-history.ts` (Year in Review): `debtBalanceAsOf` delegates
+  entirely to `net-worth.ts`'s `balanceAsOf` for a linked debt, for every
+  date — accepted tradeoff, the trend for months before the account had
+  real activity reads flat/inaccurate for these debts; the live balance
+  shown everywhere else always uses `effectiveDebtBalance`, not this
+  function.
+- `StrandedDebtRepair.tsx` excludes any linked debt from its scan — its
+  heuristic assumes `remaining_balance` is authoritative, no longer true
+  once linked.
+- **Closes Issue #65** for real: `useMarkSubmitted`/`useMarkCleared` (the
+  everyday Submit/Clear tap-to-pay flow — previously *not* covered by this
+  ADR at all, only the secondary "Log a payment" dialog was) now mirror
+  onto the linked account too, sharing `transfer_group_id` on **both** rows
+  (not just the mirror, matching how advances already did it) so a mirror
+  can actually be found again later. `useMarkUnpaid`, `useResetCycle`,
+  `useReversePayment`, and `useEditLinkedTransaction` all now find and
+  clean up / reverse / keep in sync a payment's mirror leg via that shared
+  id — the gap this ADR originally left open is closed for every payment
+  path, not just the one `useLogDebtPayment` already handled correctly.
+- Linked (via data migration, no UI change to the picker beyond what
+  already existed): Milestone, CreditOne, Mission Lane — each anchored so
+  the very first derived read after linking matches what was already
+  trusted (no jump); the user's own statement reconciliation for these
+  three supersedes those anchor numbers separately, later. GTC (a
+  credit-card debt with no matching account) stays debt-only, untouched.
+
+Status: Decided 2026-09-11. Implemented 2026-09-11; extended 2026-09-15.
 
 ## ADR-103: Cash Tracking via a Cash Account + "Cash Back" Combo Entries
 

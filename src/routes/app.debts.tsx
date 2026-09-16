@@ -8,6 +8,7 @@ import {
   useUpsertDebt,
   useCategories,
   useAccounts,
+  useLatestBalances,
   useTransactions,
   useDeleteLinkedTransaction,
   useInstitutions,
@@ -18,6 +19,7 @@ import {
   useDeleteAdvance,
   shiftMonth,
 } from "@/lib/data-hooks";
+import { effectiveDebtBalance } from "@/lib/balances";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
 import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
@@ -148,9 +150,27 @@ export const Route = createFileRoute("/app/debts")({
 });
 
 function DebtsPage() {
+  // ADR-102 addendum: `debts` stays raw everywhere in this file -- it feeds
+  // every `toPayable("debt", d)` call (PayActions, PastDueBadge, Edit,
+  // Correct/Reverse), and several of those mutations still read
+  // debt.remaining_balance client-side for a read-then-write (Issue #67). A
+  // derived value there would corrupt a linked debt's stored column.
+  // `effectiveBalanceById` is a separate, display-only lookup used at each
+  // read site below instead of touching `d.remaining_balance` directly.
   const { data: debts = [], isLoading } = useDebts();
   const { data: allInstitutions = [] } = useInstitutions();
   const institutionById = useInstitutionIndex(allInstitutions);
+  const { data: balanceAccounts = [] } = useAccounts();
+  const { data: latestBalances = {} } = useLatestBalances();
+  const { data: balanceTransactions = [] } = useTransactions();
+  const effectiveBalanceById = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const d of debts) {
+      m[d.id] = effectiveDebtBalance(d, balanceAccounts, latestBalances, balanceTransactions);
+    }
+    return m;
+  }, [debts, balanceAccounts, latestBalances, balanceTransactions]);
+  const balanceOf = (d: Debt) => effectiveBalanceById[d.id] ?? Number(d.remaining_balance ?? 0);
 
   const [editing, setEditing] = useState<Partial<Debt> | null>(null);
   const [detail, setDetail] = useState<Debt | null>(null);
@@ -176,7 +196,7 @@ function DebtsPage() {
   const isPaidOff = (d: Debt) =>
     d.debt_type === "advance"
       ? !!d.date_paid_off
-      : Number(d.remaining_balance ?? 0) <= 0;
+      : balanceOf(d) <= 0;
 
   const rows = useMemo(() => {
     let out = debts;
@@ -202,10 +222,10 @@ function DebtsPage() {
           debtDueDate(b) ?? "9999-12-31",
         );
       if (sort === "remaining")
-        return Number(b.remaining_balance || 0) - Number(a.remaining_balance || 0);
+        return balanceOf(b) - balanceOf(a);
       return (a.priority_order ?? 9999) - (b.priority_order ?? 9999);
     });
-  }, [debts, cats, q, sort, categoryName, showPaidOff]);
+  }, [debts, cats, q, sort, categoryName, showPaidOff, effectiveBalanceById]);
 
   const flat = useMemo(() => {
     if (group === "none") return rows.map((d) => ({ header: "", d }));
@@ -213,7 +233,7 @@ function DebtsPage() {
       if (group === "category") return categoryName[d.category_id ?? ""] ?? "Uncategorized";
       if (group === "due") return d.due_day ? `Day ${d.due_day}` : "No due day";
       if (group === "remaining")
-        return Number(d.remaining_balance || 0) > 0 ? "Outstanding" : "Paid off";
+        return balanceOf(d) > 0 ? "Outstanding" : "Paid off";
       return d.priority_order != null ? `Priority ${d.priority_order}` : "No priority";
     });
     const out: Array<{ header: string; d: Debt }> = [];
@@ -281,12 +301,13 @@ function DebtsPage() {
 
         <div className="space-y-2">
           {flat.map(({ header, d }, i) => {
-            const start = Number(d.starting_balance ?? 0) || Number(d.remaining_balance ?? 0);
+            const debtBalance = balanceOf(d);
+            const start = Number(d.starting_balance ?? 0) || debtBalance;
             const pctPaid =
               start > 0
                 ? Math.min(
                     100,
-                    Math.max(0, ((start - Number(d.remaining_balance)) / start) * 100),
+                    Math.max(0, ((start - debtBalance) / start) * 100),
                   )
                 : 0;
             return (
@@ -357,7 +378,7 @@ function DebtsPage() {
                   <div className="rounded-[12px] bg-muted/50 p-2">
                     <SectionLabel size="sub">Remaining</SectionLabel>
                     <p className="text-xl font-extrabold tabular-nums">
-                      {formatMoney(Number(d.remaining_balance))}
+                      {formatMoney(debtBalance)}
                     </p>
                   </div>
                   <div className="rounded-[12px] bg-muted/50 p-2">
@@ -461,7 +482,16 @@ export function DebtDetailDialog({
   const { data: institutions = [] } = useInstitutions();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
+  const { data: latestBalances = {} } = useLatestBalances();
+  const { data: balanceTransactions = [] } = useTransactions();
   const recommended = useRecommendedPayments();
+  // ADR-102 addendum: display-only -- `debt` itself stays raw (it feeds
+  // toPayable() for every action in this dialog: PayActions, Correct,
+  // Reverse). Only this one derived number is used for the "Remaining
+  // balance" figure.
+  const debtBalance = debt
+    ? effectiveDebtBalance(debt, accounts, latestBalances, balanceTransactions)
+    : 0;
 
   // ADR-085 addendum: a month stepper to inspect a prior cycle in place. Only
   // monthly items reconstruct faithfully (calendar-month window); non-monthly
@@ -503,8 +533,8 @@ export function DebtDetailDialog({
   // arrears can't double-count what's already inside remaining_balance.
   const totalOwed =
     cycle && debt
-      ? debt.remaining_balance != null && debt.remaining_balance > 0
-        ? Math.min(cycle.remaining + prior.amount, debt.remaining_balance)
+      ? debtBalance > 0
+        ? Math.min(cycle.remaining + prior.amount, debtBalance)
         : cycle.remaining + prior.amount
       : 0;
 
@@ -560,7 +590,7 @@ export function DebtDetailDialog({
               label="Program start balance"
               value={debt.program_start_balance}
             />
-            <DetailMoney label="Remaining balance" value={debt.remaining_balance} />
+            <DetailMoney label="Remaining balance" value={debtBalance} />
             <DetailMoney label="Minimum payment" value={debt.minimum_payment} />
             {hasRecommendation(recommended.get(debt.id)) ? (
               <DetailItem
@@ -770,6 +800,7 @@ export function DebtDialog({
   const { data: transactions = [] } = useTransactions();
   const { data: institutions = [] } = useInstitutions();
   const { data: accounts = [] } = useAccounts();
+  const { data: latestBalancesForEdit = {} } = useLatestBalances();
   const { data: deductions = [] } = useHouseholdDeductions();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
@@ -819,6 +850,11 @@ export function DebtDialog({
   // advanceMinimumPaymentPatch — this form shows them read-only and never
   // writes them, so a stale 0 in the form can't wipe a live draw.
   const isAdvance = debtType === "advance";
+  // ADR-102 addendum: once a debt is linked to a real account,
+  // remaining_balance is derived from that account (balances.ts,
+  // effectiveDebtBalance) and must never be written back here either --
+  // same reasoning as isAdvance above, just a different owner.
+  const isLinked = linkedAccountId !== "none";
 
   const open = debt !== null;
   const isEdit = !!debt?.id;
@@ -956,6 +992,12 @@ export function DebtDialog({
     // Both columns are NOT NULL in the DB (minimum_payment has no default), so
     // for every other debt type a blank field must land as 0, never null.
     const skipAdvanceLifecycleFields = isAdvance && isEdit;
+    // ADR-102 addendum: a linked debt's remaining_balance is derived
+    // (balances.ts, effectiveDebtBalance) -- never write it from this form,
+    // on a new link or an already-linked edit alike. minimum_payment and
+    // date_paid_off are unaffected: a linked credit card still has its own
+    // real minimum payment, distinct from the full derived balance.
+    const skipRemainingBalanceField = skipAdvanceLifecycleFields || (isLinked && isEdit);
     const remainingToWrite = isAdvance
       ? 0
       : remainingNum ?? originalNum ?? startingBalance ?? 0;
@@ -983,11 +1025,13 @@ export function DebtDialog({
             }
           : {}),
         // Advance edits: leave remaining_balance / minimum_payment /
-        // date_paid_off untouched (owned elsewhere — see above).
+        // date_paid_off untouched (owned elsewhere — see above). A linked
+        // (non-advance) debt only omits remaining_balance -- minimum_payment
+        // and date_paid_off still save normally.
         ...(skipAdvanceLifecycleFields
           ? {}
           : {
-              remaining_balance: remainingToWrite,
+              ...(skipRemainingBalanceField ? {} : { remaining_balance: remainingToWrite }),
               minimum_payment: minPaymentToWrite,
               date_paid_off: datePaidOff,
             }),
@@ -1253,8 +1297,24 @@ export function DebtDialog({
                 type="number"
                 step="0.01"
                 placeholder="Same as starting"
-                value={isAdvance ? String(debt?.remaining_balance ?? 0) : remaining}
-                disabled={isAdvance}
+                value={
+                  isAdvance
+                    ? String(debt?.remaining_balance ?? 0)
+                    : isLinked
+                      ? String(
+                          effectiveDebtBalance(
+                            {
+                              linked_account_id: debt?.linked_account_id ?? null,
+                              remaining_balance: debt?.remaining_balance ?? 0,
+                            },
+                            accounts,
+                            latestBalancesForEdit,
+                            transactions,
+                          ),
+                        )
+                      : remaining
+                }
+                disabled={isAdvance || isLinked}
                 onChange={(e) => {
                   setRemainingTouched(true);
                   setRemaining(e.target.value);
@@ -1265,6 +1325,11 @@ export function DebtDialog({
                 <p className="mt-1 text-xs text-muted-foreground">
                   Managed automatically — record a draw with "Record advance",
                   and payments bring it down.
+                </p>
+              ) : isLinked ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Managed automatically from the linked account's balance —
+                  log purchases and payments there instead.
                 </p>
               ) : null}
             </div>
@@ -1676,10 +1741,21 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       <div>
         <div className="flex items-center justify-between">
           <SectionLabel>Adjustments</SectionLabel>
-          <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" /> Add
-          </Button>
+          {/* ADR-102 addendum: hidden once linked -- remaining_balance is
+              derived from the account, so an adjustment here would be a
+              silent no-op. */}
+          {debt.linked_account_id ? null : (
+            <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" /> Add
+            </Button>
+          )}
         </div>
+        {debt.linked_account_id ? (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Managed automatically from the linked account — log purchases and
+            payments there instead.
+          </p>
+        ) : null}
         {adjustments.length === 0 ? (
           <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
             No adjustments yet.
@@ -1727,12 +1803,19 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       <div>
         <div className="flex items-center justify-between">
           <SectionLabel>Advances</SectionLabel>
-          <Button size="sm" variant="outline" className="h-8" onClick={() => setAdvanceOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" /> Add
-          </Button>
+          {/* ADR-102 addendum: hidden once linked -- same reasoning as
+              Adjustments above; a credit card also has no real "advance"
+              concept to begin with. */}
+          {debt.linked_account_id ? null : (
+            <Button size="sm" variant="outline" className="h-8" onClick={() => setAdvanceOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" /> Add
+            </Button>
+          )}
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Money borrowed against this debt — deposits into an account and increases balance owed.
+          {debt.linked_account_id
+            ? "Managed automatically from the linked account — log purchases and payments there instead."
+            : "Money borrowed against this debt — deposits into an account and increases balance owed."}
         </p>
         {advances.length === 0 ? (
           <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">

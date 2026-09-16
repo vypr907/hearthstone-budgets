@@ -29,7 +29,7 @@ import {
   useCategories,
   useInstitutions,
   useBills,
-  useDebts,
+  useEffectiveDebts,
   useUpsertTransaction,
 } from "@/lib/data-hooks";
 import { useMarkCleared, toPayable } from "@/lib/payments";
@@ -68,7 +68,7 @@ function PendingPage() {
   const { data: categories = [] } = useCategories();
   const { data: institutions = [] } = useInstitutions();
   const { data: bills = [] } = useBills();
-  const { data: debts = [] } = useDebts();
+  const { data: debts = [] } = useEffectiveDebts();
 
   const markCleared = useMarkCleared();
   const upsertTransaction = useUpsertTransaction();

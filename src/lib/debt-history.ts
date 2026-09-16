@@ -1,5 +1,7 @@
-import type { Debt, DebtAdjustment, Transaction } from "./supabase";
+import type { Account, AccountBalance, Debt, DebtAdjustment, Transaction } from "./supabase";
 import { isAdvanceDisbursement, isFeeTransaction } from "./payments";
+import { balanceAsOf } from "./net-worth";
+import { creditOwed } from "./balances";
 
 export type DebtHistoryPoint = {
   /** ISO date the point is measured at (month end / today). */
@@ -43,13 +45,32 @@ function iso(d: Date): string {
  * read-only Supabase MCP): reconstructing Dave ExtraCash and EarnIn through
  * every recorded event lands exactly on their live `remaining_balance`
  * ($45.00 and $150.00 respectively) — see `debt-history.test.ts`.
+ *
+ * ADR-102 addendum: for a debt with `linked_account_id` set, none of the
+ * above applies — a linked debt's balance is derived from its account
+ * (effectiveDebtBalance, balances.ts), and purchases (its primary driver)
+ * never touch `debt_adjustments` or carry `linked_debt_id` at all. Delegates
+ * entirely to `net-worth.ts`'s `balanceAsOf` for every date, including
+ * before the link existed — accepted tradeoff: the trend for months before
+ * the account had real transaction history will read flat/inaccurate for a
+ * linked debt (Year in Review is a secondary reporting view; the live
+ * balance shown everywhere else always uses `effectiveDebtBalance`, not
+ * this function).
  */
 export function debtBalanceAsOf(
-  debt: Pick<Debt, "id" | "starting_balance">,
+  debt: Pick<Debt, "id" | "starting_balance" | "linked_account_id">,
   adjustments: DebtAdjustment[],
   transactions: Transaction[],
   date: string,
+  accounts: Account[] = [],
+  accountBalances: AccountBalance[] = [],
 ): number {
+  if (debt.linked_account_id) {
+    const account = accounts.find((a) => a.id === debt.linked_account_id);
+    if (account) {
+      return creditOwed(balanceAsOf(account, accountBalances, transactions, date));
+    }
+  }
   const day = date.slice(0, 10);
   let balance = Number(debt.starting_balance ?? 0);
 
@@ -81,11 +102,13 @@ export function debtBalanceAsOf(
  * true balance to the earlier points instead of vanishing from the total.
  */
 export function debtPayoffTrend(
-  debts: Pick<Debt, "id" | "starting_balance">[],
+  debts: Pick<Debt, "id" | "starting_balance" | "linked_account_id">[],
   adjustments: DebtAdjustment[],
   transactions: Transaction[],
   year: number,
   today: Date = new Date(),
+  accounts: Account[] = [],
+  accountBalances: AccountBalance[] = [],
 ): DebtHistoryPoint[] {
   const isCurrentYear = year === today.getFullYear();
   const lastMonthIndex = isCurrentYear ? today.getMonth() : 11; // 0-indexed
@@ -95,7 +118,9 @@ export function debtPayoffTrend(
     const end = isLast && isCurrentYear ? today : new Date(year, m + 1, 0);
     const date = iso(end);
     let total = 0;
-    for (const d of debts) total += debtBalanceAsOf(d, adjustments, transactions, date);
+    for (const d of debts) {
+      total += debtBalanceAsOf(d, adjustments, transactions, date, accounts, accountBalances);
+    }
     points.push({ date, label: end.toLocaleDateString("en-US", { month: "short" }), total });
   }
   return points;
@@ -112,19 +137,21 @@ export function debtPayoffTrend(
  * real payoff progress).
  */
 export function totalPaidDownInYear(
-  debts: Pick<Debt, "id" | "starting_balance">[],
+  debts: Pick<Debt, "id" | "starting_balance" | "linked_account_id">[],
   adjustments: DebtAdjustment[],
   transactions: Transaction[],
   year: number,
   today: Date = new Date(),
+  accounts: Account[] = [],
+  accountBalances: AccountBalance[] = [],
 ): number {
   const priorYearEnd = `${year - 1}-12-31`;
   const yearEndDate = year === today.getFullYear() ? today : new Date(year, 11, 31);
   const yearEnd = iso(yearEndDate);
   let paidDown = 0;
   for (const d of debts) {
-    const start = debtBalanceAsOf(d, adjustments, transactions, priorYearEnd);
-    const end = debtBalanceAsOf(d, adjustments, transactions, yearEnd);
+    const start = debtBalanceAsOf(d, adjustments, transactions, priorYearEnd, accounts, accountBalances);
+    const end = debtBalanceAsOf(d, adjustments, transactions, yearEnd, accounts, accountBalances);
     paidDown += Math.max(0, start - end);
   }
   return paidDown;

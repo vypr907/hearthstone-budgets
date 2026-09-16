@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { effectiveDebtBalance } from "./balances";
 import {
   supabase,
   type Bill,
@@ -88,6 +90,41 @@ export function useDebts() {
       return (data ?? []) as Debt[];
     },
   });
+}
+
+/**
+ * ADR-102 addendum: `useDebts()`, but every linked debt's `remaining_balance`
+ * is overridden with its live derived value (`effectiveDebtBalance`,
+ * balances.ts) instead of the stored column. Display-path only — every
+ * mutation dialog (advance/adjustment/payment/reverse/reset/correct) must
+ * keep using the raw `useDebts()` result, never this one, since several of
+ * those still compute `next = debt.remaining_balance ± amount` and write it
+ * back as an absolute value (Issue #67) — feeding them a derived number
+ * would corrupt the now-inert stored column with mixed semantics.
+ */
+export function useEffectiveDebts() {
+  const debts = useDebts();
+  const accounts = useAccounts();
+  const latest = useLatestBalances();
+  const transactions = useTransactions();
+
+  const data = useMemo(() => {
+    const rawDebts = debts.data ?? [];
+    if (rawDebts.length === 0) return rawDebts;
+    const accts = accounts.data ?? [];
+    const latestMap = latest.data ?? {};
+    const txs = transactions.data ?? [];
+    return rawDebts.map((d) =>
+      d.linked_account_id
+        ? { ...d, remaining_balance: effectiveDebtBalance(d, accts, latestMap, txs) }
+        : d,
+    );
+  }, [debts.data, accounts.data, latest.data, transactions.data]);
+
+  return {
+    data,
+    isLoading: debts.isLoading || accounts.isLoading || latest.isLoading || transactions.isLoading,
+  };
 }
 
 export function useAccounts() {

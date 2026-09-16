@@ -8,7 +8,7 @@ import { Download, Loader2 } from "lucide-react";
 import {
   useAccounts,
   useBills,
-  useDebts,
+  useEffectiveDebts,
   useHousehold,
   useLatestBalances,
   useTransactions,
@@ -103,7 +103,7 @@ function MoreNote({ count, tone }: { count: number; tone: "overdue" | "upcoming"
 
 function SnapshotPage() {
   const { data: bills = [] } = useBills();
-  const { data: debts = [] } = useDebts();
+  const { data: debts = [] } = useEffectiveDebts();
   const { data: household } = useHousehold();
   const { data: sources = [] } = useIncomeSources();
   const { data: events = [] } = useIncomeEvents();

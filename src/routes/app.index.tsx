@@ -11,7 +11,7 @@ import {
   useAutoTransfers,
   useBills,
   useCategories,
-  useDebts,
+  useEffectiveDebts,
   useDebtStrategySettings,
   useInstitutions,
   useLatestBalances,
@@ -194,7 +194,7 @@ function Dashboard() {
   }
 
   const { data: bills = [] } = useBills();
-  const { data: debts = [] } = useDebts();
+  const { data: debts = [] } = useEffectiveDebts();
   const { data: strategySettings } = useDebtStrategySettings();
   const { data: autoTransfers = [] } = useAutoTransfers();
   const { data: accounts = [] } = useAccounts();

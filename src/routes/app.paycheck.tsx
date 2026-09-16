@@ -56,7 +56,7 @@ import {
   shiftMonth,
 } from "@/lib/data-hooks";
 import { buildActualResolver } from "@/lib/spending-actuals";
-import { useBills, useDebts, useAutoTransfers } from "@/lib/data-hooks";
+import { useBills, useEffectiveDebts, useAutoTransfers } from "@/lib/data-hooks";
 import { deriveCycleInfo, type CycleInfo } from "@/lib/ledger-state";
 import {
   hasRecommendation,
@@ -145,7 +145,7 @@ function PaycheckPage() {
   const { data: allocations = [] } = usePayPeriodAllocations();
   const { data: categories = [] } = useCategories();
   const { data: bills = [] } = useBills();
-  const { data: debts = [] } = useDebts();
+  const { data: debts = [] } = useEffectiveDebts();
   const { data: autoTransfers = [] } = useAutoTransfers();
 
   const primarySource = sources.find((s) => s.is_primary) ?? null;

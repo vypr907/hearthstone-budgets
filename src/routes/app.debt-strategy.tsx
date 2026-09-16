@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import {
-  useDebts,
+  useEffectiveDebts,
   useDebtStrategySettings,
   useLockStrategy,
   useSaveDebtPriorityOrder,
@@ -66,7 +66,7 @@ const STRATEGIES: { key: StrategyKey; label: string; hint: string }[] = [
 ];
 
 function DebtStrategyPage() {
-  const { data: debts = [] } = useDebts();
+  const { data: debts = [] } = useEffectiveDebts();
   const { data: transactions = [] } = useTransactions();
   const { data: settings } = useDebtStrategySettings();
   const save = useSaveDebtStrategySettings();

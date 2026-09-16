@@ -592,6 +592,57 @@ async function groupIdsFor(transactionIds: string[]): Promise<string[]> {
     .filter((g): g is string => !!g);
 }
 
+/**
+ * ADR-102 addendum: resolve the transfer_group_id values for a set of
+ * transaction ids, so a cycle reset can delete the account mirror paired
+ * with each linked-debt payment it removes (closes Issue #65 for this path).
+ */
+async function transferGroupIdsFor(transactionIds: string[]): Promise<string[]> {
+  if (transactionIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("transfer_group_id")
+    .in("id", transactionIds);
+  if (error) throw error;
+  return ((data as { transfer_group_id: string | null }[] | null) ?? [])
+    .map((r) => r.transfer_group_id)
+    .filter((g): g is string => !!g);
+}
+
+/**
+ * ADR-102 addendum: delete the account mirror paired with a linked-debt
+ * payment — every row sharing its transfer_group_id except itself. A no-op
+ * when the payment carries no transfer_group_id (never linked, or a bill).
+ */
+async function deleteMirrorTransaction(
+  transferGroupId: string | null | undefined,
+  ownId: string,
+) {
+  if (!transferGroupId) return;
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("transfer_group_id", transferGroupId)
+    .neq("id", ownId);
+  if (error) throw error;
+}
+
+/** ADR-102 addendum: the account mirror paired with a linked-debt payment, if any. */
+async function findMirrorTransaction(
+  transferGroupId: string | null | undefined,
+  ownId: string,
+) {
+  if (!transferGroupId) return null;
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("transfer_group_id", transferGroupId)
+    .neq("id", ownId)
+    .limit(1);
+  if (error) throw error;
+  return ((data ?? [])[0] as Transaction | undefined) ?? null;
+}
+
 function useAfterPayment() {
   const qc = useQueryClient();
   return () => {
@@ -671,6 +722,14 @@ export function useMarkSubmitted() {
       // later clear/undo/reset touches both atomically. No fee → no group: a
       // lone payment row must stay a plain transaction, not a 1-line "split".
       const groupId = hasFee(fee) ? crypto.randomUUID() : null;
+      // ADR-102 addendum: when this debt's balance lives on a real linked
+      // account, mirror the payment there too (a credit reducing what's
+      // owed) — this time the SAME transfer_group_id goes on both rows (not
+      // just the mirror), so undo/reset/reverse/edit can find and clean up
+      // the mirror later (closes Issue #65 for the everyday Submit/Clear
+      // pay flow).
+      const mirrorGroupId =
+        p.kind === "debt" && p.debt?.linked_account_id ? crypto.randomUUID() : null;
       const { error } = await supabase.from("transactions").insert({
         household_id: householdId,
         account_id: accountId,
@@ -681,12 +740,27 @@ export function useMarkSubmitted() {
         transaction_date: date || todayISO(),
         [linkColumn(p.kind)]: p.id,
         split_group_id: groupId,
+        transfer_group_id: mirrorGroupId,
         // ADR-065: default the place from the linked bill's/debt's own institution.
         institution_id: p.institution_id,
       });
       if (error) throw error;
 
       await insertFeeTransaction(householdId, p.name, p.institution_id, accountId, fee, "pending", groupId, date);
+
+      if (mirrorGroupId && p.kind === "debt" && p.debt?.linked_account_id) {
+        const { error: mirrorError } = await supabase.from("transactions").insert({
+          household_id: householdId,
+          account_id: p.debt.linked_account_id,
+          amount: amt,
+          status: "pending",
+          description: `Debt payment · ${p.name}`,
+          transaction_date: date || todayISO(),
+          transfer_group_id: mirrorGroupId,
+          institution_id: p.institution_id,
+        });
+        if (mirrorError) throw mirrorError;
+      }
 
       const owed = payableRemainingOwed(p) - amt;
       return owed > 0.005 ? { remaining_owed: owed } : {};
@@ -743,10 +817,22 @@ export function useMarkCleared() {
         // ADR-046: a fee submitted alongside this payment is still pending —
         // clear it too so it doesn't strand when the payment clears.
         await clearPairedFees(existing.split_group_id, effectiveClearedDate);
+        // ADR-102 addendum: the mirror useMarkSubmitted created (if any)
+        // shares this row's transfer_group_id -- clear it too.
+        if (existing.transfer_group_id) {
+          const { error: mirrorError } = await supabase
+            .from("transactions")
+            .update({ status: "cleared", cleared_date: effectiveClearedDate })
+            .eq("transfer_group_id", existing.transfer_group_id)
+            .neq("id", existing.id);
+          if (mirrorError) throw mirrorError;
+        }
       } else {
         // Direct clear (no prior submit): insert a cleared payment, paired with
         // any fee entered on this clear via split_group_id. No fee → no group.
         const groupId = hasFee(fee) ? crypto.randomUUID() : null;
+        const mirrorGroupId =
+          p.kind === "debt" && p.debt?.linked_account_id ? crypto.randomUUID() : null;
         const { error } = await supabase.from("transactions").insert({
           household_id: householdId,
           account_id: accountId,
@@ -758,6 +844,7 @@ export function useMarkCleared() {
           cleared_date: effectiveClearedDate,
           [linkColumn(p.kind)]: p.id,
           split_group_id: groupId,
+          transfer_group_id: mirrorGroupId,
           resolved_cycle_due_date: result.resolved_due_date ?? null,
           // ADR-065: default the place from the linked bill's/debt's own institution.
           institution_id: p.institution_id,
@@ -774,6 +861,21 @@ export function useMarkCleared() {
           date,
           effectiveClearedDate,
         );
+
+        if (mirrorGroupId && p.kind === "debt" && p.debt?.linked_account_id) {
+          const { error: mirrorError } = await supabase.from("transactions").insert({
+            household_id: householdId,
+            account_id: p.debt.linked_account_id,
+            amount: requested,
+            status: "cleared",
+            description: `Debt payment · ${p.name}`,
+            transaction_date: date || todayISO(),
+            cleared_date: effectiveClearedDate,
+            transfer_group_id: mirrorGroupId,
+            institution_id: p.institution_id,
+          });
+          if (mirrorError) throw mirrorError;
+        }
       }
 
       return result;
@@ -800,6 +902,8 @@ export function useMarkUnpaid() {
         if (error) throw error;
         // ADR-046: take the paired fee with the reversed payment.
         await deletePairedFees(tx.split_group_id);
+        // ADR-102 addendum: take the account mirror (if any) too (Issue #65).
+        await deleteMirrorTransaction(tx.transfer_group_id, tx.id);
       }
 
       if (p.kind === "debt") {
@@ -890,8 +994,18 @@ export function useResetCycle() {
   return useMutation({
     mutationFn: async ({ payable, transactionIds, clearedTotal, resolved }: ResetCycleInput) => {
       if (transactionIds.length > 0) {
+        // ADR-102 addendum: resolve each row's mirror group BEFORE deleting
+        // the rows themselves, so the lookup can still find them (Issue #65).
+        const mirrorGroupIds = await transferGroupIdsFor(transactionIds);
         const { error } = await supabase.from("transactions").delete().in("id", transactionIds);
         if (error) throw error;
+        for (const g of mirrorGroupIds) {
+          const { error: mirrorError } = await supabase
+            .from("transactions")
+            .delete()
+            .eq("transfer_group_id", g);
+          if (mirrorError) throw mirrorError;
+        }
         // ADR-046: remove the fee rows paired with each cleared payment. Fees
         // were never linked to the payable, so they aren't in transactionIds.
         for (const g of await groupIdsFor(transactionIds)) await deletePairedFees(g);
@@ -1010,6 +1124,26 @@ export function useReversePayment() {
         institution_id: transaction.institution_id ?? payable.institution_id,
       });
       if (error) throw error;
+
+      // ADR-102 addendum: reverse the account mirror too, if this payment
+      // had one (Issue #65) -- an offsetting row on the mirror's own
+      // account, sized to undo the mirror's own amount.
+      if (transaction.transfer_group_id) {
+        const mirror = await findMirrorTransaction(transaction.transfer_group_id, transaction.id);
+        if (mirror) {
+          const { error: mirrorError } = await supabase.from("transactions").insert({
+            household_id: mirror.household_id ?? householdId,
+            account_id: mirror.account_id,
+            amount: -Number(mirror.amount ?? 0),
+            status: "cleared",
+            description: `Reversed: ${payable.name} payment`,
+            transaction_date: date || todayISO(),
+            cleared_date: date || todayISO(),
+            institution_id: mirror.institution_id,
+          });
+          if (mirrorError) throw mirrorError;
+        }
+      }
     },
     onSuccess: done,
   });
@@ -1253,6 +1387,26 @@ export function useEditLinkedTransaction() {
 
       const { error } = await supabase.from("transactions").update(patch).eq("id", transaction.id);
       if (error) throw error;
+
+      // ADR-102 addendum: keep the account mirror (if any) in sync -- same
+      // amount, opposite sign, same date/status (Issue #65). account_id is
+      // deliberately not touched: the mirror always stays on the debt's own
+      // linked account, independent of which account paid.
+      if (transaction.transfer_group_id) {
+        const mirror = await findMirrorTransaction(transaction.transfer_group_id, transaction.id);
+        if (mirror) {
+          const { error: mirrorError } = await supabase
+            .from("transactions")
+            .update({
+              amount: -(sign * newAmount),
+              transaction_date: input.date,
+              status: input.status,
+              cleared_date: willClear ? effectiveClearedDate : null,
+            })
+            .eq("id", mirror.id);
+          if (mirrorError) throw mirrorError;
+        }
+      }
     },
     onSuccess: done,
   });

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  useDebts,
+  useEffectiveDebts,
   useDebtStrategySettings,
   useScheduleCheckoffs,
   useToggleScheduleCheckoff,
@@ -42,7 +42,7 @@ export const Route = createFileRoute("/app/payment-schedule")({
 });
 
 function PaymentSchedulePage() {
-  const { data: debts = [] } = useDebts();
+  const { data: debts = [] } = useEffectiveDebts();
   const { data: settings } = useDebtStrategySettings();
   const { data: checked = [] } = useScheduleCheckoffs();
   const toggle = useToggleScheduleCheckoff();

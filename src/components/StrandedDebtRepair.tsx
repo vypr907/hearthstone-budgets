@@ -33,6 +33,12 @@ export function findStrandedDebtPayments(
 ): StrandedGroup[] {
   const out: StrandedGroup[] = [];
   for (const debt of debts) {
+    // ADR-102 addendum: a linked debt's remaining_balance is derived from
+    // its account, not authoritative — this whole heuristic (comparing
+    // starting_balance/cycle_paid_to_date against remaining_balance) no
+    // longer applies, and its payments go through the now-atomic,
+    // now-mirrored pay flow that shouldn't strand in the first place.
+    if (debt.linked_account_id) continue;
     // A settled debt can never be stranded.
     if (debt.date_paid_off || Number(debt.remaining_balance ?? 0) <= 0.005) continue;
     const info = deriveCycleInfo(toPayable("debt", debt), transactions, today);

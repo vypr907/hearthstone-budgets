@@ -166,13 +166,30 @@ function YearInReviewPage() {
 
   // --- 4. Debt payoff progress ---
   const debtTrend = useMemo(
-    () => debtPayoffTrend(debts, adjustments, transactions, year, isCurrentYear ? today : new Date(year, 11, 31)),
-    [debts, adjustments, transactions, year, isCurrentYear], // eslint-disable-line react-hooks/exhaustive-deps
+    () =>
+      debtPayoffTrend(
+        debts,
+        adjustments,
+        transactions,
+        year,
+        isCurrentYear ? today : new Date(year, 11, 31),
+        accounts,
+        balanceHistory,
+      ),
+    [debts, adjustments, transactions, year, isCurrentYear, accounts, balanceHistory], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const paidDown = useMemo(
     () =>
-      totalPaidDownInYear(debts, adjustments, transactions, year, isCurrentYear ? today : new Date(year, 11, 31)),
-    [debts, adjustments, transactions, year, isCurrentYear], // eslint-disable-line react-hooks/exhaustive-deps
+      totalPaidDownInYear(
+        debts,
+        adjustments,
+        transactions,
+        year,
+        isCurrentYear ? today : new Date(year, 11, 31),
+        accounts,
+        balanceHistory,
+      ),
+    [debts, adjustments, transactions, year, isCurrentYear, accounts, balanceHistory], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const debtProgressRows = useMemo(() => {
     const priorYearEnd = `${year - 1}-12-31`;
@@ -183,14 +200,14 @@ function YearInReviewPage() {
         name: d.name,
         paidDown: Math.max(
           0,
-          debtBalanceAsOf(d, adjustments, transactions, priorYearEnd) -
-            debtBalanceAsOf(d, adjustments, transactions, yearEnd),
+          debtBalanceAsOf(d, adjustments, transactions, priorYearEnd, accounts, balanceHistory) -
+            debtBalanceAsOf(d, adjustments, transactions, yearEnd, accounts, balanceHistory),
         ),
       }))
       .filter((r) => r.paidDown > 0.005)
       .sort((a, b) => b.paidDown - a.paidDown)
       .slice(0, 8);
-  }, [debts, adjustments, transactions, year, isCurrentYear]);
+  }, [debts, adjustments, transactions, year, isCurrentYear, accounts, balanceHistory]);
 
   return (
     <>

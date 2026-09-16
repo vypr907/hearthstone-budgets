@@ -93,6 +93,13 @@ function shortDate(iso: string): string {
 
 function EverythingPage() {
   const { data: bills = [] } = useBills();
+  // ADR-102 addendum: `debts` stays raw -- it feeds `toPayable`, which flows
+  // into usePayFlow's tap/markUnpaid/reset, and those still read
+  // debt.remaining_balance client-side for a read-then-write (Issue #67). A
+  // derived value there would corrupt a linked debt's stored column.
+  // DebtDetailDialog (opened via openDetail, below) derives its own display
+  // balance internally from this same raw object, so no separate hydrated
+  // list is needed here.
   const { data: debts = [] } = useDebts();
   const { data: categories = [] } = useCategories();
   const { data: incomeSources = [] } = useIncomeSources();

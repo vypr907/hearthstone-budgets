@@ -96,6 +96,35 @@ export function creditOwed(balance: number): number {
 }
 
 /**
+ * A debt's remaining balance, derived from its linked account when it has
+ * one (`debts.linked_account_id`, ADR-102) — never independently written for
+ * a linked debt. Same "derived, never stored" shape this app already uses
+ * for savings-goal balances (ADR-027) and ledger cycle state (ADR-036/085),
+ * rather than trying to keep a stored column in sync via write-time hooks
+ * scattered across every account-mutating code path.
+ *
+ * Falls back to the debt's own stored `remaining_balance` when unlinked, or
+ * when the linked account can't be resolved (e.g. deleted) — every unlinked
+ * debt (the vast majority) is byte-for-byte unaffected by this function
+ * existing at all.
+ */
+export function effectiveDebtBalance(
+  debt: Pick<Debt, "linked_account_id" | "remaining_balance">,
+  accounts: Account[],
+  latest: Record<string, AccountBalance | undefined>,
+  transactions: Transaction[],
+): number {
+  if (debt.linked_account_id) {
+    const account = accounts.find((a) => a.id === debt.linked_account_id);
+    if (account) {
+      const balances = computeBalances([account], latest, transactions);
+      return creditOwed(balances[account.id].current);
+    }
+  }
+  return Number(debt.remaining_balance ?? 0);
+}
+
+/**
  * ADR-023: what one account contributes to the COMBINED household spendable
  * total. Checking contributes its raw spendable balance; credit contributes
  * available credit (limit - owed). Returns null when the account should be
