@@ -38,11 +38,13 @@ export function ObligationIcon({
 }
 
 /**
- * Faint oversized institution mark meant to sit behind a row's content as a
+ * Faint oversized institution mark meant to sit behind a card's content as a
  * background watermark (the treatment used on the Everything page) rather
- * than a normal-sized avatar. Caller is responsible for giving its container
- * `relative` + `overflow-hidden` so this crops to the row instead of
- * bleeding into neighbors.
+ * than a normal-sized avatar. Spans the full height of its container, just
+ * right of center. Caller is responsible for giving its container
+ * `relative` + `overflow-hidden` so this crops to the card instead of
+ * bleeding into neighbors, and marking every sibling `relative` so it
+ * paints above the watermark.
  */
 export function ObligationWatermark({
   institution,
@@ -63,7 +65,7 @@ export function ObligationWatermark({
         aria-hidden
         loading="lazy"
         className={cn(
-          "pointer-events-none absolute right-1 top-1/2 h-16 w-16 -translate-y-1/2 select-none object-contain opacity-[0.09]",
+          "pointer-events-none absolute left-[58%] top-0 h-full w-36 -translate-x-1/2 select-none object-contain opacity-[0.10]",
           className,
         )}
       />
@@ -76,7 +78,7 @@ export function ObligationWatermark({
     <span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 select-none text-5xl leading-none opacity-[0.12]",
+        "pointer-events-none absolute left-[58%] top-1/2 -translate-x-1/2 -translate-y-1/2 select-none text-8xl leading-none opacity-[0.12]",
         className,
       )}
     >

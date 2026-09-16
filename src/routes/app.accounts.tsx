@@ -402,14 +402,14 @@ function AccountsPage() {
                           className="cursor-pointer overflow-hidden"
                           onClick={() => setViewing(a)}
                         >
-                          <CardContent className="p-3">
-                            <div className="relative flex items-start gap-3 overflow-hidden rounded-[10px]">
-                              <ObligationWatermark
-                                institution={institutionById[a.institution_id ?? ""]}
-                                name={`${a.name} ${a.account_type ?? ""}`}
-                                fallback="🏛️"
-                              />
-                              <div className="relative min-w-0 flex-1">
+                          <CardContent className="relative p-3">
+                            <ObligationWatermark
+                              institution={institutionById[a.institution_id ?? ""]}
+                              name={`${a.name} ${a.account_type ?? ""}`}
+                              fallback="🏛️"
+                            />
+                            <div className="relative flex items-start gap-3">
+                              <div className="min-w-0 flex-1">
                                 <p className="truncate font-medium">
                                   {a.name}
                                   {accountLast4(a.account_number) ? (
@@ -444,7 +444,7 @@ function AccountsPage() {
                                 <Pencil className="h-4 w-4" />
                               </Button>
                             </div>
-                            <div className="mt-2 grid grid-cols-2 gap-2">
+                            <div className="relative mt-2 grid grid-cols-2 gap-2">
                               <div className="rounded-[12px] bg-muted/50 p-2">
                                 <SectionLabel size="sub">Current</SectionLabel>
                                 <p className="text-xl font-extrabold tabular-nums">
@@ -459,7 +459,7 @@ function AccountsPage() {
                               </div>
                             </div>
 
-                            <div onClick={(e) => e.stopPropagation()}>
+                            <div className="relative" onClick={(e) => e.stopPropagation()}>
                               <RecentActivity
                                 rows={recentByAccount[a.id] ?? []}
                                 institutionById={institutionById}
@@ -469,7 +469,7 @@ function AccountsPage() {
                             </div>
                             <Button
                               variant="outline"
-                              className="mt-2 h-10 w-full"
+                              className="relative mt-2 h-10 w-full"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setLogging(a);

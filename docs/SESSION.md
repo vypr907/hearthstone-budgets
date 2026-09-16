@@ -215,3 +215,20 @@ per-account institution icon.
   yet checked in a running browser — recommend a quick `npm run dev` pass
   (Codespace or outside-sandbox terminal) to confirm the watermark crop
   and collapse toggle look right before considering this done.
+
+## 2026-09-16 — Watermark follow-up: bigger, full card height, right-of-center
+User feedback after seeing it: logo should span the full card height (not
+just the header row) and sit slightly right of center rather than hugging
+the edge.
+- `ObligationWatermark` (`src/components/ObligationIcon.tsx`) — image now
+  `h-full w-36` anchored `left-[58%]` `-translate-x-1/2`, `top-0`
+  (previously a small `h-16 w-16` pinned to the row's right edge); emoji
+  fallback grew to `text-8xl`, same `left-[58%]` centering.
+- `src/routes/app.accounts.tsx` — moved the watermark up to be the first
+  child of `CardContent` (was nested inside just the header row), so it
+  now spans the whole card. `CardContent` itself got `relative`; every
+  section below it (header row, balance grid, recent activity wrapper,
+  log-balance button) now also carries `relative` so each still paints
+  above the watermark in the CSS stacking order — the header row alone
+  was no longer enough once the mark moved outside it.
+- `tsc --noEmit` clean. Still unverified in a running browser.
