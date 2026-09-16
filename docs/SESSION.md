@@ -423,3 +423,31 @@ all transactions.
   tap-to-view pattern `RecentDebtTransactions` already uses.
 - `tsc --noEmit` clean, 214/214 tests pass. No schema change, no ADR
   (pure UI addition). Not yet checked in a running browser.
+
+## 2026-09-16 — Credit accounts: fix Current/Spendable sign and math
+User noticed Mission Lane showing Current -$1,568.77 and Spendable
+-$1,583.76 — both wrong for a credit account: Spendable should be
+available credit (`credit_limit - owed`, e.g. $16.24 here), and Current
+should never show a minus sign (a credit balance is always "what you
+owe", same as a real card statement's Balance).
+- New `accountDisplayBalances()` (`src/lib/balances.ts`, next to
+  `creditOwed`/`spendableContribution`, reusing both): passes through
+  every non-credit account's raw signed values unchanged; for a credit
+  account, `current` drops the sign and `spendable` becomes
+  `credit_limit - owed` (can go negative when genuinely over limit;
+  `null` when no `credit_limit` is set at all, rendered as "—").
+- Searched every render site reading `computeBalances`'s `.current`/
+  `.spendable` — only two are per-account (the rest are aggregates,
+  already using `creditOwed`/`spendableContribution` correctly, or a
+  sort comparator that doesn't need to match display sign):
+  `src/routes/app.accounts.tsx`'s `AccountsPage` list card and
+  `AccountDetailDialog`, both switched to the new helper.
+  `app.institutions.tsx`'s per-account list uses a different raw
+  snapshot value (not `computeBalances` output) — out of scope, not
+  touched.
+- `src/lib/balances.test.ts` — 5 new cases: normal credit owed, over-limit
+  (negative Spendable), missing `credit_limit` (`null` Spendable),
+  non-credit passthrough (sign preserved), and the `undefined`-balance
+  default.
+- `tsc --noEmit` clean, 219/219 tests pass. No schema change, no ADR
+  (presentation-only). Not yet checked in a running browser.

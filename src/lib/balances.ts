@@ -129,7 +129,6 @@ export function effectiveDebtBalance(
  * total. Checking contributes its raw spendable balance; credit contributes
  * available credit (limit - owed). Returns null when the account should be
  * excluded from the total — credit accounts with no credit_limit entered.
- * Per-account displays keep using the balance-based value, not this.
  */
 export function spendableContribution(
   account: Account,
@@ -152,6 +151,29 @@ export function creditAccountsMissingLimit(accounts: Account[]): Account[] {
       accountTypeIs(a, "credit") &&
       !Number(a.credit_limit ?? 0),
   );
+}
+
+/**
+ * Per-account "Current"/"Spendable" figures for display. Every account
+ * type except credit shows the raw signed `computeBalances` values
+ * unchanged. For a credit account: "Current" drops the sign (it's always
+ * "what you owe", same as a real card statement's Balance); "Spendable"
+ * becomes available credit (credit_limit - owed) — which *can* go
+ * negative when the account is over its limit — or `null` when the
+ * account has no `credit_limit` set at all (nothing to compute against).
+ */
+export function accountDisplayBalances(
+  account: Pick<Account, "account_type" | "credit_limit">,
+  balance: Pick<AccountBalanceInfo, "current" | "spendable"> | undefined,
+): { current: number; spendable: number | null } {
+  const current = balance?.current ?? 0;
+  const spendable = balance?.spendable ?? 0;
+  if (norm(account.account_type) !== "credit") return { current, spendable };
+  const limit = Number(account.credit_limit ?? 0);
+  return {
+    current: creditOwed(current),
+    spendable: limit ? limit - creditOwed(spendable) : null,
+  };
 }
 
 /**

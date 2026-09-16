@@ -15,7 +15,7 @@ import {
   useTransactions,
 } from "@/lib/data-hooks";
 import { formatMoney, accountLast4 } from "@/lib/format";
-import { computeBalances } from "@/lib/balances";
+import { accountDisplayBalances, computeBalances } from "@/lib/balances";
 import { useHouseholdMembers, memberLabel } from "@/lib/household";
 import { groupLedgerRows } from "@/lib/split-groups";
 import {
@@ -396,6 +396,7 @@ function AccountsPage() {
                   ? null
                   : group.accounts.map((a) => {
                       const b = balances[a.id];
+                      const display = accountDisplayBalances(a, b);
                       return (
                         <Card
                           key={a.id}
@@ -448,13 +449,13 @@ function AccountsPage() {
                               <div className="rounded-[12px] bg-muted/50 p-2">
                                 <SectionLabel size="sub">Current</SectionLabel>
                                 <p className="text-xl font-extrabold tabular-nums">
-                                  {formatMoney(b?.current ?? 0)}
+                                  {formatMoney(display.current)}
                                 </p>
                               </div>
                               <div className="rounded-[12px] bg-muted/50 p-2">
                                 <SectionLabel size="sub">Spendable</SectionLabel>
                                 <p className="text-xl font-extrabold tabular-nums">
-                                  {formatMoney(b?.spendable ?? 0)}
+                                  {display.spendable != null ? formatMoney(display.spendable) : "—"}
                                 </p>
                               </div>
                             </div>
@@ -550,6 +551,7 @@ function AccountDetailDialog({
 
   if (!account) return null;
   const last4 = accountLast4(account.account_number);
+  const accountDetailBalances = accountDisplayBalances(account, balance);
 
   return (
     <>
@@ -568,8 +570,8 @@ function AccountDetailDialog({
           </DialogHeader>
           <div className="space-y-4">
             <DetailGrid>
-              <DetailMoney label="Current balance" value={balance?.current} />
-              <DetailMoney label="Spendable balance" value={balance?.spendable} />
+              <DetailMoney label="Current balance" value={accountDetailBalances.current} />
+              <DetailMoney label="Spendable balance" value={accountDetailBalances.spendable} />
               <DetailItem label="Type" value={<ValueChip value={account.account_type} />} />
               <DetailItem
                 label="Institution"
