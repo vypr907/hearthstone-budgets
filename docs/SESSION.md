@@ -132,3 +132,49 @@
   check in the running app (confirm displayed balances read unchanged,
   then log one real purchase on each linked account and confirm the
   debt's shown balance moves by exactly that amount) — not yet done.
+
+## 2026-09-16 — SCRATCHPAD "Next Steps": 5 small UI/UX fixes
+Researched via 3 parallel Explore agents, interviewed the user on 4 open
+judgment calls, wrote/approved a plan, implemented all 5. `tsc --noEmit`
+and `vitest run` (214/214) clean after each item.
+
+1. **Advances section gated on debt_type === "advance"** — was gated only
+   on `!linked_account_id`, showed for every debt type. `app.debts.tsx`
+   (`DebtAdjustments`). Confirmed via MCP no orphaned advance-type
+   `debt_adjustments` rows on non-advance debts, so a clean type gate.
+2. **Add Transaction preset support** — new
+   `src/components/AddTransactionPreset.tsx`
+   (`AddTransactionPresetProvider` + `useAddTransactionPreset`), wrapping
+   the app shell in `app.tsx`. `AddTransactionFab` now reads open state
+   from context and seeds `accountId`/`merchantId` from a preset. "Add
+   transaction" buttons added to `AccountDetailDialog`
+   (`app.accounts.tsx`) and `InstitutionDetail` (`app.institutions.tsx`),
+   each opening pre-filled instead of requiring the user to close and
+   manually reselect.
+3. **Clickable link between a linked debt and its account (ADR-105)** —
+   new pattern: `validateSearch({ open?: string })` on `/app/accounts` and
+   `/app/debts`, each opening the matching detail dialog on mount and
+   clearing the param. `DebtDetailDialog`'s Account field is now a link to
+   the linked account; `AccountDetailDialog` gained a reverse "Linked
+   debt" field. Also fixed an incidental bug found along the way:
+   `DebtDetailDialog`'s account lookup was keyed off `institution_id`
+   instead of `linked_account_id` — harmless pre-linking, silently wrong
+   once a debt could actually be linked.
+4. **Accounts & Balances grouped by institution** — `app.accounts.tsx`
+   now always renders accounts clustered by institution with a per-group
+   subtotal and a grand total above the list (was one flat list, no
+   totals at all).
+5. **Dashboard tap-to-see breakdown** — `obligationStatusTotals`
+   (`app.index.tsx`) now also collects the matched bills/debts per bucket
+   (paid/pending/overdue/remaining), not just sums. Each of the 4
+   `StatusBreakdownCard` rows (Paid so far/Remaining/Pending/Overdue) is
+   now a tap target (`StatusRow`, reuses the existing tap-triggered
+   Radix Popover pattern from `HelpButton`) opening a small list of the
+   matching items.
+
+Known gap: `gh` CLI isn't installed in this environment, so the 5
+GitHub Issues called for by the plan (ADR-087) weren't created — punt to
+the user or a future session with `gh` available.
+No schema change; no migration. No Playwright/TEST-household pass this
+session (same environment gap as prior sessions) — manual verification in
+the running app is still outstanding.

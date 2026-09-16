@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AccountDialog } from "@/components/AccountDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { SectionLabel } from "@/components/SectionLabel";
@@ -8,6 +8,7 @@ import {
   useAccountBalances,
   useAccounts,
   useCategories,
+  useDebts,
   useInstitutions,
   useLatestBalances,
   useLogBalance,
@@ -26,6 +27,7 @@ import {
   ValueChip,
 } from "@/components/detail";
 import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
+import { useAddTransactionPreset } from "@/components/AddTransactionPreset";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,14 +49,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Pencil, Plus, Search, TrendingUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Account, AccountBalance, Institution, Transaction } from "@/lib/supabase";
+import type { Account, AccountBalance, Debt, Institution, Transaction } from "@/lib/supabase";
 import { format, parseISO } from "date-fns";
 import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
 import { TransactionDetail } from "@/routes/app.transactions";
 
+// ADR-105: deep-link to a specific account's detail dialog from another
+// route (e.g. a linked-debt's "Account" field) — ?open=<accountId>.
+type AccountsSearch = { open?: string };
+
 export const Route = createFileRoute("/app/accounts")({
+  validateSearch: (search: Record<string, unknown>): AccountsSearch => ({
+    open: typeof search.open === "string" ? search.open : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Accounts & Balances — Hearthstone" },
@@ -77,16 +86,30 @@ export const Route = createFileRoute("/app/accounts")({
 });
 
 function AccountsPage() {
+  const search = Route.useSearch();
+  const navigate = useNavigate();
   const { data: accounts = [], isLoading } = useAccounts();
   const { data: latest = {} } = useLatestBalances();
   const { data: transactions = [] } = useTransactions();
   const { data: institutions = [] } = useInstitutions();
+  // ADR-105: display-only, for the reverse "Linked debt" lookup in the
+  // account detail dialog — nothing here mutates a debt.
+  const { data: debts = [] } = useDebts();
   const { data: members = [] } = useHouseholdMembers();
   const [editing, setEditing] = useState<Partial<Account> | null>(null);
   const [logging, setLogging] = useState<Account | null>(null);
   /** Reuses the Transactions screen detail dialog for recent-activity rows. */
   const [detail, setDetail] = useState<Transaction | null>(null);
   const [viewing, setViewing] = useState<Account | null>(null);
+
+  // ADR-105: ?open=<accountId> deep-link — opens that account's detail and
+  // clears the param so back/refresh doesn't keep reopening it.
+  useEffect(() => {
+    if (!search.open) return;
+    const match = accounts.find((a) => a.id === search.open);
+    if (match) setViewing(match);
+    navigate({ to: "/app/accounts", search: {}, replace: true });
+  }, [search.open, accounts, navigate]);
 
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<"name" | "current" | "type">("name");
@@ -188,6 +211,42 @@ function AccountsPage() {
     });
   }, [accounts, typeFilter, instFilter, ownerFilter, q, sort, balances]);
 
+  // SCRATCHPAD "Next Steps": always grouped by institution, each group
+  // carrying a subtotal, "No institution" sorted last.
+  const groupedRows = useMemo(() => {
+    const groups = new Map<
+      string,
+      { institutionId: string | null; institutionName: string; total: number; accounts: Account[] }
+    >();
+    for (const a of rows) {
+      const key = a.institution_id ?? "__none__";
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          institutionId: a.institution_id ?? null,
+          institutionName: a.institution_id
+            ? (institutionById[a.institution_id]?.name ?? "Unknown institution")
+            : "No institution",
+          total: 0,
+          accounts: [],
+        };
+        groups.set(key, g);
+      }
+      g.accounts.push(a);
+      g.total += balances[a.id]?.current ?? 0;
+    }
+    return [...groups.values()].sort((a, b) => {
+      if (a.institutionId === null) return 1;
+      if (b.institutionId === null) return -1;
+      return a.institutionName.localeCompare(b.institutionName);
+    });
+  }, [rows, institutionById, balances]);
+
+  const grandTotal = useMemo(
+    () => rows.reduce((sum, a) => sum + (balances[a.id]?.current ?? 0), 0),
+    [rows, balances],
+  );
+
   return (
     <>
       <AppHeader title="Accounts & Balances" />
@@ -277,93 +336,110 @@ function AccountsPage() {
           </Card>
         )}
 
-        <div className="space-y-2">
-          {rows.map((a) => {
-            const b = balances[a.id];
-            return (
-              <Card
-                key={a.id}
-                className="cursor-pointer"
-                onClick={() => setViewing(a)}
-              >
-                <CardContent className="p-3">
-                  <div className="flex items-start gap-3">
-                    <ObligationIcon
-                      institution={institutionById[a.institution_id ?? ""]}
-                      name={`${a.name} ${a.account_type ?? ""}`}
-                      fallback="🏛️"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">
-                        {a.name}
-                        {accountLast4(a.account_number) ? (
-                          <span className="ml-1 font-normal text-muted-foreground">
-                            •••{accountLast4(a.account_number)}
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {a.account_type || "Account"}
-                        {a.owner_member_id
-                          ? ` · ${memberLabel(memberById[a.owner_member_id])}`
-                          : members.length > 1
-                            ? " · joint"
-                            : ""}
-                        {b?.asOf
-                          ? ` · snapshot ${format(parseISO(b.asOf), "MMM d")}`
-                          : " · starting balance"}
-                      </p>
+        {rows.length > 0 && (
+          <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+            <span className="text-sm font-medium text-muted-foreground">Total</span>
+            <span className="text-lg font-bold tabular-nums">{formatMoney(grandTotal)}</span>
+          </div>
+        )}
 
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditing(a);
-                      }}
-                      aria-label="Edit"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <div className="rounded-[12px] bg-muted/50 p-2">
-                      <SectionLabel size="sub">Current</SectionLabel>
-                      <p className="text-xl font-extrabold tabular-nums">
-                        {formatMoney(b?.current ?? 0)}
-                      </p>
-                    </div>
-                    <div className="rounded-[12px] bg-muted/50 p-2">
-                      <SectionLabel size="sub">Spendable</SectionLabel>
-                      <p className="text-xl font-extrabold tabular-nums">
-                        {formatMoney(b?.spendable ?? 0)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div onClick={(e) => e.stopPropagation()}>
-                    <RecentActivity
-                      rows={recentByAccount[a.id] ?? []}
-                      institutionById={institutionById}
-                      transferTitleAccounts={transferTitleAccounts}
-                      onSelect={setDetail}
-                    />
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="mt-2 h-10 w-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLogging(a);
-                    }}
+        <div className="space-y-4">
+          {groupedRows.map((group) => (
+            <div key={group.institutionId ?? "__none__"} className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <SectionLabel>{group.institutionName}</SectionLabel>
+                <span className="text-sm font-semibold tabular-nums text-muted-foreground">
+                  {formatMoney(group.total)}
+                </span>
+              </div>
+              {group.accounts.map((a) => {
+                const b = balances[a.id];
+                return (
+                  <Card
+                    key={a.id}
+                    className="cursor-pointer"
+                    onClick={() => setViewing(a)}
                   >
-                    <TrendingUp className="mr-2 h-4 w-4" /> Log new balance
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
+                    <CardContent className="p-3">
+                      <div className="flex items-start gap-3">
+                        <ObligationIcon
+                          institution={institutionById[a.institution_id ?? ""]}
+                          name={`${a.name} ${a.account_type ?? ""}`}
+                          fallback="🏛️"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">
+                            {a.name}
+                            {accountLast4(a.account_number) ? (
+                              <span className="ml-1 font-normal text-muted-foreground">
+                                •••{accountLast4(a.account_number)}
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {a.account_type || "Account"}
+                            {a.owner_member_id
+                              ? ` · ${memberLabel(memberById[a.owner_member_id])}`
+                              : members.length > 1
+                                ? " · joint"
+                                : ""}
+                            {b?.asOf
+                              ? ` · snapshot ${format(parseISO(b.asOf), "MMM d")}`
+                              : " · starting balance"}
+                          </p>
+
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditing(a);
+                          }}
+                          aria-label="Edit"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <div className="rounded-[12px] bg-muted/50 p-2">
+                          <SectionLabel size="sub">Current</SectionLabel>
+                          <p className="text-xl font-extrabold tabular-nums">
+                            {formatMoney(b?.current ?? 0)}
+                          </p>
+                        </div>
+                        <div className="rounded-[12px] bg-muted/50 p-2">
+                          <SectionLabel size="sub">Spendable</SectionLabel>
+                          <p className="text-xl font-extrabold tabular-nums">
+                            {formatMoney(b?.spendable ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <RecentActivity
+                          rows={recentByAccount[a.id] ?? []}
+                          institutionById={institutionById}
+                          transferTitleAccounts={transferTitleAccounts}
+                          onSelect={setDetail}
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        className="mt-2 h-10 w-full"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLogging(a);
+                        }}
+                      >
+                        <TrendingUp className="mr-2 h-4 w-4" /> Log new balance
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -379,6 +455,7 @@ function AccountsPage() {
         transactions={viewing ? (recentByAccount[viewing.id] ?? []) : []}
         institutionById={institutionById}
         transferTitleAccounts={transferTitleAccounts}
+        linkedDebt={viewing ? (debts.find((d) => d.linked_account_id === viewing.id) ?? null) : null}
         onClose={() => setViewing(null)}
         onEdit={(a) => {
           setViewing(null);
@@ -403,6 +480,7 @@ function AccountDetailDialog({
   transactions,
   institutionById,
   transferTitleAccounts,
+  linkedDebt,
   onClose,
   onEdit,
   onLogBalance,
@@ -415,12 +493,16 @@ function AccountDetailDialog({
   transactions: Transaction[];
   institutionById: Record<string, Institution>;
   transferTitleAccounts: Record<string, { from: string; to: string }>;
+  /** ADR-105: reverse lookup — the debt (if any) whose linked_account_id is this account. */
+  linkedDebt?: Debt | null;
   onClose: () => void;
   onEdit: (a: Account) => void;
   onLogBalance: (a: Account) => void;
 }) {
   const { data: history = [] } = useAccountBalances(account?.id);
   const [txDetail, setTxDetail] = useState<Transaction | null>(null);
+  const { openWithPreset } = useAddTransactionPreset();
+  const navigate = useNavigate();
 
   if (!account) return null;
   const last4 = accountLast4(account.account_number);
@@ -461,6 +543,23 @@ function AccountDetailDialog({
               />
               <DetailItem label="Card / account #" value={last4 ? `•••${last4}` : "—"} />
               <DetailMoney label="Credit limit" value={account.credit_limit} />
+              {linkedDebt ? (
+                <DetailItem
+                  label="Linked debt"
+                  value={
+                    <button
+                      type="button"
+                      className="underline decoration-dotted underline-offset-2"
+                      onClick={() => {
+                        onClose();
+                        navigate({ to: "/app/debts", search: { open: linkedDebt.id } });
+                      }}
+                    >
+                      {linkedDebt.name}
+                    </button>
+                  }
+                />
+              ) : null}
             </DetailGrid>
             <InstitutionLoginButton institution={institution} />
             <DetailText label="Notes" value={account.notes} />
@@ -473,6 +572,16 @@ function AccountDetailDialog({
             />
           </div>
           <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              className="h-11"
+              onClick={() => {
+                onClose();
+                openWithPreset({ accountId: account.id });
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" /> Add transaction
+            </Button>
             <Button variant="outline" className="h-11" onClick={() => onLogBalance(account)}>
               <TrendingUp className="mr-2 h-4 w-4" /> Log balance
             </Button>

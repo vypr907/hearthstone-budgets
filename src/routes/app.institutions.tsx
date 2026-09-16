@@ -29,6 +29,7 @@ import type { Institution } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
+import { useAddTransactionPreset } from "@/components/AddTransactionPreset";
 import { formatTypeLabel } from "@/lib/visual-meta";
 import {
   Select,
@@ -222,6 +223,7 @@ function InstitutionDetail({
   const { data: debts = [] } = useEffectiveDebts();
   const { data: transactions = [] } = useTransactions();
   const balances = computeBalances(accounts, latest, transactions);
+  const { openWithPreset } = useAddTransactionPreset();
   if (!institution) return null;
   const totals = computeInstitutionTotals(institution.id, accounts, balances, bills, debts);
   const catIds = instCats[institution.id] ?? [];
@@ -375,6 +377,16 @@ function InstitutionDetail({
           </div>
         </div>
         <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            className="h-11"
+            onClick={() => {
+              onClose();
+              openWithPreset({ institutionId: institution.id });
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add transaction
+          </Button>
           <Button variant="outline" className="h-11" onClick={() => onEdit(institution)}>
             <Pencil className="mr-2 h-4 w-4" /> Edit
           </Button>

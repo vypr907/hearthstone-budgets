@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ import {
   type SplitRow,
 } from "@/components/SplitLinesEditor";
 import { accountLabel } from "@/lib/format";
+import { useAddTransactionPreset } from "@/components/AddTransactionPreset";
 import { applyClearedPayment, toPayable } from "@/lib/payments";
 import { priorCyclesArrears } from "@/lib/arrears";
 import { useQueryClient } from "@tanstack/react-query";
@@ -111,7 +112,7 @@ function CategorySelect({
  * transfers keep their own status rules.
  */
 export function AddTransactionFab() {
-  const [open, setOpen] = useState(false);
+  const { open, preset, openWithPreset, close } = useAddTransactionPreset();
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
   const save = useUpsertTransaction();
@@ -201,6 +202,15 @@ export function AddTransactionFab() {
     return m;
   }, [institutions]);
 
+  // SCRATCHPAD "Next Steps": seed the account/place from a preset (opened
+  // via "Add transaction" on an Account/Institution detail page) once the
+  // dialog opens, on top of reset()'s blank defaults.
+  useEffect(() => {
+    if (!open) return;
+    if (preset?.accountId) setAccountId(preset.accountId);
+    if (preset?.institutionId) setMerchantId(preset.institutionId);
+  }, [open, preset]);
+
   function reset() {
     setMode("expense");
     setAccountId("");
@@ -260,7 +270,7 @@ export function AddTransactionFab() {
       });
       toast.success("Transfer recorded");
       reset();
-      setOpen(false);
+      close();
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -301,7 +311,7 @@ export function AddTransactionFab() {
         });
         toast.success("Split transaction added");
         reset();
-        setOpen(false);
+        close();
       } catch (e) {
         toast.error((e as Error).message);
       }
@@ -343,7 +353,7 @@ export function AddTransactionFab() {
       qc.invalidateQueries({ queryKey: ["spending_actuals"] });
       toast.success("Transaction added");
       reset();
-      setOpen(false);
+      close();
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -395,7 +405,7 @@ export function AddTransactionFab() {
       });
       toast.success("Cash Back entry added");
       reset();
-      setOpen(false);
+      close();
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -431,7 +441,7 @@ export function AddTransactionFab() {
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
       toast.success("Income added");
       reset();
-      setOpen(false);
+      close();
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -444,13 +454,13 @@ export function AddTransactionFab() {
     <>
       <Button
         aria-label="Add transaction"
-        onClick={() => setOpen(true)}
+        onClick={() => openWithPreset()}
         className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 h-14 w-14 rounded-full shadow-lg"
       >
         <Plus className="h-6 w-6" />
       </Button>
 
-      <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : (setOpen(false), reset()))}>
+      <Dialog open={open} onOpenChange={(o) => (o ? openWithPreset() : (close(), reset()))}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add transaction</DialogTitle>

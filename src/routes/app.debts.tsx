@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { SectionLabel } from "@/components/SectionLabel";
@@ -127,7 +127,14 @@ const CYCLES: BillingCycle[] = [
 ];
 
 
+// ADR-105: deep-link to a specific debt's detail dialog from another route
+// (e.g. a linked account's "Linked debt" field) — ?open=<debtId>.
+type DebtsSearch = { open?: string };
+
 export const Route = createFileRoute("/app/debts")({
+  validateSearch: (search: Record<string, unknown>): DebtsSearch => ({
+    open: typeof search.open === "string" ? search.open : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Debts — Hearthstone" },
@@ -174,6 +181,16 @@ function DebtsPage() {
 
   const [editing, setEditing] = useState<Partial<Debt> | null>(null);
   const [detail, setDetail] = useState<Debt | null>(null);
+  const search = Route.useSearch();
+  const navigate = useNavigate();
+  // ADR-105: ?open=<debtId> deep-link — opens that debt's detail and clears
+  // the param so back/refresh doesn't keep reopening it.
+  useEffect(() => {
+    if (!search.open) return;
+    const match = debts.find((d) => d.id === search.open);
+    if (match) setDetail(match);
+    navigate({ to: "/app/debts", search: {}, replace: true });
+  }, [search.open, debts, navigate]);
   const infoOf = useCycleState();
   const recommended = useRecommendedPayments();
   const { data: categories = [] } = useCategories();
@@ -485,6 +502,7 @@ export function DebtDetailDialog({
   const { data: latestBalances = {} } = useLatestBalances();
   const { data: balanceTransactions = [] } = useTransactions();
   const recommended = useRecommendedPayments();
+  const navigate = useNavigate();
   // ADR-102 addendum: display-only -- `debt` itself stays raw (it feeds
   // toPayable() for every action in this dialog: PayActions, Correct,
   // Reverse). Only this one derived number is used for the "Remaining
@@ -507,7 +525,12 @@ export function DebtDetailDialog({
 
   const category = categories.find((c) => c.id === debt?.category_id);
   const institution = institutions.find((i) => i.id === debt?.institution_id);
-  const account = accounts.find((a) => a.institution_id === debt?.institution_id);
+  // ADR-105: prefer the actual linked account (a credit-card debt's real
+  // link); fall back to the institution-name match this used before linking
+  // existed, for a debt that has no linked_account_id.
+  const account = debt?.linked_account_id
+    ? accounts.find((a) => a.id === debt.linked_account_id)
+    : accounts.find((a) => a.institution_id === debt?.institution_id);
 
   // ADR-036: the detail panel reports the ledger-derived cycle, not the stored
   // columns — a fully-paid monthly cycle resets cycle_paid_to_date to 0, which
@@ -578,11 +601,28 @@ export function DebtDetailDialog({
             <DetailItem
               label="Account"
               value={
-                <LogoLabel
-                  name={account?.name ?? institution?.name}
-                  logoUrl={institution?.logo_url}
-                  type={institution?.institution_type}
-                />
+                debt.linked_account_id && account ? (
+                  <button
+                    type="button"
+                    className="underline decoration-dotted underline-offset-2"
+                    onClick={() => {
+                      onClose();
+                      navigate({ to: "/app/accounts", search: { open: account.id } });
+                    }}
+                  >
+                    <LogoLabel
+                      name={account.name}
+                      logoUrl={institution?.logo_url}
+                      type={institution?.institution_type}
+                    />
+                  </button>
+                ) : (
+                  <LogoLabel
+                    name={account?.name ?? institution?.name}
+                    logoUrl={institution?.logo_url}
+                    type={institution?.institution_type}
+                  />
+                )
               }
             />
             <DetailMoney label="Starting balance" value={debt.starting_balance} />
@@ -1800,56 +1840,60 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       </div>
 
       {/* ---- Advances section (ADR-056) ---- */}
-      <div>
-        <div className="flex items-center justify-between">
-          <SectionLabel>Advances</SectionLabel>
-          {/* ADR-102 addendum: hidden once linked -- same reasoning as
-              Adjustments above; a credit card also has no real "advance"
-              concept to begin with. */}
-          {debt.linked_account_id ? null : (
-            <Button size="sm" variant="outline" className="h-8" onClick={() => setAdvanceOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" /> Add
-            </Button>
+      {/* SCRATCHPAD "Next Steps": only advance-type debts have a real
+          "advance" concept -- gate the whole section on debt_type, not
+          just on linked_account_id. */}
+      {debt.debt_type === "advance" && (
+        <div>
+          <div className="flex items-center justify-between">
+            <SectionLabel>Advances</SectionLabel>
+            {/* ADR-102 addendum: hidden once linked -- same reasoning as
+                Adjustments above. */}
+            {debt.linked_account_id ? null : (
+              <Button size="sm" variant="outline" className="h-8" onClick={() => setAdvanceOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" /> Add
+              </Button>
+            )}
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {debt.linked_account_id
+              ? "Managed automatically from the linked account — log purchases and payments there instead."
+              : "Money borrowed against this debt — deposits into an account and increases balance owed."}
+          </p>
+          {advances.length === 0 ? (
+            <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+              No advances recorded.
+            </p>
+          ) : (
+            <div className="mt-1 divide-y divide-border/50 rounded-md border">
+              {advances.map((a) => (
+                <div key={a.id} className="flex items-center gap-2 px-2 py-2 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{formatMoney(Number(a.amount))}</p>
+                    <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0"
+                    onClick={async () => {
+                      if (!confirm("Delete this advance? This will also reverse the deposit transaction.")) return;
+                      try {
+                        await deleteAdvance.mutateAsync({ adjustment: a, debt });
+                        toast.success("Advance deleted");
+                      } catch (e) {
+                        toast.error((e as Error).message);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {debt.linked_account_id
-            ? "Managed automatically from the linked account — log purchases and payments there instead."
-            : "Money borrowed against this debt — deposits into an account and increases balance owed."}
-        </p>
-        {advances.length === 0 ? (
-          <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
-            No advances recorded.
-          </p>
-        ) : (
-          <div className="mt-1 divide-y divide-border/50 rounded-md border">
-            {advances.map((a) => (
-              <div key={a.id} className="flex items-center gap-2 px-2 py-2 text-sm">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{formatMoney(Number(a.amount))}</p>
-                  <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
-                </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 shrink-0"
-                  onClick={async () => {
-                    if (!confirm("Delete this advance? This will also reverse the deposit transaction.")) return;
-                    try {
-                      await deleteAdvance.mutateAsync({ adjustment: a, debt });
-                      toast.success("Advance deleted");
-                    } catch (e) {
-                      toast.error((e as Error).message);
-                    }
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* ---- Add Adjustment dialog ---- */}
       <Dialog open={open} onOpenChange={setOpen}>

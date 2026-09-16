@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { BottomNav } from "@/components/BottomNav";
 import { AddTransactionFab } from "@/components/AddTransactionFab";
+import { AddTransactionPresetProvider } from "@/components/AddTransactionPreset";
 import { Flame } from "lucide-react";
 
 
@@ -27,13 +28,15 @@ function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background pb-[calc(10rem+env(safe-area-inset-bottom))]">
-      <div className="mx-auto max-w-lg">
-        <Outlet />
+    <AddTransactionPresetProvider>
+      <div className="min-h-screen overflow-x-hidden bg-background pb-[calc(10rem+env(safe-area-inset-bottom))]">
+        <div className="mx-auto max-w-lg">
+          <Outlet />
+        </div>
+        <AddTransactionFab />
+        <BottomNav />
       </div>
-      <AddTransactionFab />
-      <BottomNav />
-    </div>
+    </AddTransactionPresetProvider>
   );
 }
 

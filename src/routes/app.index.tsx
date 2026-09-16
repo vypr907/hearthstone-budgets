@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarClock } from "lucide-react";
 import {
   monthKey,
@@ -131,32 +132,65 @@ const DASHBOARD_VIEW_KEY = "dashboard-view";
  * filtered to this kind — a different scope than "due this period", so the
  * three sub-figures aren't guaranteed to sum to `total`.
  */
+/** SCRATCHPAD "Next Steps": name+amount pairs backing each stat's tap popover. */
+type StatusItem = { id: string; name: string; amount: number };
+
 function obligationStatusTotals(
   kind: "bill" | "debt",
   total: number,
   items: (Bill | Debt)[],
   periodObligations: Obligation[],
   transactions: Transaction[],
-  overdue: { kind: "Bill" | "Debt"; amount: number }[],
-): { total: number; paid: number; pending: number; overdue: number } {
+  overdue: { kind: "Bill" | "Debt"; amount: number; id: string; name: string }[],
+): {
+  total: number;
+  paid: number;
+  pending: number;
+  overdue: number;
+  paidItems: StatusItem[];
+  pendingItems: StatusItem[];
+  overdueItems: StatusItem[];
+  remainingItems: StatusItem[];
+} {
   const today = todayISO();
   const byId = new Map(items.map((it) => [it.id, it]));
   let paid = 0;
   let pending = 0;
+  const paidItems: StatusItem[] = [];
+  const pendingItems: StatusItem[] = [];
+  const remainingItems: StatusItem[] = [];
   for (const o of periodObligations) {
     if (o.kind !== kind) continue;
     const item = byId.get(o.id);
     if (!item) continue;
     const info = deriveCycleInfo(toPayable(kind, item), transactions, today);
-    if (info.state === "cleared") paid += info.due;
-    else if (info.state === "partial") paid += info.clearedSum;
-    if (info.pending) pending += Math.abs(Number(info.pending.amount ?? 0));
+    if (info.state === "cleared") {
+      paid += info.due;
+      if (info.due > 0) paidItems.push({ id: o.id, name: o.name, amount: info.due });
+    } else if (info.state === "partial") {
+      paid += info.clearedSum;
+      if (info.clearedSum > 0) paidItems.push({ id: o.id, name: o.name, amount: info.clearedSum });
+    }
+    if (info.pending) {
+      const amount = Math.abs(Number(info.pending.amount ?? 0));
+      pending += amount;
+      if (amount > 0) pendingItems.push({ id: o.id, name: o.name, amount });
+    }
+    const remainingAmount =
+      kind === "bill"
+        ? billRemainingOwed(item as Parameters<typeof billRemainingOwed>[0])
+        : debtRemainingOwed(item as Parameters<typeof debtRemainingOwed>[0]);
+    if (remainingAmount > 0) remainingItems.push({ id: o.id, name: o.name, amount: remainingAmount });
   }
   const overdueKind = kind === "bill" ? "Bill" : "Debt";
-  const overdueAmount = overdue
-    .filter((o) => o.kind === overdueKind)
-    .reduce((s, o) => s + o.amount, 0);
-  return { total, paid, pending, overdue: overdueAmount };
+  const overdueMatches = overdue.filter((o) => o.kind === overdueKind);
+  const overdueAmount = overdueMatches.reduce((s, o) => s + o.amount, 0);
+  const overdueItems: StatusItem[] = overdueMatches.map((o) => ({
+    id: o.id,
+    name: o.name,
+    amount: o.amount,
+  }));
+  return { total, paid, pending, overdue: overdueAmount, paidItems, pendingItems, overdueItems, remainingItems };
 }
 
 
@@ -1586,6 +1620,63 @@ function BudgetTotals({ rows }: { rows: BudgetGroup[] }) {
   );
 }
 
+/**
+ * SCRATCHPAD "Next Steps": a single Paid so far/Remaining/Pending/Overdue
+ * row whose value is a tap target opening a popover listing the matching
+ * bills/debts (Radix Popover — already tap-triggered, matches the existing
+ * HelpButton pattern rather than a hover-only affordance).
+ */
+function StatusRow({
+  label,
+  amount,
+  items,
+  destructive,
+  help,
+  className,
+}: {
+  label: string;
+  amount: number;
+  items: StatusItem[];
+  destructive?: boolean;
+  help?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex items-center justify-between ${className ?? ""}`}>
+      <span className="flex items-center gap-1 text-muted-foreground">
+        {label}
+        {help}
+      </span>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={`tabular-nums font-medium underline decoration-dotted underline-offset-2 ${
+              destructive ? "text-destructive" : ""
+            }`}
+          >
+            {formatMoney(amount)}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent side="top" align="end" className="max-w-72">
+          {items.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing here.</p>
+          ) : (
+            <div className="space-y-1">
+              {items.map((it) => (
+                <div key={it.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate">{it.name}</span>
+                  <span className="shrink-0 tabular-nums font-medium">{formatMoney(it.amount)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 /** ADR-096: Simple view's Bills/Debts total + paid/pending/overdue/remaining. */
 function StatusBreakdownCard({
   title,
@@ -1596,7 +1687,16 @@ function StatusBreakdownCard({
   title: string;
   icon: string;
   accent: string;
-  status: { total: number; paid: number; pending: number; overdue: number };
+  status: {
+    total: number;
+    paid: number;
+    pending: number;
+    overdue: number;
+    paidItems: StatusItem[];
+    pendingItems: StatusItem[];
+    overdueItems: StatusItem[];
+    remainingItems: StatusItem[];
+  };
 }) {
   const paidPct = status.total > 0 ? Math.min(100, (status.paid / status.total) * 100) : 0;
   const pendingPct = status.total > 0 ? (status.pending / status.total) * 100 : 0;
@@ -1617,38 +1717,23 @@ function StatusBreakdownCard({
       </div>
       <CardContent className="space-y-2 p-4 text-sm">
         <ItemBar value={paidPct} pendingValue={pendingPct} color={budgetRingColor(status.paid, status.total)} />
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-muted-foreground">Paid so far</span>
-          <span className="font-medium tabular-nums">{formatMoney(status.paid)}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Remaining</span>
-          <span className="font-medium tabular-nums">{formatMoney(remaining)}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Pending</span>
-          <span className="font-medium tabular-nums">{formatMoney(status.pending)}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1 text-muted-foreground">
-            Overdue
+        <StatusRow label="Paid so far" amount={status.paid} items={status.paidItems} className="pt-1" />
+        <StatusRow label="Remaining" amount={remaining} items={status.remainingItems} />
+        <StatusRow label="Pending" amount={status.pending} items={status.pendingItems} />
+        <StatusRow
+          label="Overdue"
+          amount={status.overdue}
+          items={status.overdueItems}
+          destructive={status.overdue > 0.005}
+          help={
             <HelpButton>
               &apos;Remaining&apos; above is what&apos;s left of the total due
               this period. &apos;Overdue&apos; is different: money still owed
               from cycles before this period — {title.toLowerCase()} that
               already missed a due date.
             </HelpButton>
-          </span>
-          <span
-            className={
-              status.overdue > 0.005
-                ? "font-medium tabular-nums text-destructive"
-                : "font-medium tabular-nums"
-            }
-          >
-            {formatMoney(status.overdue)}
-          </span>
-        </div>
+          }
+        />
       </CardContent>
     </Card>
   );

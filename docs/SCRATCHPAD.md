@@ -27,6 +27,30 @@
 
 
 # Next Steps
+- ~~Advances section should only show on debt type: Advance~~ DONE
+  2026-09-16 — gated on `debt_type === "advance"` in `DebtAdjustments`
+  (`app.debts.tsx`).
+- ~~on account detail view for type: account, should have a "add
+  transaction" button that preloads details into an add transaction form,
+  instead of having to click out of the detail, then click the add
+  transaction button and manually reselect the account. Same with
+  institutions.~~ DONE 2026-09-16 — `AddTransactionPresetProvider`
+  (`src/components/AddTransactionPreset.tsx`); "Add transaction" buttons
+  on Account and Institution detail now open the FAB pre-filled.
+- ~~on credit card debt it shows the account, but I'd like it to be
+  clickable, so that it takes you to the account details. Conversely, on
+  the account details, there's nothing indicating that there is a linked
+  debt/no clickable link~~ DONE 2026-09-16 (ADR-105) — `?open=<id>`
+  deep-link convention on `/app/accounts` and `/app/debts`; both fields
+  now clickable, both directions.
+- ~~for Accounts and balances, I'd like it to default to being grouped by
+  institution (with a total)~~ DONE 2026-09-16 — `app.accounts.tsx` always
+  groups by institution now, per-group subtotal + grand total.
+- ~~on Dashboard/Simple, for the Bills and Debts sections, where it lists
+  "Paid so far, Remaining, Pending, Overdue", I'd like them to show the
+  associated Bills/Debts on tap in a little pop.~~ DONE 2026-09-16 — each
+  figure is a tap target opening a popover listing the matching items
+  (`StatusRow` in `app.index.tsx`).
 
 
 
