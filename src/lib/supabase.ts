@@ -55,6 +55,8 @@ export type Bill = {
   funding_deduction_id?: string | null;
   /** ADR-074: the account this bill is usually paid from. */
   usual_payment_account_id?: string | null;
+  /** ADR-106: which household member's account at the institution this belongs to, when set (null = joint/not specified). */
+  institution_member_account_id?: string | null;
 
   created_at: string;
   updated_at: string;
@@ -142,6 +144,8 @@ export type Debt = {
   usual_payment_account_id?: string | null;
   /** ADR-102: the real account this debt's balance actually lives on, when one exists. */
   linked_account_id?: string | null;
+  /** ADR-106: which household member's account at the institution this belongs to, when set (null = joint/not specified). */
+  institution_member_account_id?: string | null;
 
   created_at: string;
   updated_at: string;
@@ -255,6 +259,7 @@ export type Institution = {
   household_id: string;
   name: string;
   institution_type: string | null;
+  /** The "Main site" — additional named links live in institution_links (ADR-106). */
   login_url: string | null;
   login_username: string | null;
   sign_in_with_google: boolean | null;
@@ -262,6 +267,41 @@ export type Institution = {
   notes: string | null;
   /** ADR-030: logo image URL (often a derived favicon). */
   logo_url?: string | null;
+  /** ADR-106: Amazon/Prime-style grouping — this institution's totals roll up into its parent's. */
+  parent_institution_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * ADR-106: an additional named link for an institution, beyond its
+ * `login_url` ("Main site") — e.g. a Bill Pay site or (medical
+ * institutions only) a Patient Portal. `label` is the display name;
+ * required in practice for `kind: "other"`, optional override otherwise.
+ */
+export type InstitutionLink = {
+  id: string;
+  institution_id: string;
+  kind: "bill_pay" | "patient_portal" | "other";
+  label: string | null;
+  url: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * ADR-106: a household member's own account (account/patient #, login
+ * username) at an institution — for providers that bill each member
+ * separately rather than combining into one joint invoice.
+ */
+export type InstitutionMemberAccount = {
+  id: string;
+  institution_id: string;
+  member_id: string;
+  account_number: string | null;
+  login_username: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 };

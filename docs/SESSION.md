@@ -451,3 +451,149 @@ owe", same as a real card statement's Balance).
   default.
 - `tsc --noEmit` clean, 219/219 tests pass. No schema change, no ADR
   (presentation-only). Not yet checked in a running browser.
+
+## 2026-09-16 — Institution links/member accounts/parent-child/bill pause: planning + schema (ADR-106)
+User requested 4 related features (multiple institution links, per-spouse
+billing tracking, an Amazon/Prime parent-child relationship, marking a
+bill inactive) and asked to be interviewed until there was a solid plan.
+Researched via 3 parallel Explore agents (institution schema/login
+button/dialog; bills is_active read/write sites; household-member
+ownership + institution relationships), then 2 rounds of interview
+questions to settle: flexible `institution_links` table (not fixed
+columns); a real per-member "account" entity at an institution (not just
+a tag on each bill/debt); a real `parent_institution_id` link with child
+totals rolling up into the parent; and confirmed `bills.is_active`
+(already exists in the DB, already read in 4 places, just never had a
+UI) only needs a simple toggle, no new status enum.
+- **ADR-106** written (`docs/DECISIONS.md`) covering all 4 decisions
+  together, plus `docs/SCHEMA.md` updated with the new table/column
+  definitions (marked not-yet-applied).
+- `scripts/migrations/2026-09-16-institution-links-members-parent.sql`
+  (+ `.verify.sql`) — 2 new tables (`institution_links`,
+  `institution_member_accounts`, both RLS-joined through `institutions`,
+  no own `household_id`, verified against the exact precedent in
+  yesterday's `2026-09-15-add-tags.sql`/`transaction_tags`) + 3 new
+  nullable columns (`institutions.parent_institution_id`,
+  `bills.institution_member_account_id`,
+  `debts.institution_member_account_id`). Not yet applied — user runs it
+  manually in the Supabase SQL Editor. `bills.is_active` needs no schema
+  change, only UI wiring.
+- **Next steps** (per the plan, sequenced — not done yet): data hooks in
+  `src/lib/data-hooks.ts`; `InstitutionDialog.tsx` gains Links/Member
+  accounts/Parent institution sections; `InstitutionLoginButton.tsx`
+  evolves to prefer a `bill_pay` link over `login_url` and render extra
+  buttons for other links; `BillDialog`/`DebtDialog` gain the active
+  toggle and member-account selector; `app.institutions.tsx` +
+  `computeInstitutionTotals` (`src/lib/balances.ts`) gain parent/child
+  rollup and list decluttering.
+
+## 2026-09-16 — ADR-106 migration applied; types + data hooks added
+User ran `2026-09-16-institution-links-members-parent.sql`. Verified live
+via the read-only MCP: both new tables exist with RLS enabled + forced,
+all 3 new nullable columns exist on `institutions`/`bills`/`debts`.
+- `src/lib/supabase.ts` — new `InstitutionLink`/`InstitutionMemberAccount`
+  types; `Institution.parent_institution_id`,
+  `Bill.institution_member_account_id`,
+  `Debt.institution_member_account_id` added.
+- `src/lib/data-hooks.ts` — `useInstitutionLinks`/`useUpsertInstitutionLink`/
+  `useDeleteInstitutionLink` and `useInstitutionMemberAccounts`/
+  `useUpsertInstitutionMemberAccount`/`useDeleteInstitutionMemberAccount`,
+  same household-wide fetch-everything shape as `useInstitutions`/
+  `useAccounts`, same join-through-institution-ids-then-`.in()` pattern
+  `useInstitutionCategories` already uses (RLS itself would already scope
+  correctly without that step, but matching precedent). Member-account
+  upsert uses `upsert(..., { onConflict: "institution_id,member_id" })`
+  since re-saving an existing member's fields must never hit the new
+  unique constraint as a duplicate-key error. `parent_institution_id`
+  needs no new hook — rides along in the existing `useUpsertInstitution`
+  payload.
+- `tsc --noEmit` clean, 219/219 tests pass. Next: `InstitutionDialog.tsx`
+  (Links / Member accounts / Parent institution sections).
+
+## 2026-09-16 — InstitutionDialog: Links, Member accounts, Parent institution sections
+`src/components/InstitutionDialog.tsx`:
+- "Login URL" relabeled "Main site" (same field, unchanged behavior) with
+  a note that the Log In button prefers a Bill Pay link over it.
+- New "Links" section (gated on the institution already being saved, same
+  as the existing "Linked accounts" pattern): lists existing
+  `institution_links` rows with a delete button, plus an inline add-form
+  (kind select + URL, label input only shown for "Other"). The kind
+  dropdown hides "Bill Pay" once one exists and only offers "Patient
+  Portal" when `institution_type === "medical"` and none exists yet — add
+  is immediate (its own mutation), not batched into the main Save,
+  matching how "Add account" already works.
+- New "Parent institution" select right after Type — only institutions
+  with no parent of their own are offered (keeps it to 2 levels without
+  real recursion checks). Rides along in the main `useUpsertInstitution`
+  payload.
+- New "Member accounts" section: one card per household member
+  (account #/login username/notes, all optional), batched into the main
+  Save alongside Categories — a member's row is only written if at least
+  one field is filled in; an existing row is removed via its own small
+  trash-icon button (not by clearing all 3 fields to blank and saving).
+- `tsc --noEmit` clean, 219/219 tests pass. Next: `InstitutionLoginButton.tsx`
+  (prefer a Bill Pay link, render extra buttons for other links).
+
+## 2026-09-16 — InstitutionLoginButton evolved; Institutions screen rollup
+- `src/components/InstitutionLoginButton.tsx` — same export name/shape
+  (backward compatible), now takes an optional `links` prop: "Log In"
+  opens a `bill_pay` link when set, else falls back to `login_url`; one
+  extra button per other stored link (Patient Portal, custom "Other").
+  Wired at all 3 call sites (`app.accounts.tsx`'s `AccountDetailDialog`,
+  `app.debts.tsx`'s `DebtDetailDialog`, `app.institutions.tsx`'s
+  `InstitutionDetail`), each fetching `useInstitutionLinks()` once and
+  filtering to the relevant institution.
+- `computeInstitutionTotals` (`src/lib/balances.ts`) gained an
+  `institutions: Institution[] = []` param — a parent's totals now widen
+  the candidate account/bill/debt set to include every
+  `parent_institution_id === thisId` child too, same filter-and-sum shape,
+  the underlying rows never move off their real institution. 4 new tests
+  in `balances.test.ts` (no-children regression, child debt/account
+  rollup, child's own total stays un-rolled-up).
+- `app.institutions.tsx`: top-level list now filters to
+  `!i.parent_institution_id` (children hidden — their money's already
+  counted under the parent, showing both would double-count). New
+  "Sub-institutions" section in `InstitutionDetail` lists a parent's
+  children (tap to swap the open dialog to that child, via a new
+  `onSelect` prop threaded from `InstitutionsPage`); a child shows a
+  "Part of {parent}" row with the same swap-back link. Bills/Debts
+  sections now group by member account (new `groupRowsByMemberAccount`
+  helper) whenever an institution has more than one — invisible/unchanged
+  for every institution with 0 or 1. Bill rows also dim + label
+  "Inactive" here now, matching the Bills screen's own new treatment
+  (see below).
+- `tsc --noEmit` clean, 223/223 tests pass. Next: `BillDialog`/`DebtDialog`
+  (active toggle, member-account selector).
+
+## 2026-09-16 — BillDialog/DebtDialog wiring; ADR-106 feature complete
+Last section of the plan.
+- `src/routes/app.bills.tsx`: `BillDialog` gains an "Active" `Switch`
+  (exact copy of `AutoTransferDialog`'s existing pattern, wired to
+  `is_active`) and a "Whose account" selector (only shown once the
+  selected institution has member accounts — `institution_member_account_id`).
+  Bill list rows now dim (`opacity-60`) + label "· Inactive" for
+  `is_active === false`, matching the auto-transfer row precedent, plus a
+  small "· {member}" chip when a member account is set.
+- `src/routes/app.debts.tsx`: `DebtDialog` gains the same "Whose account"
+  selector (debts have no active/inactive concept, per the interview —
+  only bills do). Debt list rows get the same "· {member}" chip.
+- Verified via the read-only MCP earlier and via `tsc`/`vitest` throughout
+  — every section run individually, not batched. Final state: `tsc
+  --noEmit` clean, 223/223 tests pass, `eslint` clean on every changed
+  file (repo-wide CRLF/prettier noise and 2 small pre-existing issues in
+  untouched code confirmed unrelated by running eslint against an
+  untouched file for comparison).
+- **ADR-106 is now fully implemented**: institution links (Bill Pay/
+  Patient Portal/Other, Log In button prefers Bill Pay), per-member
+  institution accounts (Bills/Debts can tag "whose account", grouped in
+  the Institution detail view), institution parent/child with rollup
+  totals + list decluttering, and the bill Active/Inactive toggle.
+- **Not done this session** (explicitly out of scope, flagged for
+  awareness): no live browser check — this sandbox can't reach the dev
+  server (`npm run dev` on :8080), per the known environment constraint.
+  Recommend a manual pass: add Bill Pay/Patient Portal links to a medical
+  institution and confirm the Log In button; mark a bill inactive and
+  confirm it drops out of paycheck/snapshot totals; set Prime's parent to
+  Amazon and confirm the rollup + list decluttering; add 2 member
+  accounts to Yukon Eye and confirm a tagged debt's owner chip + the
+  Institution detail's grouped Bills/Debts sections.

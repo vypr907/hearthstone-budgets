@@ -6,10 +6,13 @@ import {
   useLatestBalances,
   useCategories,
   useInstitutionCategories,
+  useInstitutionLinks,
+  useInstitutionMemberAccounts,
   useBills,
   useEffectiveDebts,
   useTransactions,
 } from "@/lib/data-hooks";
+import { useHouseholdMembers, memberLabel } from "@/lib/household";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/format";
 import { computeBalances, computeInstitutionTotals } from "@/lib/balances";
@@ -78,11 +81,17 @@ function InstitutionsPage() {
   const [detail, setDetail] = useState<Institution | null>(null);
   const [groupBy, setGroupBy] = useState<"none" | "type" | "category">("none");
 
+  // ADR-106: a child institution's money is already counted in its parent's
+  // total (computeInstitutionTotals rolls it up) — showing both here would
+  // double-count. Children stay fully reachable via the parent's own detail
+  // dialog ("Sub-institutions" section below).
+  const rootInstitutions = institutions.filter((i) => !i.parent_institution_id);
+
   // UI-only grouping: an institution with several categories appears under each.
   const groups: Array<{ key: string; label: string; rows: Institution[] }> = (() => {
-    if (groupBy === "none") return [{ key: "all", label: "", rows: institutions }];
+    if (groupBy === "none") return [{ key: "all", label: "", rows: rootInstitutions }];
     const map = new Map<string, { label: string; rows: Institution[] }>();
-    for (const i of institutions) {
+    for (const i of rootInstitutions) {
       const keys: Array<[string, string]> =
         groupBy === "type"
           ? [[i.institution_type?.trim() || "__none__", formatTypeLabel(i.institution_type)]]
@@ -122,7 +131,7 @@ function InstitutionsPage() {
         </div>
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {!isLoading && institutions.length === 0 && (
+        {!isLoading && rootInstitutions.length === 0 && (
           <Card>
             <CardContent className="p-4 text-sm text-muted-foreground">
               No institutions yet.
@@ -139,7 +148,14 @@ function InstitutionsPage() {
                 </p>
               ) : null}
               {g.rows.map((i) => {
-                const totals = computeInstitutionTotals(i.id, accounts, balances, bills, debts);
+                const totals = computeInstitutionTotals(
+                  i.id,
+                  accounts,
+                  balances,
+                  bills,
+                  debts,
+                  institutions,
+                );
                 return (
                   <Card key={i.id} className="cursor-pointer" onClick={() => setDetail(i)}>
                     <CardContent className="flex items-start gap-3 p-3">
@@ -201,36 +217,91 @@ function InstitutionsPage() {
           setDetail(null);
           setEditing(i);
         }}
+        onSelect={setDetail}
       />
     </>
   );
+}
+
+/** ADR-106: bucket a list of bills/debts by which member's account they belong to. */
+function groupRowsByMemberAccount<T extends { institution_member_account_id?: string | null }>(
+  rows: T[],
+  labelFor: (accountId: string | null | undefined) => string,
+): Array<{ label: string; rows: T[] }> {
+  const map = new Map<string, T[]>();
+  for (const r of rows) {
+    const key = r.institution_member_account_id ?? "__joint__";
+    (map.get(key) ?? map.set(key, []).get(key)!).push(r);
+  }
+  return [...map.entries()]
+    .map(([key, rowsForKey]) => ({
+      label: labelFor(key === "__joint__" ? null : key),
+      rows: rowsForKey,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function InstitutionDetail({
   institution,
   onClose,
   onEdit,
+  onSelect,
 }: {
   institution: Institution | null;
   onClose: () => void;
   onEdit: (i: Institution) => void;
+  /** ADR-106: swap the currently-open detail to a different institution — used to
+   *  navigate to a parent/child (e.g. Amazon <-> Prime) without closing the dialog. */
+  onSelect: (i: Institution) => void;
 }) {
+  const { data: institutions = [] } = useInstitutions();
   const { data: accounts = [] } = useAccounts();
   const { data: latest = {} } = useLatestBalances();
   const { data: categories = [] } = useCategories();
   const { data: instCats = {} } = useInstitutionCategories();
+  const { data: allLinks = [] } = useInstitutionLinks();
+  const { data: allMemberAccounts = [] } = useInstitutionMemberAccounts();
+  const { data: members = [] } = useHouseholdMembers();
   const { data: bills = [] } = useBills();
   const { data: debts = [] } = useEffectiveDebts();
   const { data: transactions = [] } = useTransactions();
   const balances = computeBalances(accounts, latest, transactions);
   const { openWithPreset } = useAddTransactionPreset();
   if (!institution) return null;
-  const totals = computeInstitutionTotals(institution.id, accounts, balances, bills, debts);
+  const totals = computeInstitutionTotals(
+    institution.id,
+    accounts,
+    balances,
+    bills,
+    debts,
+    institutions,
+  );
   const catIds = instCats[institution.id] ?? [];
   const catNames = categories.filter((c) => catIds.includes(c.id));
   const linked = accounts.filter((a) => a.institution_id === institution.id);
   const linkedBills = bills.filter((b) => b.institution_id === institution.id);
   const linkedDebts = debts.filter((d) => d.institution_id === institution.id);
+  const institutionLinks = allLinks.filter((l) => l.institution_id === institution.id);
+  const memberAccounts = allMemberAccounts.filter((m) => m.institution_id === institution.id);
+  /** ADR-106: label a bill/debt's institution_member_account_id — the account this belongs to, or "Joint" when unset. */
+  const memberAccountLabel = (accountId: string | null | undefined) => {
+    if (!accountId) return "Joint / not specified";
+    const acct = memberAccounts.find((a) => a.id === accountId);
+    return acct ? memberLabel(members.find((m) => m.id === acct.member_id)) : "Unknown";
+  };
+  /** Only worth grouping when the institution actually has more than one member account. */
+  const groupByMember = memberAccounts.length > 1;
+  const groupBills = groupByMember
+    ? groupRowsByMemberAccount(linkedBills, memberAccountLabel)
+    : [{ label: "", rows: linkedBills }];
+  const groupDebts = groupByMember
+    ? groupRowsByMemberAccount(linkedDebts, memberAccountLabel)
+    : [{ label: "", rows: linkedDebts }];
+  // ADR-106: children — hidden from the top-level list, shown here instead.
+  const children = institutions.filter((i) => i.parent_institution_id === institution.id);
+  const parent = institution.parent_institution_id
+    ? institutions.find((i) => i.id === institution.parent_institution_id)
+    : null;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -254,7 +325,7 @@ function InstitutionDetail({
             />
             <DetailItem label="Login username" value={institution.login_username ?? "—"} />
             <DetailItem
-              label="Login URL"
+              label="Main site"
               value={
                 institution.login_url ? (
                   <a
@@ -270,8 +341,22 @@ function InstitutionDetail({
                 )
               }
             />
+            {parent ? (
+              <DetailItem
+                label="Part of"
+                value={
+                  <button
+                    type="button"
+                    className="underline decoration-dotted underline-offset-2"
+                    onClick={() => onSelect(parent)}
+                  >
+                    {parent.name}
+                  </button>
+                }
+              />
+            ) : null}
           </DetailGrid>
-          <InstitutionLoginButton institution={institution} />
+          <InstitutionLoginButton institution={institution} links={institutionLinks} />
           <DetailGrid>
             <DetailItem
               label="Current balance"
@@ -282,6 +367,26 @@ function InstitutionDetail({
               value={totals.currentDue == null ? "—" : formatMoney(totals.currentDue)}
             />
           </DetailGrid>
+          {children.length > 0 ? (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Sub-institutions
+              </p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Rolled up into the totals above — tap one to see its own detail.
+              </p>
+              <div className="space-y-2">
+                {children.map((c) => (
+                  <Card key={c.id} className="cursor-pointer" onClick={() => onSelect(c)}>
+                    <CardContent className="flex items-center gap-3 p-3">
+                      <InstitutionLogo logoUrl={c.logo_url} type={c.institution_type} />
+                      <p className="min-w-0 flex-1 truncate font-medium">{c.name}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Categories
@@ -336,14 +441,32 @@ function InstitutionDetail({
             {linkedBills.length === 0 ? (
               <p className="text-sm text-muted-foreground">No bills linked.</p>
             ) : (
-              <div className="space-y-2">
-                {linkedBills.map((b) => (
-                  <Card key={b.id}>
-                    <CardContent className="flex items-center gap-3 p-3">
-                      <p className="min-w-0 flex-1 truncate font-medium">{b.name}</p>
-                      <p className="shrink-0 font-semibold">{formatMoney(Number(b.amount ?? 0))}</p>
-                    </CardContent>
-                  </Card>
+              <div className="space-y-3">
+                {groupBills.map((g) => (
+                  <div key={g.label || "all"}>
+                    {g.label ? (
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">{g.label}</p>
+                    ) : null}
+                    <div className="space-y-2">
+                      {g.rows.map((b) => (
+                        <Card key={b.id} className={b.is_active === false ? "opacity-60" : undefined}>
+                          <CardContent className="flex items-center gap-3 p-3">
+                            <p className="min-w-0 flex-1 truncate font-medium">
+                              {b.name}
+                              {b.is_active === false ? (
+                                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                  · Inactive
+                                </span>
+                              ) : null}
+                            </p>
+                            <p className="shrink-0 font-semibold">
+                              {formatMoney(Number(b.amount ?? 0))}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -356,21 +479,30 @@ function InstitutionDetail({
             {linkedDebts.length === 0 ? (
               <p className="text-sm text-muted-foreground">No debts linked.</p>
             ) : (
-              <div className="space-y-2">
-                {linkedDebts.map((d) => (
-                  <Card key={d.id}>
-                    <CardContent className="flex items-center gap-3 p-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{d.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Min {formatMoney(Number(d.minimum_payment ?? 0))}
-                        </p>
-                      </div>
-                      <p className="shrink-0 font-semibold">
-                        {formatMoney(Number(d.remaining_balance ?? 0))}
-                      </p>
-                    </CardContent>
-                  </Card>
+              <div className="space-y-3">
+                {groupDebts.map((g) => (
+                  <div key={g.label || "all"}>
+                    {g.label ? (
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">{g.label}</p>
+                    ) : null}
+                    <div className="space-y-2">
+                      {g.rows.map((d) => (
+                        <Card key={d.id}>
+                          <CardContent className="flex items-center gap-3 p-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate font-medium">{d.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Min {formatMoney(Number(d.minimum_payment ?? 0))}
+                              </p>
+                            </div>
+                            <p className="shrink-0 font-semibold">
+                              {formatMoney(Number(d.remaining_balance ?? 0))}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

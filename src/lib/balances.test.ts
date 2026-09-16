@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   accountDisplayBalances,
   accountInMemberView,
+  computeBalances,
+  computeInstitutionTotals,
   isSpendableAccount,
   spendableContribution,
 } from "./balances";
 import { netWorthTrend } from "./net-worth";
-import type { Account, AccountBalance, Transaction } from "./supabase";
+import type { Account, AccountBalance, Debt, Institution, Transaction } from "./supabase";
 
 /* ------------------------------------------------------------------ */
 /* ADR-088: accountInMemberView                                        */
@@ -162,5 +164,102 @@ describe("accountDisplayBalances", () => {
       current: 0,
       spendable: 0,
     });
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* ADR-106: computeInstitutionTotals parent/child rollup               */
+/* ------------------------------------------------------------------ */
+
+describe("computeInstitutionTotals parent/child rollup (ADR-106)", () => {
+  const inst = (over: Partial<Institution>): Institution =>
+    ({
+      id: "i1",
+      household_id: "h",
+      name: "Institution",
+      institution_type: null,
+      login_url: null,
+      login_username: null,
+      sign_in_with_google: null,
+      description: null,
+      notes: null,
+      parent_institution_id: null,
+      created_at: "2026-01-01",
+      updated_at: "2026-01-01",
+      ...over,
+    }) as Institution;
+
+  const debt = (over: Partial<Debt>): Debt =>
+    ({
+      id: "d1",
+      household_id: "h",
+      name: "Debt",
+      category_id: null,
+      debt_type: null,
+      institution_id: null,
+      starting_balance: null,
+      program_start_balance: null,
+      remaining_balance: 0,
+      minimum_payment: 0,
+      interest_rate: null,
+      known_finance_charge: null,
+      due_day: null,
+      next_due_date: null,
+      billing_cycle: null,
+      payment_status: null,
+      on_payment_plan: null,
+      paid_with: null,
+      manual_or_auto: null,
+      priority_order: null,
+      notes: null,
+      date_paid_off: null,
+      created_at: "2026-01-01",
+      updated_at: "2026-01-01",
+      ...over,
+    }) as Debt;
+
+  it("a parent with no children behaves exactly as before", () => {
+    const parent = inst({ id: "amazon", name: "Amazon" });
+    const debts = [debt({ id: "d1", institution_id: "amazon", remaining_balance: 50 })];
+    const totals = computeInstitutionTotals("amazon", [], {}, [], debts, [parent]);
+    expect(totals.currentBalance).toBe(50);
+  });
+
+  it("a parent's total includes a child's debt", () => {
+    const parent = inst({ id: "amazon", name: "Amazon" });
+    const child = inst({ id: "prime", name: "Prime", parent_institution_id: "amazon" });
+    const debts = [
+      debt({ id: "d1", institution_id: "amazon", remaining_balance: 20 }),
+      debt({ id: "d2", institution_id: "prime", remaining_balance: 30 }),
+    ];
+    const totals = computeInstitutionTotals("amazon", [], {}, [], debts, [parent, child]);
+    expect(totals.currentBalance).toBe(50);
+  });
+
+  it("a parent's total includes a child's account balance", () => {
+    const parent = inst({ id: "amazon", name: "Amazon" });
+    const child = inst({ id: "prime", name: "Prime", parent_institution_id: "amazon" });
+    const primeAccount = acct({ id: "a1", institution_id: "prime", starting_balance: -30 });
+    const balances = computeBalances([primeAccount], {}, []);
+    const totals = computeInstitutionTotals(
+      "amazon",
+      [primeAccount],
+      balances,
+      [],
+      [],
+      [parent, child],
+    );
+    expect(totals.currentBalance).toBe(-30);
+  });
+
+  it("the child itself only shows its own total, not the parent's", () => {
+    const parent = inst({ id: "amazon", name: "Amazon" });
+    const child = inst({ id: "prime", name: "Prime", parent_institution_id: "amazon" });
+    const debts = [
+      debt({ id: "d1", institution_id: "amazon", remaining_balance: 20 }),
+      debt({ id: "d2", institution_id: "prime", remaining_balance: 30 }),
+    ];
+    const totals = computeInstitutionTotals("prime", [], {}, [], debts, [parent, child]);
+    expect(totals.currentBalance).toBe(30);
   });
 });

@@ -10,6 +10,7 @@ import {
   useCategories,
   useDebts,
   useInstitutions,
+  useInstitutionLinks,
   useLatestBalances,
   useLogBalance,
   useTransactions,
@@ -548,10 +549,14 @@ function AccountDetailDialog({
   const [txDetail, setTxDetail] = useState<Transaction | null>(null);
   const { openWithPreset } = useAddTransactionPreset();
   const navigate = useNavigate();
+  const { data: allInstitutionLinks = [] } = useInstitutionLinks();
 
   if (!account) return null;
   const last4 = accountLast4(account.account_number);
   const accountDetailBalances = accountDisplayBalances(account, balance);
+  const institutionLinks = institution
+    ? allInstitutionLinks.filter((l) => l.institution_id === institution.id)
+    : [];
 
   return (
     <>
@@ -608,7 +613,7 @@ function AccountDetailDialog({
               ) : null}
             </DetailGrid>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <InstitutionLoginButton institution={institution} />
+              <InstitutionLoginButton institution={institution} links={institutionLinks} />
               <Button size="sm" variant="outline" onClick={() => onLogBalance(account)}>
                 <TrendingUp className="mr-2 h-4 w-4" /> Log balance
               </Button>

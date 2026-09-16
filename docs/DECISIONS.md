@@ -4525,3 +4525,78 @@ be linked, silently wrong once it could be. Now resolves via
 only for a debt that isn't linked.
 
 Status: Decided 2026-09-16. Implemented 2026-09-16.
+
+## ADR-106: Institution Links, Per-Member Accounts, Institution Parent/Child, Bill Active Toggle
+
+Decision:
+Four related additions to how institutions/bills/debts model real-world
+complexity, interviewed and decided together (surfaced while setting up
+"Yukon Eye" and noticing Amazon/Prime were unrelated institutions):
+
+1. **Multiple links per institution** (`institution_links`: `id,
+   institution_id, kind, label, url, sort_order, created_at,
+   updated_at`). `institutions.login_url` stays exactly as-is ("Main
+   site"); this table only holds *additional* named links. `kind` is a
+   DB-checked enum (`bill_pay` / `patient_portal` / `other`) rather than
+   free text, because the Log In button and the Patient-Portal-for-medical
+   gating both need to find "the" link of a given kind reliably — free
+   text label matching would be fragile. No `household_id` column;
+   scoped through `institution_id`, same as `institution_categories`
+   already does. `InstitutionLoginButton` now opens
+   `links.find(l => l.kind === "bill_pay")?.url ?? institution.login_url`
+   (falls back to the main site when no Bill Pay link is set) and renders
+   one additional button per other stored link (Patient Portal, any
+   custom "Other" links). "Patient Portal" is only offered as a kind
+   choice in the institution form when `institution_type === "medical"`
+   — UI-side gating only, not a DB constraint (matches how other
+   type-gated UI already works here).
+2. **Per-member accounts at an institution**
+   (`institution_member_accounts`: `id, institution_id, member_id,
+   account_number, login_username, notes, created_at, updated_at`,
+   unique `(institution_id, member_id)`) — for providers that bill each
+   spouse separately (vs. providers that combine visits into one joint
+   invoice, which need no new concept at all). `bills` and `debts` each
+   gain a nullable `institution_member_account_id` FK, coexisting with
+   the existing (unchanged, still required) `institution_id` — an
+   optional overlay, same shape as `accounts.owner_member_id` (ADR-088),
+   not a replacement of the institution relationship.
+3. **Institution parent/child** (`institutions.parent_institution_id`,
+   nullable, `on delete set null`) — so Prime/Kindle/Audible can be
+   marked as part of Amazon without merging their existing data. Kept to
+   2 levels (parent + children, no grandchildren) by only offering
+   institutions with no parent of their own as parent choices in the
+   form — no recursive-chain validation needed. `computeInstitutionTotals`
+   (`src/lib/balances.ts`) now takes the full `institutions` list so a
+   parent's total includes every child's accounts/bills/debts alongside
+   its own. Child institutions drop out of the top-level Institutions
+   list (their money is now counted under the parent — showing both
+   would double-count any grand total) but stay fully reachable via the
+   parent's detail view and via any bill/debt that still names its real
+   institution directly.
+4. **Bill active/inactive toggle** — `bills.is_active` already existed
+   in the database and was already read in 4 places
+   (`computeInstitutionTotals`, `paycheck-budget.ts`, `snapshot.ts`,
+   `spending-actuals.ts`) but had no write path anywhere. Added a
+   `Switch` to `BillDialog`, copying `AutoTransferDialog`'s existing
+   "Active" pattern exactly (including the list row's `opacity-60`
+   dim-when-inactive treatment, already established there). A plain
+   boolean was kept rather than adding a paused/cancelled/active
+   three-state enum — nothing downstream needs to distinguish "paused,
+   will resume" from "cancelled for good" today.
+
+Reason:
+Each gap was blocking a real, current use case (Yukon Eye's separate
+Bill Pay/Patient Portal sites, spouses' separate invoices at shared
+providers, Amazon's family of sub-institutions, and a bill that's
+actually been cancelled still counting toward totals). All four were
+interviewed and scoped to the smallest structure that solves the real
+case in front of us rather than a maximally general one: a fixed 3-kind
+enum instead of arbitrary link types, a flat member-account overlay
+instead of a deeper ownership model, 2-level parent/child instead of
+arbitrary nesting, and a boolean instead of a status enum. `bills`/
+`debts` already supported many-to-one against `institutions` in
+practice (`computeInstitutionTotals` already `.filter()`s, never
+`.find()`s), so the member-account and parent/child additions extend an
+existing shape rather than introducing a new one.
+
+Status: Decided 2026-09-16. Implemented 2026-09-16.

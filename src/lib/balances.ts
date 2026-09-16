@@ -1,4 +1,4 @@
-import type { Account, AccountBalance, Bill, Debt, Transaction } from "./supabase";
+import type { Account, AccountBalance, Bill, Debt, Institution, Transaction } from "./supabase";
 import { debtDueDate } from "./format";
 import { todayISO } from "./snapshot";
 import { billCycleDue, billRemainingOwed } from "./payments";
@@ -225,6 +225,11 @@ export function daysRemaining(targetDate: string | null | undefined): number | n
  *   + open-cycle bill amounts; Current Due = still-owed bill amounts this cycle
  *   + minimum payments for debts due on/before today.
  * - Nothing linked → both null.
+ *
+ * ADR-106: a parent institution's totals (Amazon) also fold in every child's
+ * (Prime/Kindle/Audible, `parent_institution_id === institutionId`) own
+ * accounts/bills/debts — the underlying rows stay on their real institution,
+ * this just widens which ones count toward the parent's number.
  */
 export type InstitutionTotals = {
   source: "accounts" | "obligations" | "none";
@@ -238,8 +243,16 @@ export function computeInstitutionTotals(
   balances: Record<string, AccountBalanceInfo>,
   bills: Bill[],
   debts: Debt[],
+  institutions: Institution[] = [],
 ): InstitutionTotals {
-  const linkedAccounts = accounts.filter((a) => a.institution_id === institutionId);
+  const childIds = institutions
+    .filter((i) => i.parent_institution_id === institutionId)
+    .map((i) => i.id);
+  const candidateIds = new Set([institutionId, ...childIds]);
+
+  const linkedAccounts = accounts.filter(
+    (a) => !!a.institution_id && candidateIds.has(a.institution_id),
+  );
   if (linkedAccounts.length > 0) {
     const total = linkedAccounts.reduce(
       (sum, a) => sum + (balances[a.id]?.current ?? Number(a.starting_balance ?? 0)),
@@ -249,10 +262,10 @@ export function computeInstitutionTotals(
   }
 
   const linkedBills = bills.filter(
-    (b) => b.institution_id === institutionId && b.is_active !== false,
+    (b) => !!b.institution_id && candidateIds.has(b.institution_id) && b.is_active !== false,
   );
   const linkedDebts = debts.filter(
-    (d) => d.institution_id === institutionId && !d.date_paid_off,
+    (d) => !!d.institution_id && candidateIds.has(d.institution_id) && !d.date_paid_off,
   );
   if (linkedBills.length === 0 && linkedDebts.length === 0)
     return { source: "none", currentBalance: null, currentDue: null };

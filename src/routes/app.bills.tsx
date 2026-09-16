@@ -17,8 +17,10 @@ import {
   useAutoTransfers,
   useUpsertAutoTransfer,
   useDeleteAutoTransfer,
+  useInstitutionMemberAccounts,
   shiftMonth,
 } from "@/lib/data-hooks";
+import { useHouseholdMembers, memberLabel } from "@/lib/household";
 import {
   useProcessAutoTransfer,
   useUndoAutoTransferProcess,
@@ -129,7 +131,15 @@ function BillsPage() {
   const { data: categories = [] } = useCategories();
   const { data: allInstitutions = [] } = useInstitutions();
   const { data: autoTransfers = [] } = useAutoTransfers();
+  const { data: allMemberAccounts = [] } = useInstitutionMemberAccounts();
+  const { data: members = [] } = useHouseholdMembers();
   const institutionById = useInstitutionIndex(allInstitutions);
+  /** ADR-106: label for a bill's institution_member_account_id, if set. */
+  const memberAccountLabel = (accountId: string | null | undefined) => {
+    if (!accountId) return null;
+    const acct = allMemberAccounts.find((a) => a.id === accountId);
+    return acct ? memberLabel(members.find((m) => m.id === acct.member_id)) : null;
+  };
   const [editing, setEditing] = useState<Partial<Bill> | null>(null);
   const [detail, setDetail] = useState<Bill | null>(null);
   const [editingAT, setEditingAT] = useState<Partial<AutoTransfer> | null>(null);
@@ -228,8 +238,13 @@ function BillsPage() {
                 const due = billCycleDue(b);
                 const paid = Number(b.cycle_paid_to_date ?? 0);
                 const pct = due > 0 ? Math.min(100, (paid / due) * 100) : 0;
+                const inactive = b.is_active === false;
                 return (
-                  <Card key={b.id} className="cursor-pointer" onClick={() => setDetail(b)}>
+                  <Card
+                    key={b.id}
+                    className={inactive ? "cursor-pointer opacity-60" : "cursor-pointer"}
+                    onClick={() => setDetail(b)}
+                  >
                     <CardContent className="p-3">
                       <div className="flex items-start gap-2.5">
                         <ObligationIcon
@@ -243,6 +258,11 @@ function BillsPage() {
                           <div className="flex items-baseline gap-2">
                             <p className="min-w-0 flex-1 truncate font-semibold leading-tight">
                               {b.name}
+                              {inactive ? (
+                                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                  · Inactive
+                                </span>
+                              ) : null}
                             </p>
                             <p className="shrink-0 text-base font-extrabold tabular-nums">
                               {formatMoney(Number(b.amount))}
@@ -269,6 +289,9 @@ function BillsPage() {
                               </span>
                             ) : null}
                             {b.is_variable_amount ? <span>· variable</span> : null}
+                            {memberAccountLabel(b.institution_member_account_id) ? (
+                              <span>· {memberAccountLabel(b.institution_member_account_id)}</span>
+                            ) : null}
                           </div>
                           {/* Status chips always on their own line for scannable consistency. */}
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -783,9 +806,14 @@ export function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onCl
   const { data: accounts = [] } = useAccounts();
   const { data: transactions = [] } = useTransactions();
   const { data: deductions = [] } = useHouseholdDeductions();
+  const { data: allMemberAccounts = [] } = useInstitutionMemberAccounts();
+  const { data: members = [] } = useHouseholdMembers();
   const [fundingDeductionId, setFundingDeductionId] = useState("none");
   /** ADR-074: the account this bill is usually paid from. */
   const [usualPaymentAccountId, setUsualPaymentAccountId] = useState("none");
+  // ADR-106: which household member's account at the institution this belongs to.
+  const [memberAccountId, setMemberAccountId] = useState("none");
+  const [active, setActive] = useState(true);
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDay, setDueDay] = useState("");
@@ -820,6 +848,8 @@ export function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onCl
     setArrearsAsOf(bill?.arrears_as_of ? bill.arrears_as_of.slice(0, 10) : "");
     setFundingDeductionId(bill?.funding_deduction_id ?? "none");
     setUsualPaymentAccountId(bill?.usual_payment_account_id ?? "none");
+    setMemberAccountId(bill?.institution_member_account_id ?? "none");
+    setActive(bill?.is_active !== false);
     const derived = deriveCustomInterval(bill?.cycle_interval_days);
     setCycleCount(derived.count);
     setCycleUnit(derived.unit);
@@ -873,6 +903,8 @@ export function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onCl
         arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
         funding_deduction_id: fundingDeductionId === "none" ? null : fundingDeductionId,
         usual_payment_account_id: usualPaymentAccountId2,
+        institution_member_account_id: memberAccountId === "none" ? null : memberAccountId,
+        is_active: active,
       });
       toast.success(isEdit ? "Bill updated" : "Bill added");
       onClose();
@@ -938,6 +970,16 @@ export function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onCl
               </p>
             </div>
             <Switch id="b-variable" checked={variable} onCheckedChange={setVariable} />
+          </div>
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="pr-3">
+              <Label htmlFor="b-active">Active</Label>
+              <p className="text-xs text-muted-foreground">
+                Inactive bills stop counting toward institution totals, paycheck
+                obligations, and other budget calculations.
+              </p>
+            </div>
+            <Switch id="b-active" checked={active} onCheckedChange={setActive} />
           </div>
           <div>
             <Label>Billing cycle</Label>
@@ -1033,6 +1075,30 @@ export function BillDialog({ bill, onClose }: { bill: Partial<Bill> | null; onCl
               </SelectContent>
             </Select>
           </div>
+          {/* ADR-106: only shown once the institution has member accounts set up
+              (InstitutionDialog's "Member accounts" section) — for providers
+              that bill each household member separately. */}
+          {institutionId !== "none" &&
+          allMemberAccounts.some((a) => a.institution_id === institutionId) ? (
+            <div>
+              <Label>Whose account</Label>
+              <Select value={memberAccountId} onValueChange={setMemberAccountId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Joint / not specified</SelectItem>
+                  {allMemberAccounts
+                    .filter((a) => a.institution_id === institutionId)
+                    .map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {memberLabel(members.find((m) => m.id === a.member_id))}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           {/* ADR-068: a deduction that lands in an account can auto-pay this bill. */}
           <div>
             <Label>Funded by deduction</Label>

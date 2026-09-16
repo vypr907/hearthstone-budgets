@@ -13,6 +13,8 @@ import {
   type Category,
   type Institution,
   type InstitutionCategory,
+  type InstitutionLink,
+  type InstitutionMemberAccount,
   type Transaction,
   type SpendingBudget,
   type SpendingActual,
@@ -577,6 +579,123 @@ export function useDeleteInstitution() {
       qc.invalidateQueries({ queryKey: ["institutions"] });
       qc.invalidateQueries({ queryKey: ["accounts"] });
     },
+  });
+}
+
+/* ---------------- Institution links (ADR-106) ---------------- */
+
+/** Every institution_links row for the household, household-wide (same fetch-everything-filter-in-memory shape as useInstitutions/useAccounts). */
+export function useInstitutionLinks() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["institution_links", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<InstitutionLink[]> => {
+      const { data: insts } = await supabase
+        .from("institutions")
+        .select("id")
+        .eq("household_id", householdId!);
+      const ids = (insts ?? []).map((i) => i.id);
+      if (ids.length === 0) return [];
+      const { data, error } = await supabase
+        .from("institution_links")
+        .select("*")
+        .in("institution_id", ids)
+        .order("sort_order");
+      if (error) throw error;
+      return (data ?? []) as InstitutionLink[];
+    },
+  });
+}
+
+export function useUpsertInstitutionLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (l: Partial<InstitutionLink> & { institution_id: string }) => {
+      if (l.id) {
+        const { error } = await supabase.from("institution_links").update(l).eq("id", l.id);
+        if (error) throw error;
+        return l.id;
+      }
+      const { data, error } = await supabase.from("institution_links").insert(l).select("id");
+      if (error) throw error;
+      return (data as { id: string }[] | null)?.[0]?.id;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["institution_links"] }),
+  });
+}
+
+export function useDeleteInstitutionLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("institution_links").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["institution_links"] }),
+  });
+}
+
+/* ---------------- Institution member accounts (ADR-106) ---------------- */
+
+/** Every institution_member_accounts row for the household, household-wide. */
+export function useInstitutionMemberAccounts() {
+  const { householdId } = useAuth();
+  return useQuery({
+    queryKey: ["institution_member_accounts", householdId],
+    enabled: !!householdId,
+    queryFn: async (): Promise<InstitutionMemberAccount[]> => {
+      const { data: insts } = await supabase
+        .from("institutions")
+        .select("id")
+        .eq("household_id", householdId!);
+      const ids = (insts ?? []).map((i) => i.id);
+      if (ids.length === 0) return [];
+      const { data, error } = await supabase
+        .from("institution_member_accounts")
+        .select("*")
+        .in("institution_id", ids);
+      if (error) throw error;
+      return (data ?? []) as InstitutionMemberAccount[];
+    },
+  });
+}
+
+export function useUpsertInstitutionMemberAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      a: Partial<InstitutionMemberAccount> & { institution_id: string; member_id: string },
+    ) => {
+      if (a.id) {
+        const { error } = await supabase
+          .from("institution_member_accounts")
+          .update(a)
+          .eq("id", a.id);
+        if (error) throw error;
+        return a.id;
+      }
+      // unique(institution_id, member_id): upsert-by-conflict so re-saving
+      // an existing member's fields never throws a duplicate-key error.
+      const { data, error } = await supabase
+        .from("institution_member_accounts")
+        .upsert(a, { onConflict: "institution_id,member_id" })
+        .select("id");
+      if (error) throw error;
+      return (data as { id: string }[] | null)?.[0]?.id;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["institution_member_accounts"] }),
+  });
+}
+
+export function useDeleteInstitutionMemberAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("institution_member_accounts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["institution_member_accounts"] }),
   });
 }
 

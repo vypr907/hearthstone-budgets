@@ -1106,3 +1106,69 @@ posted by that date. Deliberately **not** used by `src/lib/ledger-state.ts`'s
 which cycle a payment resolves reflects when it was recorded, not whenever
 the bank got around to posting it) or by Dashboard/Spending's period
 bucketing, for the same reason.
+
+---
+
+## institution_links, institution_member_accounts, institution parent/child (ADR-106)
+
+Applied via `scripts/migrations/2026-09-16-institution-links-members-parent.sql`, verified live.
+
+```sql
+create table institution_links (
+    id uuid primary key default gen_random_uuid(),
+    institution_id uuid not null references institutions(id) on delete cascade,
+    kind text not null check (kind in ('bill_pay', 'patient_portal', 'other')),
+    label text,
+    url text not null,
+    sort_order integer not null default 0,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+)
+```
+
+Additional named links per institution — `institutions.login_url` stays the
+"Main site" link, unchanged; this table only holds extras (Bill Pay,
+Patient Portal, custom "Other"). No own `household_id` — RLS joins to
+`institutions` (same shape as `institution_categories`/`transaction_tags`,
+`account_balances`'s exception noted above). `kind` is a real DB-checked
+enum, not free text, because the Log In button (prefers a `bill_pay` link,
+falls back to `login_url`) and the medical-only "Patient Portal" gating in
+the institution form both need to find "the" link of a given kind reliably.
+
+```sql
+create table institution_member_accounts (
+    id uuid primary key default gen_random_uuid(),
+    institution_id uuid not null references institutions(id) on delete cascade,
+    member_id uuid not null references household_members(id) on delete cascade,
+    account_number text,
+    login_username text,
+    notes text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    unique (institution_id, member_id)
+)
+```
+
+A household member's own account (account/patient #, login username) at an
+institution — for providers that bill each spouse separately rather than
+combining visits into one joint invoice. Same no-`household_id`,
+join-through-`institutions` RLS shape as `institution_links`.
+
+```sql
+alter table institutions add column parent_institution_id uuid references institutions(id) on delete set null;
+alter table bills add column institution_member_account_id uuid references institution_member_accounts(id) on delete set null;
+alter table debts add column institution_member_account_id uuid references institution_member_accounts(id) on delete set null;
+```
+
+`institutions.parent_institution_id`: Amazon/Prime/Kindle/Audible-style
+grouping — a child institution's accounts/bills/debts roll up into its
+parent's total on the Institutions screen (`computeInstitutionTotals`,
+`src/lib/balances.ts`) without merging the underlying data. Kept to 2
+levels (parent + children, no grandchildren) by convention only — the
+institution form only offers institutions with no parent of their own as
+parent choices; not a DB constraint.
+
+`bills`/`debts.institution_member_account_id`: optional overlay, coexists
+with the existing (unchanged, still required) `institution_id` — same
+"null = joint/not specified, set = this member's own" shape
+`accounts.owner_member_id` already uses (ADR-088).

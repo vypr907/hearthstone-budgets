@@ -12,6 +12,8 @@ import {
   useTransactions,
   useDeleteLinkedTransaction,
   useInstitutions,
+  useInstitutionLinks,
+  useInstitutionMemberAccounts,
   useDebtAdjustments,
   useAddDebtAdjustment,
   useDeleteDebtAdjustment,
@@ -19,6 +21,7 @@ import {
   useDeleteAdvance,
   shiftMonth,
 } from "@/lib/data-hooks";
+import { useHouseholdMembers, memberLabel } from "@/lib/household";
 import { effectiveDebtBalance } from "@/lib/balances";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
@@ -167,6 +170,14 @@ function DebtsPage() {
   const { data: debts = [], isLoading } = useDebts();
   const { data: allInstitutions = [] } = useInstitutions();
   const institutionById = useInstitutionIndex(allInstitutions);
+  const { data: allMemberAccounts = [] } = useInstitutionMemberAccounts();
+  const { data: members = [] } = useHouseholdMembers();
+  /** ADR-106: label for a debt's institution_member_account_id, if set. */
+  const memberAccountLabel = (accountId: string | null | undefined) => {
+    if (!accountId) return null;
+    const acct = allMemberAccounts.find((a) => a.id === accountId);
+    return acct ? memberLabel(members.find((m) => m.id === acct.member_id)) : null;
+  };
   const { data: balanceAccounts = [] } = useAccounts();
   const { data: latestBalances = {} } = useLatestBalances();
   const { data: balanceTransactions = [] } = useTransactions();
@@ -368,6 +379,9 @@ function DebtsPage() {
                       {d.interest_rate != null ? (
                         <span>· {Number(d.interest_rate)}% APR</span>
                       ) : null}
+                      {memberAccountLabel(d.institution_member_account_id) ? (
+                        <span>· {memberAccountLabel(d.institution_member_account_id)}</span>
+                      ) : null}
                       <Badge
                         variant={statusVariant(d.payment_status)}
                         className="capitalize"
@@ -501,6 +515,7 @@ export function DebtDetailDialog({
   const { data: incomeEvents = [] } = useIncomeEvents();
   const { data: latestBalances = {} } = useLatestBalances();
   const { data: balanceTransactions = [] } = useTransactions();
+  const { data: allInstitutionLinks = [] } = useInstitutionLinks();
   const recommended = useRecommendedPayments();
   const navigate = useNavigate();
   // ADR-102 addendum: display-only -- `debt` itself stays raw (it feeds
@@ -525,6 +540,9 @@ export function DebtDetailDialog({
 
   const category = categories.find((c) => c.id === debt?.category_id);
   const institution = institutions.find((i) => i.id === debt?.institution_id);
+  const institutionLinks = institution
+    ? allInstitutionLinks.filter((l) => l.institution_id === institution.id)
+    : [];
   // ADR-105: prefer the actual linked account (a credit-card debt's real
   // link); fall back to the institution-name match this used before linking
   // existed, for a debt that has no linked_account_id.
@@ -583,7 +601,7 @@ export function DebtDetailDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <InstitutionLoginButton institution={institution} />
+          <InstitutionLoginButton institution={institution} links={institutionLinks} />
           {monthly ? (
             <CycleMonthStepper
               monthOffset={monthOffset}
@@ -852,10 +870,14 @@ export function DebtDialog({
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
   const { data: categories = [] } = useCategories();
+  const { data: allMemberAccounts = [] } = useInstitutionMemberAccounts();
+  const { data: members = [] } = useHouseholdMembers();
   const [categoryId, setCategoryId] = useState("none");
   const [fundingDeductionId, setFundingDeductionId] = useState("none");
   /** ADR-074: the account this debt is usually paid from. */
   const [usualPaymentAccountId, setUsualPaymentAccountId] = useState("none");
+  // ADR-106: which household member's account at the institution this belongs to.
+  const [memberAccountId, setMemberAccountId] = useState("none");
   /** ADR-102: the real account this debt's balance actually lives on, if any. */
   const [linkedAccountId, setLinkedAccountId] = useState("none");
   const [name, setName] = useState("");
@@ -930,6 +952,7 @@ export function DebtDialog({
     setInvoiceNumber(debt?.invoice_number ?? "");
     setFundingDeductionId(debt?.funding_deduction_id ?? "none");
     setUsualPaymentAccountId(debt?.usual_payment_account_id ?? "none");
+    setMemberAccountId(debt?.institution_member_account_id ?? "none");
     setLinkedAccountId(debt?.linked_account_id ?? "none");
     setNameTouched(!!debt?.name);
     setRemainingTouched(!!debt?.id);
@@ -1104,6 +1127,7 @@ export function DebtDialog({
         arrears_as_of: openingArrears && arrearsAsOf ? arrearsAsOf : null,
         invoice_number: isInvoice ? invoiceNumber.trim() || null : null,
         funding_deduction_id: fundingDeductionId === "none" ? null : fundingDeductionId,
+        institution_member_account_id: memberAccountId === "none" ? null : memberAccountId,
       });
       toast.success(isEdit ? "Debt updated" : "Debt added");
       onClose();
@@ -1226,6 +1250,32 @@ export function DebtDialog({
               </SelectContent>
             </Select>
           </div>
+          {/* ADR-106: only shown once the institution has member accounts set up
+              (InstitutionDialog's "Member accounts" section) — for providers
+              that bill each household member separately. */}
+          {institutionId !== "none" &&
+          allMemberAccounts.some((a) => a.institution_id === institutionId) ? (
+            <div>
+              <Label>Whose account</Label>
+              <Select value={memberAccountId} onValueChange={setMemberAccountId}>
+                <SelectTrigger className="h-14 text-base">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="py-3 text-base">
+                    Joint / not specified
+                  </SelectItem>
+                  {allMemberAccounts
+                    .filter((a) => a.institution_id === institutionId)
+                    .map((a) => (
+                      <SelectItem key={a.id} value={a.id} className="py-3 text-base">
+                        {memberLabel(members.find((m) => m.id === a.member_id))}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           {/* ADR-068: a deduction that lands in an account can auto-pay this debt. */}
           <div>
             <Label>Funded by deduction</Label>
