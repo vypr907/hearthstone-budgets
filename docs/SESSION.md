@@ -178,3 +178,40 @@ the user or a future session with `gh` available.
 No schema change; no migration. No Playwright/TEST-household pass this
 session (same environment gap as prior sessions) — manual verification in
 the running app is still outstanding.
+
+## 2026-09-16 — `gh` CLI working again: retroactive Issues for the 5 fixes above
+`gh auth status` now succeeds (user restarted VS Code specifically to fix
+this). Created and immediately closed 5 GitHub Issues (#69–#73), one per
+item in the "SCRATCHPAD Next Steps" entry above, each referencing commit
+`0e6ebc8` (already implemented/pushed). Satisfies ADR-087's "actionable
+work = GitHub Issues" rule retroactively. No code change.
+
+## 2026-09-16 — Accounts & Balances: institution group header + watermark icon
+User feedback on item 4 above (institution grouping): make the group
+header more prominent with a collapse toggle, and de-emphasize the
+per-account institution icon.
+- `src/routes/app.accounts.tsx` — each institution group header is now a
+  full-width tappable button (`bg-muted/40`, rounded, bordered) showing a
+  32px `ObligationIcon`, the institution name, an account count, the
+  group subtotal, and a `ChevronDown` that rotates -90° when collapsed.
+  New `collapsedGroups` state (`Set<string>` of institution id /
+  `"__none__"`), all expanded by default; collapsed groups just skip
+  rendering their account cards.
+- `src/components/ObligationIcon.tsx` — new `ObligationWatermark`
+  component: renders the institution logo (or type/name-derived emoji
+  fallback) as a large, faint (`opacity-[0.09]`/`0.12`), absolutely
+  positioned background mark instead of a normal avatar — same visual
+  language as the oversized faint logo watermark already used on the
+  Everything page (`app.everything.tsx`), reused here rather than
+  duplicated.
+- Each account card's header row now uses this watermark (behind the
+  name/type text) in place of the old left-aligned `ObligationIcon`
+  avatar; the row and its siblings got `relative` (watermark is
+  `absolute`, first in paint order) and the card got `overflow-hidden`
+  so the oversized mark crops to the row instead of bleeding out —
+  exactly the stacking trick the Everything page's row cards already
+  rely on.
+- `tsc --noEmit` clean. No schema change; no ADR (presentation only). Not
+  yet checked in a running browser — recommend a quick `npm run dev` pass
+  (Codespace or outside-sandbox terminal) to confirm the watermark crop
+  and collapse toggle look right before considering this done.

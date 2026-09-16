@@ -48,12 +48,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Pencil, Plus, Search, TrendingUp } from "lucide-react";
+import { ChevronDown, Pencil, Plus, Search, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Account, AccountBalance, Debt, Institution, Transaction } from "@/lib/supabase";
 import { format, parseISO } from "date-fns";
-import { ObligationIcon, useInstitutionIndex } from "@/components/ObligationIcon";
+import {
+  ObligationIcon,
+  ObligationWatermark,
+  useInstitutionIndex,
+} from "@/components/ObligationIcon";
 import { TransactionDetail } from "@/routes/app.transactions";
 
 // ADR-105: deep-link to a specific account's detail dialog from another
@@ -116,6 +120,16 @@ function AccountsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [instFilter, setInstFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
+  // Institution groups are expanded by default; collapsed ones are tracked
+  // by group key ("__none__" for the no-institution bucket).
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const institutionById = useInstitutionIndex(institutions);
   const memberById = useMemo(
@@ -343,103 +357,133 @@ function AccountsPage() {
           </div>
         )}
 
-        <div className="space-y-4">
-          {groupedRows.map((group) => (
-            <div key={group.institutionId ?? "__none__"} className="space-y-2">
-              <div className="flex items-center justify-between px-1">
-                <SectionLabel>{group.institutionName}</SectionLabel>
-                <span className="text-sm font-semibold tabular-nums text-muted-foreground">
-                  {formatMoney(group.total)}
-                </span>
-              </div>
-              {group.accounts.map((a) => {
-                const b = balances[a.id];
-                return (
-                  <Card
-                    key={a.id}
-                    className="cursor-pointer"
-                    onClick={() => setViewing(a)}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-start gap-3">
-                        <ObligationIcon
-                          institution={institutionById[a.institution_id ?? ""]}
-                          name={`${a.name} ${a.account_type ?? ""}`}
-                          fallback="🏛️"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">
-                            {a.name}
-                            {accountLast4(a.account_number) ? (
-                              <span className="ml-1 font-normal text-muted-foreground">
-                                •••{accountLast4(a.account_number)}
-                              </span>
-                            ) : null}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {a.account_type || "Account"}
-                            {a.owner_member_id
-                              ? ` · ${memberLabel(memberById[a.owner_member_id])}`
-                              : members.length > 1
-                                ? " · joint"
-                                : ""}
-                            {b?.asOf
-                              ? ` · snapshot ${format(parseISO(b.asOf), "MMM d")}`
-                              : " · starting balance"}
-                          </p>
-
-                        </div>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditing(a);
-                          }}
-                          aria-label="Edit"
+        <div className="space-y-3">
+          {groupedRows.map((group) => {
+            const key = group.institutionId ?? "__none__";
+            const collapsed = collapsedGroups.has(key);
+            return (
+              <div key={key} className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(key)}
+                  className="flex w-full items-center gap-3 rounded-[12px] border bg-muted/40 px-3 py-2.5 text-left"
+                  aria-expanded={!collapsed}
+                >
+                  <ObligationIcon
+                    institution={group.institutionId ? institutionById[group.institutionId] : null}
+                    name={group.institutionName}
+                    fallback="🏛️"
+                    size={32}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold">
+                      {group.institutionName}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {group.accounts.length} account{group.accounts.length === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-base font-bold tabular-nums">
+                    {formatMoney(group.total)}
+                  </span>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                      collapsed ? "-rotate-90" : ""
+                    }`}
+                  />
+                </button>
+                {collapsed
+                  ? null
+                  : group.accounts.map((a) => {
+                      const b = balances[a.id];
+                      return (
+                        <Card
+                          key={a.id}
+                          className="cursor-pointer overflow-hidden"
+                          onClick={() => setViewing(a)}
                         >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <div className="rounded-[12px] bg-muted/50 p-2">
-                          <SectionLabel size="sub">Current</SectionLabel>
-                          <p className="text-xl font-extrabold tabular-nums">
-                            {formatMoney(b?.current ?? 0)}
-                          </p>
-                        </div>
-                        <div className="rounded-[12px] bg-muted/50 p-2">
-                          <SectionLabel size="sub">Spendable</SectionLabel>
-                          <p className="text-xl font-extrabold tabular-nums">
-                            {formatMoney(b?.spendable ?? 0)}
-                          </p>
-                        </div>
-                      </div>
+                          <CardContent className="p-3">
+                            <div className="relative flex items-start gap-3 overflow-hidden rounded-[10px]">
+                              <ObligationWatermark
+                                institution={institutionById[a.institution_id ?? ""]}
+                                name={`${a.name} ${a.account_type ?? ""}`}
+                                fallback="🏛️"
+                              />
+                              <div className="relative min-w-0 flex-1">
+                                <p className="truncate font-medium">
+                                  {a.name}
+                                  {accountLast4(a.account_number) ? (
+                                    <span className="ml-1 font-normal text-muted-foreground">
+                                      •••{accountLast4(a.account_number)}
+                                    </span>
+                                  ) : null}
+                                </p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {a.account_type || "Account"}
+                                  {a.owner_member_id
+                                    ? ` · ${memberLabel(memberById[a.owner_member_id])}`
+                                    : members.length > 1
+                                      ? " · joint"
+                                      : ""}
+                                  {b?.asOf
+                                    ? ` · snapshot ${format(parseISO(b.asOf), "MMM d")}`
+                                    : " · starting balance"}
+                                </p>
 
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <RecentActivity
-                          rows={recentByAccount[a.id] ?? []}
-                          institutionById={institutionById}
-                          transferTitleAccounts={transferTitleAccounts}
-                          onSelect={setDetail}
-                        />
-                      </div>
-                      <Button
-                        variant="outline"
-                        className="mt-2 h-10 w-full"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLogging(a);
-                        }}
-                      >
-                        <TrendingUp className="mr-2 h-4 w-4" /> Log new balance
-                      </Button>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          ))}
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="relative"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditing(a);
+                                }}
+                                aria-label="Edit"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              <div className="rounded-[12px] bg-muted/50 p-2">
+                                <SectionLabel size="sub">Current</SectionLabel>
+                                <p className="text-xl font-extrabold tabular-nums">
+                                  {formatMoney(b?.current ?? 0)}
+                                </p>
+                              </div>
+                              <div className="rounded-[12px] bg-muted/50 p-2">
+                                <SectionLabel size="sub">Spendable</SectionLabel>
+                                <p className="text-xl font-extrabold tabular-nums">
+                                  {formatMoney(b?.spendable ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <RecentActivity
+                                rows={recentByAccount[a.id] ?? []}
+                                institutionById={institutionById}
+                                transferTitleAccounts={transferTitleAccounts}
+                                onSelect={setDetail}
+                              />
+                            </div>
+                            <Button
+                              variant="outline"
+                              className="mt-2 h-10 w-full"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLogging(a);
+                              }}
+                            >
+                              <TrendingUp className="mr-2 h-4 w-4" /> Log new balance
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+              </div>
+            );
+          })}
         </div>
       </div>
 
