@@ -233,7 +233,24 @@ the edge.
   was no longer enough once the mark moved outside it.
 - `tsc --noEmit` clean. Still unverified in a running browser.
 
-## 2026-09-16 — Watermark follow-up #2: pin to top, not vertically centered
+## 2026-09-16 — Account detail dialog: footer overflow fix + button reshuffle
+User feedback on the SCRATCHPAD "Add transaction" button (item 2, added
+earlier this session): it was overflowing the dialog's bounds. Also asked
+to deprioritize "Log balance" and shrink "Edit" to icon-only.
+- `AccountDetailDialog` (`src/routes/app.accounts.tsx`) footer went from
+  4 buttons (Add transaction / Log balance / Edit / Close) to 3: forced
+  `flex-row flex-wrap` (was `DialogFooter`'s default
+  `flex-col-reverse`/`sm:flex-row` with no wrap, so 4 full-text buttons
+  in a row could exceed the dialog width) with `Add transaction`/`Close`
+  each `flex-1` and `Edit` now `size="icon"` (pencil only, `aria-label`
+  for accessibility).
+- "Log balance" moved out of the footer entirely, into the body: now a
+  `size="sm"` button sharing a `justify-between` row with
+  `InstitutionLoginButton`, right after `DetailGrid` (so it sits below
+  the "Linked debt" field, same spot `InstitutionLoginButton` already
+  occupied) — "across from" the Log In button when one exists, alone on
+  the right when it doesn't.
+- `tsc --noEmit` clean. Still unverified in a running browser.
 User caught it looking pinned to the top only on short cards (no
 transactions) and drifting down on taller ones (with transactions) — the
 `h-full` box was correctly spanning the full card, but `object-contain`'s

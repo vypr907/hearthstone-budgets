@@ -605,7 +605,12 @@ function AccountDetailDialog({
                 />
               ) : null}
             </DetailGrid>
-            <InstitutionLoginButton institution={institution} />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <InstitutionLoginButton institution={institution} />
+              <Button size="sm" variant="outline" onClick={() => onLogBalance(account)}>
+                <TrendingUp className="mr-2 h-4 w-4" /> Log balance
+              </Button>
+            </div>
             <DetailText label="Notes" value={account.notes} />
             <AccountBalanceHistory history={history} />
             <AccountAllTransactions
@@ -615,10 +620,10 @@ function AccountDetailDialog({
               onSelect={setTxDetail}
             />
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="flex-row flex-wrap gap-2">
             <Button
               variant="outline"
-              className="h-11"
+              className="h-11 flex-1"
               onClick={() => {
                 onClose();
                 openWithPreset({ accountId: account.id });
@@ -626,13 +631,16 @@ function AccountDetailDialog({
             >
               <Plus className="mr-2 h-4 w-4" /> Add transaction
             </Button>
-            <Button variant="outline" className="h-11" onClick={() => onLogBalance(account)}>
-              <TrendingUp className="mr-2 h-4 w-4" /> Log balance
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-11 w-11"
+              aria-label="Edit"
+              onClick={() => onEdit(account)}
+            >
+              <Pencil className="h-4 w-4" />
             </Button>
-            <Button variant="outline" className="h-11" onClick={() => onEdit(account)}>
-              <Pencil className="mr-2 h-4 w-4" /> Edit
-            </Button>
-            <Button className="h-11" onClick={onClose}>
+            <Button className="h-11 flex-1" onClick={onClose}>
               Close
             </Button>
           </DialogFooter>
