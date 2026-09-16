@@ -251,6 +251,8 @@ to deprioritize "Log balance" and shrink "Edit" to icon-only.
   occupied) — "across from" the Log In button when one exists, alone on
   the right when it doesn't.
 - `tsc --noEmit` clean. Still unverified in a running browser.
+
+## 2026-09-16 — Watermark follow-up #2: pin to top, not vertically centered
 User caught it looking pinned to the top only on short cards (no
 transactions) and drifting down on taller ones (with transactions) — the
 `h-full` box was correctly spanning the full card, but `object-contain`'s
@@ -263,3 +265,161 @@ the box got taller.
   fallback switched from `top-1/2 -translate-y-1/2` (vertical-center) to
   `top-0` (pinned top), for the same consistent behavior.
 - `tsc --noEmit` clean. Still unverified in a running browser.
+
+## 2026-09-16 — Milestone: reconciled account/debt against real Jul/Aug/Sep statements
+User added `docs/planning/milestone_JUL.pdf`/`_AUG.pdf`/`_SEP.pdf` and
+asked to correct the Milestone account/debt to match. Direct continuation
+of the 9/15 ADR-102-addendum linking migration, whose own comment
+explicitly punted on exact numbers pending real statements.
+- **Root cause of the wrong balance**: a leftover `account_balances`
+  snapshot (2026-07-09, $298.45 — logged 2026-07-28, the same day the debt
+  was first entered, before it was linked to this account) was silently
+  overriding `accounts.starting_balance` as the anchor
+  (`computeBalances` always prefers the latest snapshot). Confirmed with
+  the user and deleted.
+- **Two real payments already existed** in `transactions` (`linked_debt_id`
+  tagged, on the *funding* accounts — Venmo 7/28 -$20, One Checking 9/11
+  cleared 9/15 -$20) but were never mirrored onto the Milestone account
+  itself, since both predate the 9/15 account link. The 7/28 one matches
+  the statement's own 07/27 "PAYMENT RECEIVED" (same event, not a
+  duplicate); the 9/11 one postdates the Sept 9 statement close, not yet
+  on any statement. Both given a proper mirror leg + shared
+  `transfer_group_id`, matching the exact shape
+  `useMarkSubmitted`/`useMarkCleared` produce.
+- Added the 3 statement purchases missing from the ledger entirely: `06/15
+  FRED M FUEL #9224 -$10.00` (Auto & Transport), `07/29 CRUMB.PET TAMPA FL
+  -$8.95` and `08/03 CRUMB NEWARK DE -$8.95` (both Pets, user's call —
+  ambiguous merchant names). Descriptions kept verbatim from the statement.
+- Reconciled anchor: `accounts.starting_balance` -268.00 → **-288.45**
+  (July statement's Previous Balance). Running the full ledger forward
+  from there reproduces all three statement closing balances exactly
+  ($298.45 July, $296.35 Aug **and** Sept) and lands on a current true
+  balance of **-$276.35** (the 9/11 payment moves it past Sept's own
+  close).
+- `debts` row (`remaining_balance` 268.00→276.35, `minimum_payment`
+  10.00→20.00, `next_due_date` 2026-08-08→2026-10-08) kept in sync with
+  the account — still the baseline several mutations read before writing
+  back (Issue #67), even though display now derives from the account.
+- Deliberately did **not** touch `payment_status`/`cycle_paid_to_date`
+  (the existing "Sync stored status" button on the Milestone debt's detail
+  dialog — `useSyncStoredStatus`, `src/lib/payments.ts` — reconciles those
+  from the ledger; told the user to tap it once after running the SQL) or
+  `opening_arrears`/`arrears_as_of`/`arrears_paid_to_date` (no evidence
+  they're wrong, arrears walk is clamped ≥ 0 regardless).
+- `scripts/migrations/2026-09-16-milestone-statement-reconciliation.sql`
+  (+ `.verify.sql`) — data-only, no schema change, no new ADR. Not yet
+  applied — user runs it manually in the Supabase SQL Editor.
+- CreditOne and Mission Lane are out of scope (no statements provided this
+  session) — same stray-snapshot risk hasn't been checked for either.
+
+## 2026-09-16 — CreditOne & Mission Lane: reconciled account/debt against real statements
+User added `docs/planning/CreditOne1.pdf` (Jun 26-Jul 25 close),
+`CreditOne2.pdf` (Jul 26-Aug 25 close), `CreditOne3.pdf` (May 26-Jun 25
+close — earliest despite its number), and
+`statement_missionLane_JUL/AUG/SEP.pdf`. Same exercise as the Milestone
+reconciliation above, for the other two debts that migration's own
+comment flagged as provisional. GTC stays out of scope (debt-only, no
+matching account).
+- **Same stray-snapshot bug as Milestone, confirmed on both**: a
+  leftover `account_balances` row logged 2026-07-28 (the day both debts
+  were first entered, before either was linked) was overriding
+  `starting_balance` — CreditOne's ($309.55, 7/9) and Mission Lane's
+  ($1,485.81, 7/24). Both deleted.
+- **New bug found on Mission Lane**: its 2 existing "Credit Protect Fee"
+  transactions (751fac58/b5c9bc81, already correctly matching the Aug/Sep
+  statements) carried `linked_debt_id` despite not following the `"Fee:"`
+  naming convention `isFeeTransaction()`/ADR-046 needs to exclude a fee
+  from payment-cycle math — almost certainly why the debt's stored
+  `cycle_paid_to_date` was $46.12, exactly the sum of those two fees, as
+  if they'd been paid toward the minimum. Cleared `linked_debt_id` on
+  both per the user (matches every other fee/purchase here: plain account
+  transactions, no `linked_debt_id`).
+- **4 real payments already in the ledger** (`linked_debt_id`-tagged, on
+  funding accounts) were never mirrored onto their card's own account —
+  all four predate their debt being linked (9/15): CreditOne 7/20 -$30
+  (matches CreditOne1's statement) and 8/31 -$60 (after CreditOne2's
+  close, not on any statement); Mission Lane 7/17 -$250 (matches Aug
+  statement) and 8/28 -$121.68 (matches Sept statement). Each given a
+  mirror leg + shared `transfer_group_id`.
+- **2 bounced Mission Lane payments** ($102.93 6/27→7/1, $50.00
+  7/27→7/30, each reversed days later with a $41 fee) were never recorded
+  at all. Per the user: skipped the wash pair (net zero), recorded only
+  the real $41 fee each time.
+- **2 Mission Lane purchases linked to their existing bills**, per the
+  user: `GOOGLE *SOLO YOUR GIG` $18.99 → bill **Solo**, category Side Gig;
+  `GOOGLE *Google One` $10.54 → bill **Google One**, category Software &
+  Tech (both `linked_bill_id`, not just categorized).
+- Added every other real statement fee/interest/credit line as a plain
+  account transaction (Credit Protect, Late Fee, Annual Fee, Express
+  Payment Fee, Interest Charge, Cash Back Credit, two tiny CreditOne
+  finance-charge/credit-protection adjustments) — reused existing
+  categories throughout (Fees, Interest Charge, Cash Back / Rewards,
+  Credit), none invented.
+- Reconciled anchors: CreditOne `starting_balance` -219.55 → **-299.14**
+  (CreditOne3's Previous Balance); Mission Lane -1271.89 → **-1709.55**
+  (July statement's Previous Balance). Running each ledger forward
+  reproduces every statement closing balance exactly (CreditOne: $339.90
+  / $289.87 / $338.63; Mission Lane: $1,735.81 / $1,600.87 / $1,541.36)
+  and lands on current true balances of **$278.63** (CreditOne, the 8/31
+  payment moves it past CreditOne2's own close) and **$1,541.36** (Mission
+  Lane — no payment known after the Sept 2 close, so it matches that
+  statement exactly).
+- `debts` rows kept in sync: CreditOne `remaining_balance` 219.55→278.63,
+  `minimum_payment` 30.00→90.00, `next_due_date` 2026-08-21→2026-09-21;
+  Mission Lane `remaining_balance` 1318.01→1541.36, `minimum_payment`
+  100.00→78.17, `next_due_date` 2026-08-27→2026-09-27 — both set from
+  each debt's latest known statement.
+- Deliberately did **not** touch `payment_status`/`cycle_paid_to_date`/
+  `opening_arrears`/`arrears_as_of`/`arrears_paid_to_date` — same
+  "Sync stored status" button as Milestone; told the user to tap it on
+  each debt's detail dialog afterward if it appears (more likely to
+  actually appear for Mission Lane this time, since the `linked_debt_id`
+  fix changes what the ledger derives).
+- `scripts/migrations/2026-09-16-creditone-missionlane-reconciliation.sql`
+  (+ `.verify.sql`) — data-only, no schema change, no new ADR. Not yet
+  applied — user runs it manually in the Supabase SQL Editor.
+
+## 2026-09-16 — CreditOne/Mission Lane migration verified live
+User ran the SQL and tapped "Sync stored status" on both debts. Verified
+via the read-only MCP: `debts.remaining_balance`/`minimum_payment`/
+`next_due_date` match exactly (CreditOne 278.63/90.00/2026-09-21; Mission
+Lane 1541.36/78.17/2026-09-27); both accounts' `starting_balance` + full
+ledger reproduce those same totals (15 transactions each); both stray
+snapshots gone; Mission Lane's 2 fee rows no longer carry `linked_debt_id`.
+`payment_status` synced to `unpaid` with `cycle_paid_to_date` reset to
+`0.00` on both — correct, since neither has a payment in the current
+(September) calendar-month cycle yet.
+
+## 2026-09-16 — Debt detail: show the linked account's activity too
+User asked 3 workflow questions after the reconciliations, to make sure
+the debt/account pairs don't drift again: (1) does Add Transaction work
+normally for a purchase on a linked debt's account, (2) do Submit
+Payment/Mark Cleared/pending still work on the Debts and Everything
+screens, (3) would it be better if both the account and the debt showed
+all transactions.
+- (1) and (2) confirmed working by reading the code, no change needed:
+  `AddTransactionFab`'s `submitExpense()` writes a plain transaction with
+  no `linked_debt_id` unless explicitly linked, and `effectiveDebtBalance`
+  (`src/lib/balances.ts`) already derives a linked debt's balance from
+  exactly those account transactions. `usePayFlow` → `useMarkSubmitted`/
+  `useMarkCleared` (`src/lib/payments.ts`) already write both the
+  `linked_debt_id` cycle-math row and a mirror credit on the linked
+  account (shared `transfer_group_id`) — the "Part 0" fix from the
+  ADR-102 addendum session, confirmed implemented.
+- (3) was a real gap: `RecentDebtTransactions`
+  (`src/routes/app.debts.tsx`) only ever filtered by `linked_debt_id` —
+  a linked debt's own detail page never showed the plain purchases that
+  actually make up its derived balance, even though the Account page
+  already showed everything. New `LinkedAccountActivity` component
+  (same file, next to `RecentDebtTransactions`) shows the linked
+  account's full transaction list read-only (no Delete/Correct/Reverse —
+  those are payment-specific and don't apply to a purchase; editing stays
+  on the Account page). Wired into `DebtDetailDialog` right after the
+  existing "Recent transactions" section, gated on `debt.linked_account_id`
+  specifically (not the ADR-105 institution-match fallback `account` var,
+  which can be truthy for an unlinked debt too) — so only Milestone/
+  CreditOne/Mission Lane get the new section; every other debt is
+  unchanged. Reuses the same month-stepper prop and `TransactionDetail`
+  tap-to-view pattern `RecentDebtTransactions` already uses.
+- `tsc --noEmit` clean, 214/214 tests pass. No schema change, no ADR
+  (pure UI addition). Not yet checked in a running browser.

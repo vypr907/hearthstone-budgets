@@ -798,6 +798,13 @@ export function DebtDetailDialog({
             month={isCurrentView ? undefined : targetMonthKey}
           />
 
+          {debt.linked_account_id && account ? (
+            <LinkedAccountActivity
+              accountId={account.id}
+              month={isCurrentView ? undefined : targetMonthKey}
+            />
+          ) : null}
+
           <DebtAdjustments debt={debt} />
 
           {debt.date_paid_off && (
@@ -1651,6 +1658,59 @@ function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string })
               </div>
             );
           })}
+        </div>
+      )}
+
+      <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />
+    </div>
+  );
+}
+
+/**
+ * ADR-102 addendum follow-up: a linked debt's balance is derived from its
+ * account's own transactions, but `RecentDebtTransactions` above only shows
+ * `linked_debt_id` rows (payments/advances) — never the plain purchases that
+ * actually make up the balance. This shows the account's full activity too,
+ * read-only (editing/deleting a purchase stays on the Account page; Correct/
+ * Reverse only make sense for an actual payment row, not a purchase).
+ */
+function LinkedAccountActivity({ accountId, month }: { accountId: string; month?: string }) {
+  const { data: transactions = [] } = useTransactions();
+  const [detail, setDetail] = useState<Transaction | null>(null);
+
+  const rows = useMemo(() => {
+    const onAccount = transactions
+      .filter((t) => t.account_id === accountId)
+      .sort((a, b) => (b.transaction_date ?? "").localeCompare(a.transaction_date ?? ""));
+    if (month) return onAccount.filter((t) => (t.transaction_date ?? "").slice(0, 7) === month);
+    return onAccount.slice(0, 10);
+  }, [transactions, accountId, month]);
+
+  return (
+    <div>
+      <SectionLabel>
+        {month ? `Card activity · ${monthLabel(month)}` : "Card activity"}
+      </SectionLabel>
+      {rows.length === 0 ? (
+        <EmptyState className="mt-1 py-2 text-left">
+          {month ? "No activity this month." : "No activity logged yet."}
+        </EmptyState>
+      ) : (
+        <div className="mt-1 divide-y divide-border/50">
+          {rows.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className="-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-2 rounded px-1 py-2 text-left text-sm hover:bg-muted/50"
+              onClick={() => setDetail(t)}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {t.transaction_date?.slice(0, 10)}
+                {t.description ? ` · ${t.description}` : ""}
+              </span>
+              <span className="shrink-0 tabular-nums">{formatMoney(Number(t.amount ?? 0))}</span>
+            </button>
+          ))}
         </div>
       )}
 
