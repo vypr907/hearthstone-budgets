@@ -1,3 +1,188 @@
+## 2026-09-16 — ADR-106: institution links, per-member accounts, parent/child institutions, bill pause
+
+Four related additions to how institutions/bills/debts model real-world
+complexity, interviewed and scoped before implementation (surfaced while
+setting up "Yukon Eye" and noticing Amazon/Prime were unrelated
+institutions).
+
+* **Multiple links per institution** — new `institution_links` table (Bill
+  Pay / Patient Portal [medical institutions only] / custom Other),
+  alongside the existing `login_url` ("Main site"). The Log In button now
+  prefers a Bill Pay link, falling back to the Main site, and renders one
+  extra button per other stored link.
+* **Per-member accounts at an institution** — new
+  `institution_member_accounts` table (account/patient #, login username
+  per household member), for providers that bill each spouse separately.
+  Bills and Debts gain an optional `institution_member_account_id`, shown
+  as a small owner chip on list rows and grouped in the Institution detail
+  view.
+* **Institution parent/child** — new `institutions.parent_institution_id`,
+  so Prime/Kindle/Audible can be marked as part of Amazon;
+  `computeInstitutionTotals` now rolls a child's accounts/bills/debts into
+  its parent's total. Children are hidden from the top-level Institutions
+  list (avoiding double-counting) but stay reachable via the parent's new
+  "Sub-institutions" section.
+* **Bill Active/Inactive toggle** — `bills.is_active` already existed in
+  the database and was already read in 4 places, but had no UI to set it;
+  added a `Switch` to `BillDialog` (copying the existing auto-transfer
+  pause pattern), plus a dim/"Inactive" treatment on list rows.
+* `scripts/migrations/2026-09-16-institution-links-members-parent.sql` —
+  applied and verified live (2 new RLS-protected tables, 3 new nullable
+  columns). `tsc`/`vitest` clean throughout (223/223 tests, 8 new). Not
+  yet checked in a live browser — this sandbox can't reach the dev server.
+
+## 2026-09-16 — Credit accounts: fixed Current/Spendable sign and math
+
+* A credit account's "Current" showed as a raw negative number and
+  "Spendable" showed the raw negative running balance instead of available
+  credit.
+* New `accountDisplayBalances()` helper: for a credit account, "Current"
+  now drops the sign (a credit balance is always "what you owe," same as a
+  real card statement's Balance) and "Spendable" becomes actual available
+  credit (`credit_limit - owed`), only going negative when genuinely over
+  the limit. Every other account type is unchanged.
+
+## 2026-09-16 — Debt detail: show the linked account's own activity too
+
+* Confirmed by reading the code (no change needed): a purchase on a linked
+  debt's account already flows correctly into its derived balance with no
+  double-count risk, and the Submit/Clear pay flow already mirrors
+  correctly onto the linked account on both the Debts and Everything
+  screens.
+* Found a real gap: a linked debt's own detail page only ever showed
+  `linked_debt_id` rows (payments/advances) — never the plain purchases
+  that make up its derived balance, even though the Account page already
+  showed everything. New read-only `LinkedAccountActivity` section on the
+  Debt detail dialog shows the linked account's full transaction list
+  (Milestone/CreditOne/Mission Lane only; every other debt is unaffected).
+
+## 2026-09-16 — CreditOne & Mission Lane: reconciled account/debt against real statements
+
+* Same stray-snapshot bug found on both (confirmed via the same mechanism
+  as Milestone below) — deleted.
+* New bug found on Mission Lane: 2 existing "Credit Protect Fee"
+  transactions were tagged `linked_debt_id` without following the `"Fee:"`
+  naming convention ADR-046 needs to exclude a fee from payment-cycle math
+  — almost certainly why the debt's stored `cycle_paid_to_date` read
+  exactly $46.12, the sum of those two fees, as if they'd been paid toward
+  the minimum. Cleared `linked_debt_id` on both.
+* 4 real payments already in the ledger were mirrored onto their card's
+  own account for the first time; 2 bounced Mission Lane payments (posted,
+  then reversed with a $41 fee) were recorded as just the real fee,
+  skipping the net-zero wash pair. 2 Mission Lane purchases linked to
+  their existing bills (Solo, Google One) per the user, rather than just
+  categorized.
+* Reconciled anchors reproduce every known statement close exactly and
+  land on current true balances of **$278.63** (CreditOne) and
+  **$1,541.36** (Mission Lane).
+* `scripts/migrations/2026-09-16-creditone-missionlane-reconciliation.sql`
+  — applied and verified live; `payment_status`/`cycle_paid_to_date`
+  synced via the existing "Sync stored status" button.
+
+## 2026-09-16 — Milestone: reconciled account/debt against real Jul/Aug/Sep statements
+
+* Root cause of a wrong displayed balance: a leftover `account_balances`
+  snapshot from before the account was linked to its debt was silently
+  overriding `starting_balance` as the balance anchor (`computeBalances`
+  always prefers the latest snapshot) — deleted.
+* Added the 3 statement purchases and mirrored 2 real payments (one
+  already logged on a funding account, one made after the last statement)
+  that were missing from the account's own ledger. Reconciled anchor
+  (`-268.00 → -288.45`) reproduces all three statement closing balances
+  exactly and lands on a current true balance of **-$276.35**.
+* `debts.remaining_balance`/`minimum_payment`/`next_due_date` kept in sync
+  with the account — still the baseline several mutations read before
+  writing back.
+* `scripts/migrations/2026-09-16-milestone-statement-reconciliation.sql` —
+  applied and verified live.
+
+## 2026-09-16 — Accounts & Balances: institution grouping polish
+
+* Institution group headers are now a full-width tappable bar (icon, name,
+  account count, subtotal, collapse chevron) instead of a plain label;
+  collapsed groups hide their account cards.
+* New `ObligationWatermark` component: an institution's logo/icon renders
+  as a large, faint watermark spanning the full account card (reusing the
+  treatment already used on the Everything page) instead of a small
+  avatar — refined over several passes (bigger, right-of-center, pinned to
+  the top instead of vertically centering as the card got taller).
+* Account detail dialog footer trimmed from 4 buttons to 3 after it
+  started overflowing the dialog bounds (`Add transaction`/`Close`
+  `flex-1`, `Edit` icon-only); "Log balance" moved into the body, next to
+  the institution Log In button.
+
+## 2026-09-16 — SCRATCHPAD "Next Steps": 5 small UI/UX fixes
+
+* **Advances section** on a debt's detail now gates on
+  `debt_type === "advance"` (was gated only on `!linked_account_id`, so it
+  showed for every debt type).
+* **Add Transaction preset support** — new
+  `AddTransactionPresetProvider`/`useAddTransactionPreset`
+  (`src/components/AddTransactionPreset.tsx`); "Add transaction" buttons
+  on Account and Institution detail now open pre-filled instead of
+  requiring a manual reselect.
+* **Clickable link between a linked debt and its account (ADR-105)** —
+  new `?open=<id>` deep-link convention on `/app/accounts` and
+  `/app/debts`; a linked debt's Account field and an account's reverse
+  "Linked debt" field are now clickable in both directions.
+* **Accounts & Balances grouped by institution** — always clustered by
+  institution with a per-group subtotal and a grand total (was one flat
+  list).
+* **Dashboard tap-to-see breakdown** — each of the 4
+  `StatusBreakdownCard` rows (Paid so far/Remaining/Pending/Overdue) is
+  now a tap target opening a small popover of the matching bills/debts.
+* Retroactive GitHub Issues (#69–#73) created and closed for these 5 items
+  once `gh` CLI access was restored later the same day, per ADR-087.
+
+## 2026-09-16 — ADR-102 addendum: credit accounts linked to their debts, derived balance
+
+* Milestone/CreditOne/Mission Lane credit accounts were almost entirely
+  inert while their matching debts tracked "owed" purely via
+  Advance/Adjustment/Payment rows — no "purchase" concept existed
+  anywhere, so the two numbers could (and had) drifted apart. Decision:
+  the **account becomes the source of truth** — a purchase is just a
+  normal expense transaction on the account; a linked debt's
+  `remaining_balance` is now *derived* from its account, never
+  independently written (`effectiveDebtBalance()`, same "derived, never
+  stored" shape as ADR-027/ADR-036).
+* Found and fixed mid-plan: last session's account-mirroring only covered
+  the secondary "Log a payment" dialog, not the everyday tap-to-pay
+  Submit/Clear flow actually used day to day. `useMarkSubmitted`/
+  `useMarkCleared` now mirror onto a linked debt's account too, with the
+  shared `transfer_group_id` on both rows (not just the mirror) — closes
+  Issue #65 for every payment path.
+* New `useEffectiveDebts()` display-only hook swapped into 7 pure-display
+  routes; `app.debts.tsx`/`app.everything.tsx` (which also mutate) keep
+  the raw debt object and compute a local display-only derived value
+  instead, since several existing mutations still read `remaining_balance`
+  client-side for a read-then-write (Issue #67).
+* `DebtDialog`: "Remaining balance" goes read-only once linked; minimum
+  payment stays independently editable.
+* `scripts/migrations/2026-09-15-credit-debt-account-links.sql` links all
+  three accounts and anchors each `starting_balance` so the first derived
+  read matched what was already trusted — explicitly **not** a
+  statement-accurate fix, just continuity, pending real-statement
+  reconciliation (above). Applied and verified live 2026-09-16: all 3
+  anchors match, GTC (debt-only) untouched, Mission Lane's 2 pre-existing
+  transactions plus its anchor reproduce the pre-migration total exactly.
+
+## 2026-09-16 — Cleo advance debt: corrected balance ($55 → $110)
+
+* Two $55 advances (9/4, 9/5) were only showing as one — the second write
+  overwrote the first because it landed 16 seconds later, before this
+  session's ADR-101 atomic-RPC fix existed (applied 9/11). A missing $40
+  advance (7/9) and a double-counted $17.98 Express Fee (entered as both
+  an Adjustment and a payment transaction) were also found and corrected
+  mid-investigation, once the user caught an error in the first draft.
+* Final correction: adds the missing 7/9 $40 advance, removes the $17.98
+  double-entry, adds two proper $8.99 `Fee:` transactions dated 9/13
+  (replacing the erroneous single entry), sets
+  `remaining_balance`/`minimum_payment` to **$110.00** (advances
+  40+40+55+55=190 minus real repayments 40+40=80). No schema change.
+* `scripts/migrations/2026-09-15-cleo-advance-fix.sql` (+ `.verify.sql`)
+  — written and arithmetic-verified independently two ways; not yet
+  confirmed applied.
+
 ## 2026-09-15 — Fixed the recurring "pre-existing" `@capacitor/browser` tsc error
 
 * Turned out not to be a code bug: `InstitutionLoginButton.tsx`'s dynamic
