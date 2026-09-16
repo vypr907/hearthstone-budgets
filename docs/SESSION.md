@@ -232,3 +232,17 @@ the edge.
   above the watermark in the CSS stacking order — the header row alone
   was no longer enough once the mark moved outside it.
 - `tsc --noEmit` clean. Still unverified in a running browser.
+
+## 2026-09-16 — Watermark follow-up #2: pin to top, not vertically centered
+User caught it looking pinned to the top only on short cards (no
+transactions) and drifting down on taller ones (with transactions) — the
+`h-full` box was correctly spanning the full card, but `object-contain`'s
+default `object-position: 50% 50%` was centering the actual logo *within*
+that tall box, so it visually crept toward the card's vertical middle as
+the box got taller.
+- `ObligationWatermark` (`src/components/ObligationIcon.tsx`) — logo
+  image gained `object-top` alongside `object-contain`, anchoring the
+  rendered logo to the top of its box regardless of box height. Emoji
+  fallback switched from `top-1/2 -translate-y-1/2` (vertical-center) to
+  `top-0` (pinned top), for the same consistent behavior.
+- `tsc --noEmit` clean. Still unverified in a running browser.

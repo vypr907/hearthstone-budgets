@@ -65,7 +65,7 @@ export function ObligationWatermark({
         aria-hidden
         loading="lazy"
         className={cn(
-          "pointer-events-none absolute left-[58%] top-0 h-full w-36 -translate-x-1/2 select-none object-contain opacity-[0.10]",
+          "pointer-events-none absolute left-[58%] top-0 h-full w-36 -translate-x-1/2 select-none object-contain object-top opacity-[0.10]",
           className,
         )}
       />
@@ -78,7 +78,7 @@ export function ObligationWatermark({
     <span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute left-[58%] top-1/2 -translate-x-1/2 -translate-y-1/2 select-none text-8xl leading-none opacity-[0.12]",
+        "pointer-events-none absolute left-[58%] top-0 -translate-x-1/2 select-none text-8xl leading-none opacity-[0.12]",
         className,
       )}
     >
