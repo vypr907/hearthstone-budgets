@@ -119,3 +119,16 @@
     Playwright pass against the TEST household (link a throwaway debt +
     account, log a purchase, submit→clear a payment, reverse it, edit it)
     before fully trusting this against the 3 real linked debts.
+
+## 2026-09-16 — Credit-card/account linking migration verified live
+- Ran `scripts/migrations/2026-09-15-credit-debt-account-links.sql` was
+  confirmed by the user; verified all 4 checks via the read-only MCP
+  (`.verify.sql` queries): Milestone/CreditOne/Mission Lane linked to the
+  right accounts, each account's `starting_balance` matches the anchor
+  math exactly (-268.00 / -219.55 / -1271.89), GTC untouched, and Mission
+  Lane's 2 pre-existing transactions plus its anchor reproduce the
+  pre-migration $1,318.01 exactly — no balance jump on any of the three.
+- ADR-102: linking is live. Next step is the user's own manual smoke
+  check in the running app (confirm displayed balances read unchanged,
+  then log one real purchase on each linked account and confirm the
+  debt's shown balance moves by exactly that amount) — not yet done.
