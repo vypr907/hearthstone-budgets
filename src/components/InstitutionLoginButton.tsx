@@ -29,25 +29,54 @@ async function openInBrowser(url: string) {
  * all. `links` is optional so callers that haven't wired it up yet still
  * get the pre-ADR-106 single "Log In" behavior unchanged.
  *
- * When the institution uses Google sign-in and has a `login_username`, a
- * small hint shows which account to pick (the app can't force-select it in
- * Google's chooser).
+ * ADR-106 addendum: `usernameHint` lets a caller show "Use: <username>"
+ * for a specific household member's own login (e.g. per-member sections at
+ * a merged institution like Alpine Medical/Labcorp) — shown regardless of
+ * `sign_in_with_google`, since none of the real institutions this was built
+ * for actually use Google sign-in, they just have a distinct real username
+ * per person. Falls back to the original Google-chooser-only hint when
+ * `usernameHint` isn't passed, so every existing call site is unchanged.
+ * `compact` renders an icon-only "Log In" button with the hint as a native
+ * title tooltip instead of visible text, and omits the extra-link buttons
+ * (Patient Portal etc. aren't member-specific — shown once, not per person).
  */
 export function InstitutionLoginButton({
   institution,
   links = [],
+  usernameHint,
+  compact = false,
 }: {
   institution?: Institution | null;
   links?: InstitutionLink[];
+  usernameHint?: string | null;
+  compact?: boolean;
 }) {
   const billPayUrl = links.find((l) => l.kind === "bill_pay")?.url?.trim();
   const loginUrl = billPayUrl || institution?.login_url?.trim();
-  const extraLinks = links.filter((l) => l.kind !== "bill_pay" && l.url?.trim());
+  const extraLinks = compact ? [] : links.filter((l) => l.kind !== "bill_pay" && l.url?.trim());
   if (!loginUrl && extraLinks.length === 0) return null;
 
-  const username = institution?.login_username?.trim();
-  const hint =
-    institution?.sign_in_with_google && username ? `Sign in with Google — use ${username}` : null;
+  const hintUsername = usernameHint?.trim() || institution?.login_username?.trim();
+  const hint = usernameHint?.trim()
+    ? `Use: ${usernameHint.trim()}`
+    : institution?.sign_in_with_google && hintUsername
+      ? `Sign in with Google — use ${hintUsername}`
+      : null;
+
+  if (compact) {
+    return loginUrl ? (
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-7 w-7"
+        title={hint ?? "Log In"}
+        aria-label={hint ?? "Log In"}
+        onClick={() => openInBrowser(loginUrl)}
+      >
+        <LogIn className="h-4 w-4" />
+      </Button>
+    ) : null;
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2">

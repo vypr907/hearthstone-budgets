@@ -4,6 +4,7 @@ import {
   accountInMemberView,
   computeBalances,
   computeInstitutionTotals,
+  isDebtPaidOff,
   isSpendableAccount,
   spendableContribution,
 } from "./balances";
@@ -261,5 +262,22 @@ describe("computeInstitutionTotals parent/child rollup (ADR-106)", () => {
     ];
     const totals = computeInstitutionTotals("prime", [], {}, [], debts, [parent, child]);
     expect(totals.currentBalance).toBe(30);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* isDebtPaidOff — single source of truth (Aurora Audiology bug class) */
+/* ------------------------------------------------------------------ */
+
+describe("isDebtPaidOff", () => {
+  it("a non-advance debt is paid off once its balance is <= 0", () => {
+    expect(isDebtPaidOff({ debt_type: "credit card", date_paid_off: null }, 0)).toBe(true);
+    expect(isDebtPaidOff({ debt_type: "credit card", date_paid_off: null }, -5)).toBe(true);
+    expect(isDebtPaidOff({ debt_type: "loan", date_paid_off: null }, 0.01)).toBe(false);
+  });
+
+  it("an advance debt is only paid off once date_paid_off is stamped, even at a $0 balance", () => {
+    expect(isDebtPaidOff({ debt_type: "advance", date_paid_off: null }, 0)).toBe(false);
+    expect(isDebtPaidOff({ debt_type: "advance", date_paid_off: "2026-01-01" }, 0)).toBe(true);
   });
 });

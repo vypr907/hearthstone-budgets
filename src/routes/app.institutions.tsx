@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
 import {
   useInstitutions,
@@ -15,7 +15,9 @@ import {
 import { useHouseholdMembers, memberLabel } from "@/lib/household";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/format";
-import { computeBalances, computeInstitutionTotals } from "@/lib/balances";
+import { computeBalances, computeInstitutionTotals, isDebtPaidOff } from "@/lib/balances";
+import { internalTransferIds } from "@/lib/internal-transfers";
+import { setTxPreFilter } from "@/lib/tx-filter-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,12 +28,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Pencil, Plus } from "lucide-react";
+import { CheckCircle2, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
-import type { Bill, Debt, Institution } from "@/lib/supabase";
+import type { Bill, Debt, Institution, Transaction } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
+import { TransactionDetail } from "@/routes/app.transactions";
 import { useAddTransactionPreset } from "@/components/AddTransactionPreset";
 import { formatTypeLabel } from "@/lib/visual-meta";
 import {
@@ -223,31 +226,103 @@ function InstitutionsPage() {
   );
 }
 
+/** Jan 1 of the current calendar year — matches Year in Review/Monthly Summary elsewhere. */
+function thisYearStartISO(): string {
+  return `${new Date().getFullYear()}-01-01`;
+}
+
+/**
+ * Every real-spend (outflow, non-internal-transfer, ADR-089) transaction at
+ * an institution — bill/debt payments already inherit the payable's
+ * `institution_id` at write time (ADR-065), so this one filter already
+ * covers bills/debts/plain expenses together. `since` optionally scopes to
+ * on/after that date (calendar-year cutoff); omitted means all time.
+ */
+function spendTransactions(
+  institutionId: string,
+  transactions: Transaction[],
+  internal: Set<string>,
+  since?: string,
+): Transaction[] {
+  return transactions.filter(
+    (t) =>
+      t.institution_id === institutionId &&
+      !(t.transfer_group_id && internal.has(t.transfer_group_id)) &&
+      (!since || (t.transaction_date ?? "") >= since) &&
+      -Number(t.amount ?? 0) > 0,
+  );
+}
+
+const sumSpend = (txns: Transaction[]) =>
+  txns.reduce((sum, t) => sum + -Number(t.amount ?? 0), 0);
+
 /**
  * ADR-106 addendum: bucket an institution's bills+debts TOGETHER by which
  * member's account they belong to, with one combined total per person —
  * e.g. Alpine Medical shows a "Steven" section (his bills + debts + total)
  * and a "Stephanie" section (hers), not a separate Bills-grouped-by-member
  * section and a separate Debts-grouped-by-member section.
+ *
+ * Also buckets the institution's own spend transactions per member, via
+ * each transaction's `linked_bill_id`/`linked_debt_id` → that bill/debt's
+ * own member-account. A transaction with no bill/debt link (a plain
+ * purchase) can't be attributed to a person and lands in the same
+ * "Joint / not specified" bucket as unassigned bills/debts, so the
+ * buckets' spend always sums to the institution total.
  */
 function groupObligationsByMember(
+  institutionId: string,
   bills: Bill[],
   debts: Debt[],
+  transactions: Transaction[],
+  internal: Set<string>,
   labelFor: (accountId: string | null | undefined) => string,
-): Array<{ label: string; bills: Bill[]; debts: Debt[]; total: number }> {
+): Array<{
+  label: string;
+  accountId: string | null;
+  bills: Bill[];
+  debts: Debt[];
+  total: number;
+  spentThisYear: number;
+  spentAllTime: number;
+}> {
   const map = new Map<string, { bills: Bill[]; debts: Debt[] }>();
   const bucket = (key: string) => map.get(key) ?? map.set(key, { bills: [], debts: [] }).get(key)!;
   for (const b of bills) bucket(b.institution_member_account_id ?? "__joint__").bills.push(b);
   for (const d of debts) bucket(d.institution_member_account_id ?? "__joint__").debts.push(d);
+
+  const billKey = new Map(bills.map((b) => [b.id, b.institution_member_account_id ?? "__joint__"]));
+  const debtKey = new Map(debts.map((d) => [d.id, d.institution_member_account_id ?? "__joint__"]));
+  const thisYearStart = thisYearStartISO();
+  const spendByKey = new Map<string, { year: number; all: number }>();
+  for (const t of spendTransactions(institutionId, transactions, internal)) {
+    const key =
+      (t.linked_bill_id && billKey.get(t.linked_bill_id)) ||
+      (t.linked_debt_id && debtKey.get(t.linked_debt_id)) ||
+      "__joint__";
+    if (!map.has(key)) bucket(key);
+    const entry = spendByKey.get(key) ?? { year: 0, all: 0 };
+    const amount = -Number(t.amount ?? 0);
+    entry.all += amount;
+    if ((t.transaction_date ?? "") >= thisYearStart) entry.year += amount;
+    spendByKey.set(key, entry);
+  }
+
   return [...map.entries()]
-    .map(([key, group]) => ({
-      label: labelFor(key === "__joint__" ? null : key),
-      bills: group.bills,
-      debts: group.debts,
-      total:
-        group.bills.reduce((sum, b) => sum + Number(b.amount ?? 0), 0) +
-        group.debts.reduce((sum, d) => sum + Number(d.remaining_balance ?? 0), 0),
-    }))
+    .map(([key, group]) => {
+      const spend = spendByKey.get(key) ?? { year: 0, all: 0 };
+      return {
+        label: labelFor(key === "__joint__" ? null : key),
+        accountId: key === "__joint__" ? null : key,
+        bills: group.bills,
+        debts: group.debts,
+        total:
+          group.bills.reduce((sum, b) => sum + Number(b.amount ?? 0), 0) +
+          group.debts.reduce((sum, d) => sum + Number(d.remaining_balance ?? 0), 0),
+        spentThisYear: spend.year,
+        spentAllTime: spend.all,
+      };
+    })
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
@@ -270,11 +345,20 @@ function BillRow({ bill }: { bill: Bill }) {
 
 /** One debt row — shared between the flat and member-grouped renderings. */
 function DebtRow({ debt }: { debt: Debt }) {
+  const paidOff = isDebtPaidOff(debt, Number(debt.remaining_balance ?? 0));
   return (
-    <Card>
+    <Card className={paidOff ? "opacity-60" : undefined}>
       <CardContent className="flex items-center gap-3 p-3">
+        {paidOff ? (
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : null}
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{debt.name}</p>
+          <p className="truncate font-medium">
+            {debt.name}
+            {paidOff ? (
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">· Paid off</span>
+            ) : null}
+          </p>
           <p className="text-xs text-muted-foreground">
             Min {formatMoney(Number(debt.minimum_payment ?? 0))}
           </p>
@@ -311,6 +395,8 @@ function InstitutionDetail({
   const { data: transactions = [] } = useTransactions();
   const balances = computeBalances(accounts, latest, transactions);
   const { openWithPreset } = useAddTransactionPreset();
+  const navigate = useNavigate();
+  const [txDetail, setTxDetail] = useState<Transaction | null>(null);
   if (!institution) return null;
   const totals = computeInstitutionTotals(
     institution.id,
@@ -335,9 +421,25 @@ function InstitutionDetail({
   };
   /** Only worth grouping when the institution actually has more than one member account. */
   const groupByMember = memberAccounts.length > 1;
+  const internal = internalTransferIds(transactions);
   const memberGroups = groupByMember
-    ? groupObligationsByMember(linkedBills, linkedDebts, memberAccountLabel)
+    ? groupObligationsByMember(
+        institution.id,
+        linkedBills,
+        linkedDebts,
+        transactions,
+        internal,
+        memberAccountLabel,
+      )
     : [];
+  const spentThisYear = sumSpend(
+    spendTransactions(institution.id, transactions, internal, thisYearStartISO()),
+  );
+  const spentAllTime = sumSpend(spendTransactions(institution.id, transactions, internal));
+  const recentTransactions = transactions
+    .filter((t) => t.institution_id === institution.id)
+    .sort((a, b) => (b.transaction_date ?? "").localeCompare(a.transaction_date ?? ""))
+    .slice(0, 8);
   // ADR-106: children — hidden from the top-level list, shown here instead.
   const children = institutions.filter((i) => i.parent_institution_id === institution.id);
   const parent = institution.parent_institution_id
@@ -345,6 +447,7 @@ function InstitutionDetail({
     : null;
 
   return (
+    <>
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -397,7 +500,9 @@ function InstitutionDetail({
               />
             ) : null}
           </DetailGrid>
-          <InstitutionLoginButton institution={institution} links={institutionLinks} />
+          {groupByMember ? null : (
+            <InstitutionLoginButton institution={institution} links={institutionLinks} />
+          )}
           <DetailGrid>
             <DetailItem
               label="Current balance"
@@ -407,6 +512,8 @@ function InstitutionDetail({
               label="Current due"
               value={totals.currentDue == null ? "—" : formatMoney(totals.currentDue)}
             />
+            <DetailItem label="Spent this year" value={formatMoney(spentThisYear)} />
+            <DetailItem label="Spent all time" value={formatMoney(spentAllTime)} />
           </DetailGrid>
           {children.length > 0 ? (
             <div>
@@ -477,30 +584,46 @@ function InstitutionDetail({
 
           {groupByMember ? (
             <div className="space-y-4">
-              {memberGroups.map((g) => (
-                <div key={g.label}>
-                  <div className="mb-2 flex items-baseline justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {g.label}
-                    </p>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums">
-                      {formatMoney(g.total)}
-                    </span>
-                  </div>
-                  {g.bills.length === 0 && g.debts.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Nothing linked.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {g.bills.map((b) => (
-                        <BillRow key={b.id} bill={b} />
-                      ))}
-                      {g.debts.map((d) => (
-                        <DebtRow key={d.id} debt={d} />
-                      ))}
+              {memberGroups.map((g) => {
+                const account = g.accountId
+                  ? memberAccounts.find((a) => a.id === g.accountId)
+                  : null;
+                return (
+                  <div key={g.label}>
+                    <div className="mb-2 flex items-baseline justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-1">
+                        <p className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {g.label}
+                        </p>
+                        <InstitutionLoginButton
+                          institution={institution}
+                          links={institutionLinks}
+                          usernameHint={account?.login_username}
+                          compact
+                        />
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">
+                        {formatMoney(g.total)}
+                      </span>
                     </div>
-                  )}
-                </div>
-              ))}
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      This year: {formatMoney(g.spentThisYear)} · All time: {formatMoney(g.spentAllTime)}
+                    </p>
+                    {g.bills.length === 0 && g.debts.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nothing linked.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {g.bills.map((b) => (
+                          <BillRow key={b.id} bill={b} />
+                        ))}
+                        {g.debts.map((d) => (
+                          <DebtRow key={d.id} debt={d} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <>
@@ -535,6 +658,45 @@ function InstitutionDetail({
               </div>
             </>
           )}
+
+          <div>
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Recent Transactions
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 shrink-0 px-2 text-xs"
+                onClick={() => {
+                  setTxPreFilter({ institutionId: institution.id, label: institution.name });
+                  onClose();
+                  void navigate({ to: "/app/transactions" });
+                }}
+              >
+                View all
+              </Button>
+            </div>
+            {recentTransactions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No transactions yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentTransactions.map((t) => (
+                  <Card key={t.id} className="cursor-pointer" onClick={() => setTxDetail(t)}>
+                    <CardContent className="flex items-center gap-3 p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{t.description || "Transaction"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.transaction_date?.slice(0, 10)}
+                        </p>
+                      </div>
+                      <p className="shrink-0 font-semibold">{formatMoney(Number(t.amount ?? 0))}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <DialogFooter className="gap-2">
           <Button
@@ -556,5 +718,7 @@ function InstitutionDetail({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <TransactionDetail transaction={txDetail} onClose={() => setTxDetail(null)} />
+    </>
   );
 }

@@ -125,6 +125,26 @@ export function effectiveDebtBalance(
 }
 
 /**
+ * Whether a debt is paid off, given its already-resolved balance (the
+ * caller's own effective/derived value — this function doesn't derive one
+ * itself, since call sites differ in what "balance" already means for
+ * them). ADR-056 addendum: an advance routinely sits at $0 between draws
+ * and is not "paid off" until the payment flow actually stamps
+ * `date_paid_off` (ADR-066 then reactivates it on the next draw); every
+ * other debt type is paid off once its balance hits zero.
+ *
+ * Single source of truth deliberately — this codebase already shipped a
+ * bug ("Aurora Audiology") from two independently-drifted paid-off
+ * definitions (`isPaidOff` vs. a raw `date_paid_off` check) disagreeing.
+ */
+export function isDebtPaidOff(
+  debt: Pick<Debt, "debt_type" | "date_paid_off">,
+  balance: number,
+): boolean {
+  return debt.debt_type === "advance" ? !!debt.date_paid_off : balance <= 0;
+}
+
+/**
  * ADR-023: what one account contributes to the COMBINED household spendable
  * total. Checking contributes its raw spendable balance; credit contributes
  * available credit (limit - owed). Returns null when the account should be

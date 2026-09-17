@@ -22,7 +22,7 @@ import {
   shiftMonth,
 } from "@/lib/data-hooks";
 import { useHouseholdMembers, memberLabel } from "@/lib/household";
-import { effectiveDebtBalance } from "@/lib/balances";
+import { effectiveDebtBalance, isDebtPaidOff } from "@/lib/balances";
 import { ListControls, groupRows } from "@/components/ListControls";
 import { PayActions } from "@/components/PayActions";
 import { StrandedDebtRepair } from "@/components/StrandedDebtRepair";
@@ -217,14 +217,7 @@ function DebtsPage() {
     return m;
   }, [categories]);
 
-  // ADR-056 addendum: an advance routinely sits at $0 between draws and is not
-  // "paid off" until the payment flow actually stamps date_paid_off (ADR-066
-  // then reactivates it on the next draw). Every other debt type is paid off
-  // once its balance hits zero.
-  const isPaidOff = (d: Debt) =>
-    d.debt_type === "advance"
-      ? !!d.date_paid_off
-      : balanceOf(d) <= 0;
+  const isPaidOff = (d: Debt) => isDebtPaidOff(d, balanceOf(d));
 
   const rows = useMemo(() => {
     let out = debts;

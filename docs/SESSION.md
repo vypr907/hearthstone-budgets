@@ -43,3 +43,40 @@
     refines yesterday's decision on first real use).
   - `tsc --noEmit` clean, 223/223 tests pass. Not yet checked in a
     running browser.
+- **Institution detail: recent transactions, spend totals, paid-off/inactive
+  visuals, per-member login.** Interviewed first (unattributed spend →
+  "Joint / unspecified" bucket; paid-off debt → grey out + checkmark;
+  Recent Transactions → last 8; "current year" → calendar year, matching
+  Year in Review/Monthly Summary). Plan approved, then implemented:
+  - `src/lib/balances.ts`: extracted `isDebtPaidOff(debt, balance)` — was a
+    local copy in `app.debts.tsx`; this codebase already shipped a bug
+    ("Aurora Audiology") from two drifted paid-off definitions, so
+    `app.debts.tsx` now imports the shared one instead (zero behavior
+    change) and `src/routes/app.institutions.tsx`'s `DebtRow` uses it too
+    (dims the row + adds a checkmark + "· Paid off" label when true, same
+    treatment `BillRow` already had for an inactive bill). New tests in
+    `balances.test.ts`.
+  - `src/lib/tx-filter-store.ts` / `app.transactions.tsx`: added
+    `institutionId` to `TxPreFilter` so "View all" on the new Recent
+    Transactions section can deep-link into Transactions pre-filtered to
+    that institution (reused the existing pre-filter store the
+    Spending/Tags drill-downs already use, no new mechanism).
+  - `src/routes/app.institutions.tsx`: new local `spendTransactions()`/
+    `sumSpend()` helpers (outflow only, excludes internal transfers per
+    ADR-089, keyed on `transactions.institution_id` which bill/debt
+    payments already inherit at write time per ADR-065 — so one filter
+    covers bills/debts/plain expenses together) power two new
+    "Spent this year"/"Spent all time" `DetailItem`s at the institution
+    level. `groupObligationsByMember()` extended to also bucket the
+    institution's spend transactions per member (via each transaction's
+    `linked_bill_id`/`linked_debt_id` → that bill/debt's own member
+    account; unattributed lands in "Joint / not specified"), shown as a
+    line under each member's total. New "Recent Transactions" section
+    (last 8, tap opens the shared `TransactionDetail`, "View all" button
+    per above). When an institution has per-member logins
+    (`groupByMember`), the single generic top-level Log In button is
+    replaced by a compact icon-only one next to each member's name
+    (`InstitutionLoginButton`'s new `usernameHint`/`compact` props),
+    passing that member's own `login_username`.
+  - `tsc --noEmit` clean, 225/225 tests pass. Not yet checked in a running
+    browser.

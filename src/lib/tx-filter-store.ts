@@ -15,6 +15,8 @@ export type TxPreFilter = {
   excludeInternalTransfers?: boolean;
   /** ADR-104: drill-down from the Tags screen. */
   tagId?: string;
+  /** Drill-down from an institution's "Recent Transactions" section. */
+  institutionId?: string;
   label?: string;
 };
 

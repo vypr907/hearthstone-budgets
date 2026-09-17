@@ -147,6 +147,10 @@ function TransactionsPage() {
       setTagFilter(pre.tagId);
       setFiltersOpen(true);
     }
+    if (pre.institutionId) {
+      setPlaceFilter(pre.institutionId);
+      setFiltersOpen(true);
+    }
     if (pre.label) setFilterLabel(pre.label);
   }, []);
 
