@@ -525,7 +525,7 @@ export async function insertCashBackPurchaseRows(
   householdId: string | null | undefined,
   accountId: string,
   groupId: string,
-  lines: { categoryId: string | null; amount: number }[],
+  lines: { categoryId: string | null; amount: number; tagIds?: string[] }[],
   description: string | null,
   institutionId: string | null | undefined,
   date: string,
@@ -542,8 +542,21 @@ export async function insertCashBackPurchaseRows(
     split_group_id: groupId,
     institution_id: institutionId ?? null,
   }));
-  const { error } = await supabase.from("transactions").insert(rows);
+  // ADR-104 addendum: .select("id") so each purchase line's own tags can be
+  // attached below — the withdrawal (cash-back) leg itself stays untagged,
+  // same as the fee row above never carrying tags.
+  const { data: inserted, error } = await supabase.from("transactions").insert(rows).select("id");
   if (error) throw error;
+  const tagRows = (inserted ?? []).flatMap((row, i) =>
+    (lines[i].tagIds ?? []).map((tag_id) => ({
+      transaction_id: (row as { id: string }).id,
+      tag_id,
+    })),
+  );
+  if (tagRows.length) {
+    const { error: tagError } = await supabase.from("transaction_tags").insert(tagRows);
+    if (tagError) throw tagError;
+  }
 }
 
 /**

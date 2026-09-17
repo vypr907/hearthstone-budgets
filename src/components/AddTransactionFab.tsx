@@ -152,6 +152,8 @@ export function AddTransactionFab() {
   const [transferDescription, setTransferDescription] = useState("");
   /** ADR-064: one optional category for the transfer pair as a whole. */
   const [transferCategoryId, setTransferCategoryId] = useState(NO_CATEGORY);
+  /** ADR-104 addendum: tags for the transfer pair — applied to both legs. */
+  const [transferTagIds, setTransferTagIds] = useState<string[]>([]);
 
   // --- Cash Back state (ADR-103) ---
   /** The account the whole register swipe hit — cash back leaves here too. */
@@ -229,6 +231,7 @@ export function AddTransactionFab() {
     setTransferFee("");
     setTransferDescription("");
     setTransferCategoryId(NO_CATEGORY);
+    setTransferTagIds([]);
     setCbAccountId("");
     setCbCashAccountId("");
     setCbAmount("");
@@ -267,6 +270,7 @@ export function AddTransactionFab() {
         categoryId: transferCategoryId === NO_CATEGORY ? null : transferCategoryId,
         fee,
         feeInstitutionId: fromAccount?.institution_id ?? null,
+        tagIds: transferTagIds,
       });
       toast.success("Transfer recorded");
       reset();
@@ -398,6 +402,7 @@ export function AddTransactionFab() {
         purchaseLines: lines.map((r) => ({
           categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
           amount: Number(r.amount),
+          tagIds: r.tagIds,
         })),
         description: cbDescription.trim() || null,
         institutionId: cbMerchantId,
@@ -595,6 +600,12 @@ export function AddTransactionFab() {
                     onChange={setTransferCategoryId}
                     categories={sortedCategories}
                   />
+                </div>
+
+                {/* ADR-104 addendum: tags apply to both legs of the pair. */}
+                <div className="space-y-2">
+                  <Label>Tags</Label>
+                  <TagPicker tagIds={transferTagIds} onChange={setTransferTagIds} />
                 </div>
 
                 <div className="space-y-2">

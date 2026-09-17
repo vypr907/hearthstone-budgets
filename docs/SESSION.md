@@ -96,3 +96,20 @@
     Portal still gets its own button when a `bill_pay` link is also set
     and takes priority instead). `docs/DECISIONS.md` ADR-106 addendum
     written. `tsc --noEmit` clean, 225/225 tests pass.
+- **Tagging extended to Transfer and Cash Back creation (ADR-104
+  addendum).** User wanted to tag transfers, cash back entries, and
+  income; research showed income already supports tags (both at creation
+  and edit) — only Transfer and Cash Back creation had no `TagPicker` at
+  all (a gap, not a deliberate exclusion). Interviewed the granularity:
+  - Transfer: one tag picker for the pair, applied to **both legs**
+    (`useSaveTransfer` gains `tagIds?`, writes `transaction_tags` for
+    both inserted rows once they have ids).
+  - Cash Back: tags apply to the **purchase line(s) only**, not the
+    withdrawal-to-Cash leg (which is excluded from spend already,
+    ADR-089) — `cbPurchaseRows` already had a `TagPicker` per line via
+    the shared `SplitLinesEditor`, `submitCashBack` just wasn't
+    forwarding `tagIds`; `insertCashBackPurchaseRows`
+    (`src/lib/payments.ts`) now attaches them by index after insert,
+    same pattern `useSaveSplitTransaction` already uses.
+  - `docs/DECISIONS.md` ADR-104 addendum written. `tsc --noEmit` clean,
+    225/225 tests pass. Not yet checked in a running browser.

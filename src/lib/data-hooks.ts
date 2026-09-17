@@ -1168,6 +1168,8 @@ export function useSaveTransfer() {
       fee?: number;
       /** ADR-097: from-account's institution, carried onto the fee row (ADR-065 pattern). */
       feeInstitutionId?: string | null;
+      /** ADR-104 addendum: tags applied to BOTH legs — a transfer is one movement. */
+      tagIds?: string[];
     }) => {
       if (args.fromAccountId === args.toAccountId) {
         throw new Error("From and to accounts must be different");
@@ -1187,13 +1189,13 @@ export function useSaveTransfer() {
         category_id: args.categoryId ?? null,
       };
       // Write from-side first; if it fails nothing is written.
-      await saveWithOptionalColumns<Transaction>(
+      const fromTxn = await saveWithOptionalColumns<Transaction>(
         { ...base, account_id: args.fromAccountId, amount: -args.amount } as Record<string, unknown>,
         async (p) => supabase.from("transactions").insert(p).select("*").single(),
       );
       // Write to-side; if this fails the from-side is orphaned (same risk as
       // SetAsideAction — no RPC available in this codebase).
-      await saveWithOptionalColumns<Transaction>(
+      const toTxn = await saveWithOptionalColumns<Transaction>(
         { ...base, account_id: args.toAccountId, amount: args.amount } as Record<string, unknown>,
         async (p) => supabase.from("transactions").insert(p).select("*").single(),
       );
@@ -1208,11 +1210,20 @@ export function useSaveTransfer() {
         groupId,
         args.transferDate,
       );
+      if (args.tagIds?.length) {
+        const { error } = await supabase.from("transaction_tags").insert(
+          [fromTxn.id, toTxn.id].flatMap((transaction_id) =>
+            args.tagIds!.map((tag_id) => ({ transaction_id, tag_id })),
+          ),
+        );
+        if (error) throw error;
+      }
       return groupId;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
+      qc.invalidateQueries({ queryKey: ["transaction_tags"] });
     },
   });
 }
@@ -1305,6 +1316,7 @@ export function useSaveCashBack() {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
       qc.invalidateQueries({ queryKey: ["spending_actuals"] });
+      qc.invalidateQueries({ queryKey: ["transaction_tags"] });
     },
   });
 }

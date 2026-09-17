@@ -4471,6 +4471,46 @@ silently drops previously-applied tags.
 
 Status: Decided 2026-09-15. Implemented 2026-09-15.
 
+ADR-104 addendum (2026-09-17) — tagging extended to Transfer and Cash Back creation:
+
+Decision:
+Tags were only wired into the Add Transaction dialog's shared expense/
+income/split branch — the "Transfer" and "Cash Back" modes each have their
+own JSX branch in `AddTransactionFab.tsx` and never reached the `TagPicker`,
+so neither could be tagged at creation at all (not a deliberate exclusion,
+just missing). Fixed for both, with the granularity interviewed rather than
+guessed:
+
+1. **Transfer**: one `TagPicker` for the pair, applied to BOTH legs —
+   a transfer is conceptually one movement, so a tag search finds it
+   regardless of which leg (or account) it's looked at from.
+   `useSaveTransfer` (`src/lib/data-hooks.ts`) takes an optional
+   `tagIds?: string[]`, writes `transaction_tags` rows against both
+   inserted legs' ids once they exist (a plain insert, not the diffing
+   `useSetTransactionTags` does, since these are brand-new rows with
+   nothing to diff against).
+2. **Cash Back**: tags apply to the categorized purchase line(s) only —
+   the withdrawal-to-Cash leg itself stays untagged, matching how it's
+   already excluded from spend totals as an internal transfer (ADR-089).
+   `cbPurchaseRows` already reused `SplitLinesEditor`/`SplitRow`
+   (`tagIds` per line, ADR-104's own split-line tagging), so the picker
+   was already on screen — `submitCashBack` just wasn't forwarding
+   `r.tagIds` into `purchaseLines`. `insertCashBackPurchaseRows`
+   (`src/lib/payments.ts`) now `.select("id")`s the inserted purchase
+   rows and attaches each line's tags by index, the same
+   insert-then-correlate pattern `useSaveSplitTransaction` already uses.
+
+Reason:
+Interviewed rather than assumed: a transfer's two legs are one user-facing
+event, so splitting the tag between them would make a tag-based search miss
+half of it depending on which account you're looking from. A Cash Back
+withdrawal leg is deliberately excluded from spend already (ADR-089) — most
+tag use cases are spend-tracking (tax-deductible, per-trip, etc.), so
+tagging the never-spend withdrawal leg too would double-count it whenever a
+tag's total is summed by transaction.
+
+Status: Decided 2026-09-17. Implemented 2026-09-17.
+
 ## ADR-105: Cross-Entity Navigation via `?open=<id>` Search Params; Global Dialogs Gain External Presets
 
 Decision:
