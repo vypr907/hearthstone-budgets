@@ -1,3 +1,94 @@
+## 2026-09-17 — ADR-106 addendum: merged split-by-spouse institutions; member-primary Institution detail
+
+* Three real institutions (Labcorp, Alpine Medical, Planet Fitness) were each
+  modeled as a duplicate pair (split "- Steven"/"- Stephanie" or "- Me"/"-
+  You") for lack of any other way to represent per-spouse billing before
+  ADR-106. Interviewed and confirmed: every pair's `login_url`/`logo_url`/
+  `description`/`notes` were identical (only `login_username` differed,
+  which `institution_member_accounts.login_username` now covers), so each
+  pair is merged into one institution rather than using the new
+  parent/child feature — that would leave two parallel "whose is this"
+  mechanisms.
+* `scripts/migrations/2026-09-17-merge-split-institutions.sql` (+
+  `.verify.sql`, user-run, data-only): 2 new `institution_member_accounts`
+  rows per merged institution, every bill/debt/transaction re-pointed and
+  tagged, the losing institution's row deleted.
+* Institution detail restructured to member-primary
+  (`src/routes/app.institutions.tsx`): an institution with 2+ member
+  accounts now shows one section per person (their bills + debts together,
+  one combined total) instead of a flat Bills section and a separate Debts
+  section each independently grouped by member. New shared `BillRow`/
+  `DebtRow` components. `tsc --noEmit` clean, 223/223 tests.
+
+## 2026-09-17 — Institution detail: recent transactions, spend totals, paid-off/inactive visuals, per-member login
+
+Interviewed first (unattributed spend → "Joint / unspecified" bucket;
+paid-off debt → grey out + checkmark; Recent Transactions → last 8; "current
+year" → calendar year, matching Year in Review/Monthly Summary).
+
+* **Recent Transactions section** — last 8 transactions at that institution,
+  tap opens the shared `TransactionDetail`; "View all" pre-filters the
+  Transactions screen via a new `institutionId` field on the existing
+  `tx-filter-store.ts`. Later restyled (same session) to match Bills'/Debts'
+  `RecentBillTransactions`/`RecentDebtTransactions` pattern — `SectionLabel`
+  header, `divide-y` row list, `EmptyState` — instead of the ad hoc Card list
+  it launched with.
+* **Spend totals** — new "Spent this year"/"Spent all time" figures,
+  institution-wide and per member for multi-member institutions (Alpine
+  Medical, Labcorp), via new local `spendTransactions()`/`sumSpend()`
+  helpers (outflow only, excludes internal transfers per ADR-089, keyed on
+  `transactions.institution_id` which bill/debt payments already inherit at
+  write time per ADR-065).
+* **Paid-off debt visual** — extracted `isDebtPaidOff(debt, balance)` to
+  `src/lib/balances.ts` as the single source of truth (was a local copy in
+  `app.debts.tsx`; this codebase already shipped a bug, "Aurora Audiology,"
+  from two drifted paid-off definitions). `DebtRow` now dims + checkmarks a
+  paid-off debt, matching the existing inactive-bill treatment.
+* **Per-member Log In button** — when an institution has per-member logins,
+  the single generic top-level button is replaced by a compact icon-only
+  one next to each member's name (`InstitutionLoginButton`'s new
+  `usernameHint`/`compact` props).
+* **Follow-up (ADR-106 addendum)**: Log In's URL fallback order amended to
+  `bill_pay -> patient_portal -> login_url` (was `bill_pay -> login_url`) —
+  Alpine Medical has no dedicated bill-pay link, but its billing lives
+  inside its Patient Portal. Whichever link "Log In" ends up using is no
+  longer also duplicated as its own extra button.
+* `tsc --noEmit` clean, 225/225 tests pass throughout. Not yet checked in a
+  running browser.
+
+## 2026-09-17 — ADR-104 addendum: tagging extended to Transfer and Cash Back creation
+
+* Tags were only wired into the Add Transaction dialog's shared
+  expense/income/split branch — Transfer and Cash Back each have their own
+  creation-form branch and never reached the `TagPicker`, so neither could
+  be tagged at all (a gap, not a deliberate exclusion). Income already
+  supported tags at both creation and edit.
+* **Transfer**: one tag picker for the pair, applied to both legs — a
+  transfer is one movement, so a tag search shouldn't miss half of it
+  depending on which leg it's looked at from. `useSaveTransfer` gains
+  `tagIds?`, writing `transaction_tags` for both inserted legs.
+* **Cash Back**: tags apply to the purchase line(s) only, not the
+  withdrawal-to-Cash leg (already excluded from spend, ADR-089).
+  `cbPurchaseRows` already had a `TagPicker` per line via the shared
+  `SplitLinesEditor`; `submitCashBack` just wasn't forwarding `tagIds` —
+  `insertCashBackPurchaseRows` (`src/lib/payments.ts`) now attaches them by
+  index after insert, the same pattern `useSaveSplitTransaction` uses.
+* `tsc --noEmit` clean, 225/225 tests pass.
+
+## 2026-09-17 — Semiannually billing cycle added
+
+* Gap found creating a USPS PO Box bill (billed every 6 months): only
+  monthly/biweekly/quarterly/bimonthly/annually/custom/one_time existed.
+  `billing_cycle` is plain text with no DB check constraint (unlike
+  `institution_type`), so this was purely app-side.
+* Added `"semiannually"` to the `BillingCycle` union (`src/lib/supabase.ts`),
+  both Bills/Debts cycle dropdowns, and the three cycle-math switches in
+  `src/lib/format.ts` — `shiftDate` (±6 months), `monthlyEquivalent`
+  (amount / 6), `needsEnvelope` (true, same bucket as quarterly/bimonthly/
+  annually). Every other cycle-aware call site already routes through those
+  three shared helpers, so nothing else needed a change.
+* New tests in `format.test.ts`. `tsc --noEmit` clean, 228/228 tests pass.
+
 ## 2026-09-16 — ADR-106: institution links, per-member accounts, parent/child institutions, bill pause
 
 Four related additions to how institutions/bills/debts model real-world
