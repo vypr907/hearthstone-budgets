@@ -1172,3 +1172,12 @@ parent choices; not a DB constraint.
 with the existing (unchanged, still required) `institution_id` — same
 "null = joint/not specified, set = this member's own" shape
 `accounts.owner_member_id` already uses (ADR-088).
+
+**ADR-106 addendum (2026-09-17)**: first real use surfaced that a
+split-by-spouse institution should be *merged* into one institution using
+`institution_member_accounts`, not linked via `parent_institution_id` —
+parent/child stays reserved for genuinely distinct-but-related
+institutions (Amazon/Prime), not a second way to express "this is the same
+place, split by who it belongs to." Applied via
+`scripts/migrations/2026-09-17-merge-split-institutions.sql` (data-only,
+no schema change) for Labcorp/Alpine Medical/Planet Fitness.

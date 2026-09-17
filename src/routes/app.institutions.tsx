@@ -28,7 +28,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Pencil, Plus } from "lucide-react";
 import { useState } from "react";
-import type { Institution } from "@/lib/supabase";
+import type { Bill, Debt, Institution } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
@@ -223,22 +223,66 @@ function InstitutionsPage() {
   );
 }
 
-/** ADR-106: bucket a list of bills/debts by which member's account they belong to. */
-function groupRowsByMemberAccount<T extends { institution_member_account_id?: string | null }>(
-  rows: T[],
+/**
+ * ADR-106 addendum: bucket an institution's bills+debts TOGETHER by which
+ * member's account they belong to, with one combined total per person —
+ * e.g. Alpine Medical shows a "Steven" section (his bills + debts + total)
+ * and a "Stephanie" section (hers), not a separate Bills-grouped-by-member
+ * section and a separate Debts-grouped-by-member section.
+ */
+function groupObligationsByMember(
+  bills: Bill[],
+  debts: Debt[],
   labelFor: (accountId: string | null | undefined) => string,
-): Array<{ label: string; rows: T[] }> {
-  const map = new Map<string, T[]>();
-  for (const r of rows) {
-    const key = r.institution_member_account_id ?? "__joint__";
-    (map.get(key) ?? map.set(key, []).get(key)!).push(r);
-  }
+): Array<{ label: string; bills: Bill[]; debts: Debt[]; total: number }> {
+  const map = new Map<string, { bills: Bill[]; debts: Debt[] }>();
+  const bucket = (key: string) => map.get(key) ?? map.set(key, { bills: [], debts: [] }).get(key)!;
+  for (const b of bills) bucket(b.institution_member_account_id ?? "__joint__").bills.push(b);
+  for (const d of debts) bucket(d.institution_member_account_id ?? "__joint__").debts.push(d);
   return [...map.entries()]
-    .map(([key, rowsForKey]) => ({
+    .map(([key, group]) => ({
       label: labelFor(key === "__joint__" ? null : key),
-      rows: rowsForKey,
+      bills: group.bills,
+      debts: group.debts,
+      total:
+        group.bills.reduce((sum, b) => sum + Number(b.amount ?? 0), 0) +
+        group.debts.reduce((sum, d) => sum + Number(d.remaining_balance ?? 0), 0),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** One bill row — shared between the flat and member-grouped renderings. */
+function BillRow({ bill }: { bill: Bill }) {
+  return (
+    <Card className={bill.is_active === false ? "opacity-60" : undefined}>
+      <CardContent className="flex items-center gap-3 p-3">
+        <p className="min-w-0 flex-1 truncate font-medium">
+          {bill.name}
+          {bill.is_active === false ? (
+            <span className="ml-1.5 text-xs font-normal text-muted-foreground">· Inactive</span>
+          ) : null}
+        </p>
+        <p className="shrink-0 font-semibold">{formatMoney(Number(bill.amount ?? 0))}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** One debt row — shared between the flat and member-grouped renderings. */
+function DebtRow({ debt }: { debt: Debt }) {
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 p-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{debt.name}</p>
+          <p className="text-xs text-muted-foreground">
+            Min {formatMoney(Number(debt.minimum_payment ?? 0))}
+          </p>
+        </div>
+        <p className="shrink-0 font-semibold">{formatMoney(Number(debt.remaining_balance ?? 0))}</p>
+      </CardContent>
+    </Card>
+  );
 }
 
 function InstitutionDetail({
@@ -291,12 +335,9 @@ function InstitutionDetail({
   };
   /** Only worth grouping when the institution actually has more than one member account. */
   const groupByMember = memberAccounts.length > 1;
-  const groupBills = groupByMember
-    ? groupRowsByMemberAccount(linkedBills, memberAccountLabel)
-    : [{ label: "", rows: linkedBills }];
-  const groupDebts = groupByMember
-    ? groupRowsByMemberAccount(linkedDebts, memberAccountLabel)
-    : [{ label: "", rows: linkedDebts }];
+  const memberGroups = groupByMember
+    ? groupObligationsByMember(linkedBills, linkedDebts, memberAccountLabel)
+    : [];
   // ADR-106: children — hidden from the top-level list, shown here instead.
   const children = institutions.filter((i) => i.parent_institution_id === institution.id);
   const parent = institution.parent_institution_id
@@ -434,79 +475,66 @@ function InstitutionDetail({
             </div>
           </div>
 
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Bills
-            </p>
-            {linkedBills.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No bills linked.</p>
-            ) : (
-              <div className="space-y-3">
-                {groupBills.map((g) => (
-                  <div key={g.label || "all"}>
-                    {g.label ? (
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">{g.label}</p>
-                    ) : null}
+          {groupByMember ? (
+            <div className="space-y-4">
+              {memberGroups.map((g) => (
+                <div key={g.label}>
+                  <div className="mb-2 flex items-baseline justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {g.label}
+                    </p>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums">
+                      {formatMoney(g.total)}
+                    </span>
+                  </div>
+                  {g.bills.length === 0 && g.debts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nothing linked.</p>
+                  ) : (
                     <div className="space-y-2">
-                      {g.rows.map((b) => (
-                        <Card key={b.id} className={b.is_active === false ? "opacity-60" : undefined}>
-                          <CardContent className="flex items-center gap-3 p-3">
-                            <p className="min-w-0 flex-1 truncate font-medium">
-                              {b.name}
-                              {b.is_active === false ? (
-                                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                                  · Inactive
-                                </span>
-                              ) : null}
-                            </p>
-                            <p className="shrink-0 font-semibold">
-                              {formatMoney(Number(b.amount ?? 0))}
-                            </p>
-                          </CardContent>
-                        </Card>
+                      {g.bills.map((b) => (
+                        <BillRow key={b.id} bill={b} />
+                      ))}
+                      {g.debts.map((d) => (
+                        <DebtRow key={d.id} debt={d} />
                       ))}
                     </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Bills
+                </p>
+                {linkedBills.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No bills linked.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {linkedBills.map((b) => (
+                      <BillRow key={b.id} bill={b} />
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
 
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Debts
-            </p>
-            {linkedDebts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No debts linked.</p>
-            ) : (
-              <div className="space-y-3">
-                {groupDebts.map((g) => (
-                  <div key={g.label || "all"}>
-                    {g.label ? (
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">{g.label}</p>
-                    ) : null}
-                    <div className="space-y-2">
-                      {g.rows.map((d) => (
-                        <Card key={d.id}>
-                          <CardContent className="flex items-center gap-3 p-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate font-medium">{d.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Min {formatMoney(Number(d.minimum_payment ?? 0))}
-                              </p>
-                            </div>
-                            <p className="shrink-0 font-semibold">
-                              {formatMoney(Number(d.remaining_balance ?? 0))}
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Debts
+                </p>
+                {linkedDebts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No debts linked.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {linkedDebts.map((d) => (
+                      <DebtRow key={d.id} debt={d} />
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
         <DialogFooter className="gap-2">
           <Button

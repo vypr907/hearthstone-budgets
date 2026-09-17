@@ -4600,3 +4600,50 @@ practice (`computeInstitutionTotals` already `.filter()`s, never
 existing shape rather than introducing a new one.
 
 Status: Decided 2026-09-16. Implemented 2026-09-16.
+
+ADR-106 addendum (2026-09-17) — merge over parent/child; member-primary
+detail grouping:
+
+Decision:
+First real use of ADR-106 surfaced two refinements, both interviewed with
+the user rather than assumed:
+
+1. **Merge a split-by-spouse institution into one, don't parent/child it.**
+   The user had 3 real institutions modeled as duplicate pairs (Labcorp,
+   Alpine Medical, Planet Fitness, each split "- Steven"/"- Stephanie" or
+   "- Me"/"- You") purely because there was previously no other way to
+   represent per-spouse billing. Checked live: within every pair,
+   `login_url`/`logo_url`/`description`/`notes` were identical — the only
+   difference was `login_username`, exactly what
+   `institution_member_accounts.login_username` now holds. Rather than
+   using the new parent/child rollup for this case, each pair is merged
+   into a single institution (`scripts/migrations/2026-09-17-merge-split-institutions.sql`):
+   two new `institution_member_accounts` rows (Steven/Stephanie) under the
+   surviving institution id, every existing bill/debt re-pointed/tagged to
+   it, every `transactions.institution_id` "place" reference re-pointed
+   too (the losing institution otherwise can't be deleted — a live FK),
+   the losing institution deleted. Parent/child stays reserved for
+   genuinely distinct institutions that happen to be commercially related
+   (Amazon/Prime) — not a second way to express "this is the same place,
+   split by who it belongs to," which member-tagging already owns.
+2. **Institution detail's member grouping is member-primary, not
+   kind-primary.** The original ADR-106 implementation grouped *within*
+   separate "Bills" and "Debts" sections by member, with no subtotal. The
+   user's actual want was the reverse: one section per person, their
+   bills and debts together, one combined total — e.g. Alpine Medical
+   showing a "Steven" section (his bills + debts + total) and a
+   "Stephanie" section (hers). `InstitutionDetail`
+   (`src/routes/app.institutions.tsx`) restructured accordingly for any
+   institution with 2+ member accounts; an institution with 0-1 stays on
+   the original flat Bills/Debts layout, unchanged.
+
+Reason:
+Both gaps only became visible once ADR-106 met real data. The merge
+question mattered because two competing "whose is this" mechanisms
+(parent/child and member-tagging) solving the same problem for different
+institutions would be a lasting inconsistency, not a one-time cost — worth
+fixing before any more institutions are set up either way. The grouping
+shape came directly from the user's own description of what they needed
+to see, not a guess.
+
+Status: Decided 2026-09-17. Implemented 2026-09-17.
