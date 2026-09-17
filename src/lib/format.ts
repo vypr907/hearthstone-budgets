@@ -136,6 +136,9 @@ export function shiftDate(
     case "quarterly":
       addMonths(base, 3 * direction, d);
       break;
+    case "semiannually":
+      addMonths(base, 6 * direction, d);
+      break;
     case "annually":
     case "annual":
     case "yearly":
@@ -230,6 +233,8 @@ export function monthlyEquivalent(bill: {
       return amount / 3;
     case "bimonthly":
       return amount / 2;
+    case "semiannually":
+      return amount / 6;
     case "annually":
     case "annual":
     case "yearly":
@@ -247,7 +252,7 @@ export function monthlyEquivalent(bill: {
 
 /** ADR-033: cycles long enough to need their own savings envelope. */
 export function needsEnvelope(cycle: string | null | undefined): boolean {
-  return ["quarterly", "bimonthly", "annually", "annual", "yearly"].includes(
+  return ["quarterly", "bimonthly", "semiannually", "annually", "annual", "yearly"].includes(
     normalizeCycle(cycle),
   );
 }

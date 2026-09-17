@@ -113,3 +113,20 @@
     same pattern `useSaveSplitTransaction` already uses.
   - `docs/DECISIONS.md` ADR-104 addendum written. `tsc --noEmit` clean,
     225/225 tests pass. Not yet checked in a running browser.
+- **Added "Semiannually" billing cycle (bills/debts).** User hit the gap
+  creating a USPS PO Box bill (every 6 months) — only had
+  monthly/biweekly/quarterly/bimonthly/annually/custom/one_time.
+  `billing_cycle` is plain text with no DB check constraint (unlike
+  `institution_type`), so this was purely app-side: added
+  `"semiannually"` to the `BillingCycle` union (`src/lib/supabase.ts`),
+  both `CYCLES` dropdown lists (`app.bills.tsx`, `app.debts.tsx`), and the
+  three cycle-math switches in `src/lib/format.ts` — `shiftDate` (+/- 6
+  months), `monthlyEquivalent` (amount / 6), `needsEnvelope` (true, same
+  bucket as quarterly/bimonthly/annually). Everything else
+  (arrears/auto-transfers/ledger-state/payments/paycheck-budget) already
+  routes through those three shared helpers rather than switching on
+  cycle strings itself, so no other call site needed a change. New tests
+  in `format.test.ts`. `tsc --noEmit` clean, 228/228 tests pass. User's
+  USPS bill was saved as "Annually" as a placeholder — needs switching to
+  "Semiannually" in the app now that the option exists (a data edit, not
+  something to do via the read-only Supabase MCP).

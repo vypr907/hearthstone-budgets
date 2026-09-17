@@ -17,6 +17,7 @@ export type BillingCycle =
   | "biweekly"
   | "quarterly"
   | "bimonthly"
+  | "semiannually"
   | "annually"
   | "custom"
   /** ADR-048: a non-recurring charge (invoice) with a single due date. */

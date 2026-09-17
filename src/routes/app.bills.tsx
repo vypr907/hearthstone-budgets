@@ -94,6 +94,7 @@ const CYCLES: BillingCycle[] = [
   "biweekly",
   "quarterly",
   "bimonthly",
+  "semiannually",
   "annually",
   "custom",
 ];

@@ -123,6 +123,7 @@ const CYCLES: BillingCycle[] = [
   "biweekly",
   "quarterly",
   "bimonthly",
+  "semiannually",
   "annually",
   "custom",
   // ADR-048: invoices and other non-recurring charges.

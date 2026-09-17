@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { addDaysISO, priorSetAsideThisMonth } from "./format";
+import {
+  addDaysISO,
+  monthlyEquivalent,
+  needsEnvelope,
+  priorSetAsideThisMonth,
+  shiftDate,
+} from "./format";
 
 type TxLike = Parameters<typeof priorSetAsideThisMonth>[0][number];
 
@@ -87,5 +93,20 @@ describe("addDaysISO (ADR-047 2026-09-10 — early paycheck splits)", () => {
   it("ignores a time component on the input and truncates fractional days", () => {
     expect(addDaysISO("2026-09-11T00:00:00", -2)).toBe("2026-09-09");
     expect(addDaysISO("2026-09-11", -1.9)).toBe("2026-09-10");
+  });
+});
+
+describe("semiannually billing cycle", () => {
+  it("shiftDate advances/reverses by 6 calendar months", () => {
+    expect(shiftDate("2026-03-15", "semiannually", 1)).toBe("2026-09-15");
+    expect(shiftDate("2026-09-15", "semiannually", -1)).toBe("2026-03-15");
+  });
+
+  it("monthlyEquivalent divides the amount by 6", () => {
+    expect(monthlyEquivalent({ amount: 60, billing_cycle: "semiannually" })).toBe(10);
+  });
+
+  it("needsEnvelope is true, same as quarterly/bimonthly/annually", () => {
+    expect(needsEnvelope("semiannually")).toBe(true);
   });
 });
