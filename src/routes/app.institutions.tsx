@@ -32,6 +32,8 @@ import { CheckCircle2, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 import type { Bill, Debt, Institution, Transaction } from "@/lib/supabase";
 import { DetailGrid, DetailItem, DetailText } from "@/components/detail";
+import { EmptyState } from "@/components/EmptyState";
+import { SectionLabel } from "@/components/SectionLabel";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
 import { TransactionDetail } from "@/routes/app.transactions";
@@ -660,10 +662,8 @@ function InstitutionDetail({
           )}
 
           <div>
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Recent Transactions
-              </p>
+            <div className="flex items-center justify-between gap-2">
+              <SectionLabel>Recent transactions</SectionLabel>
               <Button
                 size="sm"
                 variant="outline"
@@ -678,21 +678,28 @@ function InstitutionDetail({
               </Button>
             </div>
             {recentTransactions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No transactions yet.</p>
+              <EmptyState className="mt-1 py-2 text-left">No transactions yet.</EmptyState>
             ) : (
-              <div className="space-y-2">
+              <div className="mt-1 divide-y divide-border/50">
                 {recentTransactions.map((t) => (
-                  <Card key={t.id} className="cursor-pointer" onClick={() => setTxDetail(t)}>
-                    <CardContent className="flex items-center gap-3 p-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{t.description || "Transaction"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t.transaction_date?.slice(0, 10)}
-                        </p>
-                      </div>
-                      <p className="shrink-0 font-semibold">{formatMoney(Number(t.amount ?? 0))}</p>
-                    </CardContent>
-                  </Card>
+                  <div
+                    key={t.id}
+                    className="flex cursor-pointer items-center justify-between gap-2 py-2 text-sm"
+                    onClick={() => setTxDetail(t)}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate">
+                        {t.transaction_date?.slice(0, 10)}
+                        {t.description ? ` · ${t.description}` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs capitalize text-muted-foreground">
+                      {t.status ?? "—"}
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {formatMoney(Number(t.amount ?? 0))}
+                    </span>
+                  </div>
                 ))}
               </div>
             )}

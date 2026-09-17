@@ -80,3 +80,9 @@
     passing that member's own `login_username`.
   - `tsc --noEmit` clean, 225/225 tests pass. Not yet checked in a running
     browser.
+  - **Follow-up**: restyled the Recent Transactions section to match
+    Bills'/Debts' `RecentBillTransactions`/`RecentDebtTransactions` pattern
+    — `SectionLabel` header, `divide-y` row list (date · description /
+    status / amount) instead of a `Card` list, `EmptyState` for the empty
+    case — rather than the ad hoc Card styling it launched with. `tsc
+    --noEmit` clean, 225/225 tests pass.
