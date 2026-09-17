@@ -4647,3 +4647,24 @@ shape came directly from the user's own description of what they needed
 to see, not a guess.
 
 Status: Decided 2026-09-17. Implemented 2026-09-17.
+
+ADR-106 addendum (2026-09-17b) — Log In URL priority: bill_pay > patient_portal > login_url:
+
+Decision:
+`InstitutionLoginButton`'s "Log In" now opens the first URL found in
+`links.find(bill_pay) -> links.find(patient_portal) -> institution.login_url`,
+amending the original bill_pay-then-login_url order from earlier the same
+day. Whichever link "Log In" ends up using is no longer also offered as its
+own extra button (previously only `bill_pay` was excluded from the extra-
+links row; now `patient_portal` is excluded too, but only when it's actually
+serving as the login target — if a `bill_pay` link is also set, Patient
+Portal still gets shown as its own separate button).
+
+Reason:
+Alpine Medical has no dedicated bill-pay link; its billing lives inside its
+Patient Portal. Falling straight through to the generic "Main site" login
+for Log In was wrong for that case — Patient Portal is a more specific,
+still-generic-enough (not per-member) destination than the main site, so it
+belongs ahead of it in the fallback order.
+
+Status: Decided 2026-09-17. Implemented 2026-09-17.

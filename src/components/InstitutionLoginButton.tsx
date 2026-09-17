@@ -22,12 +22,15 @@ async function openInBrowser(url: string) {
  * — OS-level Autofill only triggers on a real browser page. Credential fill stays
  * entirely with the OS; the app never stores or sees a password.
  *
- * ADR-106: "Log In" opens a `bill_pay` link when one is set, falling back to
- * `login_url` ("Main site") otherwise. Every other stored link (Patient
- * Portal, any custom "Other" links) gets its own button alongside it, same
- * open mechanism. Renders nothing when there's no login_url and no links at
- * all. `links` is optional so callers that haven't wired it up yet still
- * get the pre-ADR-106 single "Log In" behavior unchanged.
+ * ADR-106: "Log In" opens the first URL found in this order: `bill_pay` link,
+ * `patient_portal` link, then `login_url` ("Main site") — e.g. Alpine
+ * Medical has no separate bill-pay link, but its billing lives inside the
+ * Patient Portal, so that's what "Log In" should open. Every other stored
+ * link gets its own button alongside it (same open mechanism), except
+ * whichever one "Log In" is already using — that one isn't shown twice.
+ * Renders nothing when there's no login_url and no links at all. `links` is
+ * optional so callers that haven't wired it up yet still get the
+ * pre-ADR-106 single "Log In" behavior unchanged.
  *
  * ADR-106 addendum: `usernameHint` lets a caller show "Use: <username>"
  * for a specific household member's own login (e.g. per-member sections at
@@ -52,8 +55,19 @@ export function InstitutionLoginButton({
   compact?: boolean;
 }) {
   const billPayUrl = links.find((l) => l.kind === "bill_pay")?.url?.trim();
-  const loginUrl = billPayUrl || institution?.login_url?.trim();
-  const extraLinks = compact ? [] : links.filter((l) => l.kind !== "bill_pay" && l.url?.trim());
+  const patientPortalUrl = links.find((l) => l.kind === "patient_portal")?.url?.trim();
+  const loginUrl = billPayUrl || patientPortalUrl || institution?.login_url?.trim();
+  // Patient Portal only doubles as its own button when it isn't already the
+  // thing "Log In" opens (i.e. there's a bill_pay link taking priority).
+  const patientPortalUsedAsLogin = !billPayUrl && !!patientPortalUrl;
+  const extraLinks = compact
+    ? []
+    : links.filter(
+        (l) =>
+          l.kind !== "bill_pay" &&
+          l.url?.trim() &&
+          !(patientPortalUsedAsLogin && l.kind === "patient_portal"),
+      );
   if (!loginUrl && extraLinks.length === 0) return null;
 
   const hintUsername = usernameHint?.trim() || institution?.login_username?.trim();

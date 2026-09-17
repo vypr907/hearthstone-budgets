@@ -86,3 +86,13 @@
     status / amount) instead of a `Card` list, `EmptyState` for the empty
     case — rather than the ad hoc Card styling it launched with. `tsc
     --noEmit` clean, 225/225 tests pass.
+  - **Follow-up (ADR-106 addendum)**: user amended the Log In URL fallback
+    order to `bill_pay -> patient_portal -> login_url` (was
+    `bill_pay -> login_url`) — Alpine Medical has no dedicated bill-pay
+    link but its billing lives inside its Patient Portal, so that needed
+    to outrank the generic "Main site" fallback.
+    `InstitutionLoginButton.tsx` updated; whichever link "Log In" ends up
+    using is no longer also duplicated as its own extra button (Patient
+    Portal still gets its own button when a `bill_pay` link is also set
+    and takes priority instead). `docs/DECISIONS.md` ADR-106 addendum
+    written. `tsc --noEmit` clean, 225/225 tests pass.
