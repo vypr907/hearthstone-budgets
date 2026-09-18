@@ -68,6 +68,7 @@ export function AccountDialog({
   const [notes, setNotes] = useState("");
   const [isSpendable, setIsSpendable] = useState(false);
   const [includeInNetWorth, setIncludeInNetWorth] = useState(true);
+  const [transfersCountAsSpend, setTransfersCountAsSpend] = useState(false);
   const [ownerMemberId, setOwnerMemberId] = useState("joint");
   const [creditLimit, setCreditLimit] = useState("");
   const [institutionId, setInstitutionId] = useState("none");
@@ -86,6 +87,7 @@ export function AccountDialog({
     setNotes(account?.notes ?? "");
     setIsSpendable(account?.is_spendable ?? false);
     setIncludeInNetWorth(account?.include_in_net_worth ?? true);
+    setTransfersCountAsSpend(account?.transfers_count_as_spend ?? false);
     setOwnerMemberId(account?.owner_member_id ?? "joint");
     setCreditLimit(account?.credit_limit != null ? String(account.credit_limit) : "");
     setInstitutionId(account?.institution_id ?? "none");
@@ -107,6 +109,7 @@ export function AccountDialog({
         notes: notes || null,
         is_spendable: isSpendable,
         include_in_net_worth: includeInNetWorth,
+        transfers_count_as_spend: transfersCountAsSpend,
         owner_member_id: ownerMemberId === "joint" ? null : ownerMemberId,
         credit_limit: isCredit && creditLimit ? Number(creditLimit) : null,
         institution_id: institutionId === "none" ? null : institutionId,
@@ -252,6 +255,24 @@ export function AccountDialog({
             <Label htmlFor="includeInNetWorth" className="font-normal">
               Include in net worth
             </Label>
+          </div>
+          <div className="flex items-start gap-2 py-1">
+            <Checkbox
+              id="transfersCountAsSpend"
+              checked={transfersCountAsSpend}
+              onCheckedChange={(v) => setTransfersCountAsSpend(v === true)}
+              className="mt-0.5"
+            />
+            <div>
+              <Label htmlFor="transfersCountAsSpend" className="font-normal">
+                Not fully tracked — count transfers as spend
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                For an account you don't log day-to-day spending from (e.g. a
+                spouse's personal account). A transfer landing here counts as
+                money out instead of an internal, non-spend transfer.
+              </p>
+            </div>
           </div>
           <div>
             <Label>Notes</Label>

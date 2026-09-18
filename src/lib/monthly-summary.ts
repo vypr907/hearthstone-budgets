@@ -51,6 +51,8 @@ export function combinedActualByCategory(
   debts: Debt[],
   categories: Category[],
   month: string,
+  /** ADR-089 addendum: `opaqueTransferAccountIds()` — see internal-transfers.ts. */
+  opaqueAccountIds?: Set<string>,
 ): Map<string, CategoryActual> {
   const income = incomeCategoryIds(categories);
   const billCategory = new Map<string, string | null>(bills.map((b) => [b.id, (b.category_id as string | null) ?? null]));
@@ -58,7 +60,7 @@ export function combinedActualByCategory(
   const deductedDebtIds = new Set(debts.filter(isPaycheckDeducted).map((d) => d.id));
   // ADR-089: two-sided transfers move money between the household's own
   // accounts — never spend. One-sided legs still count.
-  const internal = internalTransferIds(transactions);
+  const internal = internalTransferIds(transactions, opaqueAccountIds);
   const out = new Map<string, CategoryActual>();
 
   const bump = (
@@ -108,12 +110,21 @@ export function trailingAverageByCategory(
   categories: Category[],
   throughMonth: string,
   months = 6,
+  /** ADR-089 addendum: `opaqueTransferAccountIds()` — see internal-transfers.ts. */
+  opaqueAccountIds?: Set<string>,
 ): Map<string, number> {
   const [y, m] = throughMonth.split("-").map(Number);
   const totals = new Map<string, number>();
   for (let i = 1; i <= months; i++) {
     const d = new Date(y, m - 1 - i, 1);
-    const monthActuals = combinedActualByCategory(transactions, bills, debts, categories, monthKey(d));
+    const monthActuals = combinedActualByCategory(
+      transactions,
+      bills,
+      debts,
+      categories,
+      monthKey(d),
+      opaqueAccountIds,
+    );
     for (const [categoryId, row] of monthActuals) {
       totals.set(categoryId, (totals.get(categoryId) ?? 0) + row.total);
     }

@@ -5,6 +5,7 @@ import { AppHeader } from "@/components/AppHeader";
 import {
   monthKey,
   shiftMonth,
+  useAccounts,
   useCategories,
   categoryDomain,
   useClearSpendingOverride,
@@ -18,6 +19,7 @@ import {
   useUpsertSpendingBudget,
 } from "@/lib/data-hooks";
 import { billsBudgetedByCategory, buildActualResolver } from "@/lib/spending-actuals";
+import { opaqueTransferAccountIds } from "@/lib/internal-transfers";
 import { formatMoney, monthLabel } from "@/lib/format";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -95,6 +97,7 @@ function SpendingPage() {
   const { data: actuals = [] } = useSpendingActuals();
   const { data: transactions = [] } = useTransactions();
   const { data: bills = [] } = useBills();
+  const { data: accounts = [] } = useAccounts();
 
   const saveBudget = useUpsertSpendingBudget();
   const saveActual = useUpsertSpendingActual();
@@ -136,8 +139,8 @@ function SpendingPage() {
   }, [categories]);
 
   const resolver = useMemo(
-    () => buildActualResolver(actuals, transactions, bills, categories),
-    [actuals, transactions, bills, categories],
+    () => buildActualResolver(actuals, transactions, bills, categories, opaqueTransferAccountIds(accounts)),
+    [actuals, transactions, bills, categories, accounts],
   );
 
   const billsBudget = useMemo(

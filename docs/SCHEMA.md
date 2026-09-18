@@ -211,6 +211,7 @@ accounts (
     is_spendable boolean default true,   -- live default is TRUE
     include_in_net_worth boolean default true,   -- ADR-088: false drops the account from the net-worth trend
     owner_member_id uuid references household_members(id) on delete set null,  -- ADR-088: null = joint; a set owner scopes spendable/net-worth aggregates to that member
+    transfers_count_as_spend boolean not null default false,  -- ADR-107: true = not fully tracked by this household; a transfer landing here counts as spend, not an internal wash
     starting_balance numeric default 0,
     notes text,
     created_at timestamptz default now(),

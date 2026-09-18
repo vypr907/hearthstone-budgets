@@ -53,7 +53,7 @@ import {
   periodRange,
 } from "@/lib/paycheck-budget";
 import { deriveCycleInfo } from "@/lib/ledger-state";
-import { internalTransferIds } from "@/lib/internal-transfers";
+import { internalTransferIds, opaqueTransferAccountIds } from "@/lib/internal-transfers";
 import type { Obligation } from "@/lib/paycheck-budget";
 import type { Bill, Debt, Transaction } from "@/lib/supabase";
 import { categoryVisual, AUTO_TRANSFER_ICON } from "@/lib/visual-meta";
@@ -375,8 +375,24 @@ function Dashboard() {
         .filter((b) => b.category_id)
         .map((b) => [b.category_id as string, Number(b.budgeted_amount || 0)]),
     );
-    const actualByCategory = combinedActualByCategory(transactions, bills, debts, categories, month);
-    const trailingByCategory = trailingAverageByCategory(transactions, bills, debts, categories, month, 6);
+    const opaqueForSummary = opaqueTransferAccountIds(accounts);
+    const actualByCategory = combinedActualByCategory(
+      transactions,
+      bills,
+      debts,
+      categories,
+      month,
+      opaqueForSummary,
+    );
+    const trailingByCategory = trailingAverageByCategory(
+      transactions,
+      bills,
+      debts,
+      categories,
+      month,
+      6,
+      opaqueForSummary,
+    );
     const byId: Record<string, (typeof categories)[number]> = {};
     for (const c of categories) byId[c.id] = c;
 
@@ -444,7 +460,7 @@ function Dashboard() {
       groups.set(key, g);
     }
     return [...groups.values()].sort((a, b) => b.actual - a.actual);
-  }, [budgets, transactions, categories, bills, debts]);
+  }, [budgets, transactions, categories, bills, debts, accounts]);
 
 
 
@@ -555,6 +571,7 @@ function Dashboard() {
     }
     // Spent = cleared money only; pending is reported as its own figure so
     // the split-line detail can show both without double-counting.
+    const internalForActual = internalTransferIds(transactions);
     const actualByCategory = actualByCategoryInRange(
       transactions.filter((t) => (t.status ?? "cleared") !== "pending"),
       bills,
@@ -562,6 +579,7 @@ function Dashboard() {
       categories,
       period.start,
       period.end,
+      internalForActual,
     );
     const pendingByCategory = actualByCategoryInRange(
       transactions.filter((t) => (t.status ?? "cleared") === "pending"),
@@ -570,6 +588,7 @@ function Dashboard() {
       categories,
       period.start,
       period.end,
+      internalForActual,
     );
     const byId: Record<string, (typeof categories)[number]> = {};
     for (const c of categories) byId[c.id] = c;
@@ -783,6 +802,7 @@ function Dashboard() {
    * `SIMPLE_SPEND_GROUP` instead of `parent_category`.
    */
   const simpleSpendGroups = useMemo(() => {
+    const internalForActual = internalTransferIds(transactions);
     const actualByCategory = actualByCategoryInRange(
       transactions.filter((t) => (t.status ?? "cleared") !== "pending"),
       bills,
@@ -790,6 +810,7 @@ function Dashboard() {
       categories,
       period.start,
       period.end,
+      internalForActual,
     );
     const pendingByCategory = actualByCategoryInRange(
       transactions.filter((t) => (t.status ?? "cleared") === "pending"),
@@ -798,6 +819,7 @@ function Dashboard() {
       categories,
       period.start,
       period.end,
+      internalForActual,
     );
     const byId = new Map(categories.map((c) => [c.id, c]));
     const groups = new Map<string, BudgetGroup>();
@@ -1882,6 +1904,7 @@ function SimpleSpendTile({
 }) {
   const [open, setOpen] = useState(false);
   const { data: institutions = [] } = useInstitutions();
+  const { data: accounts = [] } = useAccounts();
   const pct = g.budgeted ? Math.min(100, (g.actual / g.budgeted) * 100) : g.actual > 0 ? 100 : 0;
   const pendingPct = g.budgeted ? (g.spendingPending / g.budgeted) * 100 : 0;
   const over = g.budgeted > 0 && g.actual > g.budgeted;
@@ -1891,7 +1914,7 @@ function SimpleSpendTile({
   const byPlace = useMemo(() => {
     if (!open) return [];
     const categoryIds = new Set(g.categoryIds);
-    const internal = internalTransferIds(transactions);
+    const internal = internalTransferIds(transactions, opaqueTransferAccountIds(accounts));
     const byId = new Map<string, number>();
     for (const t of transactions) {
       if (!t.institution_id || !t.category_id || !categoryIds.has(t.category_id)) continue;
@@ -1910,7 +1933,7 @@ function SimpleSpendTile({
     return [...byId.entries()]
       .map(([id, amount]) => ({ id, amount, institution: institutions.find((inst) => inst.id === id) ?? null }))
       .sort((a, b) => b.amount - a.amount);
-  }, [open, g.categoryIds, transactions, period, institutions]);
+  }, [open, g.categoryIds, transactions, period, institutions, accounts]);
   const byPlaceTotal = byPlace.reduce((s, r) => s + r.amount, 0);
 
   return (

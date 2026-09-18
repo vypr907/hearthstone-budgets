@@ -28,6 +28,8 @@ export function buildActualResolver(
   transactions: Transaction[],
   bills: Bill[] = [],
   categories: Category[] = [],
+  /** ADR-089 addendum: `opaqueTransferAccountIds()` — see internal-transfers.ts. */
+  opaqueAccountIds?: Set<string>,
 ) {
   const income = incomeCategoryIds(categories);
   const billCategory = new Map<string, string | null>(
@@ -36,7 +38,7 @@ export function buildActualResolver(
 
   // ADR-089: internal (two-sided) transfers are money moved between the
   // household's own accounts, never spend.
-  const internal = internalTransferIds(transactions);
+  const internal = internalTransferIds(transactions, opaqueAccountIds);
 
   const fromLedger = new Map<string, number>();
   const billsLedger = new Map<string, number>();

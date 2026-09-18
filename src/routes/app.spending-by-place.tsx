@@ -7,9 +7,9 @@ import { SectionLabel } from "@/components/SectionLabel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { itemColor } from "@/components/viz";
-import { useInstitutions, useTransactions } from "@/lib/data-hooks";
+import { useAccounts, useInstitutions, useTransactions } from "@/lib/data-hooks";
 import { formatMoney, monthLabel } from "@/lib/format";
-import { internalTransferIds } from "@/lib/internal-transfers";
+import { internalTransferIds, opaqueTransferAccountIds } from "@/lib/internal-transfers";
 
 export const Route = createFileRoute("/app/spending-by-place")({
   head: () => ({
@@ -52,11 +52,15 @@ function shiftMonth(month: string, delta: number) {
 function SpendingByPlacePage() {
   const { data: transactions = [] } = useTransactions();
   const { data: institutions = [] } = useInstitutions();
+  const { data: accounts = [] } = useAccounts();
   const [month, setMonth] = useState(currentMonth());
 
   // ADR-089: money moved between the household's own accounts isn't spending
   // at a place, even when a leg happens to carry an institution.
-  const internal = useMemo(() => internalTransferIds(transactions), [transactions]);
+  const internal = useMemo(
+    () => internalTransferIds(transactions, opaqueTransferAccountIds(accounts)),
+    [transactions, accounts],
+  );
 
   const rows = useMemo(() => {
     const byPlace = new Map<string, number>();

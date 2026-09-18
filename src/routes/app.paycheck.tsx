@@ -56,6 +56,7 @@ import {
   shiftMonth,
 } from "@/lib/data-hooks";
 import { buildActualResolver } from "@/lib/spending-actuals";
+import { opaqueTransferAccountIds } from "@/lib/internal-transfers";
 import { useBills, useEffectiveDebts, useAutoTransfers } from "@/lib/data-hooks";
 import { deriveCycleInfo, type CycleInfo } from "@/lib/ledger-state";
 import {
@@ -416,7 +417,13 @@ function PeriodBudget({
   // Per-category spend history: last completed month and 3-month average,
   // resolved through the same ledger/override rules as the Spending screen.
   const spendHistory = useMemo(() => {
-    const resolver = buildActualResolver(spendActuals, allTransactions, bills);
+    const resolver = buildActualResolver(
+      spendActuals,
+      allTransactions,
+      bills,
+      [],
+      opaqueTransferAccountIds(accounts),
+    );
     const thisMonth = monthKey();
     const lastMonth = shiftMonth(thisMonth, -1);
     const window = [1, 2, 3].map((n) => shiftMonth(thisMonth, -n));
@@ -431,7 +438,7 @@ function PeriodBudget({
       });
     }
     return out;
-  }, [spendActuals, allTransactions, bills, categories]);
+  }, [spendActuals, allTransactions, bills, categories, accounts]);
 
   const obligations = useMemo(
     // ADR-060: project recurrences forward through the end of this period so

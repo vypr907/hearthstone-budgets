@@ -190,6 +190,12 @@ export type Account = {
   owner_member_id?: string | null;
   /** ADR-088: when false, the account is left out of the net-worth trend. */
   include_in_net_worth?: boolean | null;
+  /**
+   * ADR-089 addendum: this account isn't fully tracked by the household (e.g.
+   * a spouse's personal account whose spending isn't logged here yet) — a
+   * transfer landing here counts as real spend instead of an internal wash.
+   */
+  transfers_count_as_spend?: boolean | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

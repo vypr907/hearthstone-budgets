@@ -15,7 +15,7 @@ import {
   useTransactions,
   useUpsertTransaction,
 } from "@/lib/data-hooks";
-import { internalTransferIds } from "@/lib/internal-transfers";
+import { internalTransferIds, opaqueTransferAccountIds } from "@/lib/internal-transfers";
 import { accountLabel, formatMoney } from "@/lib/format";
 import type { Transaction } from "@/lib/supabase";
 
@@ -94,14 +94,14 @@ function FixPlacesPage() {
    * where the money really did leave the household.
    */
   const unassigned = useMemo(() => {
-    const internal = internalTransferIds(transactions);
+    const internal = internalTransferIds(transactions, opaqueTransferAccountIds(accounts));
     return transactions.filter(
       (t: Transaction) =>
         !t.institution_id &&
         !(t.transfer_group_id && internal.has(t.transfer_group_id)) &&
         Number(t.amount ?? 0) < 0,
     );
-  }, [transactions]);
+  }, [transactions, accounts]);
 
   async function assign(t: Transaction, institutionId: string | null) {
     if (!institutionId) return;

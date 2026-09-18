@@ -16,7 +16,7 @@ import { useHouseholdMembers, memberLabel } from "@/lib/household";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/format";
 import { computeBalances, computeInstitutionTotals, isDebtPaidOff } from "@/lib/balances";
-import { internalTransferIds } from "@/lib/internal-transfers";
+import { internalTransferIds, opaqueTransferAccountIds } from "@/lib/internal-transfers";
 import { setTxPreFilter } from "@/lib/tx-filter-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -423,7 +423,7 @@ function InstitutionDetail({
   };
   /** Only worth grouping when the institution actually has more than one member account. */
   const groupByMember = memberAccounts.length > 1;
-  const internal = internalTransferIds(transactions);
+  const internal = internalTransferIds(transactions, opaqueTransferAccountIds(accounts));
   const memberGroups = groupByMember
     ? groupObligationsByMember(
         institution.id,

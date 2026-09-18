@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monthlyIncomeVsExpenses, projectOccurrences } from "@/lib/paycheck-budget";
+import { actualByCategoryInRange, monthlyIncomeVsExpenses, projectOccurrences } from "@/lib/paycheck-budget";
 import type { Category, Transaction } from "@/lib/supabase";
 
 /**
@@ -164,5 +164,63 @@ describe("monthlyIncomeVsExpenses", () => {
 
   it("returns an empty array for no matching transactions", () => {
     expect(monthlyIncomeVsExpenses([], categories, "2026-01-01", "2026-12-31")).toEqual([]);
+  });
+});
+
+/**
+ * ADR-089 addendum: a transfer's negative leg can carry a spending category
+ * (ADR-064 applies one category to both rows of the pair), but a two-sided
+ * transfer isn't money leaving the household. Found live: a $25 transfer
+ * tagged "Home & Garden" was inflating the Dashboard/Simple category tile's
+ * total by $25 beyond what its own institution-breakdown drill-down showed
+ * (that drill-down already excluded internal transfers; this total didn't).
+ */
+describe("actualByCategoryInRange excludes two-sided transfers (ADR-089 addendum)", () => {
+  const categories: Category[] = [
+    { id: "home", household_id: "h", name: "Home & Garden", domain: "spending", parent_category: null },
+  ];
+
+  function tx(partial: Partial<Transaction> & { amount: number; transaction_date: string }): Transaction {
+    return {
+      id: partial.id ?? crypto.randomUUID(),
+      household_id: "h",
+      account_id: null,
+      category_id: partial.category_id ?? null,
+      amount: partial.amount,
+      status: "cleared",
+      description: null,
+      transaction_date: partial.transaction_date,
+      linked_bill_id: null,
+      linked_debt_id: null,
+      transfer_group_id: partial.transfer_group_id ?? null,
+    } as Transaction;
+  }
+
+  it("counts a categorized transfer's negative leg as spend when no internal-transfer set is passed", () => {
+    const out = actualByCategoryInRange(
+      [tx({ amount: -25, category_id: "home", transaction_date: "2026-09-16", transfer_group_id: "g1" })],
+      [],
+      [],
+      categories,
+      "2026-09-01",
+      "2026-10-01",
+    );
+    expect(out.get("home")?.spendingSpent).toBe(25);
+  });
+
+  it("excludes it once its transfer_group_id is in the internal-transfer set", () => {
+    const out = actualByCategoryInRange(
+      [
+        tx({ amount: -25, category_id: "home", transaction_date: "2026-09-16", transfer_group_id: "g1" }),
+        tx({ amount: -16.84, category_id: "home", transaction_date: "2026-09-11" }),
+      ],
+      [],
+      [],
+      categories,
+      "2026-09-01",
+      "2026-10-01",
+      new Set(["g1"]),
+    );
+    expect(out.get("home")?.spendingSpent).toBe(16.84);
   });
 });

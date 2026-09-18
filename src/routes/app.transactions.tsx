@@ -57,7 +57,7 @@ import {
   type SplitRow,
 } from "@/components/SplitLinesEditor";
 import { consumeTxPreFilter } from "@/lib/tx-filter-store";
-import { internalTransferIds, isInternalTransfer } from "@/lib/internal-transfers";
+import { internalTransferIds, isInternalTransfer, opaqueTransferAccountIds } from "@/lib/internal-transfers";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { useEditLinkedTransaction, toPayable } from "@/lib/payments";
 import { useTags, useTransactionTags, useSetTransactionTags } from "@/lib/tags";
@@ -226,7 +226,7 @@ function TransactionsPage() {
     if (dateTo) out = out.filter((t) => t.transaction_date <= dateTo);
     // ADR-089: mirror the budget math — two-sided transfers aren't spending.
     if (hideInternalTransfers) {
-      const internal = internalTransferIds(transactions);
+      const internal = internalTransferIds(transactions, opaqueTransferAccountIds(accounts));
       out = out.filter((t) => !isInternalTransfer(t, internal));
     }
     const q = searchQuery.trim().toLowerCase();
@@ -266,6 +266,7 @@ function TransactionsPage() {
     amountMin,
     amountMax,
     institutionName,
+    accounts,
   ]);
 
   /** ADR-044: collapse split lines into one entry per real transaction. */

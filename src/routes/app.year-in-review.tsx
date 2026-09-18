@@ -34,6 +34,7 @@ import {
 } from "@/lib/data-hooks";
 import { useCurrentMember } from "@/lib/household";
 import { actualByCategoryInRange, monthlyIncomeVsExpenses } from "@/lib/paycheck-budget";
+import { internalTransferIds, opaqueTransferAccountIds } from "@/lib/internal-transfers";
 import { debtBalanceAsOf, debtPayoffTrend, totalPaidDownInYear } from "@/lib/debt-history";
 import { netWorthTrend } from "@/lib/net-worth";
 import { accountInMemberView } from "@/lib/balances";
@@ -122,6 +123,7 @@ function YearInReviewPage() {
       categories,
       rangeStart,
       `${rangeEnd}T23:59:59`,
+      internalTransferIds(transactions, opaqueTransferAccountIds(accounts)),
     );
     const byId = new Map(categories.map((c) => [c.id, c]));
     const rows = [...byCategory.entries()]
@@ -146,7 +148,7 @@ function YearInReviewPage() {
             },
           ];
     return { rows, chartRows: chartRows.slice().reverse() /* recharts vertical bar renders bottom-up */ };
-  }, [transactions, bills, categories, rangeStart, rangeEnd]);
+  }, [transactions, bills, debts, categories, rangeStart, rangeEnd, accounts]);
 
   // --- 2. Income vs. expenses trend ---
   const incomeExpense = useMemo(

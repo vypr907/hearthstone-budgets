@@ -303,6 +303,11 @@ export function actualByCategoryInRange(
   categories: Category[],
   start: string,
   end: string,
+  /** ADR-089: two-sided transfer group ids (`internalTransferIds()`) — a
+   *  transfer's negative leg can carry a spending category (ADR-064 applies
+   *  one category to both rows of the pair), but it isn't money leaving the
+   *  household, so it's excluded here the same as every other spend total. */
+  internalTransferGroupIds?: Set<string>,
 ): Map<string, CategoryActual> {
   const income = new Set(
     categories.filter((c) => (c.domain ?? "").toLowerCase() === "income").map((c) => c.id),
@@ -325,6 +330,7 @@ export function actualByCategoryInRange(
 
   for (const t of transactions) {
     if (!inRange(t.transaction_date, start, end)) continue;
+    if (t.transfer_group_id && internalTransferGroupIds?.has(t.transfer_group_id)) continue;
     const amount = Number(t.amount || 0);
     if (amount >= 0) continue; // only money out counts as spend
     const linkedBillId = t.linked_bill_id ?? null;
