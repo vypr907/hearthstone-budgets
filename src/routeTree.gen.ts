@@ -16,6 +16,7 @@ import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppAccountsRouteImport } from './routes/app.accounts'
 import { Route as AppBillsRouteImport } from './routes/app.bills'
 import { Route as AppCategoriesRouteImport } from './routes/app.categories'
+import { Route as AppDailyFinancialsRouteImport } from './routes/app.daily-financials'
 import { Route as AppDebtStrategyRouteImport } from './routes/app.debt-strategy'
 import { Route as AppDebtsRouteImport } from './routes/app.debts'
 import { Route as AppEverythingRouteImport } from './routes/app.everything'
@@ -69,6 +70,11 @@ const AppBillsRoute = AppBillsRouteImport.update({
 const AppCategoriesRoute = AppCategoriesRouteImport.update({
   id: '/categories',
   path: '/categories',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDailyFinancialsRoute = AppDailyFinancialsRouteImport.update({
+  id: '/daily-financials',
+  path: '/daily-financials',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDebtStrategyRoute = AppDebtStrategyRouteImport.update({
@@ -174,6 +180,7 @@ export interface FileRoutesByFullPath {
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
   '/app/categories': typeof AppCategoriesRoute
+  '/app/daily-financials': typeof AppDailyFinancialsRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
@@ -201,6 +208,7 @@ export interface FileRoutesByTo {
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
   '/app/categories': typeof AppCategoriesRoute
+  '/app/daily-financials': typeof AppDailyFinancialsRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
@@ -230,6 +238,7 @@ export interface FileRoutesById {
   '/app/accounts': typeof AppAccountsRoute
   '/app/bills': typeof AppBillsRoute
   '/app/categories': typeof AppCategoriesRoute
+  '/app/daily-financials': typeof AppDailyFinancialsRoute
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
@@ -260,6 +269,7 @@ export interface FileRouteTypes {
     | '/app/accounts'
     | '/app/bills'
     | '/app/categories'
+    | '/app/daily-financials'
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
@@ -287,6 +297,7 @@ export interface FileRouteTypes {
     | '/app/accounts'
     | '/app/bills'
     | '/app/categories'
+    | '/app/daily-financials'
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
@@ -315,6 +326,7 @@ export interface FileRouteTypes {
     | '/app/accounts'
     | '/app/bills'
     | '/app/categories'
+    | '/app/daily-financials'
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
@@ -392,6 +404,13 @@ declare module '@tanstack/react-router' {
       path: '/categories'
       fullPath: '/app/categories'
       preLoaderRoute: typeof AppCategoriesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/daily-financials': {
+      id: '/app/daily-financials'
+      path: '/daily-financials'
+      fullPath: '/app/daily-financials'
+      preLoaderRoute: typeof AppDailyFinancialsRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/debt-strategy': {
@@ -534,6 +553,7 @@ interface AppRouteChildren {
   AppAccountsRoute: typeof AppAccountsRoute
   AppBillsRoute: typeof AppBillsRoute
   AppCategoriesRoute: typeof AppCategoriesRoute
+  AppDailyFinancialsRoute: typeof AppDailyFinancialsRoute
   AppDebtStrategyRoute: typeof AppDebtStrategyRoute
   AppDebtsRoute: typeof AppDebtsRoute
   AppEverythingRoute: typeof AppEverythingRoute
@@ -560,6 +580,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAccountsRoute: AppAccountsRoute,
   AppBillsRoute: AppBillsRoute,
   AppCategoriesRoute: AppCategoriesRoute,
+  AppDailyFinancialsRoute: AppDailyFinancialsRoute,
   AppDebtStrategyRoute: AppDebtStrategyRoute,
   AppDebtsRoute: AppDebtsRoute,
   AppEverythingRoute: AppEverythingRoute,

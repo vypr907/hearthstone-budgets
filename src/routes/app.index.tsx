@@ -66,7 +66,11 @@ import { HelpButton } from "@/components/HelpButton";
 
 
 import { netWorthTrend } from "@/lib/net-worth";
+import { currentMonthWindow, currentPayPeriod } from "@/lib/pay-period";
+import { dailySpendSeries } from "@/lib/daily-financials";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -305,6 +309,33 @@ function Dashboard() {
     for (const p of netWorth) for (const k of Object.keys(p.byType)) set.add(k);
     return [...set].sort();
   }, [netWorth]);
+
+  /**
+   * ADR-108: daily-spend trend for the bottom-of-dashboard chart, toggleable
+   * between the current pay period and the current calendar month. Shows
+   * total outflow (bills/debts included), not the Daily Financials screen's
+   * spending-only category breakdown — see ADR-108 for why the two
+   * intentionally differ.
+   */
+  const [dailyChartRange, setDailyChartRange] = useState<"period" | "month">("period");
+  const dailyChartWindow = useMemo(() => {
+    if (dailyChartRange === "month") return currentMonthWindow();
+    return currentPayPeriod(sources, events) ?? currentMonthWindow();
+  }, [dailyChartRange, sources, events]);
+  const internalForDailyChart = useMemo(
+    () => internalTransferIds(transactions, opaqueTransferAccountIds(accounts)),
+    [transactions, accounts],
+  );
+  const dailySpendData = useMemo(
+    () =>
+      dailySpendSeries(
+        transactions,
+        internalForDailyChart,
+        dailyChartWindow.start,
+        dailyChartWindow.end,
+      ).map((p) => ({ ...p, label: p.date.slice(8, 10) })),
+    [transactions, internalForDailyChart, dailyChartWindow],
+  );
   const netWorthData = useMemo(
     () =>
       netWorth.map((p) => ({
@@ -1585,6 +1616,65 @@ function Dashboard() {
                     {t}
                   </span>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {dailySpendData.length > 1 && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Daily spending — {formatWindow(dailyChartWindow.start, dailyChartWindow.end)}
+                </p>
+                <div className="flex items-center gap-1 rounded-full border border-border p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setDailyChartRange("period")}
+                    className={`rounded-full px-2 py-0.5 ${
+                      dailyChartRange === "period" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    Pay period
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDailyChartRange("month")}
+                    className={`rounded-full px-2 py-0.5 ${
+                      dailyChartRange === "month" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    Month
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 h-40 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dailySpendData} margin={{ left: 4, right: 8, top: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} interval="preserveStartEnd" />
+                    <YAxis
+                      width={40}
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={11}
+                      tickFormatter={(v: number) => `$${Math.round(v)}`}
+                    />
+                    <Tooltip
+                      formatter={(v: number) => [formatMoney(v), "Spent"]}
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ""}
+                      contentStyle={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar dataKey="amount" name="Spent" fill="var(--chart-1)" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>

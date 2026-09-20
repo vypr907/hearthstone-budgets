@@ -6,6 +6,7 @@ import { itemColor } from "@/components/viz";
 import {
   BarChart3,
   Building2,
+  CalendarClock,
   CalendarDays,
   PiggyBank,
   Target,
@@ -19,7 +20,6 @@ import {
   Wallet,
   Wrench,
 } from "lucide-react";
-
 
 export const Route = createFileRoute("/app/more")({
   head: () => ({
@@ -45,6 +45,7 @@ export const Route = createFileRoute("/app/more")({
 
 const links = [
   { to: "/app/accounts", label: "Accounts", icon: Wallet },
+  { to: "/app/daily-financials", label: "Daily Financials", icon: CalendarClock },
   { to: "/app/spending", label: "Spending", icon: PiggyBank },
   { to: "/app/goals", label: "Savings Goals", icon: Target },
   { to: "/app/paycheck", label: "Paycheck Budget", icon: Wallet },
@@ -88,4 +89,3 @@ function MorePage() {
     </>
   );
 }
-

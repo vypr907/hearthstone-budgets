@@ -33,18 +33,87 @@ export const PAYCHECK_DEDUCTION_ICON = "💼";
 /** ADR-081: marks a recurring auto-transfer between the household's own accounts. */
 export const AUTO_TRANSFER_ICON = "🔁";
 
-
 /** Emoji choices offered by the category icon picker. */
 export const CATEGORY_ICONS = [
-  "🏷️", "🛒", "🍽️", "⛽", "🚗", "🏠", "💡", "💧", "📱", "🌐",
-  "🛡️", "🩺", "💊", "🎬", "🎮", "🐾", "🎓", "💳", "🏦", "🐷",
-  "📈", "👛", "🔁", "✈️", "🛍️", "🎁", "👶", "💼", "🧾", "🍺",
-  "☕", "🍔", "🚕", "🚌", "🚲", "⚡", "🔧", "🛠️", "🌳", "🧹",
-  "🏋️", "🧘", "💇", "💅", "🧴", "🎵", "📺", "🎨", "📚", "🎉",
-  "🎂", "⚖️", "🖥️", "❤️",
-  "💵", "💸", "📦", "🚬", "💨", "🆘", "📁", "🎄", "🧮", "🚙",
-  "🧳", "💻", "🍕", "🛁", "🚿", "📷", "🏖️", "🅿️", "🏥", "🧸",
-  "🎧", "🕹️", "🌱",
+  "🏷️",
+  "🛒",
+  "🍽️",
+  "⛽",
+  "🚗",
+  "🏠",
+  "💡",
+  "💧",
+  "📱",
+  "🌐",
+  "🛡️",
+  "🩺",
+  "💊",
+  "🎬",
+  "🎮",
+  "🐾",
+  "🎓",
+  "💳",
+  "🏦",
+  "🐷",
+  "📈",
+  "👛",
+  "🔁",
+  "✈️",
+  "🛍️",
+  "🎁",
+  "👶",
+  "💼",
+  "🧾",
+  "🍺",
+  "☕",
+  "🍔",
+  "🚕",
+  "🚌",
+  "🚲",
+  "⚡",
+  "🔧",
+  "🛠️",
+  "🌳",
+  "🧹",
+  "🏋️",
+  "🧘",
+  "💇",
+  "💅",
+  "🧴",
+  "🎵",
+  "📺",
+  "🎨",
+  "📚",
+  "🎉",
+  "🎂",
+  "⚖️",
+  "🖥️",
+  "❤️",
+  "💵",
+  "💸",
+  "📦",
+  "🚬",
+  "💨",
+  "🆘",
+  "📁",
+  "🎄",
+  "🧮",
+  "🚙",
+  "🧳",
+  "💻",
+  "🍕",
+  "🛁",
+  "🚿",
+  "📷",
+  "🏖️",
+  "🅿️",
+  "🏥",
+  "🧸",
+  "🎧",
+  "🕹️",
+  "🌱",
+  "🐍",
+  "🐱",
 ];
 
 export type CategoryVisualSource = {
@@ -123,7 +192,10 @@ export function formatTypeLabel(type: string | null | undefined) {
 
 /** Icon + colour for an institution type, same pattern as categories. */
 export function institutionTypeVisual(type: string | null | undefined) {
-  const key = (type ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const key = (type ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   const hit = INSTITUTION_TYPE_META[key];
   if (hit) return hit;
   return { icon: emojiFor(type, "🏢"), color: DEFAULT_CATEGORY_COLOR };
@@ -144,12 +216,14 @@ const ACCOUNT_TYPE_META: Record<string, { icon: string; color: string }> = {
 
 /** Icon + colour for an account type, same pattern as institutions. */
 export function accountTypeVisual(type: string | null | undefined) {
-  const key = (type ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const key = (type ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   return ACCOUNT_TYPE_META[key] ?? { icon: "🏦", color: DEFAULT_CATEGORY_COLOR };
 }
 
 /* ---------------- Logo suggestion (ADR-030) ---------------- */
-
 
 /** Extract a bare domain from a possibly-scheme-less URL string. */
 export function domainFromUrl(url: string | null | undefined) {
@@ -180,9 +254,7 @@ export function suggestedLogoUrl(loginUrl: string | null | undefined) {
  * which the user can clear or correct on the institution afterwards.
  */
 export function guessMerchantDomain(name: string | null | undefined) {
-  const slug = (name ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
+  const slug = (name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
   if (slug.length < 3) return null;
   return `${slug}.com`;
 }
