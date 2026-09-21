@@ -1,3 +1,48 @@
+## 2026-09-20 — ADR-108: Daily Financials screen + Dashboard daily-spend chart + snake/cat emoji
+
+Interviewed via `/plan` first: the household wanted a day-level companion to
+the existing month/pay-period screens (Spending, Monthly Summary, Paycheck
+Budget) — nothing in the app answered "what happened on this specific day"
+before. Purely client-side, no schema change.
+
+* **New `/app/daily-financials` screen** (`src/lib/daily-financials.ts`,
+  `src/routes/app.daily-financials.tsx`, linked from More): a day picker
+  (Popover + the existing shadcn `Calendar` component — first real use of
+  it anywhere in the app), money in/out/net for that day, spending by
+  category (categories with zero spend that day omitted) expandable via
+  shadcn `Collapsible` (also its first real use) to a per-institution
+  breakdown read directly off `transactions.institution_id` (ADR-053), and
+  a "Paid today" bills/debts list.
+* **Interviewed and deliberately scoped, not assumed**: the category
+  section is **spending-only** — a transaction carrying
+  `linked_bill_id`/`linked_debt_id` is excluded there and shown only in
+  the "Paid today" list, so the same dollar never visibly double-counts on
+  one screen (a departure from `combinedActualByCategory`/
+  `actualByCategoryInRange`'s usual bills+debts+spending-combined
+  convention, used deliberately here only). Every aggregate on the screen
+  includes pending + cleared transactions and keys on `transaction_date`,
+  never `cleared_date` (ADR-100) — matches how every other spend-total
+  function in this codebase already works.
+* **New Dashboard chart** (`src/routes/app.index.tsx`, bottom of the "More
+  Info" full-details view, right after Net worth trend): a recharts
+  `BarChart` of total daily outflow, toggleable between the current pay
+  period (`currentPayPeriod`) and calendar month (`currentMonthWindow`,
+  both `src/lib/pay-period.ts`). Intentionally **not** spending-only —
+  bills/debts are included, since there's no adjacent "paid today" list on
+  the Dashboard to double up against, so the trend reads as real daily
+  burn.
+* Appended 🐍 and 🐱 (the household's own nicknames, "vypr" and "kitten")
+  to `CATEGORY_ICONS` (`src/lib/visual-meta.ts`) — one shared array already
+  backs both the category and tag icon pickers.
+* 8 new unit tests (`daily-financials.test.ts`). Ran `npm install` in this
+  checkout (no `node_modules` present) to verify locally: `tsc --noEmit`
+  clean, 243/243 tests pass, `eslint` clean on every new/touched file,
+  `vite build` succeeds and correctly regenerated `routeTree.gen.ts`.
+  Loaded both `/app/` and `/app/daily-financials/` in a headless browser —
+  both redirect cleanly to sign-in with zero console errors (no
+  `.env.test` creds were available in this checkout for a fully-logged-in
+  visual pass). Committed and pushed to `main` (`bf42d1b`).
+
 ## 2026-09-17 — Bug fix: `actualByCategoryInRange` didn't exclude two-sided transfers (ADR-089)
 
 * User noticed Dashboard/Simple's "Home & Garden" tile showed $41.84 total
