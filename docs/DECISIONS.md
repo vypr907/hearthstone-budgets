@@ -4244,6 +4244,57 @@ the migration; full run **34/34 checks pass**, TEST household confirmed clean af
 
 Status: Decided 2026-09-11. Implemented 2026-09-13.
 
+Addendum (2026-09-24, Issue #67): converted the 5 sibling functions named
+above. Ten new Postgres functions (`security invoker`,
+`scripts/migrations/2026-09-24-atomic-payment-undo-rpcs.sql`) — one per JS
+function per entity type, matching how `apply_debt_advance`/
+`apply_debt_adjustment`/`apply_cleared_debt_payment`/
+`apply_cleared_bill_payment` were each kept separate rather than
+consolidating shapes that only looked similar:
+
+- `useMarkUnpaid` -> `apply_debt_mark_unpaid` / `apply_bill_mark_unpaid`
+- `useResetCycle` -> `apply_debt_cycle_reset` / `apply_bill_cycle_reset`
+- `useReversePayment` -> `apply_debt_payment_reversal` / `apply_bill_payment_reversal`
+- `rollbackClearedPayment` -> `rollback_cleared_debt_payment` / `rollback_cleared_bill_payment`
+- `useCorrectPayment` -> `correct_cleared_debt_payment` / `correct_cleared_bill_payment`
+
+The issue's own column list mixed debt-only (`arrears_paid_to_date`,
+`minimum_payment`) and bill-only (`cycle_amount_due`) columns, so both
+entity branches of all 5 functions were in scope, not just the debt side —
+10 RPCs, not 5. Each is a direct single-`UPDATE` port of its JS function's
+existing branch (every column reference in one `UPDATE`'s `SET` list sees
+the same pre-update snapshot, so duplicating a condition across `SET`
+clauses is safe, same style `apply_debt_advance` already used — not a CTE
+chain like the cleared-payment RPCs, since none of these 5 need a
+multi-step shortfall/overflow derivation). New shared helper
+`rebuild_bill_cycle_amount_due` ports `rebuiltCycleAmountDue`
+(`src/lib/payments.ts`) into SQL for the two bill RPCs that need it,
+reusing `shift_billing_date` for its window math. `useCorrectPayment`'s
+client-side resolve-boundary validation stays in JS as a fast pre-check
+(unchanged messages); `correct_cleared_debt_payment`/
+`correct_cleared_bill_payment` re-enforce the same three guards
+server-side as the authoritative, race-closing check — the two guards with
+no dynamic value raise the exact existing message text directly, the third
+(carries a computed due amount) uses the same sentinel +
+client-regex-translation pattern `apply_cleared_bill_payment`'s overpay cap
+already established.
+
+One genuine pre-existing asymmetry ported verbatim, not "fixed": unlike
+the other 4 conversions, `useResetCycle`'s debt branch never mirrored
+`minimum_payment` for advance debts — preserved exactly as-is rather than
+silently changed while porting.
+
+Status: Decided 2026-09-24. Implemented and verified 2026-09-24. Migration
+applied by the user, verified via the read-only MCP (all 11 functions
+present, `security invoker`). `src/lib/payments.ts` updated to call all 10
+RPCs — `tsc --noEmit` clean, 246/246 tests pass.
+`scripts/smoke/verify-payment-undo-rpcs.mjs` run against the TEST
+household: **43/43 checks pass**, all 10 RPCs plus
+`rebuild_bill_cycle_amount_due` exercised, household confirmed clean
+afterward (no orphaned rows). Not yet checked in a running browser — sandbox
+networking can't reach the dev server; needs a Codespace or real terminal
+pass per CLAUDE.md.
+
 ## ADR-102: Debts Can Link to a Real Account (Mirrored Ledger)
 
 Decision:
