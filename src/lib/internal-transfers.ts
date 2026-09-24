@@ -62,3 +62,38 @@ export function isInternalTransfer(t: Transaction, internal: Set<string>): boole
   const gid = t.transfer_group_id ?? null;
   return !!gid && internal.has(gid);
 }
+
+/**
+ * ADR-109: the reverse of `internalTransferIds`'s opaque-account carve-out —
+ * a two-sided transfer whose NEGATIVE (sending) leg is on an opaque account
+ * is money coming back from a flagged personal account into a joint/tracked
+ * one. `internalTransferIds` already classifies this pair as internal
+ * (excluded from spend); this returns the subset of that set so a caller can
+ * additionally recognize the positive leg as income instead of leaving it
+ * neutral.
+ *
+ * @returns the set of `transfer_group_id`s that are a two-sided,
+ *   reverse-opaque transfer (subset of `internalTransferIds()`'s result).
+ */
+export function reverseOpaqueTransferIds(
+  transactions: Transaction[] = [],
+  opaqueAccountIds: Set<string> = new Set(),
+): Set<string> {
+  const negOnOpaque = new Set<string>();
+  const pos = new Set<string>();
+  for (const t of transactions) {
+    const gid = t.transfer_group_id ?? null;
+    if (!gid) continue;
+    const amount = Number(t.amount || 0);
+    if (amount < 0) {
+      if (t.account_id && opaqueAccountIds.has(t.account_id)) negOnOpaque.add(gid);
+    } else if (amount > 0) {
+      pos.add(gid);
+    }
+  }
+  const out = new Set<string>();
+  for (const gid of negOnOpaque) {
+    if (pos.has(gid)) out.add(gid);
+  }
+  return out;
+}

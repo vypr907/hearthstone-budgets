@@ -152,8 +152,9 @@ function YearInReviewPage() {
 
   // --- 2. Income vs. expenses trend ---
   const incomeExpense = useMemo(
-    () => monthlyIncomeVsExpenses(transactions, categories, rangeStart, `${rangeEnd}T23:59:59`),
-    [transactions, categories, rangeStart, rangeEnd],
+    () =>
+      monthlyIncomeVsExpenses(transactions, categories, rangeStart, `${rangeEnd}T23:59:59`, accounts),
+    [transactions, categories, rangeStart, rangeEnd, accounts],
   );
 
   // --- 3. Net worth growth ---
