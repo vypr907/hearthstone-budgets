@@ -1,5 +1,6 @@
-import type { AutoTransfer, Bill, Category, Debt, IncomeEvent, IncomeSource, Transaction } from "./supabase";
+import type { Account, AutoTransfer, Bill, Category, Debt, IncomeEvent, IncomeSource, Transaction } from "./supabase";
 import { debtDueDate, shiftDateSafe } from "./format";
+import { internalTransferIds, opaqueTransferAccountIds, reverseOpaqueTransferIds } from "./internal-transfers";
 
 export function todayISO() {
   const n = new Date();
@@ -363,21 +364,45 @@ export type MonthlyIncomeExpense = {
  * (categories.domain === "income") rather than re-deriving it — a
  * transaction's sign alone can't tell income from a refund/correction on an
  * expense category, so domain is the source of truth here too.
+ *
+ * ADR-109: also excludes ordinary two-sided internal transfers entirely
+ * (they carry no category and were previously falling through to the
+ * expenses bucket unexcluded — the only calculator in the codebase that
+ * didn't already exclude them), and recognizes the receiving leg of a
+ * reverse-opaque transfer (ADR-107's flagged-account carve-out, reverse
+ * direction) as income instead of leaving it neutral.
  */
 export function monthlyIncomeVsExpenses(
   transactions: Transaction[],
   categories: Category[],
   start: string,
   end: string,
+  accounts: Account[] = [],
 ): MonthlyIncomeExpense[] {
   const income = new Set(
     categories.filter((c) => (c.domain ?? "").toLowerCase() === "income").map((c) => c.id),
   );
+  const opaqueAccountIds = opaqueTransferAccountIds(accounts);
+  const internal = internalTransferIds(transactions, opaqueAccountIds);
+  const reverseOpaque = reverseOpaqueTransferIds(transactions, opaqueAccountIds);
   const byMonth = new Map<string, { income: number; expenses: number }>();
   for (const t of transactions) {
     if (!inRange(t.transaction_date, start, end)) continue;
     const amount = Number(t.amount || 0);
     if (!amount) continue;
+    const monthKey = t.transaction_date.slice(0, 7) + "-01";
+    const gid = t.transfer_group_id ?? null;
+    if (gid && internal.has(gid)) {
+      if (reverseOpaque.has(gid) && amount > 0) {
+        const row = byMonth.get(monthKey) ?? { income: 0, expenses: 0 };
+        row.income += amount;
+        byMonth.set(monthKey, row);
+      }
+      // Every other two-sided internal transfer leg (both legs of a plain
+      // transfer, or the sending/opaque leg of a reverse-opaque pair) stays
+      // neutral — it's not spend or income, same as everywhere else.
+      continue;
+    }
     const categoryId = (t as { category_id?: string | null }).category_id ?? null;
     const isIncome = !!categoryId && income.has(categoryId);
     // A negative amount on an income category (a correction/clawback) and a
@@ -386,7 +411,6 @@ export function monthlyIncomeVsExpenses(
     // skip rather than mis-bucket or spuriously seed an all-zero month.
     if (isIncome && amount <= 0) continue;
     if (!isIncome && amount >= 0) continue;
-    const monthKey = t.transaction_date.slice(0, 7) + "-01";
     const row = byMonth.get(monthKey) ?? { income: 0, expenses: 0 };
     if (isIncome) row.income += amount;
     else row.expenses += Math.abs(amount);
