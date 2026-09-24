@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { actualByCategoryInRange, monthlyIncomeVsExpenses, projectOccurrences } from "@/lib/paycheck-budget";
-import type { Category, Transaction } from "@/lib/supabase";
+import type { Account, Category, Transaction } from "@/lib/supabase";
 
 /**
  * ADR-060: projectOccurrences walks a bill/debt forward one billing cycle at a
@@ -110,7 +110,7 @@ describe("monthlyIncomeVsExpenses", () => {
     return {
       id: partial.id ?? crypto.randomUUID(),
       household_id: "h",
-      account_id: null,
+      account_id: partial.account_id ?? null,
       category_id: partial.category_id ?? null,
       amount: partial.amount,
       status: "cleared",
@@ -118,6 +118,7 @@ describe("monthlyIncomeVsExpenses", () => {
       transaction_date: partial.transaction_date,
       linked_bill_id: null,
       linked_debt_id: null,
+      transfer_group_id: partial.transfer_group_id ?? null,
     } as Transaction;
   }
 
@@ -164,6 +165,64 @@ describe("monthlyIncomeVsExpenses", () => {
 
   it("returns an empty array for no matching transactions", () => {
     expect(monthlyIncomeVsExpenses([], categories, "2026-01-01", "2026-12-31")).toEqual([]);
+  });
+
+  function account(partial: Partial<Account> & { id: string }): Account {
+    return {
+      id: partial.id,
+      household_id: "h",
+      institution_id: null,
+      name: partial.id,
+      account_type: "checking",
+      starting_balance: 0,
+      is_spendable: true,
+      credit_limit: null,
+      transfers_count_as_spend: partial.transfers_count_as_spend ?? false,
+    } as Account;
+  }
+
+  it("excludes both legs of an ordinary internal transfer (ADR-109)", () => {
+    const out = monthlyIncomeVsExpenses(
+      [
+        tx({ amount: -300, account_id: "checking", transfer_group_id: "g1", transaction_date: "2026-01-05" }),
+        tx({ amount: 300, account_id: "savings", transfer_group_id: "g1", transaction_date: "2026-01-05" }),
+        tx({ amount: 2000, category_id: "salary", transaction_date: "2026-01-05" }),
+      ],
+      categories,
+      "2026-01-01",
+      "2026-12-31",
+      [account({ id: "checking" }), account({ id: "savings" })],
+    );
+    expect(out).toEqual([{ date: "2026-01-01", label: "Jan", income: 2000, expenses: 0 }]);
+  });
+
+  it("counts the receiving leg of a reverse-opaque transfer as income, and excludes its sending leg (ADR-109)", () => {
+    const out = monthlyIncomeVsExpenses(
+      [
+        // Money coming back from a flagged/opaque personal account into joint checking.
+        tx({ amount: -100, account_id: "opaque", transfer_group_id: "g2", transaction_date: "2026-01-05" }),
+        tx({ amount: 100, account_id: "checking", transfer_group_id: "g2", transaction_date: "2026-01-05" }),
+      ],
+      categories,
+      "2026-01-01",
+      "2026-12-31",
+      [account({ id: "opaque", transfers_count_as_spend: true }), account({ id: "checking" })],
+    );
+    expect(out).toEqual([{ date: "2026-01-01", label: "Jan", income: 100, expenses: 0 }]);
+  });
+
+  it("still counts a transfer INTO an opaque account as an expense here (ADR-107's spend-side carve-out — not excluded as internal, consistent with every other calculator)", () => {
+    const out = monthlyIncomeVsExpenses(
+      [
+        tx({ amount: -100, account_id: "checking", transfer_group_id: "g3", transaction_date: "2026-01-05" }),
+        tx({ amount: 100, account_id: "opaque", transfer_group_id: "g3", transaction_date: "2026-01-05" }),
+      ],
+      categories,
+      "2026-01-01",
+      "2026-12-31",
+      [account({ id: "checking" }), account({ id: "opaque", transfers_count_as_spend: true })],
+    );
+    expect(out).toEqual([{ date: "2026-01-01", label: "Jan", income: 0, expenses: 100 }]);
   });
 });
 
