@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Bill, type BillAdjustment, type Debt, type Transaction } from "./supabase";
-import { advanceDate, reverseDate, shiftDateSafe, formatMoney } from "./format";
+import { shiftDateSafe, formatMoney } from "./format";
 import { useAuth } from "./auth-context";
 import { debtPayoffDatePatch } from "./debt-payoff-state";
 
@@ -200,25 +200,6 @@ export function rebuiltCycleAmountDue(
   if (active.length === 0) return null;
   const delta = active.reduce((s, a) => s + Number(a.amount ?? 0), 0);
   return Math.max(0, Math.round((Number(bill.amount ?? 0) + delta) * 100) / 100);
-}
-
-/**
- * Read a bill's adjustment rows for a reset recompute. Degrades to `[]` on any
- * read error so a reset never fails outright — the caller then falls back to
- * the old null-ing behavior rather than blocking the undo.
- */
-async function fetchBillAdjustments(billId: string): Promise<BillAdjustment[]> {
-  try {
-    const { data, error } = await supabase
-      .from("bill_adjustments")
-      .select("*")
-      .eq("bill_id", billId);
-    if (error) throw error;
-    return (data ?? []) as BillAdjustment[];
-  } catch (e) {
-    console.warn("[rebuiltCycleAmountDue] bill_adjustments read failed, resetting flat", e);
-    return [];
-  }
 }
 
 /** Remaining owed this cycle for either kind of payable. */
@@ -919,68 +900,28 @@ export function useMarkUnpaid() {
         await deleteMirrorTransaction(tx.transfer_group_id, tx.id);
       }
 
+      const amount = Math.abs(Number(tx?.amount ?? p.amount));
+
+      // ADR-101 addendum (Issue #67): the debt/bill-row update is now one
+      // atomic RPC call (apply_debt_mark_unpaid / apply_bill_mark_unpaid,
+      // scripts/migrations/2026-09-24-atomic-payment-undo-rpcs.sql) instead
+      // of a client-computed update — the RPC re-derives the
+      // partial-vs-resolved branch from the row's own live cycle_paid_to_date.
       if (p.kind === "debt") {
-        const update: Record<string, unknown> = { payment_status: "unpaid" };
-        if (wasCleared) {
-          const amount = Math.abs(Number(tx?.amount ?? p.amount));
-          update.remaining_balance = Number(p.debt?.remaining_balance ?? 0) + amount;
-          const paid = Number(p.debt?.cycle_paid_to_date ?? 0);
-          if (paid > 0) {
-            // Reversing a partial payment: stay in the same cycle, take it back off.
-            update.cycle_paid_to_date = Math.max(0, paid - amount);
-          } else {
-            // The clear resolved the cycle — undo that roll-forward.
-            const cycle = (p.debt?.billing_cycle ?? "monthly").toLowerCase();
-            if (cycle !== "monthly" && p.debt?.next_due_date) {
-              update.next_due_date = reverseDate(
-                p.debt.next_due_date,
-                p.debt.billing_cycle,
-                p.debt.cycle_interval_days,
-              );
-            }
-            update.cycle_paid_to_date = 0;
-          }
-        }
-        const { error } = await supabase.from("debts").update(update).eq("id", p.id);
+        const { error } = await supabase.rpc("apply_debt_mark_unpaid", {
+          p_debt_id: p.id,
+          p_amount: amount,
+          p_was_cleared: wasCleared,
+        });
         if (error) throw error;
         return;
       }
 
-      const bill = p.bill;
-      const update: Record<string, unknown> = { payment_status: "unpaid" };
-      if (wasCleared && bill) {
-        const amount = Math.abs(Number(tx?.amount ?? p.amount));
-        const paid = Number(bill.cycle_paid_to_date ?? 0);
-        if (paid > 0) {
-          // Reversing a partial payment: stay in the same cycle, just take it back off.
-          const next = Math.max(0, paid - amount);
-          update.cycle_paid_to_date = next;
-          if (next === 0 && !bill.is_variable_amount) {
-            // ADR-058 addendum: rebuild from any active adjustment rather than
-            // blanking — a null here silently drops the adjustment's effect.
-            update.cycle_amount_due = rebuiltCycleAmountDue(
-              bill,
-              await fetchBillAdjustments(bill.id),
-              bill.next_due_date,
-            );
-          }
-        } else if (bill.next_due_date) {
-          // The clear rolled the bill into its next cycle — undo that roll-forward.
-          const revertedDue = reverseDate(
-            bill.next_due_date,
-            bill.billing_cycle,
-            bill.cycle_interval_days,
-          );
-          update.next_due_date = revertedDue;
-          update.cycle_paid_to_date = 0;
-          update.cycle_amount_due = rebuiltCycleAmountDue(
-            bill,
-            await fetchBillAdjustments(bill.id),
-            revertedDue,
-          );
-        }
-      }
-      const { error } = await supabase.from("bills").update(update).eq("id", p.id);
+      const { error } = await supabase.rpc("apply_bill_mark_unpaid", {
+        p_bill_id: p.id,
+        p_amount: amount,
+        p_was_cleared: wasCleared,
+      });
       if (error) throw error;
     },
     onSuccess: done,
@@ -1024,54 +965,23 @@ export function useResetCycle() {
         for (const g of await groupIdsFor(transactionIds)) await deletePairedFees(g);
       }
 
+      // ADR-101 addendum (Issue #67): the debt/bill-row update is now one
+      // atomic RPC call (apply_debt_cycle_reset / apply_bill_cycle_reset,
+      // scripts/migrations/2026-09-24-atomic-payment-undo-rpcs.sql).
       if (payable.kind === "debt") {
-        const debt = payable.debt!;
-        const update: Record<string, unknown> = {
-          payment_status: "unpaid",
-          cycle_paid_to_date: 0,
-          remaining_balance: Number(debt.remaining_balance ?? 0) + clearedTotal,
-          ...debtPayoffDatePatch(
-            debt,
-            Number(debt.remaining_balance ?? 0) + clearedTotal,
-          ),
-        };
-        const cycle = (debt.billing_cycle ?? "monthly").toLowerCase();
-        if (resolved && cycle !== "monthly" && debt.next_due_date) {
-          update.next_due_date = reverseDate(
-            debt.next_due_date,
-            debt.billing_cycle,
-            debt.cycle_interval_days,
-          );
-        }
-        const { error } = await supabase.from("debts").update(update).eq("id", payable.id);
+        const { error } = await supabase.rpc("apply_debt_cycle_reset", {
+          p_debt_id: payable.id,
+          p_cleared_total: clearedTotal,
+          p_resolved: resolved,
+        });
         if (error) throw error;
         return;
       }
 
-      const bill = payable.bill!;
-      // The cycle we're returning the bill to: the reversed due date when the
-      // clear had already rolled it forward, otherwise the current one.
-      const restoredDue =
-        resolved && bill.next_due_date
-          ? reverseDate(bill.next_due_date, bill.billing_cycle, bill.cycle_interval_days)
-          : bill.next_due_date;
-      // ADR-058 addendum: rebuild cycle_amount_due from any active adjustment
-      // for that cycle instead of blanking it (returns null when there is
-      // none, so a plain bill resets exactly as before).
-      const rebuiltDue = rebuiltCycleAmountDue(
-        bill,
-        await fetchBillAdjustments(bill.id),
-        restoredDue,
-      );
-      const update: Record<string, unknown> = {
-        payment_status: "unpaid",
-        cycle_paid_to_date: 0,
-        cycle_amount_due: rebuiltDue,
-      };
-      if (resolved && bill.next_due_date) {
-        update.next_due_date = restoredDue;
-      }
-      const { error } = await supabase.from("bills").update(update).eq("id", payable.id);
+      const { error } = await supabase.rpc("apply_bill_cycle_reset", {
+        p_bill_id: payable.id,
+        p_resolved: resolved,
+      });
       if (error) throw error;
     },
     onSuccess: done,
@@ -1102,26 +1012,21 @@ export function useReversePayment() {
       const amt = Math.abs(Number(transaction.amount ?? 0));
       if (!(amt > 0)) throw new Error("This transaction has no amount to reverse.");
 
+      // ADR-101 addendum (Issue #67): the debt/bill-row update is now one
+      // atomic RPC call (apply_debt_payment_reversal / apply_bill_payment_reversal,
+      // scripts/migrations/2026-09-24-atomic-payment-undo-rpcs.sql).
       if (payable.kind === "bill") {
-        const bill = payable.bill!;
-        const paid = Math.max(0, Number(bill.cycle_paid_to_date ?? 0) - amt);
-        const due = bill.cycle_amount_due != null ? Number(bill.cycle_amount_due) : Number(bill.amount || 0);
-        const update: Record<string, unknown> = { cycle_paid_to_date: paid };
-        if (paid + 0.005 < due) update.payment_status = "unpaid";
-        await updateRow("bills", payable.id, update);
+        const { error } = await supabase.rpc("apply_bill_payment_reversal", {
+          p_bill_id: payable.id,
+          p_amount: amt,
+        });
+        if (error) throw error;
       } else {
-        const debt = payable.debt!;
-        const paid = Math.max(0, Number(debt.cycle_paid_to_date ?? 0) - amt);
-        const due = debtCycleDue(debt);
-        const nextBalance = Number(debt.remaining_balance ?? 0) + amt;
-        const update: Record<string, unknown> = {
-          remaining_balance: nextBalance,
-          cycle_paid_to_date: paid,
-          ...advanceMinimumPaymentPatch(debt, nextBalance),
-          ...debtPayoffDatePatch(debt, nextBalance),
-        };
-        if (paid + 0.005 < due) update.payment_status = "unpaid";
-        await updateRow("debts", payable.id, update);
+        const { error } = await supabase.rpc("apply_debt_payment_reversal", {
+          p_debt_id: payable.id,
+          p_amount: amt,
+        });
+        if (error) throw error;
       }
 
       const { error } = await supabase.from("transactions").insert({
@@ -1171,6 +1076,25 @@ export type CorrectPaymentInput = {
 };
 
 /**
+ * ADR-101 addendum (Issue #67): correct_cleared_debt_payment /
+ * correct_cleared_bill_payment raise a sentinel message for the one guard
+ * that carries a dynamic value (the cycle's due amount) — translate it back
+ * into the same friendly, formatMoney'd string useCorrectPayment's own
+ * client-side pre-check already produces for that case. Any other RPC error
+ * (including the two guards with no dynamic value, which the RPC raises
+ * with that exact message text directly) passes through unchanged.
+ */
+function translateCorrectPaymentError(error: { message?: string }): Error {
+  const m = /CORRECT_PAYMENT_WOULD_RESOLVE ([\d.]+)/.exec(error.message ?? "");
+  if (m) {
+    return new Error(
+      `That amount would fully pay off the cycle (due ${formatMoney(Number(m[1]))}) — correcting across a resolve isn't supported here. Reverse the original payment, then redo it through Submit/Clear.`,
+    );
+  }
+  return error instanceof Error ? error : new Error(error.message ?? "Correction failed.");
+}
+
+/**
  * ADR-077: fix a wrong amount/date/account on an already-cleared, linked
  * PARTIAL payment in place — no delete, no reversal row. Only safe when
  * neither the stored cycle total before nor after the correction would
@@ -1194,6 +1118,11 @@ export function useCorrectPayment() {
 
       const originalAmount = Math.abs(Number(transaction.amount ?? 0));
 
+      // ADR-101 addendum (Issue #67): validation stays here as a fast,
+      // friendly pre-check (unchanged messages) — the RPC re-enforces the
+      // same three guards server-side as the authoritative, race-closing
+      // check (correct_cleared_debt_payment / correct_cleared_bill_payment,
+      // scripts/migrations/2026-09-24-atomic-payment-undo-rpcs.sql).
       if (payable.kind === "debt") {
         const debt = payable.debt!;
         const due = debtCycleDue(debt);
@@ -1214,16 +1143,13 @@ export function useCorrectPayment() {
             `That amount would fully pay off the cycle (due ${formatMoney(due)}) — correcting across a resolve isn't supported here. Reverse the original payment, then redo it through Submit/Clear.`,
           );
         }
-        const newRemaining = Math.max(
-          0,
-          Number(debt.remaining_balance ?? 0) + (originalAmount - amount),
-        );
-        await updateRow("debts", payable.id, {
-          cycle_paid_to_date: paidAfter,
-          remaining_balance: newRemaining,
-          ...advanceMinimumPaymentPatch(debt, newRemaining),
-          ...debtPayoffDatePatch(debt, newRemaining, date),
+        const { error } = await supabase.rpc("correct_cleared_debt_payment", {
+          p_debt_id: payable.id,
+          p_original_amount: originalAmount,
+          p_new_amount: amount,
+          p_date: date,
         });
+        if (error) throw translateCorrectPaymentError(error);
       } else {
         const bill = payable.bill!;
         const due = billCycleDue(bill);
@@ -1244,7 +1170,12 @@ export function useCorrectPayment() {
             `That amount would fully pay off the cycle (due ${formatMoney(due)}) — correcting across a resolve isn't supported here. Reverse the original payment, then redo it through Submit/Clear.`,
           );
         }
-        await updateRow("bills", payable.id, { cycle_paid_to_date: paidAfter });
+        const { error } = await supabase.rpc("correct_cleared_bill_payment", {
+          p_bill_id: payable.id,
+          p_original_amount: originalAmount,
+          p_new_amount: amount,
+        });
+        if (error) throw translateCorrectPaymentError(error);
       }
 
       const { error } = await supabase
@@ -1290,39 +1221,24 @@ export async function rollbackClearedPayment(
   resolvedDueDate?: string | null,
 ) {
   const amt = Math.abs(amount);
+  // ADR-101 addendum (Issue #67): the debt/bill-row update is now one atomic
+  // RPC call (rollback_cleared_debt_payment / rollback_cleared_bill_payment,
+  // scripts/migrations/2026-09-24-atomic-payment-undo-rpcs.sql).
   if (p.kind === "bill") {
-    const bill = p.bill!;
-    const paid = Math.max(0, Number(bill.cycle_paid_to_date ?? 0) - amt);
-    const update: Record<string, unknown> = { cycle_paid_to_date: paid };
-    if (resolvedDueDate) {
-      // The resolve rolled the cycle forward and cleared the counters — put the
-      // cycle back where it was and credit whatever else had been paid into it.
-      update.next_due_date = resolvedDueDate;
-      update.cycle_paid_to_date = 0;
-      update.payment_status = "unpaid";
-    } else if (paid + 0.005 < billCycleDue(bill)) {
-      update.payment_status = paid > 0.005 ? "pending" : "unpaid";
-    }
-    await updateRow("bills", p.id, update);
+    const { error } = await supabase.rpc("rollback_cleared_bill_payment", {
+      p_bill_id: p.id,
+      p_amount: amt,
+      p_resolved_due_date: resolvedDueDate ?? null,
+    });
+    if (error) throw error;
     return;
   }
-  const debt = p.debt!;
-  const paid = Math.max(0, Number(debt.cycle_paid_to_date ?? 0) - amt);
-  const nextBalance = Number(debt.remaining_balance ?? 0) + amt;
-  const update: Record<string, unknown> = {
-    remaining_balance: nextBalance,
-    cycle_paid_to_date: paid,
-    ...advanceMinimumPaymentPatch(debt, nextBalance),
-    ...debtPayoffDatePatch(debt, nextBalance),
-  };
-  if (resolvedDueDate) {
-    update.next_due_date = resolvedDueDate;
-    update.cycle_paid_to_date = 0;
-    update.payment_status = "unpaid";
-  } else if (paid + 0.005 < debtCycleDue(debt)) {
-    update.payment_status = paid > 0.005 ? "pending" : "unpaid";
-  }
-  await updateRow("debts", p.id, update);
+  const { error } = await supabase.rpc("rollback_cleared_debt_payment", {
+    p_debt_id: p.id,
+    p_amount: amt,
+    p_resolved_due_date: resolvedDueDate ?? null,
+  });
+  if (error) throw error;
 }
 
 export type EditLinkedTransactionInput = {
