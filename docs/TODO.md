@@ -41,3 +41,10 @@ not tasks:
   `transaction_date`-bucketed view shows the early deposit one bucket back.
   Inherent to anchoring on the official pay date and expressing earliness as an
   offset.
+- **`useResetCycle`'s debt branch doesn't mirror `minimum_payment` for
+  advance-type debts**, unlike every other debt-balance mutation
+  (`useMarkUnpaid`, `useReversePayment`, `rollbackClearedPayment`,
+  `useCorrectPayment`, all of which apply `advanceMinimumPaymentPatch`).
+  Found and deliberately preserved verbatim (not fixed) while porting all
+  five to atomic RPCs (ADR-101 addendum, Issue #67, 2026-09-24) — a
+  pre-existing asymmetry, not something introduced by that change.

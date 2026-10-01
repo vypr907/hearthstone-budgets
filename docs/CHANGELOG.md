@@ -1,3 +1,81 @@
+## 2026-10-01 — Statement reconciliation feature: researched and filed as Issue #78
+
+* User asked (via `/plan`) whether an in-app "upload a bank statement,
+  auto-match transactions, interview me for conflicts" feature was
+  feasible. Researched the existing `scripts/reconcile-*-csv.mjs` tools
+  (a reusable date-window + subset-sum matcher, ~70-85% duplicated across
+  the three) and the app's architecture (pure client SPA, zero
+  server-side code, no upload/CSV/PDF infra today, no reconciliation
+  concept in the schema).
+* Decided with the user: CSV + PDF (OnePay) both in v1; ephemeral
+  one-sitting import with no new DB table/ADR; auto-match silently and
+  interview only exceptions, including a new amount-mismatch bucket for
+  cases like a pending entry that clears at a different amount because a
+  tip was added after the swipe.
+* Full design (module breakdown, CSV column-mapping UX, the PDF→rows
+  approach via `pdfjs-dist`, the ported matching algorithm, interview
+  UI/UX, verification plan, flagged risks, suggested build order) written
+  up and filed as [Issue #78](https://github.com/vypr907/hearthstone-budgets/issues/78)
+  rather than implemented now, per the user's request to save it for a
+  future session. No code changed.
+
+## 2026-09-24 — Issue #68: recategorize the 2 legacy Cash & Checks transactions
+
+* The last 2 pre-ADR-103 "Cash & Checks" transactions (both 2026-07-02,
+  $60 total, ATM withdrawal fully spent same-day at Nature's Releaf) are
+  recategorized to "Green," matching every sibling transaction at that
+  merchant — confirmed via the read-only MCP that these were fully spent,
+  not leftover cash, so no Cash Back transfer combo (ADR-103) applied.
+* `scripts/migrations/2026-09-24-cash-checks-legacy-recategorize.sql` (+
+  `.verify.sql`), user-run and verified live. Pure data fix, no app code,
+  no new ADR (cites ADR-103). PR #75.
+
+## 2026-09-24 — ADR-109: reverse-direction transfer from an opaque account counts as income (Year in Review)
+
+* ADR-107 deferred this — money moving *back* out of a flagged/opaque
+  personal account (`accounts.transfers_count_as_spend`) stayed a neutral
+  excluded transfer everywhere, since no spend calculator had an "income"
+  counterpart a positive leg could feed into. New
+  `reverseOpaqueTransferIds()` (`src/lib/internal-transfers.ts`),
+  symmetric to the existing `posOnOpaque` carve-out; `monthlyIncomeVsExpenses()`
+  (`src/lib/paycheck-budget.ts`) gained an `accounts` param and now credits
+  that leg as income — scoped to Year in Review's Income vs. Expenses
+  chart only (interviewed: Dashboard's income tile is event-sourced, not
+  ledger-sourced; Monthly Summary has no income row today).
+* **Bundled bug fix** (required for #74 to be correct, not scope creep):
+  `monthlyIncomeVsExpenses` was the only calculator in the codebase that
+  never excluded ordinary two-sided internal transfers at all — an
+  uncategorized transfer's negative leg (e.g. paycheck → savings) was
+  inflating "expenses" in Year in Review. Fixed as part of the same change.
+* 3 new tests, `tsc --noEmit` clean, 246/246 tests pass. No schema change.
+  Closes #74, PR #76.
+
+## 2026-09-24 — Issue #67 (ADR-101 addendum): atomic RPCs for the remaining 5 payment/debt functions
+
+* `useMarkUnpaid`, `useResetCycle`, `useReversePayment`,
+  `rollbackClearedPayment`, and `useCorrectPayment` (`src/lib/payments.ts`)
+  were the last functions still doing the racy client-side "read a
+  Payable, compute in JS, write back" pattern responsible for two real
+  balance-corruption incidents (ADR-101). Ten new atomic Postgres RPCs —
+  one per function × debt/bill entity, matching the granularity already
+  established by `apply_debt_advance`/`apply_cleared_debt_payment`/etc. —
+  replace each write, plus a new shared `rebuild_bill_cycle_amount_due`
+  helper. `useCorrectPayment`'s client-side validation stays as a fast
+  pre-check; the RPCs re-enforce the same guards server-side as the
+  authoritative, race-closing check.
+* `scripts/migrations/2026-09-24-atomic-payment-undo-rpcs.sql` (+
+  `.verify.sql`), user-run and verified live (all 11 functions present,
+  `security invoker`). New `scripts/smoke/verify-payment-undo-rpcs.mjs`
+  run against the TEST household: **43/43 checks pass**, household
+  confirmed clean afterward. `tsc --noEmit` clean, 246/246 tests pass.
+* One genuine pre-existing asymmetry ported verbatim, not fixed:
+  `useResetCycle`'s debt branch never mirrored `minimum_payment` for
+  advance debts, unlike the other 4 conversions — noted in `docs/TODO.md`.
+* Test user's `.env.test` password had expired — reset via the Supabase
+  Auth REST API directly (captured the recovery-email's `access_token` via
+  `curl` with redirects disabled, since the app has no dedicated
+  password-reset page). Closes #67, PR #77.
+
 ## 2026-09-20 — ADR-108: Daily Financials screen + Dashboard daily-spend chart + snake/cat emoji
 
 Interviewed via `/plan` first: the household wanted a day-level companion to
