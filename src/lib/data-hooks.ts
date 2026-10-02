@@ -27,6 +27,7 @@ import { advanceDate, needsEnvelope } from "./format";
 import { assertCategorySplitRows } from "./split-groups";
 import { useAuth } from "./auth-context";
 import { insertFeeTransaction, insertCashBackPurchaseRows, deletePairedFees, hasFee } from "./payments";
+import { ATM_FEE_LINK_MAX_DATE_DIFF_DAYS } from "./atm-fee-link";
 import { nextPayDate } from "./paycheck-budget";
 import { useIncomeSources, useIncomeEvents } from "./income-hooks";
 
@@ -1249,6 +1250,73 @@ export function useDeleteTransferPair() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
+/**
+ * ADR-110: retroactively pair an EXISTING standalone transaction (an ATM fee
+ * that was never written through `insertFeeTransaction`) to an EXISTING
+ * transfer, using the same `split_group_id = transfer_group_id` convention
+ * ADR-097 established — the first hook in this codebase to set a group id on
+ * a row after insert time (every other write path only ever sets one at
+ * creation). Re-derives the transfer pair live rather than trusting
+ * caller-supplied data, so it's safe to call from the repair screen
+ * (`app.fix-atm-fees.tsx`) without re-validating there too.
+ */
+export function useLinkTransferFee() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { feeTransactionId: string; transferGroupId: string }) => {
+      const { data: feeRow, error: feeErr } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("id", args.feeTransactionId)
+        .single();
+      if (feeErr) throw feeErr;
+
+      const { data: legs, error: legErr } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("transfer_group_id", args.transferGroupId);
+      if (legErr) throw legErr;
+
+      const allLegs = (legs ?? []) as Transaction[];
+      const fromLeg = allLegs.find((l) => Number(l.amount) < 0) ?? null;
+      const toLeg = allLegs.find((l) => Number(l.amount) >= 0) ?? null;
+      if (!fromLeg || !toLeg || allLegs.length !== 2) {
+        throw new Error("That transfer isn't a clean two-row pair.");
+      }
+      const fee = feeRow as Transaction;
+      if (fee.household_id !== householdId || fromLeg.household_id !== householdId) {
+        throw new Error("That transaction doesn't belong to this household.");
+      }
+      if (fee.split_group_id || fee.transfer_group_id) {
+        throw new Error("This transaction is already linked to something else.");
+      }
+      if (fee.account_id !== fromLeg.account_id) {
+        throw new Error("This transaction's account doesn't match the transfer's from-account.");
+      }
+      if (!(Number(fee.amount) < 0)) {
+        throw new Error("Only a negative (expense) transaction can be linked as a fee.");
+      }
+      const dayDiff =
+        Math.abs(
+          new Date(fee.transaction_date).getTime() - new Date(fromLeg.transaction_date).getTime(),
+        ) / 86_400_000;
+      if (dayDiff > ATM_FEE_LINK_MAX_DATE_DIFF_DAYS) {
+        throw new Error("That transaction's date is too far from the transfer's date.");
+      }
+
+      const { error } = await supabase
+        .from("transactions")
+        .update({ split_group_id: args.transferGroupId })
+        .eq("id", args.feeTransactionId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
 }

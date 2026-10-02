@@ -18,6 +18,7 @@ import {
 } from "@/lib/data-hooks";
 import { formatMoney } from "@/lib/format";
 import { todayISO } from "@/lib/snapshot";
+import { buildTransferTitleMap } from "@/lib/transfer-title";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -169,27 +170,13 @@ function TransactionsPage() {
     for (const i of institutions) m[i.id] = i.name;
     return m;
   }, [institutions]);
-  // ADR-098: resolve each transfer leg's own "<Source> -> <Destination>"
-  // pair once, keyed by transaction id, instead of a per-row find().
-  const transferTitleAccounts = useMemo(() => {
-    const legsByGroup: Record<string, Transaction[]> = {};
-    for (const t of transactions) {
-      if (!t.transfer_group_id) continue;
-      (legsByGroup[t.transfer_group_id] ||= []).push(t);
-    }
-    const m: Record<string, { from: string; to: string }> = {};
-    for (const legs of Object.values(legsByGroup)) {
-      const from = legs.find((l) => Number(l.amount) < 0);
-      const to = legs.find((l) => Number(l.amount) >= 0);
-      if (!from || !to) continue;
-      const pair = {
-        from: accountName[from.account_id ?? ""] ?? "—",
-        to: accountName[to.account_id ?? ""] ?? "—",
-      };
-      for (const l of legs) m[l.id] = pair;
-    }
-    return m;
-  }, [transactions, accountName]);
+  // ADR-098/110: resolve each transfer leg's own "<Source> -> <Destination>"
+  // pair (plus an ATM-withdrawal place, ADR-110) once, keyed by transaction
+  // id, instead of a per-row find().
+  const transferTitleAccounts = useMemo(
+    () => buildTransferTitleMap(transactions, accounts, institutions),
+    [transactions, accounts, institutions],
+  );
 
   const rows = useMemo(() => {
     let out = transactions;
@@ -576,6 +563,7 @@ function TransactionsPage() {
                           placeName={t.institution_id ? institutionName[t.institution_id] : null}
                           transferFromAccount={transferTitleAccounts[t.id]?.from}
                           transferToAccount={transferTitleAccounts[t.id]?.to}
+                          atmPlaceName={transferTitleAccounts[t.id]?.atmPlaceName}
                         />
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -889,6 +877,22 @@ export function TransactionDetail({
   const transferFromAccountInstitutionId = transferFromAccountId
     ? (accounts.find((a) => a.id === transferFromAccountId)?.institution_id ?? null)
     : null;
+  // ADR-110: when the transfer's destination is a Cash-type account and its
+  // paired fee/purchase row (transferFeeRow above) carries a place, show
+  // that instead of the Source -> Destination arrow.
+  const transferToAccountId = transferPair
+    ? Number(transaction.amount) < 0
+      ? transferPair.account_id
+      : transaction.account_id
+    : null;
+  const transferToIsCash =
+    (accounts.find((a) => a.id === transferToAccountId)?.account_type ?? "")
+      .trim()
+      .toLowerCase() === "cash";
+  const atmPlaceName =
+    transferToIsCash && transferFeeRow?.institution_id
+      ? (institutions.find((i) => i.id === transferFeeRow.institution_id)?.name ?? null)
+      : null;
   // ADR-097 addendum: the reverse of transferFeeRow above — opening a
   // transfer's fee row directly (not via its parent transfer leg) had no way
   // back. A fee row's split_group_id equals its transfer's transfer_group_id,
@@ -1022,6 +1026,7 @@ export function TransactionDetail({
               placeName={placeName}
               transferFromAccount={transferFromAccount}
               transferToAccount={transferToAccount}
+              atmPlaceName={atmPlaceName}
             />
           </DialogTitle>
         </DialogHeader>

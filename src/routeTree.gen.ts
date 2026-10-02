@@ -20,6 +20,7 @@ import { Route as AppDailyFinancialsRouteImport } from './routes/app.daily-finan
 import { Route as AppDebtStrategyRouteImport } from './routes/app.debt-strategy'
 import { Route as AppDebtsRouteImport } from './routes/app.debts'
 import { Route as AppEverythingRouteImport } from './routes/app.everything'
+import { Route as AppFixAtmFeesRouteImport } from './routes/app.fix-atm-fees'
 import { Route as AppFixInstitutionLoginsRouteImport } from './routes/app.fix-institution-logins'
 import { Route as AppFixPlacesRouteImport } from './routes/app.fix-places'
 import { Route as AppGoalsRouteImport } from './routes/app.goals'
@@ -90,6 +91,11 @@ const AppDebtsRoute = AppDebtsRouteImport.update({
 const AppEverythingRoute = AppEverythingRouteImport.update({
   id: '/everything',
   path: '/everything',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFixAtmFeesRoute = AppFixAtmFeesRouteImport.update({
+  id: '/fix-atm-fees',
+  path: '/fix-atm-fees',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFixInstitutionLoginsRoute = AppFixInstitutionLoginsRouteImport.update({
@@ -184,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
+  '/app/fix-atm-fees': typeof AppFixAtmFeesRoute
   '/app/fix-institution-logins': typeof AppFixInstitutionLoginsRoute
   '/app/fix-places': typeof AppFixPlacesRoute
   '/app/goals': typeof AppGoalsRoute
@@ -212,6 +219,7 @@ export interface FileRoutesByTo {
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
+  '/app/fix-atm-fees': typeof AppFixAtmFeesRoute
   '/app/fix-institution-logins': typeof AppFixInstitutionLoginsRoute
   '/app/fix-places': typeof AppFixPlacesRoute
   '/app/goals': typeof AppGoalsRoute
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/app/debt-strategy': typeof AppDebtStrategyRoute
   '/app/debts': typeof AppDebtsRoute
   '/app/everything': typeof AppEverythingRoute
+  '/app/fix-atm-fees': typeof AppFixAtmFeesRoute
   '/app/fix-institution-logins': typeof AppFixInstitutionLoginsRoute
   '/app/fix-places': typeof AppFixPlacesRoute
   '/app/goals': typeof AppGoalsRoute
@@ -273,6 +282,7 @@ export interface FileRouteTypes {
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
+    | '/app/fix-atm-fees'
     | '/app/fix-institution-logins'
     | '/app/fix-places'
     | '/app/goals'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
+    | '/app/fix-atm-fees'
     | '/app/fix-institution-logins'
     | '/app/fix-places'
     | '/app/goals'
@@ -330,6 +341,7 @@ export interface FileRouteTypes {
     | '/app/debt-strategy'
     | '/app/debts'
     | '/app/everything'
+    | '/app/fix-atm-fees'
     | '/app/fix-institution-logins'
     | '/app/fix-places'
     | '/app/goals'
@@ -432,6 +444,13 @@ declare module '@tanstack/react-router' {
       path: '/everything'
       fullPath: '/app/everything'
       preLoaderRoute: typeof AppEverythingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/fix-atm-fees': {
+      id: '/app/fix-atm-fees'
+      path: '/fix-atm-fees'
+      fullPath: '/app/fix-atm-fees'
+      preLoaderRoute: typeof AppFixAtmFeesRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/fix-institution-logins': {
@@ -557,6 +576,7 @@ interface AppRouteChildren {
   AppDebtStrategyRoute: typeof AppDebtStrategyRoute
   AppDebtsRoute: typeof AppDebtsRoute
   AppEverythingRoute: typeof AppEverythingRoute
+  AppFixAtmFeesRoute: typeof AppFixAtmFeesRoute
   AppFixInstitutionLoginsRoute: typeof AppFixInstitutionLoginsRoute
   AppFixPlacesRoute: typeof AppFixPlacesRoute
   AppGoalsRoute: typeof AppGoalsRoute
@@ -584,6 +604,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDebtStrategyRoute: AppDebtStrategyRoute,
   AppDebtsRoute: AppDebtsRoute,
   AppEverythingRoute: AppEverythingRoute,
+  AppFixAtmFeesRoute: AppFixAtmFeesRoute,
   AppFixInstitutionLoginsRoute: AppFixInstitutionLoginsRoute,
   AppFixPlacesRoute: AppFixPlacesRoute,
   AppGoalsRoute: AppGoalsRoute,

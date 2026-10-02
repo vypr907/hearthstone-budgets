@@ -58,6 +58,7 @@ const links = [
   { to: "/app/transactions", label: "Transactions", icon: Receipt },
   { to: "/app/fix-places", label: "Fix Places", icon: Wrench },
   { to: "/app/fix-institution-logins", label: "Fix Logins", icon: Wrench },
+  { to: "/app/fix-atm-fees", label: "Fix ATM Fees", icon: Wrench },
   { to: "/app/snapshot", label: "Status Snapshot", icon: Camera },
   { to: "/app/year-in-review", label: "Year in Review", icon: BarChart3 },
   { to: "/app/settings", label: "Settings", icon: Settings },

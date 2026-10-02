@@ -789,6 +789,16 @@ category split, regardless of how many purchase rows share it. No schema
 change; see ADR-103 for why (double-counting a cash withdrawal that's later
 spent) and `useDeleteTransferPair` in `data-hooks.ts` for cleanup.
 
+ADR-110: an ATM withdrawal (a transfer whose destination is a Cash-type
+account) reuses the same `split_group_id`/`transfer_group_id` fee-pairing
+convention for its withdrawal fee. New: this is the first place a row's
+`split_group_id` is set on an ALREADY-EXISTING transaction, after insert
+time, via `useLinkTransferFee` (`data-hooks.ts`) — every prior writer of
+these two columns only ever set them at insert. No schema change.
+`TransactionTitle.tsx`'s transfer-leg title renders the paired place (🏧)
+instead of "Source → Destination" when this applies — see
+`src/lib/transfer-title.ts`.
+
 ---
 
 ## transactions.resolved_cycle_due_date (ADR-075)

@@ -149,6 +149,11 @@ export function AddTransactionFab() {
   const [transferAmount, setTransferAmount] = useState("");
   /** ADR-097: optional extra amount debited only from the from-account. */
   const [transferFee, setTransferFee] = useState("");
+  /** ADR-110: the fee's own place (e.g. an ATM's merchant/location), shown
+   * only when the destination is a Cash account — overrides the default
+   * from-account's-own-institution fee attribution (correct for a bank fee
+   * like Venmo's, wrong for an ATM withdrawal fee). */
+  const [feePlaceId, setFeePlaceId] = useState<string | null>(null);
   const [transferDescription, setTransferDescription] = useState("");
   /** ADR-064: one optional category for the transfer pair as a whole. */
   const [transferCategoryId, setTransferCategoryId] = useState(NO_CATEGORY);
@@ -193,6 +198,13 @@ export function AddTransactionFab() {
     () => cashAccounts.find((a) => a.owner_member_id === currentMember?.id)?.id ?? cashAccounts[0]?.id ?? "",
     [cashAccounts, currentMember?.id],
   );
+  /** ADR-110: the Transfer form's destination is this kind of ATM withdrawal. */
+  const isTransferToCash = useMemo(
+    () =>
+      (accounts.find((a) => a.id === toAccountId)?.account_type ?? "").trim().toLowerCase() ===
+      "cash",
+    [accounts, toAccountId],
+  );
 
   const { data: institutions = [] } = useInstitutions();
   /** ADR-053/063: the place this money was spent at. */
@@ -229,6 +241,7 @@ export function AddTransactionFab() {
     setToAccountId("");
     setTransferAmount("");
     setTransferFee("");
+    setFeePlaceId(null);
     setTransferDescription("");
     setTransferCategoryId(NO_CATEGORY);
     setTransferTagIds([]);
@@ -269,7 +282,7 @@ export function AddTransactionFab() {
         transferDate: txDate,
         categoryId: transferCategoryId === NO_CATEGORY ? null : transferCategoryId,
         fee,
-        feeInstitutionId: fromAccount?.institution_id ?? null,
+        feeInstitutionId: feePlaceId ?? fromAccount?.institution_id ?? null,
         tagIds: transferTagIds,
       });
       toast.success("Transfer recorded");
@@ -586,6 +599,23 @@ export function AddTransactionFab() {
                     separately as a fee, so the to-account only receives the amount above.
                   </p>
                 </div>
+
+                {/* ADR-110: an ATM withdrawal's fee belongs to the ATM's own
+                    place, not the from-account's bank — only relevant once
+                    there's a fee and the destination is a Cash account. */}
+                {isTransferToCash && Number(transferFee) > 0 ? (
+                  <div className="space-y-2">
+                    <PlacePicker
+                      value={feePlaceId}
+                      onChange={setFeePlaceId}
+                      label="Fee charged at (optional)"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Leave blank to attribute the fee to the from-account's own institution
+                      instead.
+                    </p>
+                  </div>
+                ) : null}
 
                 <p className="text-xs text-muted-foreground">
                   Moves money between your household's own accounts — no place needed,

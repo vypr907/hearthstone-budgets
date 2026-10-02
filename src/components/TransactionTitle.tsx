@@ -18,21 +18,40 @@ type TitleSource = Pick<
  * place's description above. Callers resolve the two account names
  * themselves (they already have the transfer pair in hand) and pass them in;
  * with either name missing, this falls back to the normal rendering below.
+ *
+ * ADR-110: when the transfer's destination is a Cash-type account AND a row
+ * paired to it (via `split_group_id === transfer_group_id`, ADR-097/103) has
+ * a place, this wins over the arrow instead: "🏧 <place>" — an ATM
+ * withdrawal reads by its place, not by "Checking -> Cash". Scoped to
+ * Cash-destination transfers only; every other transfer (e.g. a Venmo
+ * instant-transfer fee) keeps the arrow unconditionally. Callers resolve
+ * `atmPlaceName` themselves (see `src/lib/transfer-title.ts`), same as the
+ * two account names.
  */
 export function TransactionTitle({
   transaction,
   placeName,
   transferFromAccount,
   transferToAccount,
+  atmPlaceName,
 }: {
   transaction: TitleSource;
   placeName: string | null | undefined;
   transferFromAccount?: string | null;
   transferToAccount?: string | null;
+  atmPlaceName?: string | null;
 }) {
   const desc = transaction.description?.trim() || null;
 
   if (transaction.transfer_group_id && transferFromAccount && transferToAccount) {
+    if (atmPlaceName) {
+      return (
+        <>
+          🏧 {atmPlaceName}
+          {desc ? <span className="text-xs italic text-muted-foreground"> · {desc}</span> : null}
+        </>
+      );
+    }
     return (
       <>
         {transferFromAccount} → {transferToAccount}
