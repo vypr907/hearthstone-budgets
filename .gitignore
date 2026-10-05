@@ -45,3 +45,6 @@ scripts/smoke/.pw/
 
 # Local backups
 *.local.backup.md
+
+# graphify (regenerable; rebuild via /graphify or the installed hooks)
+graphify-out/
