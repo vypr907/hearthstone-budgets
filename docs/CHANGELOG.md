@@ -1,3 +1,109 @@
+## 2026-10-06 — Bank statement reconciliation: OnePay + USAA, 14 discrepancies resolved
+
+* Reconciled a OnePay September statement PDF and two USAA CSV exports
+  against One Checking - Steven and Classic Checking (USAA). Generalized
+  `planning/parse-one-statement.py` (was hardcoded to Jul/Aug only) and
+  wrote a new `planning/build-one-statement-csv.mjs` (recreating a lost
+  bridge script) to feed the existing `scripts/reconcile-one-csv.mjs` /
+  `reconcile-usaa-csv.mjs`.
+* Found real precision gaps in both reconcile scripts, not fixed this
+  session: subset-sum caps at 3 app rows (missed two genuine 4-way
+  splits); no de-dup once a coincidental amount+date sum is found (stole
+  several exact same-day matches — Dave ExtraCash, both ATM Fee Rebates,
+  a second Lovable payment — to satisfy unrelated CSV rows by chance);
+  no support for many-CSV-rows-to-one-app-row (MoneyLion/EarnIn disburses
+  an advance as several $100 chunks against the app's one lump entry).
+  Worth a GitHub Issue if these tools get reused again.
+* Interviewed the user to resolve the genuine discrepancies: a $3,169.40
+  lump USAA deposit was the final ASRC Federal paycheck (job ended, sent
+  whole instead of the usual 3-way One/USAA/SoFi split — not a bug);
+  Aaron's-Dresser's fee corrected $14.00 → $14.20 (real USAA charge was
+  $111.30, not $111.10); a Sunrise Bagel transaction had a mistagged
+  `institution_id` ("One Finance" instead of the real merchant), no
+  category, and a wrong `cleared_date` — fixed, and confirmed *not* a
+  duplicate as first suspected (the reconciliation script's date-drift
+  had borrowed an unrelated row to satisfy a different statement line).
+* Found and fixed a real app bug: a reversed-then-redone OnePay Advance
+  debt payment left a stale, unpaired $6.75 fee row — the reversal only
+  ever put back the $225 principal, never the original fee, so the fee
+  was effectively charged twice in the ledger with only one real bank
+  charge behind it. Deleted the orphaned row.
+* 12 genuinely-missing charges logged across both accounts (Pixel Flow
+  ×3, Kindle Unlimited, Aaron's Club Membership, Snapchat ×3, and a
+  DoubleWood bill payment on One Checking; Google Starz, Siam Square
+  Thai, Sunrise Bagel on USAA), tagged to match existing sibling
+  transactions' merchant/category for consistency. DoubleWood's payment
+  (a linked bill) correctly ran the app's own "elapsed cycle" historical
+  path (ledger-only, cycle fields untouched) since 9/30 falls before the
+  bill's current cycle window.
+* Fully explained with no data change needed: USAA's "$252.09 missing
+  P&C insurance" charge is a real 3-way split (Auto $177.92 + Renters
+  $70.81 + Jewelry $3.36) that both reconcile scripts' institution-tag
+  filter was blocking from matching.
+* All fixes applied by the user via the Supabase SQL Editor; the
+  read-only MCP was used throughout for diagnosis/verification only.
+  `planning/*` (PDFs, CSVs, JSON snapshots, built scripts) stays
+  gitignored — real financial data never committed.
+
+## 2026-10-02 — Diagnosed ATT/Prose "exceeds arrears" clearing errors (data-only, no code bug)
+
+* User couldn't clear the ATT or Prose bill payments ("exceeds the bill
+  and its arrears currently owe"). Diagnosed via the read-only Supabase
+  MCP — two unrelated data issues, not an app bug:
+  - **ATT**: a duplicate pending transaction (-$222.12, 9/30) — an exact
+    duplicate of a transaction that had already cleared and already
+    rolled the bill to its next cycle ($212.12 owed). Fix: delete the
+    duplicate.
+  - **Prose**: `bills.amount`/`cycle_amount_due` was stuck at $59.18
+    while the real recurring charge (and the pending transaction being
+    cleared) was $125.54 — same `cycle_amount_due` drift class as the
+    2026-08-21 Beiers/ATT fix. Fix: correct `amount` to $125.54, null
+    out `cycle_amount_due`.
+* Both fixes applied by the user via the Supabase SQL Editor; confirmed
+  live afterward — ATT had nothing left to clear (already correctly
+  resolved), Prose's pending transaction cleared normally once the
+  bill's amount was corrected.
+
+## 2026-10-02 — ADR-110: ATM withdrawal fees link to their transfer, show merchant + 🏧
+
+* An ATM cash withdrawal previously wrote two unrelated rows — an
+  ADR-056 transfer pair for the cash, and a separate standalone expense
+  for the fee — with nothing connecting them; the transfer leg's title
+  fell back to generic "Checking → Cash" instead of anything
+  merchant-related.
+* No schema change: reuses the existing ADR-097 `split_group_id =
+  transfer_group_id` fee-pairing convention (the same mechanism ADR-103's
+  Cash Back feature already generalizes), scoped to transfers whose
+  destination is a Cash-type account only.
+* `TransactionTitle.tsx` + new `src/lib/transfer-title.ts`
+  (`buildTransferTitleMap`) render `🏧 <place>` instead of the arrow when
+  a Cash-destination transfer has a paired placed row; wired into all 4
+  call sites (`app.transactions.tsx` ledger list + detail,
+  `app.accounts.tsx`'s `AccountAllTransactions` + `RecentActivity`). The
+  existing 💵 `ACCOUNT_TYPE_META.cash.icon` (the Cash account's own icon)
+  is untouched.
+* New `useLinkTransferFee` (`data-hooks.ts`) — the first hook in the
+  codebase to set a group id on an already-existing row (every prior
+  write path only ever set one at insert time) — retroactively pairs a
+  standalone fee transaction to an existing transfer, validated against
+  household/account/link-state/date proximity (`src/lib/atm-fee-link.ts`).
+* New guided repair screen `src/routes/app.fix-atm-fees.tsx` (registered
+  in `app.more.tsx`'s Tools grid) + pure detection
+  `src/lib/atm-fee-repair.ts` (`findUnlinkedAtmFeeCandidates`, 9 unit
+  tests) — confirm/skip per candidate, never auto-applied, surfacing
+  every date-proximate transfer per fee so a same-day multi-visit to the
+  same place doesn't get silently mismatched.
+* `AddTransactionFab.tsx`'s Transfer mode gains an optional fee
+  place-picker (shown only when the destination is a Cash account) for
+  the going-forward manual-entry case.
+* Verified: `tsc --noEmit` clean, 255/255 tests pass (9 new), `eslint`
+  clean on new/touched code. Cross-checked the detection heuristic
+  against live household data via the read-only MCP — zero false
+  positives, and found the household had already manually linked one
+  real ATM-fee/transfer pair by hand, confirming the convention matches
+  real data shape. Not yet checked in a running browser (sandbox
+  networking constraint) — needs a manual click-through or Codespace pass.
+
 ## 2026-10-01 — Statement reconciliation feature: researched and filed as Issue #78
 
 * User asked (via `/plan`) whether an in-app "upload a bank statement,
