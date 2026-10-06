@@ -5,7 +5,9 @@ output of the OnePay statement PDFs into structured per-account transaction
 history + activity-summary totals, for all accounts (Checking, Savings, and
 every Pocket), not just Checking.
 
-Usage: python3 parse-one-statement.py 2026-07.txt 2026-08.txt
+Usage: python3 parse-one-statement.py 2026-07.txt 2026-08.txt ...
+Any number of files; each one's label/year is taken from its own filename
+stem (e.g. "2026-09.txt" -> label "09", year 2026).
 Writes one-statement-parsed.json next to this script.
 """
 import json
@@ -121,8 +123,11 @@ def parse_file(path, year):
 
 def main():
     out = {}
-    for path, year in [(sys.argv[1], 2026), (sys.argv[2], 2026)]:
-        label = "07" if "07" in Path(path).stem else "08"
+    for path in sys.argv[1:]:
+        stem = Path(path).stem  # e.g. "2026-09" from "2026-09.txt"
+        year_s, _, label = stem.partition("-")
+        year = int(year_s) if year_s.isdigit() else 2026
+        label = label or stem
         out[label] = parse_file(path, year)
 
     outpath = Path(__file__).parent / "one-statement-parsed.json"
