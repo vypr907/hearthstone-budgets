@@ -19,6 +19,7 @@ import {
   useDeleteDebtAdjustment,
   useCreateAdvance,
   useDeleteAdvance,
+  useAllAccountBalances,
   shiftMonth,
 } from "@/lib/data-hooks";
 import { useHouseholdMembers, memberLabel } from "@/lib/household";
@@ -78,16 +79,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
 import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
 import { LogDebtPaymentDialog } from "@/components/LogDebtPaymentDialog";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Debt, BillingCycle, Transaction } from "@/lib/supabase";
+import type { Debt, BillingCycle, DebtAdjustment, Transaction } from "@/lib/supabase";
 import { TransactionDetail } from "@/routes/app.transactions";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 import { PastDueBadge } from "@/components/PastDueBadge";
+import { computeAdvanceEpisodes, type AdvanceEpisode } from "@/lib/debt-episodes";
 import { PastDueEditor } from "@/components/PastDueEditor";
 
 
@@ -99,6 +101,7 @@ const ADJUSTMENT_TYPES = [
   "insurance_discount",
   "late_fee",
   "nsf_fee",
+  "advance_fee",
   "other",
 ];
 import { format, parseISO } from "date-fns";
@@ -1775,6 +1778,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   const { data: allAdjustments = [] } = useDebtAdjustments();
   const { data: allTransactions = [] } = useTransactions();
   const { data: accounts = [] } = useAccounts();
+  const { data: allAccountBalances = [] } = useAllAccountBalances();
   const adjustments = useMemo(
     () => allAdjustments.filter((a) => a.debt_id === debt.id && a.adjustment_type !== "advance"),
     [allAdjustments, debt.id],
@@ -1782,6 +1786,11 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   const advances = useMemo(
     () => allAdjustments.filter((a) => a.debt_id === debt.id && a.adjustment_type === "advance"),
     [allAdjustments, debt.id],
+  );
+  // ADR-111: per-advance episode history, replacing the flat list below.
+  const episodes = useMemo(
+    () => computeAdvanceEpisodes(debt, allAdjustments, allTransactions, accounts, allAccountBalances),
+    [debt, allAdjustments, allTransactions, accounts, allAccountBalances],
   );
   const add = useAddDebtAdjustment();
   const remove = useDeleteDebtAdjustment();
@@ -1885,16 +1894,19 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       <div>
         <div className="flex items-center justify-between">
           <SectionLabel>Adjustments</SectionLabel>
-          {/* ADR-102 addendum: hidden once linked -- remaining_balance is
-              derived from the account, so an adjustment here would be a
-              silent no-op. */}
-          {debt.linked_account_id ? null : (
+          {/* ADR-102 addendum (2026-10-13 revision): hidden only for a linked
+              NON-advance debt (credit card) -- remaining_balance there is
+              derived from the account, so an adjustment would be a silent
+              no-op. A linked advance debt still needs this: it's the guided
+              way to log a real fee that increases what's owed (useAddDebtAdjustment
+              already mirrors it onto the linked account correctly). */}
+          {debt.linked_account_id && debt.debt_type !== "advance" ? null : (
             <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(true)}>
               <Plus className="mr-1 h-4 w-4" /> Add
             </Button>
           )}
         </div>
-        {debt.linked_account_id ? (
+        {debt.linked_account_id && debt.debt_type !== "advance" ? (
           <p className="mt-0.5 text-xs text-muted-foreground">
             Managed automatically from the linked account — log purchases and
             payments there instead.
@@ -1951,48 +1963,50 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
         <div>
           <div className="flex items-center justify-between">
             <SectionLabel>Advances</SectionLabel>
-            {/* ADR-102 addendum: hidden once linked -- same reasoning as
-                Adjustments above. */}
-            {debt.linked_account_id ? null : (
-              <Button size="sm" variant="outline" className="h-8" onClick={() => setAdvanceOpen(true)}>
-                <Plus className="mr-1 h-4 w-4" /> Add
-              </Button>
-            )}
+            {/* ADR-102 addendum (2026-10-13 revision): useCreateAdvance has
+                always mirrored correctly onto a linked account (ADR-102,
+                2026-09-11) -- the 2026-09-15 addendum hid this button for
+                every linked debt, which was right for a linked credit card
+                (no advance concept) but wrong here. Always show it for an
+                advance-type debt, linked or not. */}
+            <Button size="sm" variant="outline" className="h-8" onClick={() => setAdvanceOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" /> Add
+            </Button>
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {debt.linked_account_id
-              ? "Managed automatically from the linked account — log purchases and payments there instead."
+              ? "Record advance draws a new advance; Log a payment above records a repayment. Both post directly to the linked account."
               : "Money borrowed against this debt — deposits into an account and increases balance owed."}
           </p>
-          {advances.length === 0 ? (
+          {episodes.length === 0 ? (
             <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
               No advances recorded.
             </p>
           ) : (
-            <div className="mt-1 divide-y divide-border/50 rounded-md border">
-              {advances.map((a) => (
-                <div key={a.id} className="flex items-center gap-2 px-2 py-2 text-sm">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{formatMoney(Number(a.amount))}</p>
-                    <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
-                  </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 shrink-0"
-                    onClick={async () => {
-                      if (!confirm("Delete this advance? This will also reverse the deposit transaction.")) return;
-                      try {
-                        await deleteAdvance.mutateAsync({ adjustment: a, debt });
-                        toast.success("Advance deleted");
-                      } catch (e) {
-                        toast.error((e as Error).message);
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+            <div className="mt-1 space-y-2">
+              {episodes.map((ep) => (
+                <AdvanceEpisodeCard
+                  key={ep.markerId ?? `pre-${ep.startDate}`}
+                  episode={ep}
+                  advances={advances}
+                  onDeleteAdvance={async (a) => {
+                    if (!confirm("Delete this advance? This will also reverse the deposit transaction.")) return;
+                    try {
+                      await deleteAdvance.mutateAsync({ adjustment: a, debt });
+                      toast.success("Advance deleted");
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    }
+                  }}
+                  onDeleteAdjustment={async (a) => {
+                    try {
+                      await remove.mutateAsync({ adjustment: a, debt });
+                      toast.success("Adjustment removed");
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    }
+                  }}
+                />
               ))}
             </div>
           )}
@@ -2132,6 +2146,149 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+const EPISODE_STATUS_LABEL: Record<AdvanceEpisode["status"], string> = {
+  open: "Open",
+  repaid: "Repaid",
+  carried_forward: "Carried forward",
+};
+
+const EPISODE_STATUS_VARIANT: Record<
+  AdvanceEpisode["status"],
+  "default" | "secondary" | "outline"
+> = {
+  open: "default",
+  repaid: "secondary",
+  carried_forward: "outline",
+};
+
+/**
+ * ADR-111: one advance's lifecycle — draw, fees, repayment, running net —
+ * expandable to the specific advance marker + any in-window adjustments,
+ * reusing their existing amount+date+trash row markup (nested here instead
+ * of in a flat list) so delete still works exactly as it did before.
+ */
+function AdvanceEpisodeCard({
+  episode,
+  advances,
+  onDeleteAdvance,
+  onDeleteAdjustment,
+}: {
+  episode: AdvanceEpisode;
+  advances: DebtAdjustment[];
+  onDeleteAdvance: (a: DebtAdjustment) => void;
+  onDeleteAdjustment: (a: DebtAdjustment) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const marker = advances.find((a) => a.id === episode.markerId) ?? null;
+  const hasManageableRows = marker !== null || episode.adjustments.length > 0;
+
+  return (
+    <div className="rounded-md border">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 px-2 py-2 text-left text-sm"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">
+            {episode.markerId ? formatMoney(episode.advanceAmount) : "Before advance tracking"}
+            {episode.feesTotal > 0.005 ? ` + ${formatMoney(episode.feesTotal)} fees` : ""}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {episode.startDate}
+            {episode.endDate && episode.endDate !== episode.startDate
+              ? ` – ${episode.endDate}`
+              : ""}
+            {episode.endDate === null ? " – ongoing" : ""}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge variant={EPISODE_STATUS_VARIANT[episode.status]}>
+            {EPISODE_STATUS_LABEL[episode.status]}
+          </Badge>
+          {episode.status !== "repaid" ? (
+            <span className="text-sm font-medium tabular-nums">
+              {formatMoney(episode.net)} owed
+            </span>
+          ) : null}
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </div>
+      </button>
+      {expanded ? (
+        <div className="border-t px-2 py-2 text-xs text-muted-foreground">
+          <div className="grid grid-cols-3 gap-2 pb-2">
+            <div>
+              <p className="text-[11px] uppercase tracking-wide">Advance</p>
+              <p className="font-medium text-foreground">{formatMoney(episode.advanceAmount)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide">Fees</p>
+              <p className="font-medium text-foreground">{formatMoney(episode.feesTotal)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide">Repaid</p>
+              <p className="font-medium text-foreground">{formatMoney(episode.repaidTotal)}</p>
+            </div>
+          </div>
+          {hasManageableRows ? (
+            <div className="divide-y divide-border/50 rounded-md border">
+              {marker ? (
+                <div className="flex items-center gap-2 px-2 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-foreground">
+                      {formatMoney(Number(marker.amount))} advance
+                    </p>
+                    <p className="text-xs">{marker.adjustment_date}</p>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => onDeleteAdvance(marker)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : null}
+              {episode.adjustments.map((a) => (
+                <div key={a.id} className="flex items-center gap-2 px-2 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-foreground">
+                      {formatTypeLabel(a.adjustment_type ?? "other")}
+                      {a.description ? ` · ${a.description}` : ""}
+                      {a.affects_balance === false ? (
+                        <span className="ml-1">(record only)</span>
+                      ) : null}
+                    </p>
+                    <p className="text-xs">{a.adjustment_date}</p>
+                  </div>
+                  <span className="shrink-0 tabular-nums font-medium text-foreground">
+                    {Number(a.amount) > 0 ? "+" : ""}
+                    {formatMoney(Number(a.amount))}
+                  </span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => onDeleteAdjustment(a)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p>
+              No manageable entries in this window — see Card activity above for the full account
+              history.
+            </p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

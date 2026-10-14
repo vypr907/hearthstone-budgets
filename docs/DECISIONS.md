@@ -4407,7 +4407,29 @@ session already (Dave ExtraCash, EarnIn, both pre-atomic-RPC balance races).
   three supersedes those anchor numbers separately, later. GTC (a
   credit-card debt with no matching account) stays debt-only, untouched.
 
-Status: Decided 2026-09-11. Implemented 2026-09-11; extended 2026-09-15.
+**2026-10-13 addendum — narrowed the hidden-Add-buttons clause to non-advance
+linked debts:** the 2026-09-15 addendum's "Adjustments/Advances 'Add' actions
+are hidden once linked" was written with credit-card debts in mind (Milestone,
+CreditOne, Mission Lane — no real "advance" concept, so hiding was correct)
+but the gate itself was unconditional on `linked_account_id` alone, so it also
+hid the button for Dave ExtraCash (`debt_type = 'advance'`), the one other
+debt linked so far. That was an overcorrection: `useCreateAdvance` and
+`useAddDebtAdjustment` have been linked-account-aware since this ADR's
+original 2026-09-11 version — both already write a correctly-signed mirror
+transaction onto `linked_account_id`, so the button was hiding working,
+already-correct code, not a real no-op. Decision: narrow the gate in
+`src/routes/app.debts.tsx` (`DebtAdjustments`) to `linked_account_id &&
+debt_type !== 'advance'` for both the Adjustments and Advances sections —
+credit-card debts keep the original hidden behavior unchanged; a linked
+advance debt now shows both "Record advance" and "Add adjustment," each
+writing straight through to the linked account exactly as the unlinked case
+already did. Also added `"advance_fee"` to `ADJUSTMENT_TYPES` so a fee can be
+logged with an on-the-nose label instead of "Other." No hook/schema/RPC
+change — purely a UI gate and copy fix. See ADR-111 for the related
+per-advance history view added in the same pass.
+
+Status: Decided 2026-09-11. Implemented 2026-09-11; extended 2026-09-15;
+addendum 2026-10-13.
 
 ## ADR-103: Cash Tracking via a Cash Account + "Cash Back" Combo Entries
 
@@ -5037,3 +5059,96 @@ confirms the convention matches real data. Not yet checked in a running
 browser — this sandbox can't reach `npm run dev`'s port and the Playwright
 smoke-test setup needs a Codespace; needs a manual click-through before
 fully trusting the 🏧 rendering and the repair screen's live behavior.
+
+## ADR-111: Per-Advance Episode History for `debt_type = 'advance'` Debts
+
+Decision:
+Scoped only to `debt_type === 'advance'` debts (currently OnePay Advance,
+unlinked, and Dave ExtraCash, linked — ADR-102), replace the flat
+"Advances" list on the debt detail screen with a partitioned view: each
+advance draw, its fees, and its eventual repayment grouped as one
+expandable "episode" card (date range, advance amount, fees total, repaid
+total, net remaining, status badge), instead of one blended running
+number. No schema change — this is a pure, read-only derived view built
+entirely from data already written unconditionally for every advance
+debt:
+- `debt_adjustments` rows with `adjustment_type === 'advance'`, sorted by
+  `(adjustment_date, created_at)` (tie-broken by id), are the episode
+  boundary markers. Episode *i* spans `[marker_i, marker_{i+1})`; the last
+  marker's episode is open-ended. Anything dated before the first marker
+  (real pre-tracking data on OnePay Advance) lands in an unlabeled
+  "episode 0".
+- New pure function `computeAdvanceEpisodes(debt, adjustments,
+  transactions, accounts, accountBalances)` in new `src/lib/debt-episodes.ts`,
+  mirroring the partitioning shape of `debt-history.ts`'s
+  `debtBalanceAsOf()` but split per advance instead of per debt.
+  - **Unlinked debts** (OnePay Advance): sums `linked_debt_id`-tagged
+    transactions in-window, using the same `isAdvanceDisbursement`/
+    `isFeeTransaction` classifiers (`payments.ts`) `debtBalanceAsOf`
+    already uses, but fees are captured into their own `feesTotal`
+    instead of being dropped.
+  - **Linked debts** (Dave ExtraCash): sums *every* transaction on
+    `linked_account_id` in-window, regardless of `linked_debt_id`
+    tagging — the account's real history is ground truth, not the tag.
+    This is deliberately stricter than the unlinked case and is what
+    makes an untagged duplicate payment (e.g. one logged through the
+    generic Transfer form instead of "Log a payment") visible as an
+    overpayment instead of silently invisible, which is exactly the shape
+    of bug that caused Dave's balance to read $15 low (see the ADR-102
+    2026-10-13 addendum). The window's own disbursement mirror leg is
+    excluded by matching amount+date 1:1 against its marker in sort
+    order (handles a confirmed real same-day double-advance on Dave,
+    2026-09-04 — two $50 draws).
+  - **Anchor override**: naively replaying carry-forward from the very
+    first advance marker ever written ignores the `account_balances`
+    snapshot anchor that `effectiveDebtBalance()`/`balanceAsOf()` treat as
+    ground truth, and was found live to produce a wildly inflated number
+    for Dave (~$245 instead of ~$25) because it double-counted everything
+    before the household started snapshotting that account. Fixed by
+    accepting `accounts`/`accountBalances` and overriding just the final
+    (open) episode's `net`/`status` with `creditOwed(balanceAsOf(account,
+    accountBalances, transactions, todayISO()))` — reusing the existing,
+    already-proven anchor logic rather than reimplementing it. Only the
+    last episode is overridden; earlier, closed episodes keep their
+    replayed totals since they are historical and the anchor only applies
+    going forward from its own date.
+  - **Status per episode**: `open` (the last episode, net > 0), `repaid`
+    (net ≤ 0), or `carried_forward` (an earlier, closed episode whose
+    shortfall rolled into the next draw) — new information the prior flat
+    list never showed.
+- `src/routes/app.debts.tsx` (`DebtAdjustments`): flat `advances.map(...)`
+  replaced with `episodes.map((ep) => <AdvanceEpisodeCard ... />)`, a new
+  expandable card component. Existing delete actions (`useDeleteAdvance`,
+  `useDeleteDebtAdjustment`) stay reachable inside each expanded card,
+  nested instead of flat — no hook changes, presentation only. Also wired
+  `useAllAccountBalances()` alongside the already-fetched `accounts` so
+  the anchor override above actually applies live, not just in tests.
+- Companion UI fix bundled in the same pass: see the ADR-102 2026-10-13
+  addendum for restoring the "Record advance"/"Add adjustment" buttons for
+  linked advance debts specifically (they had been hidden for every linked
+  debt since 2026-09-15, including Dave, which is what motivated looking at
+  this screen in the first place).
+
+Reason:
+The user wanted to take a $50 advance and be able to see its own lifecycle
+— draw, fees, repayment — as one unit, rather than inferring it from a
+blended balance. An advance-type debt can only have one open advance at a
+time (confirmed with the user, ADR-084 2026-09-04 addendum — must repay
+before taking another), which is exactly the property that makes
+boundary-marker partitioning well-defined with no overlap to resolve.
+
+Not covered: no new write path or schema — this is strictly a read/display
+feature. Credit-card debts (Milestone, CreditOne, Mission Lane) are
+untouched; `computeAdvanceEpisodes` returns `[]` immediately for any
+`debt_type !== 'advance'`.
+
+Status: Decided 2026-10-13. Implemented 2026-10-13 — `tsc --noEmit` clean,
+268/268 tests pass (13 new, in `debt-episodes.test.ts`, including a
+regression test for the untagged-duplicate-payment case and a regression
+test for the anchor-override fix). Live-data spot check against Dave
+ExtraCash's real rows via the read-only MCP confirms the open episode's net
+matches `effectiveDebtBalance` both before and after the pending Step 0 SQL
+fix (duplicate $15 transfer — see ADR-102 2026-10-13 addendum; not yet run
+by the user). Not yet checked in a running browser — needs a Codespace or
+real device pass to confirm the restored button, updated copy, and new
+episode cards actually render/expand correctly.
