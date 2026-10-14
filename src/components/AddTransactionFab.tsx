@@ -772,7 +772,9 @@ export function AddTransactionFab() {
                   <p className="text-xs text-muted-foreground">
                     {mode === "income"
                       ? "Money in — side income, a reimbursement, refund or gift."
-                      : "Money out. Enter a negative amount for money in."}
+                      : accounts.find((a) => a.id === accountId)?.account_type === "credit"
+                        ? "A new charge on this card. To record a payment toward the balance, use Income or Transfer instead — not a negative amount here."
+                        : "Money out. Enter a negative amount for money in."}
                   </p>
                 </div>
 

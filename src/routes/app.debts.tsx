@@ -85,7 +85,7 @@ import { CorrectPaymentButton } from "@/components/CorrectPaymentButton";
 import { LogDebtPaymentDialog } from "@/components/LogDebtPaymentDialog";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Debt, BillingCycle, DebtAdjustment, Transaction } from "@/lib/supabase";
+import type { Account, Debt, BillingCycle, DebtAdjustment, Transaction } from "@/lib/supabase";
 import { TransactionDetail } from "@/routes/app.transactions";
 import { InstitutionDialog } from "@/components/InstitutionDialog";
 import { PastDueBadge } from "@/components/PastDueBadge";
@@ -1833,6 +1833,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   const [advanceOpen, setAdvanceOpen] = useState(false);
   const [advanceAccountId, setAdvanceAccountId] = useState("none");
   const [advanceAmount, setAdvanceAmount] = useState("");
+  const [advanceFee, setAdvanceFee] = useState("");
   const [advanceDate, setAdvanceDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   async function save() {
@@ -1871,6 +1872,11 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       toast.error("Pick a destination account");
       return;
     }
+    const feeValue = Number(advanceFee) || 0;
+    if (feeValue < 0) {
+      toast.error("Fee can't be negative");
+      return;
+    }
     if (!confirmIfBackdated(advanceDate)) return;
     try {
       await createAdvance.mutateAsync({
@@ -1879,9 +1885,24 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
         amount: value,
         advanceDate,
       });
-      toast.success("Advance recorded");
+      // ADR-111 addendum: a fee incurred at the same moment as the draw
+      // (e.g. an "instant transfer" fee) gets tied to this same advance in
+      // one step instead of a separate, easy-to-forget "Add adjustment" —
+      // reusing useAddDebtAdjustment exactly as the Adjustments section
+      // already does, so it mirrors onto the linked account the same way.
+      if (feeValue > 0.005) {
+        await add.mutateAsync({
+          debt,
+          amount: feeValue,
+          adjustmentType: "advance_fee",
+          description: null,
+          adjustmentDate: advanceDate,
+        });
+      }
+      toast.success(feeValue > 0.005 ? "Advance and fee recorded" : "Advance recorded");
       setAdvanceOpen(false);
       setAdvanceAmount("");
+      setAdvanceFee("");
       setAdvanceAccountId("none");
     } catch (e) {
       toast.error((e as Error).message);
@@ -1989,6 +2010,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                   key={ep.markerId ?? `pre-${ep.startDate}`}
                   episode={ep}
                   advances={advances}
+                  accounts={accounts}
                   onDeleteAdvance={async (a) => {
                     if (!confirm("Delete this advance? This will also reverse the deposit transaction.")) return;
                     try {
@@ -2130,6 +2152,23 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
               />
             </div>
             <div>
+              <Label>Fee (optional)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                min="0"
+                placeholder="0.00"
+                value={advanceFee}
+                onChange={(e) => setAdvanceFee(e.target.value)}
+                className="h-11"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                An instant-transfer/overdraft fee charged at the same time as this advance —
+                recorded as its own adjustment, tied to this same advance.
+              </p>
+            </div>
+            <div>
               <Label>Date</Label>
               <Input
                 type="date"
@@ -2174,17 +2213,20 @@ const EPISODE_STATUS_VARIANT: Record<
 function AdvanceEpisodeCard({
   episode,
   advances,
+  accounts,
   onDeleteAdvance,
   onDeleteAdjustment,
 }: {
   episode: AdvanceEpisode;
   advances: DebtAdjustment[];
+  accounts: Account[];
   onDeleteAdvance: (a: DebtAdjustment) => void;
   onDeleteAdjustment: (a: DebtAdjustment) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const marker = advances.find((a) => a.id === episode.markerId) ?? null;
   const hasManageableRows = marker !== null || episode.adjustments.length > 0;
+  const accountName = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? "Account";
 
   return (
     <div className="rounded-md border">
@@ -2287,6 +2329,36 @@ function AdvanceEpisodeCard({
               history.
             </p>
           )}
+          {episode.transactions.length > 0 ? (
+            <>
+              <p className="mt-2 text-[11px] uppercase tracking-wide">
+                Transactions tied to this advance
+              </p>
+              <div className="mt-1 divide-y divide-border/50 rounded-md border">
+                {episode.transactions
+                  .slice()
+                  .sort((a, b) =>
+                    (a.cleared_date ?? a.transaction_date).localeCompare(
+                      b.cleared_date ?? b.transaction_date,
+                    ),
+                  )
+                  .map((t) => (
+                    <div key={t.id} className="flex items-center gap-2 px-2 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-foreground">{t.description || "Transaction"}</p>
+                        <p className="text-xs">
+                          {t.cleared_date ?? t.transaction_date} · {accountName(t.account_id)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 tabular-nums font-medium text-foreground">
+                        {Number(t.amount) > 0 ? "+" : ""}
+                        {formatMoney(Number(t.amount))}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

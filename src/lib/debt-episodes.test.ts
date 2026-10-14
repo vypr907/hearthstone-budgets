@@ -240,15 +240,18 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
     expect(episodes.map((e) => e.markerId)).toEqual(["1", "2", "3", "4", "5", "8"]);
   });
 
-  it("carries an underpaid draw's shortfall into the next episode instead of resetting", () => {
+  it("carries an underpaid draw's shortfall into the next episode, then retroactively resolves both once it's paid off", () => {
     const episodes = computeAdvanceEpisodes(daveUnlinked, daveAdjustments, daveTransactions);
-    // Episode for marker "1" ($40, 7/17): no repayment before the 7/18 draw -> carried forward.
+    // Episode for marker "1" ($40, 7/17): no repayment before the 7/18 draw, so its
+    // own window carries a shortfall — but the 7/31 payment (inside marker 2's
+    // window) clears it, so it retroactively reads "repaid," not stuck at
+    // "carried forward" forever just because the resolution landed one window later.
     expect(episodes[0]).toMatchObject({
       advanceAmount: 40,
       feesTotal: 0,
       repaidTotal: 0,
       net: 40,
-      status: "carried_forward",
+      status: "repaid",
     });
     // Episode for marker "2" ($35, 7/18): the 7/31 $75 payment covers both it and marker 1's carry-in.
     expect(episodes[1]).toMatchObject({
@@ -257,6 +260,44 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
       net: 0,
       status: "repaid",
     });
+  });
+
+  it("leaves a shortfall genuinely marked carried_forward when it's never resolved before the end of the chain", () => {
+    // A debt whose first advance is never repaid before the second (unlike
+    // Dave's real history, where every shortfall eventually clears) must
+    // still show the truth: carried_forward, not a false "repaid."
+    const neverResolvedId = "never-resolved-1";
+    const neverResolved: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
+      id: neverResolvedId,
+      debt_type: "advance",
+      linked_account_id: null,
+    };
+    const adj: DebtAdjustment[] = [
+      {
+        id: "n1",
+        household_id: "h",
+        debt_id: neverResolvedId,
+        amount: 100,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-01-01",
+        affects_balance: true,
+      },
+      {
+        id: "n2",
+        household_id: "h",
+        debt_id: neverResolvedId,
+        amount: 50,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-02-01",
+        affects_balance: true,
+      },
+    ];
+    const episodes = computeAdvanceEpisodes(neverResolved, adj, []);
+    expect(episodes).toHaveLength(2);
+    expect(episodes[0]).toMatchObject({ net: 100, status: "carried_forward" });
+    expect(episodes[1]).toMatchObject({ net: 150, status: "open" });
   });
 
   it("attributes the two same-day 2026-09-04 $5 fees to whichever episode they fall into, without double-counting or dropping either", () => {
@@ -562,16 +603,58 @@ describe("computeAdvanceEpisodes — linked (the Problem 2 regression case)", ()
     // from the first marker gives a wildly inflated number ($220+); the real
     // app only ever displays the anchor-based figure.
     const markers: DebtAdjustment[] = [
-      { id: "old1", household_id: "h", debt_id: daveId, amount: 40, adjustment_type: "advance", description: null, adjustment_date: "2026-07-17", affects_balance: true },
-      { id: "old2", household_id: "h", debt_id: daveId, amount: 35, adjustment_type: "advance", description: null, adjustment_date: "2026-07-18", affects_balance: true },
-      { id: "current", household_id: "h", debt_id: daveId, amount: 50, adjustment_type: "advance", description: null, adjustment_date: "2026-09-14", affects_balance: true },
+      {
+        id: "old1",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 40,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-07-17",
+        affects_balance: true,
+      },
+      {
+        id: "old2",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 35,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-07-18",
+        affects_balance: true,
+      },
+      {
+        id: "current",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 50,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-09-14",
+        affects_balance: true,
+      },
     ];
     const transactions: Transaction[] = [
       // Pre-anchor activity — none of this should reach the open episode's net.
-      tx({ id: "old-mirror1", amount: -40, account_id: linkedAccountId, transaction_date: "2026-07-17" }),
-      tx({ id: "old-mirror2", amount: -35, account_id: linkedAccountId, transaction_date: "2026-07-18" }),
+      tx({
+        id: "old-mirror1",
+        amount: -40,
+        account_id: linkedAccountId,
+        transaction_date: "2026-07-17",
+      }),
+      tx({
+        id: "old-mirror2",
+        amount: -35,
+        account_id: linkedAccountId,
+        transaction_date: "2026-07-18",
+      }),
       // The current draw's own mirror leg (consumed by its marker as usual).
-      tx({ id: "current-mirror", amount: -50, account_id: linkedAccountId, transaction_date: "2026-09-14" }),
+      tx({
+        id: "current-mirror",
+        amount: -50,
+        account_id: linkedAccountId,
+        transaction_date: "2026-09-14",
+      }),
       // One real post-anchor repayment.
       tx({ id: "pay", amount: 15, account_id: linkedAccountId, transaction_date: "2026-09-24" }),
     ];
@@ -589,16 +672,282 @@ describe("computeAdvanceEpisodes — linked (the Problem 2 regression case)", ()
       updated_at: "",
     } as Account;
     const accountBalances: AccountBalance[] = [
-      { id: "snap1", account_id: linkedAccountId, balance: -55, as_of_date: "2026-09-14", created_at: "" },
+      {
+        id: "snap1",
+        account_id: linkedAccountId,
+        balance: -55,
+        as_of_date: "2026-09-14",
+        created_at: "",
+      },
     ];
 
     const naive = computeAdvanceEpisodes(daveLinked, markers, transactions); // no accounts/accountBalances passed
     expect(naive[naive.length - 1].net).toBeGreaterThan(100); // the inflated, wrong number
 
-    const anchored = computeAdvanceEpisodes(daveLinked, markers, transactions, [account], accountBalances);
+    const anchored = computeAdvanceEpisodes(
+      daveLinked,
+      markers,
+      transactions,
+      [account],
+      accountBalances,
+    );
     expect(anchored[anchored.length - 1].net).toBeCloseTo(40, 2); // abs(-55 + 15) — matches effectiveDebtBalance
     expect(anchored[anchored.length - 1].status).toBe("open");
     // Earlier (closed) episodes are untouched by the override — still shown for history.
     expect(anchored[0].markerId).toBe("old1");
+  });
+
+  it("REGRESSION: a linked debt's pre-link repayments, logged on a DIFFERENT account and never mirrored, are found and counted — Dave ExtraCash's real full history", () => {
+    // Real shape pulled live (2026-10-14): the account was only linked
+    // 2026-09-11, so every advance/repayment before that was logged the old
+    // way — tagged linked_debt_id, but on whichever account was actually
+    // used (Checking, etc.), never mirrored onto Dave ExtraCash itself. An
+    // account-only sum sees none of this and wrongly treats every old
+    // advance as still outstanding (the bug this fix addresses). Also
+    // includes a real "Arrears payment" row (2026-09-25, $40) that must be
+    // excluded — it only ever moves arrears_paid_to_date, never principal;
+    // including it breaks the reconciliation (claims $0 owed instead of the
+    // known-correct $40).
+    const otherAccountId = "checking-acct";
+    const markers: DebtAdjustment[] = [
+      {
+        id: "m0",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 40,
+        adjustment_type: "advance",
+        description: "Advance: Dave ExtraCash",
+        adjustment_date: "2026-07-17",
+        created_at: "2026-08-30 17:46:34+00",
+        affects_balance: true,
+      },
+      {
+        id: "m1",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 35,
+        adjustment_type: "advance",
+        description: "Advance: Dave ExtraCash",
+        adjustment_date: "2026-07-18",
+        created_at: "2026-08-30 17:46:53+00",
+        affects_balance: true,
+      },
+      {
+        id: "m2",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 50,
+        adjustment_type: "advance",
+        description: "Advance: Dave ExtraCash",
+        adjustment_date: "2026-08-20",
+        created_at: "2026-08-27 17:09:30+00",
+        affects_balance: true,
+      },
+      {
+        id: "m3",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 50,
+        adjustment_type: "advance",
+        description: "Advance: Dave ExtraCash",
+        adjustment_date: "2026-09-04",
+        created_at: "2026-09-11 22:32:20+00",
+        affects_balance: true,
+      },
+      {
+        id: "m4",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 50,
+        adjustment_type: "advance",
+        description: "Advance: Dave ExtraCash",
+        adjustment_date: "2026-09-04",
+        created_at: "2026-09-11 22:32:41+00",
+        affects_balance: true,
+      },
+      {
+        id: "fee1",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 5,
+        adjustment_type: "other",
+        description: "Overdraft Fee",
+        adjustment_date: "2026-09-04",
+        created_at: "2026-09-11 22:34:09+00",
+        affects_balance: true,
+      },
+      {
+        id: "fee2",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 5,
+        adjustment_type: "other",
+        description: "Overdraft Fee",
+        adjustment_date: "2026-09-04",
+        created_at: "2026-09-11 22:34:41+00",
+        affects_balance: true,
+      },
+      {
+        id: "m5",
+        household_id: "h",
+        debt_id: daveId,
+        amount: 50,
+        adjustment_type: "advance",
+        description: "Advance: Dave ExtraCash",
+        adjustment_date: "2026-09-14",
+        created_at: "2026-09-14 21:22:33+00",
+        affects_balance: true,
+      },
+    ];
+    const transactions: Transaction[] = [
+      // Pre-tracking stray credit, long before any advance — lands in episode 0, irrelevant to the rest.
+      tx({
+        id: "stray",
+        amount: 10,
+        account_id: linkedAccountId,
+        transaction_date: "2026-06-04",
+        cleared_date: "2026-06-04",
+      }),
+      // Real cross-account repayments — tagged to the debt, logged on Checking, never mirrored (pre-link).
+      tx({
+        id: "pay-731",
+        amount: -75,
+        account_id: otherAccountId,
+        transaction_date: "2026-07-31",
+        cleared_date: "2026-07-31",
+        description: "Debt payment · Dave ExtraCash",
+        linked_debt_id: daveId,
+      }),
+      tx({
+        id: "pay-827a",
+        amount: -25,
+        account_id: otherAccountId,
+        transaction_date: "2026-08-27",
+        cleared_date: "2026-08-27",
+        description: "Debt payment · Dave ExtraCash",
+        linked_debt_id: daveId,
+      }),
+      tx({
+        id: "pay-827b",
+        amount: -25,
+        account_id: "checking-acct-2",
+        transaction_date: "2026-08-27",
+        cleared_date: "2026-08-27",
+        description: "Debt payment · Dave ExtraCash",
+        linked_debt_id: daveId,
+      }),
+      tx({
+        id: "pay-911",
+        amount: -105,
+        account_id: otherAccountId,
+        transaction_date: "2026-09-11",
+        cleared_date: "2026-09-11",
+        description: "Debt payment · Dave ExtraCash",
+        linked_debt_id: daveId,
+      }),
+      // A mirrored pair (post-link): tagged real leg on Checking + untagged mirror on Dave ExtraCash — must count once, not twice.
+      tx({
+        id: "pay-911-real",
+        amount: -5,
+        account_id: otherAccountId,
+        transaction_date: "2026-09-11",
+        cleared_date: "2026-09-11",
+        description: "Debt payment · Dave ExtraCash",
+        linked_debt_id: daveId,
+        transfer_group_id: "tg-5",
+      }),
+      tx({
+        id: "pay-911-mirror",
+        amount: 5,
+        account_id: linkedAccountId,
+        transaction_date: "2026-09-11",
+        cleared_date: "2026-09-11",
+        description: "Debt payment · Dave ExtraCash",
+        transfer_group_id: "tg-5",
+      }),
+      // The current advance's own disbursement + mirror (consumed by its marker).
+      tx({
+        id: "m5-mirror",
+        amount: -50,
+        account_id: linkedAccountId,
+        transaction_date: "2026-09-14",
+        description: "Advance: Dave ExtraCash",
+      }),
+      tx({
+        id: "m5-fee",
+        amount: -5,
+        account_id: linkedAccountId,
+        transaction_date: "2026-09-14",
+        description: "Advance Fee",
+        linked_debt_id: daveId,
+      }),
+      // Post-anchor repayment, properly mirrored.
+      tx({
+        id: "pay-924-real",
+        amount: -15,
+        account_id: otherAccountId,
+        transaction_date: "2026-09-24",
+        cleared_date: "2026-09-24",
+        description: "Debt payment · Dave ExtraCash",
+        linked_debt_id: daveId,
+        transfer_group_id: "tg-15",
+      }),
+      tx({
+        id: "pay-924-mirror",
+        amount: 15,
+        account_id: linkedAccountId,
+        transaction_date: "2026-09-24",
+        cleared_date: "2026-09-24",
+        description: "Debt payment · Dave ExtraCash",
+        transfer_group_id: "tg-15",
+      }),
+      // The real "Arrears payment" — must be excluded, or the math wrongly claims $0 owed.
+      tx({
+        id: "arrears",
+        amount: -40,
+        account_id: otherAccountId,
+        transaction_date: "2026-09-25",
+        cleared_date: null,
+        description: "Arrears payment · Dave ExtraCash",
+        linked_debt_id: daveId,
+      }),
+    ];
+    const account: Account = {
+      id: linkedAccountId,
+      household_id: "h",
+      institution_id: null,
+      name: "Dave ExtraCash",
+      account_type: "credit",
+      starting_balance: 0,
+      is_spendable: false,
+      credit_limit: null,
+      notes: null,
+      created_at: "",
+      updated_at: "",
+    } as Account;
+    const accountBalances: AccountBalance[] = [
+      {
+        id: "snap1",
+        account_id: linkedAccountId,
+        balance: -55,
+        as_of_date: "2026-09-14",
+        created_at: "",
+      },
+    ];
+
+    const episodes = computeAdvanceEpisodes(
+      daveLinked,
+      markers,
+      transactions,
+      [account],
+      accountBalances,
+    );
+    expect(episodes).toHaveLength(7); // pre-tracking bucket, old1, old2, old3, old4a, old4b, current
+    for (const ep of episodes.slice(0, -1)) {
+      expect(ep.status).toBe("repaid");
+    }
+    const last = episodes[episodes.length - 1];
+    expect(last.status).toBe("open");
+    expect(last.net).toBeCloseTo(40, 2); // matches the live anchor-based figure exactly
   });
 });

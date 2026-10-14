@@ -140,6 +140,21 @@ export function isFeeTransaction(t: Pick<Transaction, "description">): boolean {
 }
 
 /**
+ * ADR-076: `useMarkArrearsPaid` writes an "Arrears payment · <name>" row that
+ * only ever increments `arrears_paid_to_date` (a cycle-lateness counter) —
+ * it never touches `remaining_balance`. Any reconstruction of a debt's
+ * principal balance from its ledger history (ADR-111's episode view,
+ * `debtBalanceAsOf`) must exclude these the same way it excludes a
+ * disbursement or a "Fee: " row, or it double-counts/misattributes real
+ * money that affected a different field entirely. Confirmed live: including
+ * one of these in a from-scratch balance reconstruction for Dave ExtraCash
+ * produced a wrong total; excluding it matched the known-correct figure.
+ */
+export function isArrearsOnlyPayment(t: Pick<Transaction, "description">): boolean {
+  return (t.description ?? "").trim().toLowerCase().startsWith("arrears payment");
+}
+
+/**
  * ADR-066: recording a new advance against a paid-off advance-type debt
  * reactivates it in place. Beyond clearing `date_paid_off`, that also starts a
  * fresh cycle — so the stale `payment_status`/`cycle_paid_to_date` left from the

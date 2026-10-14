@@ -185,6 +185,23 @@ Decision: In the quick-add transaction dialog a positive amount is stored as a n
 Reason: Most manual entries are spending, and it keeps the form to the four requested fields with no extra direction toggle.
 Status: Decided 2026-08-02. Implemented.
 
+**2026-10-14 addendum — the Expense-mode hint is wrong advice for a
+credit-type account.** Confirmed via code trace (`AddTransactionFab.tsx`'s
+`submitExpense`): this decision's own hint text ("Enter a negative amount
+for money in") describes the general/checking case, but for a
+`credit`-type account it's actively misleading — a credit account's
+"money in" (a payment toward the balance) must be a *positive* stored
+amount (the convention `effectiveDebtBalance`/`creditOwed`,
+`balances.ts`, and the ADR-111 episode view all already trust), not a
+negative one. Typing a negative number in Expense mode on a credit
+account, following this hint literally, increases what's owed instead of
+reducing it. Fixed with an account-type-aware swap: when the selected
+account is `credit`-type, the Expense-mode hint now points at Income or
+Transfer mode for a payment instead of repeating the generic (here,
+wrong) advice. Every other account type is unaffected — this decision's
+original wording and behavior stand unchanged for them.
+Status: addendum decided 2026-10-14. Implemented 2026-10-14.
+
 ## ADR-015: Debt payoff projection engine
 Decision: Simulate payoff month-by-month in the client (src/lib/debt-payoff.ts) rather than storing projections; when a debt has known_finance_charge, use it verbatim as that debt's total interest instead of the simulated figure.
 Reason: Projections change with every balance/payment edit, so caching them invites staleness. Real loan/lease paperwork is more accurate than amortization estimates for those specific debts.
@@ -5152,3 +5169,82 @@ fix (duplicate $15 transfer — see ADR-102 2026-10-13 addendum; not yet run
 by the user). Not yet checked in a running browser — needs a Codespace or
 real device pass to confirm the restored button, updated copy, and new
 episode cards actually render/expand correctly.
+
+**2026-10-14 addendum — fixed the linked branch's blind spot to pre-link
+history, fixed status to resolve retroactively, and added a combined
+advance+fee entry.** After the Step 0 fix landed, the live view on Dave
+ExtraCash still showed every episode before the latest as "Carried
+forward" with an inflated owed amount, and no repayment ever appeared.
+Root-caused live (read-only MCP) to two real bugs, not one:
+
+- **The linked branch's content was blind to anything before the account
+  was linked (2026-09-11).** Every advance/repayment before that date was
+  logged tagged to the debt (`linked_debt_id`) but on whichever account
+  was actually used (Checking, etc.) — never mirrored onto Dave
+  ExtraCash, because mirroring didn't exist yet. Summing only the linked
+  account's own transactions saw zero activity for any of those windows
+  and treated "no data" as "never repaid." Fixed: `computeAdvanceEpisodes`
+  now also pulls in every other `linked_debt_id`-tagged transaction for
+  the debt found on a *different* account, excluding `isAdvanceDisbursement`
+  (already counted via the marker), a new `isArrearsOnlyPayment()`
+  (`payments.ts`, same shape as the existing disbursement/fee checks —
+  matches `useMarkArrearsPaid`'s `"Arrears payment · "` rows, which only
+  ever move `arrears_paid_to_date`, never principal; found live that
+  including one broke an otherwise-exact reconciliation), and any
+  transaction sharing a `transfer_group_id` already represented via the
+  linked account's own history (the other leg of an already-mirrored
+  pair — counting both would double the event). The two sources use their
+  own already-established, opposite sign conventions (account-centric for
+  the linked account's own rows; paying-account-centric, matching
+  `debtBalanceAsOf`'s, for the cross-account ones) rather than one shared
+  rule. Verified live: the merged reconstruction lands on exactly $40 for
+  Dave's still-open episode — independently matching the existing
+  anchor-based override.
+- **Status only ever looked one window ahead.** `applyCarryForward` asked
+  "did this window's own shortfall clear by the very start of the next
+  marker" — too narrow, since a shortfall legitimately gets absorbed one
+  or more windows later (confirmed live: the $40 7/17 draw's shortfall is
+  cleared by a payment dated 7/31, inside the *next* window). Rewritten to
+  resolve retroactively: when the running carry returns to zero at window
+  *i*, every still-pending window back to the last resolution point is
+  marked `"repaid"`, not just window *i*. General fix, both branches —
+  `debt-episodes.test.ts`'s existing carry-forward test updated to match
+  (episode 1's shortfall, resolved by episode 2's payment, now correctly
+  reads `"repaid"`); a new test confirms a shortfall that's *never*
+  resolved before the end of the chain still correctly reads
+  `"carried_forward"`, not a false `"repaid"`.
+- **Fees total now includes an unmirrored adjustment.** The two existing
+  "Overdraft Fee" adjustments on Dave (`mirror_transaction_id` null —
+  predate the mirroring convention) were previously skipped outright for
+  linked debts (assuming every adjustment is already mirrored, true for
+  every other one on this debt). Now included directly when
+  `mirror_transaction_id` is null.
+- **Expanded card shows the real contributing transactions**, not just
+  `debt_adjustments` rows (`AdvanceEpisodeCard`, `app.debts.tsx`) — the
+  episode's own `transactions` were already computed, just never rendered.
+- **Combined advance+fee entry**: "Record advance" gets an optional "Fee"
+  field (same shape as ADR-110's optional ATM-fee field). On save, if the
+  fee is non-zero, `useAddDebtAdjustment` runs immediately after
+  `useCreateAdvance` with `adjustment_type: 'advance_fee'` and the same
+  date — no schema change, the existing date-windowing already attributes
+  a same-day adjustment to the right episode.
+- One-time SQL backfill drafted for the two orphaned Overdraft Fee
+  adjustments' missing mirror transactions
+  (`scripts/migrations/2026-10-14-dave-overdraft-fee-mirrors.sql`), so the
+  account's own ledger is complete too — not required for the view's
+  numbers (it includes an unmirrored adjustment directly either way), just
+  data completeness.
+- Flagged, not fixed here (filed as a GitHub issue instead): `debt-history.ts`'s
+  `debtBalanceAsOf` (Year in Review's historical trend, every debt type,
+  not just advances) has the identical un-excluded-arrears-row gap —
+  confirmed live, the "Car" debt has its own "Arrears payment" row that
+  would skew its trend the same way. Out of scope here since it touches a
+  different feature's trusted reconstruction logic for every debt, not
+  just advances.
+
+Status: addendum decided 2026-10-14. Implemented 2026-10-14 — `tsc --noEmit`
+clean, 270/270 tests pass. Live-data spot check (scratch test against
+Dave's full real cross-account history, read-only MCP) confirms every
+episode before the latest now reads `"repaid"` and the latest reads
+`"open"` at exactly $40, matching the live anchor-based figure. Not yet
+checked in a running browser.

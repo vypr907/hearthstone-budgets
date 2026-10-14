@@ -1,5 +1,5 @@
 import type { Account, AccountBalance, Debt, DebtAdjustment, Transaction } from "./supabase";
-import { isAdvanceDisbursement, isFeeTransaction } from "./payments";
+import { isAdvanceDisbursement, isArrearsOnlyPayment, isFeeTransaction } from "./payments";
 import { balanceAsOf } from "./net-worth";
 import { creditOwed } from "./balances";
 import { todayISO } from "./snapshot";
@@ -111,24 +111,45 @@ type RawWindow = {
   adjustments: DebtAdjustment[];
 };
 
-/** Threads a running balance through chronologically-ordered windows so an
- * underpaid draw's shortfall carries into the next one, matching the real
- * single-running-balance model instead of resetting every window to 0. */
+/**
+ * Threads a running balance through chronologically-ordered windows so an
+ * underpaid draw's shortfall carries into the next one(s), matching the
+ * real single-running-balance model instead of resetting every window to 0.
+ *
+ * Status is resolved RETROACTIVELY: a window only ever knows "did the carry
+ * return to zero by my own end boundary" in isolation, but a real shortfall
+ * can legitimately get absorbed one or more windows later (e.g. a payment
+ * landing inside the *next* window rather than exactly at this one's own
+ * boundary — confirmed on Dave ExtraCash's real history, where the $40
+ * 7/17 draw's shortfall is cleared by a payment dated 7/31, inside the
+ * following window). Whenever carry hits zero at window i, every window
+ * back to the last resolution point gets marked "repaid" too, not just
+ * window i itself — "carried_forward" only survives for a window whose
+ * shortfall is still outstanding by the very end of the chain (i.e. it
+ * never got resolved before the final, still-open window).
+ */
 function applyCarryForward(windows: RawWindow[]): AdvanceEpisode[] {
+  const results: AdvanceEpisode[] = windows.map((w) => ({
+    ...w,
+    net: 0,
+    status: "carried_forward" as AdvanceEpisodeStatus,
+  }));
   let carry = 0;
-  return windows.map((w, i) => {
+  let pendingSince = 0;
+  for (let i = 0; i < windows.length; i++) {
+    const w = windows[i];
     const net = Math.max(0, carry + w.advanceAmount + w.feesTotal - w.repaidTotal);
     carry = net;
+    results[i].net = net;
     const isLast = i === windows.length - 1;
-    const status: AdvanceEpisodeStatus = isLast
-      ? net > 0.005
-        ? "open"
-        : "repaid"
-      : net > 0.005
-        ? "carried_forward"
-        : "repaid";
-    return { ...w, net, status };
-  });
+    if (isLast) {
+      results[i].status = net > 0.005 ? "open" : "repaid";
+    } else if (net <= 0.005) {
+      for (let j = pendingSince; j <= i; j++) results[j].status = "repaid";
+      pendingSince = i + 1;
+    }
+  }
+  return results;
 }
 
 /**
@@ -140,14 +161,22 @@ function applyCarryForward(windows: RawWindow[]): AdvanceEpisode[] {
  * yet (the caller falls back to an empty-state).
  *
  * Linked debts (`debt.linked_account_id` set) sum the account's OWN
- * transaction history in each window, regardless of `linked_debt_id`
- * tagging — this is deliberate: a plain untagged Transfer logged directly on
- * the account is invisible to a `linked_debt_id` filter but still real money
- * (the exact shape of a confirmed real bug on Dave ExtraCash, where a
- * duplicate untagged $15 payment went uncaught because the debt's own
- * payment-history view only ever looked at tagged rows). `effectiveDebtBalance()`
- * (balances.ts) already treats the account as ground truth; this mirrors
- * that choice per-episode instead of for the debt as a whole.
+ * transaction history in each window, PLUS any other `linked_debt_id`-tagged
+ * transaction for this debt found on a DIFFERENT account — necessary
+ * because the account is usually only linked partway through a debt's real
+ * history (ADR-102): every advance/repayment from before that point was
+ * logged the old way, tagged to the debt but never mirrored onto its
+ * account, and is otherwise invisible to an account-only sum. Confirmed live
+ * on Dave ExtraCash: real $75/$25/$25/$105 payments logged on Checking,
+ * tagged to this debt, fully explain how $275 of old advances is already
+ * settled — an account-only sum saw none of them and treated every one of
+ * those advances as still outstanding. A tagged transaction that shares a
+ * `transfer_group_id` with one already counted via the account's own history
+ * is skipped — it's the other leg of an already-mirrored pair, and counting
+ * both would double the event. `isArrearsOnlyPayment` rows are excluded
+ * entirely: they only ever move `arrears_paid_to_date` (ADR-076), never
+ * principal — confirmed live that including one broke an otherwise-exact
+ * reconciliation.
  *
  * The LAST (still-open) episode's `net` is overridden to match
  * `effectiveDebtBalance()` exactly, via the same `balanceAsOf()` the rest of
@@ -157,9 +186,10 @@ function applyCarryForward(windows: RawWindow[]): AdvanceEpisode[] {
  * deliberate balance-correction checkpoint), producing a wildly inflated
  * number instead of the one figure users will actually cross-check against
  * the Debt card's own displayed balance. Earlier (closed) episodes keep the
- * naive chain — informational history, not something users compare live.
- * Requires `accounts`/`accountBalances` to apply; falls back to the naive
- * value when a caller doesn't have that data (e.g. existing unit fixtures).
+ * merged-content chain — informational history, not something users compare
+ * live. Requires `accounts`/`accountBalances` to apply; falls back to the
+ * naive value when a caller doesn't have that data (e.g. existing unit
+ * fixtures).
  *
  * Unlinked debts (e.g. OnePay Advance) have no backing account, so content
  * comes from `linked_debt_id`-tagged transactions plus non-marker
@@ -196,6 +226,23 @@ export function computeAdvanceEpisodes(
     const accountTx = transactions.filter(
       (t) => t.account_id === debt.linked_account_id && t.status === "cleared",
     );
+    const accountTransferGroups = new Set(
+      accountTx.map((t) => t.transfer_group_id).filter((g): g is string => !!g),
+    );
+    // Any other transaction tagged to this debt, on a DIFFERENT account —
+    // real pre-link history (or any other never-mirrored entry). Excludes
+    // disbursements (already counted via the marker's own advanceAmount),
+    // arrears-only rows (never affect principal), and the other leg of a
+    // pair already represented via accountTx.
+    const crossAccountTx = transactions.filter(
+      (t) =>
+        t.linked_debt_id === debt.id &&
+        t.status === "cleared" &&
+        t.account_id !== debt.linked_account_id &&
+        !isAdvanceDisbursement(t) &&
+        !isArrearsOnlyPayment(t) &&
+        !(t.transfer_group_id && accountTransferGroups.has(t.transfer_group_id)),
+    );
     // Consume exactly one disbursement-mirror transaction per marker (same
     // amount, opposite sign, same date), in marker order — the deterministic
     // tie-break for a same-day double-advance.
@@ -209,53 +256,100 @@ export function computeAdvanceEpisodes(
       );
       if (match) consumed.add(match.id);
     }
-    const remainingTx = accountTx.filter((t) => !consumed.has(t.id));
+    const remainingAccountTx = accountTx.filter((t) => !consumed.has(t.id));
     const txKey = (t: Transaction) =>
       dateCreatedKey(t.cleared_date ?? t.transaction_date, t.created_at);
     const adjKey = (a: DebtAdjustment) => dateCreatedKey(a.adjustment_date, a.created_at);
 
-    const preTx = remainingTx.filter((t) => txKey(t) < firstKey);
+    // accountTx entries keep the account-centric convention (positive =
+    // repaid, negative = fee); crossAccountTx entries use the paying
+    // account's own convention (negative = repaid, positive = fee) — the
+    // same one debt-history.ts's debtBalanceAsOf/splitFeesAndRepaid already
+    // use for tagged transactions. Mixing them up would silently invert half
+    // the totals.
+    function accountCentricSplit(tx: Transaction[]): { feesTotal: number; repaidTotal: number } {
+      let feesTotal = 0;
+      let repaidTotal = 0;
+      for (const t of tx) {
+        const amt = Number(t.amount);
+        if (amt > 0) repaidTotal += amt;
+        else if (amt < 0) feesTotal += Math.abs(amt);
+      }
+      return { feesTotal, repaidTotal };
+    }
+    function payingAccountSplit(tx: Transaction[]): { feesTotal: number; repaidTotal: number } {
+      let feesTotal = 0;
+      let repaidTotal = 0;
+      for (const t of tx) {
+        const amt = Number(t.amount);
+        if (amt < 0) repaidTotal += Math.abs(amt);
+        else if (amt > 0) feesTotal += amt;
+      }
+      return { feesTotal, repaidTotal };
+    }
+    // A non-marker adjustment with no mirror on record contributes directly
+    // — it's the one case (the two pre-mirroring-convention "Overdraft Fee"
+    // rows found live on Dave ExtraCash) where nothing on any account
+    // already represents it. A mirrored adjustment is skipped here: its
+    // mirror transaction is already in accountTx, counting both would
+    // double it.
+    function unmirroredAdjustmentSplit(adj: DebtAdjustment[]): {
+      feesTotal: number;
+      repaidTotal: number;
+    } {
+      let feesTotal = 0;
+      let repaidTotal = 0;
+      for (const a of adj) {
+        if (a.mirror_transaction_id) continue;
+        const amt = Number(a.amount);
+        if (amt > 0) feesTotal += amt;
+        else if (amt < 0) repaidTotal += Math.abs(amt);
+      }
+      return { feesTotal, repaidTotal };
+    }
+
+    const preAccountTx = remainingAccountTx.filter((t) => txKey(t) < firstKey);
+    const preCrossTx = crossAccountTx.filter((t) => txKey(t) < firstKey);
     const preAdj = nonMarkerAdjustments.filter((a) => adjKey(a) < firstKey);
-    if (preTx.length > 0 || preAdj.length > 0) {
-      const repaidTotal = preTx
-        .filter((t) => Number(t.amount) > 0)
-        .reduce((s, t) => s + Number(t.amount), 0);
-      const feesTotal = preTx
-        .filter((t) => Number(t.amount) < 0)
-        .reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    if (preAccountTx.length > 0 || preCrossTx.length > 0 || preAdj.length > 0) {
+      const a1 = accountCentricSplit(preAccountTx);
+      const a2 = payingAccountSplit(preCrossTx);
+      const a3 = unmirroredAdjustmentSplit(preAdj);
       const d = markers[0].adjustment.adjustment_date.slice(0, 10);
       windows.push({
         markerId: null,
         startDate: d,
         endDate: d,
         advanceAmount: 0,
-        feesTotal,
-        repaidTotal,
-        transactions: preTx,
+        feesTotal: a1.feesTotal + a2.feesTotal + a3.feesTotal,
+        repaidTotal: a1.repaidTotal + a2.repaidTotal + a3.repaidTotal,
+        transactions: [...preAccountTx, ...preCrossTx],
         adjustments: preAdj,
       });
     }
     for (let i = 0; i < markers.length; i++) {
       const m = markers[i];
       const next = markers[i + 1] ?? null;
-      const inWindowTx = remainingTx.filter((t) => inWindow(txKey(t), m.key, next?.key ?? null));
+      const inWindowAccountTx = remainingAccountTx.filter((t) =>
+        inWindow(txKey(t), m.key, next?.key ?? null),
+      );
+      const inWindowCrossTx = crossAccountTx.filter((t) =>
+        inWindow(txKey(t), m.key, next?.key ?? null),
+      );
       const inWindowAdj = nonMarkerAdjustments.filter((a) =>
         inWindow(adjKey(a), m.key, next?.key ?? null),
       );
-      const repaidTotal = inWindowTx
-        .filter((t) => Number(t.amount) > 0)
-        .reduce((s, t) => s + Number(t.amount), 0);
-      const feesTotal = inWindowTx
-        .filter((t) => Number(t.amount) < 0)
-        .reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+      const a1 = accountCentricSplit(inWindowAccountTx);
+      const a2 = payingAccountSplit(inWindowCrossTx);
+      const a3 = unmirroredAdjustmentSplit(inWindowAdj);
       windows.push({
         markerId: m.adjustment.id,
         startDate: m.adjustment.adjustment_date.slice(0, 10),
         endDate: next ? next.adjustment.adjustment_date.slice(0, 10) : null,
         advanceAmount: Number(m.adjustment.amount),
-        feesTotal,
-        repaidTotal,
-        transactions: inWindowTx,
+        feesTotal: a1.feesTotal + a2.feesTotal + a3.feesTotal,
+        repaidTotal: a1.repaidTotal + a2.repaidTotal + a3.repaidTotal,
+        transactions: [...inWindowAccountTx, ...inWindowCrossTx],
         adjustments: inWindowAdj,
       });
     }
@@ -274,7 +368,7 @@ export function computeAdvanceEpisodes(
   // same sources debt-history.ts's debtBalanceAsOf already uses.
   const debtTx = transactions.filter((t) => t.linked_debt_id === debt.id && t.status === "cleared");
   const disbursements = debtTx.filter((t) => isAdvanceDisbursement(t));
-  const content = debtTx.filter((t) => !isAdvanceDisbursement(t));
+  const content = debtTx.filter((t) => !isAdvanceDisbursement(t) && !isArrearsOnlyPayment(t));
   const txKey = (t: Transaction) =>
     dateCreatedKey(t.cleared_date ?? t.transaction_date, t.created_at);
   const adjKey = (a: DebtAdjustment) => dateCreatedKey(a.adjustment_date, a.created_at);
