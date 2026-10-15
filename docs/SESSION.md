@@ -225,3 +225,13 @@
     category-level fee tracking.
   - `tsc --noEmit` clean, 274/274 tests pass. Not yet verified in a
     running browser.
+  - Follow-up: user asked to have Method 1's fee categorized too.
+    `useAddDebtAdjustment` (`src/lib/data-hooks.ts`) now sets
+    `category_id` (via `feeCategoryId()`) on the mirror transaction for
+    an `advance_fee` adjustment — for a linked debt via the existing
+    mirror; for an unlinked debt (no account to mirror onto at all) via
+    a new optional `mirrorAccountId` param, which "Record advance"
+    (`src/routes/app.debts.tsx`) fills with the advance's own
+    destination account. Scoped to `advance_fee` only; the standalone
+    "Add adjustment" dialog never passes `mirrorAccountId`, so nothing
+    else changes. `tsc --noEmit` clean, 274/274 tests pass.

@@ -26,7 +26,13 @@ import {
 import { advanceDate, needsEnvelope } from "./format";
 import { assertCategorySplitRows } from "./split-groups";
 import { useAuth } from "./auth-context";
-import { insertFeeTransaction, insertCashBackPurchaseRows, deletePairedFees, hasFee } from "./payments";
+import {
+  insertFeeTransaction,
+  insertCashBackPurchaseRows,
+  deletePairedFees,
+  hasFee,
+  feeCategoryId,
+} from "./payments";
 import { ATM_FEE_LINK_MAX_DATE_DIFF_DAYS } from "./atm-fee-link";
 import { nextPayDate } from "./paycheck-budget";
 import { useIncomeSources, useIncomeEvents } from "./income-hooks";
@@ -957,6 +963,13 @@ export function useAddDebtAdjustment() {
       description: string | null;
       adjustmentDate: string;
       affectsBalance?: boolean;
+      /** ADR-111 addendum: when the debt is UNLINKED and the caller knows
+       * which account the charge actually hit (currently only "Record
+       * advance"'s combined Fee field, which knows the advance's own
+       * destination account), write a real categorized transaction there
+       * instead of leaving the fee invisible to spending totals. Ignored
+       * for a linked debt — it already mirrors onto linked_account_id. */
+      mirrorAccountId?: string;
     }) => {
       const affectsBalance = args.affectsBalance !== false; // default true
       if (affectsBalance) {
@@ -978,6 +991,11 @@ export function useAddDebtAdjustment() {
         });
         if (debtError) throw debtError;
       }
+      // ADR-111 addendum: only an `advance_fee` gets categorized under
+      // "Fees" — other adjustment types (insurance credits, manual
+      // corrections) aren't necessarily real spending in the same sense.
+      const isFeeType = args.adjustmentType === "advance_fee";
+      const feeCatId = isFeeType ? await feeCategoryId(householdId) : null;
       // ADR-102: mirror onto the debt's linked_account_id, when it has one —
       // same sign flip as a payment (a charge that increases what's owed is
       // money leaving the real account; a credit that decreases it is money
@@ -993,6 +1011,24 @@ export function useAddDebtAdjustment() {
             status: "cleared",
             description: args.description ?? args.adjustmentType,
             transaction_date: args.adjustmentDate,
+            category_id: feeCatId,
+          } as Record<string, unknown>,
+          async (p) => supabase.from("transactions").insert(p).select("*").single(),
+        );
+        mirrorTransactionId = mirror.id;
+      } else if (affectsBalance && args.mirrorAccountId) {
+        // Unlinked debt, but the caller knows the real account — write the
+        // charge there, categorized, so it counts toward yearly fee totals
+        // the same way a "Fee: " payment line already does.
+        const mirror = await saveWithOptionalColumns<Transaction>(
+          {
+            household_id: householdId!,
+            account_id: args.mirrorAccountId,
+            amount: -args.amount,
+            status: "cleared",
+            description: args.description ?? args.adjustmentType,
+            transaction_date: args.adjustmentDate,
+            category_id: feeCatId,
           } as Record<string, unknown>,
           async (p) => supabase.from("transactions").insert(p).select("*").single(),
         );
@@ -1055,7 +1091,6 @@ export function useDeleteDebtAdjustment() {
     },
   });
 }
-
 
 /* ---------------- Bill adjustments (ADR-058) ---------------- */
 

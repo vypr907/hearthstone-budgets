@@ -1907,8 +1907,14 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
           debt,
           amount: feeValue,
           adjustmentType: "advance_fee",
-          description: null,
+          description: `Advance fee: ${debt.name}`,
           adjustmentDate: advanceDate,
+          // ADR-111 addendum: for an unlinked debt, this is the only real
+          // account in play at draw time — write the fee there, categorized,
+          // so it counts toward yearly fee totals like a logged payment's
+          // fee line already does. Ignored for a linked debt (mirrors onto
+          // linked_account_id instead, same as always).
+          mirrorAccountId: advanceAccountId,
         });
       }
       toast.success(feeValue > 0.005 ? "Advance and fee recorded" : "Advance recorded");

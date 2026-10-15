@@ -5439,3 +5439,30 @@ Status: addendum decided 2026-10-15. Implemented 2026-10-15 — `tsc
 --noEmit` clean, 274/274 tests pass (no new pure logic — both changes
 reuse already-tested functions: `nextPayDate`, `computeAdvanceEpisodes`,
 `debtRemainingOwed`). Not yet checked in a running browser.
+
+**2026-10-15 addendum — Method 1's fee now categorized too.** The user
+wanted a `debt_adjustments`-sourced `advance_fee` (Record Advance's
+combined Fee field) to count toward a yearly "Fees" category total the
+same way a `"Fee: "` payment line already does, having just learned it
+didn't. `useAddDebtAdjustment` (`src/lib/data-hooks.ts`) now resolves
+`feeCategoryId()` (`payments.ts`, already used by `useLogDebtPayment`'s
+fee lines) and sets it on the mirror transaction — for a **linked** debt,
+the existing mirror onto `linked_account_id` now carries it; for an
+**unlinked** debt (no account to mirror onto at all), a new optional
+`mirrorAccountId` param lets the caller supply one — "Record advance"
+passes the advance's own destination account (the only real account in
+play at draw time), so the fee now writes a real, categorized
+transaction there instead of staying invisible to spending totals.
+Scoped to `adjustment_type === 'advance_fee'` only (not every adjustment
+type — an insurance credit or manual correction isn't necessarily real
+spending). No `linked_debt_id` on this new transaction, same reasoning
+as every other mirror leg (stays invisible to cycle-progress math); it's
+a parallel, category-tracking-only write, not picked up by
+`computeAdvanceEpisodes`'s own balance math (which still reads the
+`debt_adjustments` row directly for an unlinked debt). The standalone
+"Add adjustment" dialog never passes `mirrorAccountId`, so its behavior
+for every other adjustment type and debt is unchanged.
+
+Status: addendum decided 2026-10-15. Implemented 2026-10-15 — `tsc
+--noEmit` clean, 274/274 tests pass. Not yet checked in a running
+browser.
