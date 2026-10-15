@@ -576,6 +576,144 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
     expect(episodes[0]).toMatchObject({ markerId: "m1", net: 100, status: "repaid" });
     expect(episodes[1]).toMatchObject({ markerId: "m2", net: 0, status: "repaid" });
   });
+
+  it("REGRESSION: a 'Fee: ' transaction never affects net — it's ledger-only (ADR-084), matching debtBalanceAsOf — found live on Cleo and Instacash", () => {
+    // Cleo's real history: a $40 advance, fully repaid, plus a same-day
+    // "Fee: Cleo · advance fee — Express fee" transaction that never
+    // touched the real remaining_balance (confirmed: stored balance is
+    // $0, not $6.99). An earlier version of this function counted every
+    // "Fee: " transaction's abs amount into feesTotal (which fed net),
+    // inflating the reconstructed balance above the real, confirmed-$0
+    // figure by exactly the fee amount.
+    const id = "cleo-regression";
+    const debt: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
+      id,
+      debt_type: "advance",
+      linked_account_id: null,
+    };
+    const adjustments: DebtAdjustment[] = [
+      {
+        id: "m1",
+        household_id: "h",
+        debt_id: id,
+        amount: 40,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-08-08",
+        affects_balance: true,
+      },
+    ];
+    const transactions: Transaction[] = [
+      tx({
+        id: "disbursement",
+        amount: 40,
+        transaction_date: "2026-08-08",
+        description: "Advance: Cleo",
+        linked_debt_id: id,
+      }),
+      tx({
+        id: "fee",
+        amount: -6.99,
+        transaction_date: "2026-08-14",
+        description: "Fee: Cleo · advance fee — Express fee",
+        linked_debt_id: id,
+      }),
+      tx({
+        id: "payment",
+        amount: -40,
+        transaction_date: "2026-08-14",
+        description: "Debt payment · Cleo",
+        linked_debt_id: id,
+      }),
+    ];
+    const episodes = computeAdvanceEpisodes(debt, adjustments, transactions);
+    expect(episodes).toHaveLength(1);
+    expect(episodes[0]).toMatchObject({
+      advanceAmount: 40,
+      feesTotal: 0, // the ledger-only fee never shows up here
+      repaidTotal: 40,
+      net: 0, // not 6.99
+      status: "repaid",
+    });
+    // Still visible in the episode's raw transaction list, for transparency.
+    expect(episodes[0].transactions.some((t) => t.id === "fee")).toBe(true);
+  });
+
+  it("REGRESSION: an early overpayment credit carries forward to offset a later draw instead of being floored away — found live on OnePay Advance", () => {
+    // A real cycle was overpaid by $6.75 (a fee paid out of pocket but
+    // never added to what the debt itself owed). debtBalanceAsOf (one
+    // continuous sum, floored once at the very end) lets that $6.75
+    // credit offset the next advance; applyCarryForward previously
+    // floored `carry` at 0 after every window, discarding the credit and
+    // inflating every later episode's balance by exactly $6.75.
+    const id = "onepay-overpay-regression";
+    const debt: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
+      id,
+      debt_type: "advance",
+      linked_account_id: null,
+    };
+    const adjustments: DebtAdjustment[] = [
+      {
+        id: "m1",
+        household_id: "h",
+        debt_id: id,
+        amount: 225,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-07-02",
+        affects_balance: true,
+      },
+      {
+        id: "m2",
+        household_id: "h",
+        debt_id: id,
+        amount: 225,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-07-17",
+        affects_balance: true,
+      },
+    ];
+    const transactions: Transaction[] = [
+      tx({
+        id: "d1",
+        amount: 225,
+        transaction_date: "2026-07-02",
+        description: "Advance: OnePay Advance",
+        linked_debt_id: id,
+      }),
+      // Overpays m1's $225 by $6.75 (a real fee paid out of pocket, never
+      // added to what's owed) — not a shortfall, an overpayment.
+      tx({
+        id: "p1",
+        amount: -231.75,
+        transaction_date: "2026-07-10",
+        description: "Debt payment · OnePay Advance",
+        linked_debt_id: id,
+      }),
+      tx({
+        id: "d2",
+        amount: 225,
+        transaction_date: "2026-07-17",
+        description: "Advance: OnePay Advance",
+        linked_debt_id: id,
+      }),
+      // Pays exactly m2's own $225 — if the $6.75 credit from m1 carried
+      // through, the debt is now fully settled; if it was floored away,
+      // $6.75 stays wrongly "owed."
+      tx({
+        id: "p2",
+        amount: -225,
+        transaction_date: "2026-07-20",
+        description: "Debt payment · OnePay Advance",
+        linked_debt_id: id,
+      }),
+    ];
+    const episodes = computeAdvanceEpisodes(debt, adjustments, transactions);
+    expect(episodes).toHaveLength(2);
+    expect(episodes[0]).toMatchObject({ markerId: "m1", net: 0, status: "repaid" });
+    expect(episodes[1]).toMatchObject({ markerId: "m2", net: 0, status: "repaid" }); // not 6.75
+  });
 });
 
 describe("computeAdvanceEpisodes — linked (the Problem 2 regression case)", () => {

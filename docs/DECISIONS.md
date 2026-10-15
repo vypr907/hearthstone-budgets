@@ -5331,10 +5331,70 @@ now correctly reads `"repaid"` except the still-open one, and the
 reconstructed final balance is $0 — see the separate note in
 `docs/SESSION.md` about that number not matching EarnIn's currently
 *stored* `remaining_balance` ($200), a distinct data-reconciliation
-question this fix surfaced but didn't resolve.
+question this fix surfaced and (confirmed with the user) resolved by
+correcting the stored row to match.
+
+Auditing the rest of the household's advance debts after these two
+fixes (`docs/SESSION.md` has the per-debt detail) surfaced a third,
+independent bug: `splitFeesAndRepaid` counted a `"Fee: "`-prefixed
+transaction's abs amount into `feesTotal` (which feeds `net`) — unlike
+`debtBalanceAsOf`, which excludes these entirely (ADR-084: a fee/interest
+line attached to a logged payment is ledger-only, never touching
+`remaining_balance`). Confirmed live on two debts (Cleo, Instacash): each
+reconciled to its real, stored $0 balance only once "Fee: " transactions
+were excluded from the math the same way `debtBalanceAsOf` already
+excludes them — the earlier inclusion ("surfaced here on purpose")
+inflated the reconstructed net above the true balance by exactly each
+debt's own fee total. Fixed by skipping `isFeeTransaction` content
+entirely in `splitFeesAndRepaid`, matching `debtBalanceAsOf` byte for
+byte; the fee transaction is still visible in the episode's own
+`transactions` list for transparency, just excluded from the balance
+math. A fourth debt (OnePay Advance) still didn't reconcile even with
+all three fixes applied — tracked down to a fourth, independent bug and
+a set of real data gaps, both resolved (below).
+
+**Fourth bug — `applyCarryForward` floored the running `carry` at zero
+after every window, not just once at the end.** `debtBalanceAsOf` is one
+continuous running sum, floored (`Math.max(0, balance)`) exactly once at
+the very end of its walk — a transient overpayment earlier in the
+history can offset a later draw. `applyCarryForward` instead floored
+`carry` at every window boundary, silently discarding that kind of
+credit instead of letting it carry forward. Found live on OnePay
+Advance: an early cycle was overpaid by $6.75 (a fee paid out of pocket
+but never added to what the debt itself owed, since it was logged as a
+ledger-only "Fee: " line rather than a balance-affecting adjustment) —
+the per-window floor lost that credit, inflating every later episode's
+reconstructed balance by exactly $6.75 relative to `debtBalanceAsOf`'s
+own math on the same data. Fixed by only flooring the *displayed* `net`
+(`Math.max(0, carry)`), leaving the internal `carry` free to go negative
+between windows, matching `debtBalanceAsOf` exactly. General fix, not
+OnePay-specific — 1 new regression test.
+
+**OnePay Advance's real data gaps**, found by walking its full
+chronological history with the user: (1) a real 2026-07-02 $225 advance
+was never logged as a `debt_adjustments` marker, only its disbursement
+transaction existed; (2) two real $231.75 repayments (2026-08-11,
+2026-08-27) existed in the ledger but were entered as two "Fee: OnePay
+Advance" lines with no `linked_debt_id` at all — the $225 "principal"
+half of each was invisible to the debt's own tracking (wrong
+description, untagged); the $6.75 fee half of each was already correct
+(a legitimate ledger-only "Fee: " line); (3) the still-open 2026-09-11
+draw was missing its own $6.75 fee adjustment (confirmed real with the
+user, following the same convention one earlier cycle already used).
+Fixed via `scripts/migrations/2026-10-15-onepay-reconcile.sql`: adds the
+missing marker and fee adjustment, retags the two mislabeled
+repayments, and corrects the stored `remaining_balance`/`minimum_payment`
+to $231.75 (the still-open cycle's own $225 + $6.75, confirmed by
+reconstructing the full corrected ledger with both code fixes applied)
+and `next_due_date` to 2026-10-08 (the cycle's real due date per the
+user — the stale prior value predates this draw and would otherwise
+trip a false "past due" once the balance is nonzero again).
 
 Status: addendum decided 2026-10-15. Implemented 2026-10-15 — `tsc
---noEmit` clean, 272/272 tests pass (2 new regression tests in
-`debt-episodes.test.ts`). Live-data spot check (scratch test against
-EarnIn's real history, read-only MCP) confirms every episode now reads
-"repaid" except the still-open one. Not yet checked in a running browser.
+--noEmit` clean, 274/274 tests pass (4 new regression tests in
+`debt-episodes.test.ts`). Live-data spot checks (scratch tests against
+EarnIn's, Cleo's, Instacash's, and OnePay Advance's real histories,
+read-only MCP) confirm every episode now reads "repaid" except each
+debt's still-open one, and all four debts' reconstructed totals match
+their real, confirmed balances exactly. Not yet checked in a running
+browser.

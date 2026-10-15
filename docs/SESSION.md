@@ -158,5 +158,49 @@
     advance debts, not introduced here). `next_due_date` left untouched:
     `computeArrears()` short-circuits to empty whenever
     `remaining_balance <= 0`, so a stale due date can't trip a false
-    "past due" once this lands. Not yet run by the user.
+    "past due" once this lands. Run by the user 2026-10-15, confirmed via
+    the read-only MCP: EarnIn now reads $0/$0/`'unpaid'`.
+  - Not yet verified in a running browser — same sandbox limitation.
+- 2026-10-15: User asked to check the other advance debts too (Cleo,
+  OnePay Advance, Instacash (MoneyLion), plus TEST Debt Advance — the
+  last is TEST-household fixture data, skipped). Pulled each debt's real
+  `debt_adjustments` + tagged transactions via the read-only MCP and
+  reconstructed with the (now EarnIn-fixed) episode logic:
+  - **Cleo and Instacash (MoneyLion)**: found a third real bug —
+    `splitFeesAndRepaid` counted a `"Fee: "`-prefixed transaction into
+    `feesTotal` (which feeds `net`), unlike `debtBalanceAsOf`, which
+    excludes these entirely per ADR-084 (ledger-only, never touches
+    `remaining_balance`). Both debts' reconstructed totals matched their
+    real, stored $0 balances exactly only once "Fee: " transactions were
+    excluded the same way — confirmed via scratch tests against both
+    debts' real histories. Fixed in `src/lib/debt-episodes.ts`
+    (`splitFeesAndRepaid`); 1 new regression test. The fee transaction
+    stays visible in the episode's own transaction list, just excluded
+    from the balance math.
+  - **OnePay Advance — resolved.** Walked the full chronological history
+    with the user and confirmed: every real cycle is $225 advance +
+    $6.75 "advance overdraft fee," fully repaid before the next draw.
+    Found real data gaps: the 2026-07-02 $225 draw was never logged as a
+    marker; the 2026-08-11 and 2026-08-27 repayments ($231.75 each) exist
+    but were entered as two untagged "Fee: OnePay Advance" lines (the
+    $225 "principal" half of each invisible to the debt's own tracking —
+    wrong description, no `linked_debt_id`); the still-open 2026-09-11
+    draw was missing its own $6.75 fee. Also found a fourth CODE bug
+    while reconciling: `applyCarryForward` floored its running `carry` to
+    0 after every window instead of only once at the very end (like
+    `debtBalanceAsOf` does), silently discarding a real $6.75 overpayment
+    credit from an early cycle instead of letting it offset a later
+    draw — inflated every later episode's balance by exactly $6.75.
+    Fixed (general, not OnePay-specific); 1 new regression test. With
+    both the data gaps filled and the carry-flooring fix applied, the
+    full reconstruction lands on exactly $231.75 owed (confirmed via a
+    scratch test against the real history) — drafted
+    `scripts/migrations/2026-10-15-onepay-reconcile.sql` (adds the
+    missing marker + fee adjustment, retags the two mislabeled
+    repayments, corrects `remaining_balance`/`minimum_payment` to
+    $231.75 and `next_due_date` to 2026-10-08 per the user's own stated
+    cycle). Not yet run by the user.
+  - `tsc --noEmit` clean, 274/274 tests pass (4 new regression tests
+    total this entry). ADR-111 addendum extended (same 2026-10-15 entry)
+    in docs/DECISIONS.md.
   - Not yet verified in a running browser — same sandbox limitation.

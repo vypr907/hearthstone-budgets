@@ -65,15 +65,22 @@ type Marker = { adjustment: DebtAdjustment; key: string };
 /**
  * Splits a window's non-disbursement content into { feesTotal, repaidTotal }
  * for the unlinked branch, matching `debtBalanceAsOf`'s `balance += amount`
- * sign convention (negative reduces what's owed, positive increases it) but
- * decomposed into two display buckets instead of one running sum:
- * - A `"Fee: "`-prefixed transaction always counts as an owed-increase
- *   (abs amount), regardless of sign weirdness — unlike `debtBalanceAsOf`,
- *   which drops these entirely (per ADR-110 design, surfaced here on purpose).
+ * sign convention (negative reduces what's owed, positive increases it):
+ * - A `"Fee: "`-prefixed transaction is excluded entirely — same as
+ *   `debtBalanceAsOf` (`isFeeTransaction` -> skip). ADR-084: a fee/interest
+ *   line attached to a logged payment is ledger-only, never touching
+ *   `remaining_balance`. An earlier version of this function counted these
+ *   toward `feesTotal` anyway ("surfaced here on purpose") — found live,
+ *   against two real debts (Cleo, Instacash), that this inflated the
+ *   reconstructed net above the real, confirmed-correct balance by exactly
+ *   each debt's own "Fee: " transaction total; excluding them (matching
+ *   `debtBalanceAsOf`) reconciled both exactly.
  * - Any other content: negative amount -> repaidTotal; positive amount ->
  *   feesTotal. A positive non-fee amount is rare but real — e.g. a reversed
- *   repayment (ADR-008) restoring what was paid — and must increase net the
- *   same way a fee does, not be silently dropped.
+ *   repayment (ADR-008) restoring what was paid, or a genuine
+ *   `debt_adjustments`-sourced fee (which DOES touch `remaining_balance` via
+ *   `apply_debt_adjustment`, unlike a ledger-only "Fee: " transaction) — and
+ *   must increase net, not be silently dropped.
  * - A non-marker `debt_adjustments` row contributes by its own sign the same
  *   way (positive = owed increase, e.g. `late_fee`; negative = owed decrease,
  *   e.g. `insurance_covered`).
@@ -85,9 +92,9 @@ function splitFeesAndRepaid(
   let feesTotal = 0;
   let repaidTotal = 0;
   for (const t of content) {
+    if (isFeeTransaction(t)) continue;
     const amt = Number(t.amount);
-    if (isFeeTransaction(t)) feesTotal += Math.abs(amt);
-    else if (amt > 0) feesTotal += amt;
+    if (amt > 0) feesTotal += amt;
     else if (amt < 0) repaidTotal += Math.abs(amt);
   }
   for (const a of nonMarkerAdjustments) {
@@ -116,17 +123,30 @@ type RawWindow = {
  * underpaid draw's shortfall carries into the next one(s), matching the
  * real single-running-balance model instead of resetting every window to 0.
  *
+ * `carry` is deliberately NOT floored at 0 between windows — only the
+ * DISPLAYED `net` is (`Math.max(0, carry)`, never show a negative "owed"
+ * figure). This matches `debtBalanceAsOf`'s own model exactly: one
+ * continuous running sum, floored once at the very end of the walk, not
+ * after every individual event. Flooring `carry` itself at each window
+ * boundary silently discards a real, transient overpayment credit instead
+ * of letting it offset the next draw — found live on OnePay Advance: an
+ * early cycle was overpaid by $6.75 (fee paid out of pocket but never added
+ * to what the debt itself owed), and per-window flooring lost that credit
+ * instead of carrying it forward, inflating the final reconstructed
+ * balance by exactly $6.75 relative to `debtBalanceAsOf`'s own math on the
+ * same data.
+ *
  * Status is resolved RETROACTIVELY: a window only ever knows "did the carry
  * return to zero by my own end boundary" in isolation, but a real shortfall
  * can legitimately get absorbed one or more windows later (e.g. a payment
  * landing inside the *next* window rather than exactly at this one's own
  * boundary — confirmed on Dave ExtraCash's real history, where the $40
  * 7/17 draw's shortfall is cleared by a payment dated 7/31, inside the
- * following window). Whenever carry hits zero at window i, every window
- * back to the last resolution point gets marked "repaid" too, not just
- * window i itself — "carried_forward" only survives for a window whose
- * shortfall is still outstanding by the very end of the chain (i.e. it
- * never got resolved before the final, still-open window).
+ * following window). Whenever carry returns to zero (or below) at window
+ * i, every window back to the last resolution point gets marked "repaid"
+ * too, not just window i itself — "carried_forward" only survives for a
+ * window whose shortfall is still outstanding by the very end of the
+ * chain (i.e. it never got resolved before the final, still-open window).
  */
 function applyCarryForward(windows: RawWindow[]): AdvanceEpisode[] {
   const results: AdvanceEpisode[] = windows.map((w) => ({
@@ -138,8 +158,8 @@ function applyCarryForward(windows: RawWindow[]): AdvanceEpisode[] {
   let pendingSince = 0;
   for (let i = 0; i < windows.length; i++) {
     const w = windows[i];
-    const net = Math.max(0, carry + w.advanceAmount + w.feesTotal - w.repaidTotal);
-    carry = net;
+    carry = carry + w.advanceAmount + w.feesTotal - w.repaidTotal;
+    const net = Math.max(0, carry);
     results[i].net = net;
     const isLast = i === windows.length - 1;
     if (net <= 0.005) {
