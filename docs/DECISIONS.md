@@ -5293,3 +5293,48 @@ Dave's full real cross-account history, read-only MCP) confirms every
 episode before the latest now reads `"repaid"` and the latest reads
 `"open"` at exactly $40, matching the live anchor-based figure. Not yet
 checked in a running browser.
+
+**2026-10-15 addendum — two more bugs found live on EarnIn (unlinked),
+both in the shared `applyCarryForward`/disbursement-matching logic, so
+they affect every unlinked advance debt, not just EarnIn:**
+
+- **A debt's very first disbursement could be double-counted.**
+  `useCreateAdvance` inserts the disbursement transaction (Step 1) a
+  fraction of a second *before* its `debt_adjustments` row (Step 3) — so
+  for a debt's very first tracked advance, the disbursement's own
+  `created_at` can sort as earlier than the marker's own, even though
+  both are the same real event. The unlinked branch's pre-tracking-orphan
+  detection (`txKey < firstKey`) treated this as a genuine orphan (the
+  real OnePay case — a disbursement with no matching marker at all),
+  double-counting the draw: once via the orphan bucket, once via the
+  marker's own `advanceAmount`. The phantom extra amount then never gets
+  repaid, permanently inflating every later episode's carried balance so
+  nothing downstream ever resolves. Fixed the same way the linked branch
+  already handles this: match each marker to its own disbursement by
+  amount + date (not creation-order) before falling back to orphan
+  detection for whatever's left unmatched.
+- **`applyCarryForward`'s retroactive resolution skipped the last
+  window.** The 2026-10-14 fix (above) only retroactively marked earlier
+  pending episodes `"repaid"` when an *intermediate* window's carry hit
+  zero — if the chain's shortfall doesn't clear until the very last
+  window's own payment, that last window got its status set directly
+  (`"open"`/`"repaid"`) without ever running the retroactive backfill for
+  the pending episodes before it, leaving them stuck at
+  `"carried_forward"` even though the debt was, in fact, fully settled.
+  Fixed by running the same retroactive-backfill check unconditionally on
+  every window, last or not.
+
+Together, on EarnIn's real history, these explained "showing a lot of
+carried forward on the advances, instead of the payments being made
+going towards the correct advance" exactly as reported: every episode
+now correctly reads `"repaid"` except the still-open one, and the
+reconstructed final balance is $0 — see the separate note in
+`docs/SESSION.md` about that number not matching EarnIn's currently
+*stored* `remaining_balance` ($200), a distinct data-reconciliation
+question this fix surfaced but didn't resolve.
+
+Status: addendum decided 2026-10-15. Implemented 2026-10-15 — `tsc
+--noEmit` clean, 272/272 tests pass (2 new regression tests in
+`debt-episodes.test.ts`). Live-data spot check (scratch test against
+EarnIn's real history, read-only MCP) confirms every episode now reads
+"repaid" except the still-open one. Not yet checked in a running browser.

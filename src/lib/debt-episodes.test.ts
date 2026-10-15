@@ -451,6 +451,131 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
       status: "open",
     });
   });
+
+  it("REGRESSION: the first-ever marker's own disbursement isn't misclassified as a pre-tracking orphan and double-counted — found live on EarnIn", () => {
+    // useCreateAdvance inserts the disbursement transaction (Step 1) a
+    // fraction of a second BEFORE its debt_adjustments row (Step 3) — so
+    // for a debt's very first tracked advance, the disbursement's own
+    // created_at can sort as earlier than the marker's, even though both
+    // are the same real event. Naively comparing txKey < firstKey treated
+    // this as a "pre-tracking orphan disbursement" (the real OnePay case),
+    // double-counting the $100 draw (once via the orphan bucket, once via
+    // the marker's own advanceAmount) and permanently inflating every
+    // later episode's carried balance so nothing ever resolved.
+    const id = "earnin-regression";
+    const debt: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
+      id,
+      debt_type: "advance",
+      linked_account_id: null,
+    };
+    const adjustments: DebtAdjustment[] = [
+      {
+        id: "m1",
+        household_id: "h",
+        debt_id: id,
+        amount: 100,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-08-18",
+        created_at: "2026-08-19 16:18:02.984354+00",
+        affects_balance: true,
+      },
+    ];
+    const transactions: Transaction[] = [
+      tx({
+        id: "disbursement",
+        amount: 100,
+        transaction_date: "2026-08-18",
+        cleared_date: "2026-08-18",
+        description: "Advance: EarnIn",
+        linked_debt_id: id,
+        created_at: "2026-08-19 16:18:02.381332+00", // earlier than the marker's own created_at above
+      }),
+      tx({
+        id: "payment",
+        amount: -100,
+        transaction_date: "2026-08-28",
+        cleared_date: "2026-08-28",
+        description: "Debt payment · EarnIn",
+        linked_debt_id: id,
+        created_at: "2026-08-29 02:48:29.775946+00",
+      }),
+    ];
+    const episodes = computeAdvanceEpisodes(debt, adjustments, transactions);
+    expect(episodes).toHaveLength(1); // no phantom "episode 0" from a misdetected orphan
+    expect(episodes[0]).toMatchObject({
+      markerId: "m1",
+      advanceAmount: 100,
+      repaidTotal: 100,
+      net: 0, // not 100 — the disbursement must not be double-counted
+      status: "repaid",
+    });
+  });
+
+  it("REGRESSION: a debt fully paid off by its own final episode retroactively resolves every earlier pending episode too — found live on EarnIn", () => {
+    // The chain's shortfall never clears exactly at any INTERMEDIATE
+    // window boundary, only by the time the final (otherwise 'open')
+    // window's own payment lands — a debt that's actually fully settled
+    // must not leave earlier episodes stuck showing "carried forward"
+    // just because the resolution happened to land on the very last window.
+    const id = "earnin-regression-2";
+    const debt: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
+      id,
+      debt_type: "advance",
+      linked_account_id: null,
+    };
+    const adjustments: DebtAdjustment[] = [
+      {
+        id: "m1",
+        household_id: "h",
+        debt_id: id,
+        amount: 100,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-09-01",
+        affects_balance: true,
+      },
+      {
+        id: "m2",
+        household_id: "h",
+        debt_id: id,
+        amount: 50,
+        adjustment_type: "advance",
+        description: null,
+        adjustment_date: "2026-09-08",
+        affects_balance: true,
+      },
+    ];
+    const transactions: Transaction[] = [
+      tx({
+        id: "d1",
+        amount: 100,
+        transaction_date: "2026-09-01",
+        description: "Advance: EarnIn",
+        linked_debt_id: id,
+      }),
+      tx({
+        id: "d2",
+        amount: 50,
+        transaction_date: "2026-09-08",
+        description: "Advance: EarnIn",
+        linked_debt_id: id,
+      }),
+      // Nothing repaid until a single payment, inside m2's own window, that
+      // happens to cover the entire remaining 150 (100 carried in + 50).
+      tx({
+        id: "payoff",
+        amount: -150,
+        transaction_date: "2026-09-10",
+        description: "Debt payment · EarnIn",
+        linked_debt_id: id,
+      }),
+    ];
+    const episodes = computeAdvanceEpisodes(debt, adjustments, transactions);
+    expect(episodes).toHaveLength(2);
+    expect(episodes[0]).toMatchObject({ markerId: "m1", net: 100, status: "repaid" });
+    expect(episodes[1]).toMatchObject({ markerId: "m2", net: 0, status: "repaid" });
+  });
 });
 
 describe("computeAdvanceEpisodes — linked (the Problem 2 regression case)", () => {

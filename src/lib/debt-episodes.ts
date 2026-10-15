@@ -142,11 +142,16 @@ function applyCarryForward(windows: RawWindow[]): AdvanceEpisode[] {
     carry = net;
     results[i].net = net;
     const isLast = i === windows.length - 1;
-    if (isLast) {
-      results[i].status = net > 0.005 ? "open" : "repaid";
-    } else if (net <= 0.005) {
+    if (net <= 0.005) {
+      // Resolved here — retroactively repay every pending window back to
+      // the last resolution point, EVEN when this is the last window: a
+      // debt that's fully paid off by its own final episode must not leave
+      // earlier, still-"pending" episodes stuck showing carried_forward
+      // just because the resolution happened to land on the last window.
       for (let j = pendingSince; j <= i; j++) results[j].status = "repaid";
       pendingSince = i + 1;
+    } else if (isLast) {
+      results[i].status = "open";
     }
   }
   return results;
@@ -373,7 +378,29 @@ export function computeAdvanceEpisodes(
     dateCreatedKey(t.cleared_date ?? t.transaction_date, t.created_at);
   const adjKey = (a: DebtAdjustment) => dateCreatedKey(a.adjustment_date, a.created_at);
 
-  const preDisbursements = disbursements.filter((t) => txKey(t) < firstKey);
+  // Match each marker to its own disbursement transaction (same amount,
+  // same date) rather than relying on txKey < firstKey alone: useCreateAdvance
+  // inserts the disbursement (Step 1) a fraction of a second BEFORE its
+  // debt_adjustments row (Step 3), so the very first marker's own
+  // disbursement can sort as if it predates the marker itself — found live
+  // on EarnIn, where this misclassified the first $100 advance's own
+  // disbursement as a "pre-tracking orphan," double-counting that $100
+  // (once via the orphan bucket, once via the marker's own advanceAmount)
+  // and permanently inflating every later episode's carried balance so
+  // nothing ever retroactively resolved to "repaid."
+  const consumedDisbursements = new Set<string>();
+  for (const m of markers) {
+    const match = disbursements.find(
+      (t) =>
+        !consumedDisbursements.has(t.id) &&
+        Number(t.amount) === Number(m.adjustment.amount) &&
+        t.transaction_date.slice(0, 10) === m.adjustment.adjustment_date.slice(0, 10),
+    );
+    if (match) consumedDisbursements.add(match.id);
+  }
+  const orphanDisbursements = disbursements.filter((t) => !consumedDisbursements.has(t.id));
+
+  const preDisbursements = orphanDisbursements.filter((t) => txKey(t) < firstKey);
   const preContent = content.filter((t) => txKey(t) < firstKey);
   const preAdj = nonMarkerAdjustments.filter(
     (a) => a.affects_balance !== false && adjKey(a) < firstKey,

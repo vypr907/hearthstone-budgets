@@ -115,3 +115,48 @@
     same way would need importing from `data-hooks.ts`, which already
     imports from `payments.ts` — circular-import risk. Flagged, not fixed.
   - Not yet verified in a running browser — same sandbox limitation.
+- 2026-10-15: Fixed two more ADR-111 episode-view bugs, found live on
+  EarnIn (unlinked advance debt) — user reported "a lot of carried
+  forward on the advances, instead of the payments being made going
+  towards the correct advance." Both bugs are in shared logic, so they
+  affect every unlinked advance debt, not just EarnIn:
+  - `useCreateAdvance` inserts the disbursement transaction a fraction of
+    a second before its `debt_adjustments` row, so a debt's very first
+    advance's own disbursement could sort as if it predated the marker
+    itself, misclassifying it as a "pre-tracking orphan" and double-
+    counting the draw — a phantom amount that never gets repaid, which
+    permanently inflated every later episode's carried balance so
+    nothing ever resolved. Fixed by matching each marker to its own
+    disbursement by amount+date (same pattern the linked branch already
+    used), not creation-order, before falling back to orphan detection.
+  - `applyCarryForward`'s retroactive-resolution fix (from 2026-10-14)
+    only backfilled "repaid" onto earlier pending episodes when an
+    *intermediate* window resolved to zero — if the chain doesn't
+    actually clear until the very last window's own payment, the earlier
+    ones stayed stuck at "carried forward" forever even though the debt
+    was genuinely fully settled. Fixed by running the same backfill
+    check on every window, including the last.
+  - Both confirmed via a scratch test against EarnIn's real history
+    (read-only MCP): every episode now reads "repaid" except the
+    still-open one, with the reconstructed total landing on exactly $0.
+  - 2 new regression tests in `debt-episodes.test.ts`. ADR-111 addendum
+    written to docs/DECISIONS.md. `tsc --noEmit` clean, 272/272 tests
+    pass.
+  - **Resolved**: the reconstructed $0 did NOT match EarnIn's stored
+    `remaining_balance` ($200) — unlike Dave, EarnIn is unlinked, so
+    there's no derived-balance override and whatever the stored column
+    says is what the app displays. Hand-simulating the real
+    `apply_cleared_debt_payment` RPC call history against the live data
+    couldn't reproduce $200 either (it also gives $0), so the exact
+    mechanism of the drift was never pinned down. User confirmed live:
+    EarnIn is in fact paid off. Drafted
+    `scripts/migrations/2026-10-15-earnin-balance-reconcile.sql`
+    (`remaining_balance`/`minimum_payment`/`cycle_paid_to_date` → 0,
+    `payment_status` → `'unpaid'`, matching what
+    `apply_cleared_debt_payment` itself sets on a resolved biweekly
+    cycle — not fixed to `'cleared'`, that's an existing convention for
+    advance debts, not introduced here). `next_due_date` left untouched:
+    `computeArrears()` short-circuits to empty whenever
+    `remaining_balance <= 0`, so a stale due date can't trip a false
+    "past due" once this lands. Not yet run by the user.
+  - Not yet verified in a running browser — same sandbox limitation.
