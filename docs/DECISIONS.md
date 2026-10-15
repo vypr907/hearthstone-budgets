@@ -5398,3 +5398,44 @@ read-only MCP) confirm every episode now reads "repaid" except each
 debt's still-open one, and all four debts' reconstructed totals match
 their real, confirmed balances exactly. Not yet checked in a running
 browser.
+
+**2026-10-15 addendum — manual due date on "Record advance," and a
+double-count warning on "Log a payment":**
+
+- **"Record advance" gains a "Due date" field.** It previously only ever
+  wrote a *silent* auto-computed guess (`nextPayDate`, ADR-056 addendum —
+  the household's next paycheck after the draw) with no way to see or
+  correct it. The field is now shown, pre-filled with that same guess,
+  and editable — e.g. to match what the lender itself actually says is
+  due, which doesn't always line up with paycheck timing.
+  `useCreateAdvance` (`src/lib/data-hooks.ts`) gains an optional `dueDate`
+  param that overrides the auto-computed value when provided; the RPC's
+  own fill/reset gating (null, or prior balance settled — ADR-102
+  2026-10-14 addendum) is unchanged, so a confirmed value still won't
+  clobber a genuinely still-open advance's own due date.
+- **"Log a payment" warns when a fee was already logged at draw time.**
+  If the current (still-open) advance episode already has an
+  `advance_fee`-type adjustment (from "Record advance"'s combined Fee
+  field, ADR-111 2026-10-14 addendum), a note now appears above "Fees &
+  interest" — reusing `computeAdvanceEpisodes` (already computed
+  elsewhere) rather than new logic, since its latest episode's
+  `adjustments` already carries exactly this. Not a hard block (a
+  genuinely separate charge, e.g. a late fee, is still a legitimate
+  line) — just a clear warning, since the Principal field already
+  defaults to the full amount owed (`debtRemainingOwed`), which already
+  includes that fee.
+- **Clarified, not changed**: whether a fee counts toward a "Fees"
+  category total for the year depends entirely on which of these two
+  patterns was used. A `debt_adjustments`-sourced fee (Record Advance's
+  Fee field, or a manual "Add adjustment") never gets a `category_id` —
+  for an unlinked debt it writes no transaction at all; even the mirror
+  transaction `useAddDebtAdjustment` writes for a *linked* debt has none.
+  A `"Fee: "`-prefixed transaction (Log a Payment's fee lines) always
+  does, via `feeCategoryId()` (`payments.ts`) — confirmed by code trace,
+  not changed here. A household wanting fee amounts to show up in yearly
+  category totals should prefer the fee-line pattern.
+
+Status: addendum decided 2026-10-15. Implemented 2026-10-15 — `tsc
+--noEmit` clean, 274/274 tests pass (no new pure logic — both changes
+reuse already-tested functions: `nextPayDate`, `computeAdvanceEpisodes`,
+`debtRemainingOwed`). Not yet checked in a running browser.

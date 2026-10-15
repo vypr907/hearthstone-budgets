@@ -1476,6 +1476,10 @@ export function useCreateAdvance() {
       destinationAccountId: string;
       amount: number;
       advanceDate: string;
+      /** User-entered due date from the "Record advance" dialog's new Due
+       * date field — overrides the auto-computed `nextPayDate` guess below
+       * when provided. */
+      dueDate?: string | null;
     }) => {
       if (!args.amount || args.amount <= 0) {
         throw new Error("Enter a positive amount");
@@ -1530,15 +1534,18 @@ export function useCreateAdvance() {
       // the second silently overwriting the first's effect. Reactivation,
       // the minimum_payment mirror, and the due-date-fill-if-blank all move
       // server-side with it, computed from the same atomic snapshot.
-      // ADR-056 addendum: a one-time smart default, same as the debt form —
-      // an advance against a biweekly advance-type debt with no due date yet
-      // fills it from the household's next paycheck. The RPC only applies
-      // this if next_due_date is *currently* (atomically) still blank.
+      // ADR-056 addendum: a smart default, same as the debt form — an
+      // advance against a biweekly advance-type debt fills its due date
+      // from the household's next paycheck, unless the user entered one
+      // explicitly in the "Record advance" dialog's Due date field. The RPC
+      // only applies this when next_due_date is *currently* (atomically)
+      // still blank, or the debt's prior balance was already settled —
+      // never clobbers a genuinely still-open advance's own due date.
       const eligibleForDueDateFill =
         args.debt.debt_type === "advance" &&
         (args.debt.billing_cycle ?? "").toLowerCase() === "biweekly";
       const nextDue = eligibleForDueDateFill
-        ? nextPayDate(sources, events, args.advanceDate)
+        ? (args.dueDate ?? nextPayDate(sources, events, args.advanceDate))
         : null;
       // ADR-102 addendum: same reasoning as useAddDebtAdjustment — a linked
       // debt's remaining_balance is derived, not stored; pass the current

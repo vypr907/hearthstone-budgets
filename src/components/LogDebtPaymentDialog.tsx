@@ -31,6 +31,7 @@ import {
   type PaymentLine,
 } from "@/lib/payments";
 import { priorCyclesArrears } from "@/lib/arrears";
+import { computeAdvanceEpisodes } from "@/lib/debt-episodes";
 import { formatMoney } from "@/lib/format";
 import { todayISO } from "@/lib/snapshot";
 import type { Debt } from "@/lib/supabase";
@@ -76,6 +77,20 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
     () => transactions.find((t) => t.linked_debt_id === debt.id)?.account_id ?? "",
     [transactions, debt.id],
   );
+
+  /** ADR-111 addendum: if the current (still-open) advance episode already
+   * has an `advance_fee` adjustment logged (via "Record advance"'s combined
+   * Fee field), warn here — that fee is already included in the Principal
+   * amount above, so a "Fees & interest" line for the same charge would
+   * double-count it. */
+  const alreadyLoggedAdvanceFee = useMemo(() => {
+    if (debt.debt_type !== "advance") return null;
+    const episodes = computeAdvanceEpisodes(debt, adjustments, transactions);
+    if (episodes.length === 0) return null;
+    const latest = episodes[episodes.length - 1];
+    const feeAdj = latest.adjustments.find((a) => a.adjustment_type === "advance_fee");
+    return feeAdj ? Number(feeAdj.amount) : null;
+  }, [debt, adjustments, transactions]);
 
   const [date, setDate] = useState(todayISO());
   const [accountId, setAccountId] = useState("");
@@ -241,6 +256,14 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
                     <Plus className="mr-1 h-4 w-4" /> Add line
                   </Button>
                 </div>
+                {alreadyLoggedAdvanceFee != null ? (
+                  <p className="mt-1 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+                    A {formatMoney(alreadyLoggedAdvanceFee)} advance fee was already logged when
+                    this advance was taken — it's already included in the Principal amount above.
+                    Only add a line here for a genuinely separate charge (e.g. a late fee), not this
+                    same one again.
+                  </p>
+                ) : null}
                 {lines.length === 0 ? (
                   <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
                     No extra charges. Added lines post their own transactions against the same

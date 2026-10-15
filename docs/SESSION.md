@@ -199,8 +199,29 @@
     missing marker + fee adjustment, retags the two mislabeled
     repayments, corrects `remaining_balance`/`minimum_payment` to
     $231.75 and `next_due_date` to 2026-10-08 per the user's own stated
-    cycle). Not yet run by the user.
+    cycle). Run by the user 2026-10-15, confirmed via the read-only MCP.
   - `tsc --noEmit` clean, 274/274 tests pass (4 new regression tests
     total this entry). ADR-111 addendum extended (same 2026-10-15 entry)
     in docs/DECISIONS.md.
   - Not yet verified in a running browser — same sandbox limitation.
+- 2026-10-15: Follow-up UX questions from the OnePay reconciliation —
+  how does the combined advance+fee entry interact with repaying it, and
+  how does either pattern affect yearly fee-category totals?
+  - Added a "Due date" field to "Record advance" (`src/routes/app.debts.tsx`),
+    pre-filled with the existing silent auto-guess (`nextPayDate`) but now
+    visible and editable. `useCreateAdvance` (`src/lib/data-hooks.ts`)
+    gains an optional `dueDate` override param.
+  - Added a warning (not a hard block) to "Log a payment"
+    (`src/components/LogDebtPaymentDialog.tsx`) when the current advance
+    episode already has an `advance_fee` adjustment logged — reuses
+    `computeAdvanceEpisodes` rather than new logic.
+  - Clarified for the user: a `debt_adjustments`-sourced fee (Record
+    Advance's Fee field) never gets a category assigned and, for an
+    unlinked debt, creates no transaction at all — it won't show up in a
+    yearly "Fees" category total. A `"Fee: "`-prefixed transaction (Log a
+    Payment's fee lines) always gets categorized under "Fees" via
+    `feeCategoryId()`. Documented in the ADR-111 addendum, not changed —
+    user's choice which pattern to use depending on whether they want
+    category-level fee tracking.
+  - `tsc --noEmit` clean, 274/274 tests pass. Not yet verified in a
+    running browser.

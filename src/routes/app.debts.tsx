@@ -1779,6 +1779,8 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   const { data: allTransactions = [] } = useTransactions();
   const { data: accounts = [] } = useAccounts();
   const { data: allAccountBalances = [] } = useAllAccountBalances();
+  const { data: incomeSources = [] } = useIncomeSources();
+  const { data: incomeEvents = [] } = useIncomeEvents();
   const adjustments = useMemo(
     () => allAdjustments.filter((a) => a.debt_id === debt.id && a.adjustment_type !== "advance"),
     [allAdjustments, debt.id],
@@ -1835,6 +1837,15 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceFee, setAdvanceFee] = useState("");
   const [advanceDate, setAdvanceDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [advanceDueDate, setAdvanceDueDate] = useState("");
+
+  function openAdvanceDialog() {
+    // Smart default, same guess the RPC itself used to make silently —
+    // now shown up front and editable, since it's a guess (next paycheck
+    // after the draw), not necessarily the lender's own real due date.
+    setAdvanceDueDate(nextPayDate(incomeSources, incomeEvents, advanceDate) ?? "");
+    setAdvanceOpen(true);
+  }
 
   async function save() {
     const value = Number(amount);
@@ -1884,6 +1895,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
         destinationAccountId: advanceAccountId,
         amount: value,
         advanceDate,
+        dueDate: advanceDueDate || null,
       });
       // ADR-111 addendum: a fee incurred at the same moment as the draw
       // (e.g. an "instant transfer" fee) gets tied to this same advance in
@@ -1904,6 +1916,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       setAdvanceAmount("");
       setAdvanceFee("");
       setAdvanceAccountId("none");
+      setAdvanceDueDate("");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -1990,7 +2003,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                 every linked debt, which was right for a linked credit card
                 (no advance concept) but wrong here. Always show it for an
                 advance-type debt, linked or not. */}
-            <Button size="sm" variant="outline" className="h-8" onClick={() => setAdvanceOpen(true)}>
+            <Button size="sm" variant="outline" className="h-8" onClick={openAdvanceDialog}>
               <Plus className="mr-1 h-4 w-4" /> Add
             </Button>
           </div>
@@ -2176,6 +2189,19 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                 onChange={(e) => setAdvanceDate(e.target.value)}
                 className="h-11"
               />
+            </div>
+            <div>
+              <Label>Due date</Label>
+              <Input
+                type="date"
+                value={advanceDueDate}
+                onChange={(e) => setAdvanceDueDate(e.target.value)}
+                className="h-11"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pre-filled with a guess (your next paycheck after this draw) — edit it to match
+                what the lender actually says is due.
+              </p>
             </div>
           </div>
           <DialogFooter>
