@@ -4445,8 +4445,53 @@ logged with an on-the-nose label instead of "Other." No hook/schema/RPC
 change — purely a UI gate and copy fix. See ADR-111 for the related
 per-advance history view added in the same pass.
 
+**2026-10-14 addendum — extended "derived, never stored" to the WRITE
+path for `minimum_payment`/`next_due_date`:** the 2026-10-13 addendum
+restored "Record advance" for a linked advance debt, and the very first
+real use of it (a $100 advance + $10 fee against Dave ExtraCash) exposed
+a bug this ADR's original version never covered: `apply_debt_advance`/
+`apply_debt_adjustment` (the atomic RPCs, ADR-101) always add onto
+whatever `debts.remaining_balance` currently holds — correct for an
+unlinked debt, where that column is the trusted balance, but once linked
+the column is only ever corrected on the *read* path (`effectiveDebtBalance()`/
+`useEffectiveDebts()`), never the write path. It had drifted to a stale
+$30, and the new advance additively landed on top of it (30 + 100 + 10 =
+140) instead of the real $0 + 100 + 10 = 110. `minimum_payment`/
+`next_due_date` have no derived-override equivalent anywhere, so this
+write-path mistake reached the UI directly — and a stale, already-passed
+`next_due_date` then tripped a false "past due" in `arrears.ts`'s cycle
+walk.
+
+Decision: both RPCs gain one new optional trailing parameter,
+`p_current_balance_override numeric default null` (`scripts/migrations/
+2026-10-14-linked-advance-balance-override.sql`) — fully backward
+compatible, every existing caller that never passes it is byte-for-byte
+unchanged. `useCreateAdvance`/`useAddDebtAdjustment` (`src/lib/data-hooks.ts`)
+now compute the real current balance via `effectiveDebtBalance()`
+whenever `debt.linked_account_id` is set, and pass it in; the RPC uses
+`coalesce(p_current_balance_override, remaining_balance)` as its
+baseline instead of the bare column. `apply_debt_advance`'s due-date
+logic widens from "fill once, only if blank" to also reset when the
+(possibly-overridden) baseline is ~0 — i.e. the prior advance, if any,
+was already settled — replacing a stale date instead of only filling a
+null one. This also fixes the identical gap for an *unlinked* advance
+debt that's fully paid off and gets a new draw (same stale-due-date
+problem, just never reported yet) — a correct generalization of the same
+rule, not a new behavior. A one-time data fix in the same migration
+corrects Dave's already-drifted row directly (remaining_balance/
+minimum_payment → $110.00, next_due_date → 2026-10-22), since it can't
+retroactively re-run through the now-fixed RPC.
+
+Kept out of scope: `useLogDebtPayment`'s historical/out-of-cycle branch
+(`src/lib/payments.ts`) calls the same `apply_debt_adjustment` RPC with
+the same staleness exposure for a linked debt, but fixing it the same
+way would need importing `effectiveDebtBalance`'s account/balance/
+transaction data into `payments.ts` — which `data-hooks.ts` already
+imports *from*, so pulling those hooks in the other direction risks a
+circular import. Flagged as a known related gap, not fixed here.
+
 Status: Decided 2026-09-11. Implemented 2026-09-11; extended 2026-09-15;
-addendum 2026-10-13.
+addendum 2026-10-13; addendum 2026-10-14.
 
 ## ADR-103: Cash Tracking via a Cash Account + "Cash Back" Combo Entries
 

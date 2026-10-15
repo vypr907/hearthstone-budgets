@@ -73,3 +73,45 @@
     shadowing a valid stored `gh` login — unset it and `gh` worked fine).
   - Not yet verified in a running browser — same sandbox limitation as
     above.
+- 2026-10-14: Fixed a third Dave ExtraCash bug — taking a real $100
+  advance + $10 fee (the new combined entry) pushed `minimum_payment` to
+  $140 instead of $110, and the debt showed a false "1 cycle · $80 past
+  due" even though the new advance isn't due until 2026-10-22. Root cause
+  (ADR-102 addendum): `apply_debt_advance`/`apply_debt_adjustment` always
+  add onto the STORED `remaining_balance` column — correct for an
+  unlinked debt, but for a linked one that column is only ever corrected
+  on the read path (`effectiveDebtBalance`), never the write path, so it
+  had drifted to a stale $30 and the new advance compounded onto it
+  (30+100+10=140). `minimum_payment`/`next_due_date` have no derived
+  override at all, so the mistake reached the UI directly, and the stale
+  `next_due_date` tripped `arrears.ts`'s cycle walk into a false overdue
+  reading.
+  - Fix: both RPCs gain a new optional `p_current_balance_override`
+    param (backward compatible, unlinked debts unaffected);
+    `useCreateAdvance`/`useAddDebtAdjustment` (`src/lib/data-hooks.ts`)
+    now compute the real current balance via `effectiveDebtBalance()`
+    for a linked debt and pass it in. `apply_debt_advance`'s due-date
+    fill widened from "once ever, only if blank" to also reset when the
+    prior balance was ~0 (also fixes the same latent gap for a paid-off
+    *unlinked* advance debt taking a new draw).
+  - Migration: `scripts/migrations/2026-10-14-linked-advance-balance-override.sql`
+    (RPC changes + one-time fix of Dave's drifted row to $110/$110/
+    2026-10-22) — run by the user 2026-10-15.
+  - Follow-up bug found running it: `create or replace function` only
+    replaces a function with the EXACT SAME parameter list — adding a new
+    trailing parameter made Postgres create a second overload instead of
+    replacing the original, so the old 3-arg (still-buggy) functions
+    stayed live alongside the new 4-arg ones. Any caller passing only 3
+    named args would've silently resolved to the stale version, undoing
+    the fix for that call shape. Fixed with
+    `scripts/migrations/2026-10-15-drop-stale-debt-rpc-overloads.sql`
+    (drops the old 3-arg signatures) — run by the user, confirmed via the
+    read-only MCP that exactly one (4-arg) overload of each function now
+    exists.
+  - `tsc --noEmit` clean, 270/270 tests pass (no new pure logic to test —
+    both hooks just call the already-tested `effectiveDebtBalance()`).
+  - Scoped out: `useLogDebtPayment`'s historical/out-of-cycle branch
+    (`src/lib/payments.ts`) has the same RPC exposure but fixing it the
+    same way would need importing from `data-hooks.ts`, which already
+    imports from `payments.ts` — circular-import risk. Flagged, not fixed.
+  - Not yet verified in a running browser — same sandbox limitation.

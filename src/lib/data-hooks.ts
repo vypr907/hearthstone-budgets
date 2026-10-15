@@ -946,6 +946,9 @@ export function useDebtAdjustments() {
 export function useAddDebtAdjustment() {
   const { householdId } = useAuth();
   const qc = useQueryClient();
+  const { data: accounts = [] } = useAccounts();
+  const { data: latestBalances = {} } = useLatestBalances();
+  const { data: transactions = [] } = useTransactions();
   return useMutation({
     mutationFn: async (args: {
       debt: Debt;
@@ -958,10 +961,20 @@ export function useAddDebtAdjustment() {
       const affectsBalance = args.affectsBalance !== false; // default true
       if (affectsBalance) {
         // ADR-101: atomic RPC — see useCreateAdvance for why.
+        // ADR-102 addendum: for a linked debt, remaining_balance is derived
+        // (effectiveDebtBalance), never trusted stored — pass the current
+        // derived balance so the RPC adds onto the real number instead of
+        // compounding onto a stale stored one. Unlinked debts pass null
+        // (effectiveDebtBalance falls back to the stored column itself),
+        // so nothing changes for them.
+        const currentBalanceOverride = args.debt.linked_account_id
+          ? effectiveDebtBalance(args.debt, accounts, latestBalances, transactions)
+          : null;
         const { error: debtError } = await supabase.rpc("apply_debt_adjustment", {
           p_debt_id: args.debt.id,
           p_amount: args.amount,
           p_effective_date: args.adjustmentDate,
+          p_current_balance_override: currentBalanceOverride,
         });
         if (debtError) throw debtError;
       }
@@ -1454,6 +1467,9 @@ export function useCreateAdvance() {
   const qc = useQueryClient();
   const { data: sources = [] } = useIncomeSources();
   const { data: events = [] } = useIncomeEvents();
+  const { data: accounts = [] } = useAccounts();
+  const { data: latestBalances = {} } = useLatestBalances();
+  const { data: transactions = [] } = useTransactions();
   return useMutation({
     mutationFn: async (args: {
       debt: Debt;
@@ -1524,10 +1540,21 @@ export function useCreateAdvance() {
       const nextDue = eligibleForDueDateFill
         ? nextPayDate(sources, events, args.advanceDate)
         : null;
+      // ADR-102 addendum: same reasoning as useAddDebtAdjustment — a linked
+      // debt's remaining_balance is derived, not stored; pass the current
+      // derived balance (computed from args.debt, before this draw's own
+      // mirror leg above) so the RPC adds onto the real number and can
+      // correctly tell whether the prior advance was already settled (for
+      // the due-date reset below) instead of trusting a column nothing
+      // else keeps in sync.
+      const currentBalanceOverride = args.debt.linked_account_id
+        ? effectiveDebtBalance(args.debt, accounts, latestBalances, transactions)
+        : null;
       const { error: debtError } = await supabase.rpc("apply_debt_advance", {
         p_debt_id: args.debt.id,
         p_amount: args.amount,
         p_next_due_date_if_blank: nextDue,
+        p_current_balance_override: currentBalanceOverride,
       });
       if (debtError) throw debtError;
       // Step 3: insert debt_adjustments row.
