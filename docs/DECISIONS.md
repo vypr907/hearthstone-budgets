@@ -3656,6 +3656,35 @@ keeping the bill/debt in sync is the app's job, not a second workflow.
 
 Status: Decided 2026-08-31. Implemented.
 
+**2026-10-16 addendum — fee lines in the grouped editor gain Type + Note,
+and always compose their description.** The grouped `payment-with-fees`
+editor's "add new lines" feature (`LinkedGroupDetail`, `src/routes/
+app.transactions.tsx`) previously had no fee/interest/tax type concept at
+all — each line was just a `category_id` Select (a real FK, unrelated) plus
+an amount Input; a `description` field existed in local state but was never
+rendered in any input. Worse, the save handler wrote
+`line.description || \`Fee: ${payable.name}\`` — a raw full-string override
+with no `"Fee: "` prefix enforcement, structurally looser than the
+`insertFeeLines` convention (ADR-046/084 addenda) every other fee-entry
+path already uses. Both are fixed together: each line now has a Type
+`<Select>` (`LINE_TYPES`, `src/lib/payments.ts` — Fee/Interest/Late
+fee/Processing fee/Tax/Other charge) and a Note `<Input>`, and the saved
+`description` is always composed via a new shared
+`composeFeeDescription(label, type, note)` (factored out of
+`insertFeeLines`, which now calls it too) — never a raw override. A new
+inverse helper, `parseFeeDescription(description, label)`, reconstructs
+`{type, note}` when loading an *existing* row into the editor; anything
+that doesn't match the exact composed shape (older rows predating this
+convention, or text from the old raw-override path) falls back to
+`type: "other"` with the original string kept as the note, so nothing is
+silently discarded. No schema change — same `transactions.description`
+string, same `"Fee: "` prefix every classifier (`isFeeTransaction`,
+`clearPairedFees`, `deletePairedFees`, `debtBalanceAsOf`,
+`computeAdvanceEpisodes`) already matches on.
+
+Status: addendum decided 2026-10-16. Implemented 2026-10-16 — `tsc --noEmit`
+clean, 274/274 tests pass. Not yet checked in a running browser.
+
 ## ADR-092: Rent-to-own debts are tracked at total cost to own
 
 Decision:

@@ -60,7 +60,13 @@ import {
 import { consumeTxPreFilter } from "@/lib/tx-filter-store";
 import { internalTransferIds, isInternalTransfer, opaqueTransferAccountIds } from "@/lib/internal-transfers";
 import { ReversePaymentButton } from "@/components/ReversePaymentButton";
-import { useEditLinkedTransaction, toPayable } from "@/lib/payments";
+import {
+  composeFeeDescription,
+  LINE_TYPES,
+  parseFeeDescription,
+  toPayable,
+  useEditLinkedTransaction,
+} from "@/lib/payments";
 import { useTags, useTransactionTags, useSetTransactionTags } from "@/lib/tags";
 import { TagPicker } from "@/components/TagPicker";
 import { tagVisual } from "@/lib/visual-meta";
@@ -1590,7 +1596,7 @@ function LinkedGroupDetail({
       ? toPayable("debt", linkedDebt)
       : null;
 
-  type FeeLine = { id: string | null; categoryId: string; amount: string; description: string };
+  type FeeLine = { id: string | null; categoryId: string; amount: string; type: string; note: string };
 
   const [edit, setEdit] = useState(false);
   const [payAmount, setPayAmount] = useState("");
@@ -1619,7 +1625,7 @@ function LinkedGroupDetail({
         id: r.id,
         categoryId: r.category_id ?? NO_SPLIT_CATEGORY,
         amount: String(Math.abs(Number(r.amount ?? 0))),
-        description: r.description ?? "",
+        ...parseFeeDescription(r.description, payable?.name ?? ""),
       })),
     );
   }
@@ -1665,7 +1671,7 @@ function LinkedGroupDetail({
           cleared_date: effectiveClearedDate,
           account_id: accountId,
           category_id: line.categoryId === NO_SPLIT_CATEGORY ? null : line.categoryId,
-          description: line.description || `Fee: ${payable.name}`,
+          description: composeFeeDescription(payable.name, line.type, line.note),
           split_group_id: groupId,
           institution_id: linkedRow.institution_id,
         });
@@ -1813,7 +1819,24 @@ function LinkedGroupDetail({
             <div className="space-y-2">
               <Label>Fees and extra lines</Label>
               {lines.map((l, i) => (
-                <div key={l.id ?? `new-${i}`} className="flex items-center gap-2">
+                <div key={l.id ?? `new-${i}`} className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={l.type}
+                    onValueChange={(v) =>
+                      setLines(lines.map((x, idx) => (idx === i ? { ...x, type: v } : x)))
+                    }
+                  >
+                    <SelectTrigger className="h-11 w-[9.5rem]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LINE_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Select
                     value={l.categoryId}
                     onValueChange={(v) =>
@@ -1845,6 +1868,16 @@ function LinkedGroupDetail({
                       )
                     }
                   />
+                  <Input
+                    placeholder="Note (optional)"
+                    className="h-11 min-w-0 flex-1"
+                    value={l.note}
+                    onChange={(e) =>
+                      setLines(
+                        lines.map((x, idx) => (idx === i ? { ...x, note: e.target.value } : x)),
+                      )
+                    }
+                  />
                   <Button
                     type="button"
                     size="icon"
@@ -1868,7 +1901,7 @@ function LinkedGroupDetail({
                 onClick={() =>
                   setLines([
                     ...lines,
-                    { id: null, categoryId: NO_SPLIT_CATEGORY, amount: "", description: "" },
+                    { id: null, categoryId: NO_SPLIT_CATEGORY, amount: "", type: "fee", note: "" },
                   ])
                 }
               >

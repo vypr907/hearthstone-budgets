@@ -537,7 +537,7 @@ export async function insertFeeLines(
     category_id: feeCatId ?? null,
     amount: -Math.abs(Number(l.amount) || 0),
     status,
-    description: `Fee: ${label} · ${l.type}${l.note ? ` — ${l.note}` : ""}`,
+    description: composeFeeDescription(label, l.type, l.note),
     transaction_date: date || todayISO(),
     cleared_date: status === "cleared" ? (clearedDate || date || todayISO()) : null,
     split_group_id: splitGroupId ?? null,
@@ -1436,6 +1436,38 @@ export const LINE_TYPES = [
   { value: "tax", label: "Tax" },
   { value: "other", label: "Other charge" },
 ];
+
+/** ADR-046/091: the canonical "Fee: <label> · <type>[ — <note>]" shape every fee line writes. */
+export function composeFeeDescription(label: string, type: string, note?: string | null): string {
+  return `Fee: ${label} · ${type}${note ? ` — ${note}` : ""}`;
+}
+
+/**
+ * ADR-091 addendum: the inverse of `composeFeeDescription`, for loading an
+ * *existing* fee row's raw `description` back into editable type/note
+ * fields (LinkedGroupDetail's "edit a payment" UI). Anything that doesn't
+ * match the exact composed shape — an older row from before this
+ * convention, or free text typed through the pre-addendum raw-override
+ * path — falls back to `type: "other"` with the whole original string kept
+ * as the note, so nothing is silently discarded.
+ */
+export function parseFeeDescription(
+  description: string | null | undefined,
+  label: string,
+): { type: string; note: string } {
+  const escapedLabel = (label || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = (description ?? "").match(
+    new RegExp(`^Fee:\\s*${escapedLabel}\\s*·\\s*(\\w+)(?:\\s*—\\s*(.*))?$`, "i"),
+  );
+  if (match) {
+    const [, rawType, rawNote] = match;
+    const type = LINE_TYPES.some((t) => t.value === rawType.toLowerCase())
+      ? rawType.toLowerCase()
+      : "other";
+    return { type, note: rawNote ?? "" };
+  }
+  return { type: "other", note: description ?? "" };
+}
 
 export type PaymentLineDraft = PaymentLine & { key: string };
 
