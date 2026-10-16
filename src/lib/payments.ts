@@ -63,6 +63,13 @@ export type PayInput = {
   cycleAmount?: number;
   /** ADR-046/addendum: optional itemized fee/interest/tax lines charged with the payment. */
   feeLines?: PaymentLine[];
+  /**
+   * ADR-046 addendum: overrides the payment transaction's own description
+   * (default `"<Bill|Debt> payment · <name>"`) — used to fold an "Itemize
+   * this amount" breakdown (e.g. "Base $92.04, Tax $5.06") into the single
+   * linked transaction's text. The amount itself is unaffected either way.
+   */
+  description?: string;
   /** Payment date; defaults to today when omitted — lets a payment be backdated. */
   date?: string;
   /**
@@ -760,7 +767,15 @@ export function useMarkSubmitted() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable, accountId, amount, cycleAmount, feeLines, date }: PayInput) => {
+    mutationFn: async ({
+      payable,
+      accountId,
+      amount,
+      cycleAmount,
+      feeLines,
+      description,
+      date,
+    }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const amt = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       // Mark the payable pending first so a failed status write never leaves an
@@ -786,7 +801,7 @@ export function useMarkSubmitted() {
         category_id: p.category_id,
         amount: -amt,
         status: "pending",
-        description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
+        description: description || `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
         transaction_date: date || todayISO(),
         [linkColumn(p.kind)]: p.id,
         split_group_id: groupId,
@@ -843,6 +858,7 @@ export function useMarkCleared() {
       amount,
       cycleAmount,
       feeLines,
+      description,
       date,
       clearedDate,
       priorArrears,
@@ -900,7 +916,7 @@ export function useMarkCleared() {
           category_id: p.category_id,
           amount: -requested,
           status: "cleared",
-          description: `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
+          description: description || `${p.kind === "bill" ? "Bill" : "Debt"} payment · ${p.name}`,
           transaction_date: date || todayISO(),
           cleared_date: effectiveClearedDate,
           [linkColumn(p.kind)]: p.id,
@@ -1469,6 +1485,42 @@ export function parseFeeDescription(
   return { type: "other", note: description ?? "" };
 }
 
+/**
+ * ADR-046 addendum: an "Itemize this amount" row — a label + amount, used to
+ * build up a single payment's principal/amount from a breakdown (e.g. Base +
+ * Tax) instead of typing the combined total. Unlike `PaymentLine`, these are
+ * never written as their own transactions — they only ever fold into the one
+ * linked payment row's amount and description (see `composeItemizedDescription`).
+ */
+export type ItemizedAmountLine = { key: string; label: string; amount: string };
+
+export function newItemizedAmountLine(): ItemizedAmountLine {
+  return { key: crypto.randomUUID(), label: "", amount: "" };
+}
+
+export function itemizedAmountTotal(items: ItemizedAmountLine[]): number {
+  return items.reduce((s, i) => s + (Math.abs(Number(i.amount)) || 0), 0);
+}
+
+/**
+ * Folds itemize rows with both a label and a non-trivial amount into a
+ * parenthetical suffix on `base` (e.g. `"Debt payment · Aarons - Dresser
+ * (Base $92.04, Tax $5.06)"`). Returns `undefined` when nothing qualifies, so
+ * callers can fall back to their own default description.
+ */
+export function composeItemizedDescription(
+  base: string,
+  items: ItemizedAmountLine[],
+): string | undefined {
+  const charged = items.filter(
+    (i) => i.label.trim() && Math.abs(Number(i.amount) || 0) >= 0.005,
+  );
+  if (charged.length === 0) return undefined;
+  return `${base} (${charged
+    .map((i) => `${i.label.trim()} ${formatMoney(Math.abs(Number(i.amount)) || 0)}`)
+    .join(", ")})`;
+}
+
 export type PaymentLineDraft = PaymentLine & { key: string };
 
 export function newPaymentLine(): PaymentLineDraft {
@@ -1521,6 +1573,12 @@ export type LogDebtPaymentInput = {
   date: string;
   status: "pending" | "cleared";
   lines: PaymentLine[];
+  /**
+   * ADR-046 addendum: overrides the principal transaction's own description
+   * (default `"Debt payment · <name>"`) — used to fold an "Itemize this
+   * amount" breakdown into the single linked transaction's text.
+   */
+  principalDescription?: string;
   /** priorCyclesArrears(payable) from arrears.ts — only used for the in-cycle path. */
   priorArrears: number;
   /**
@@ -1590,6 +1648,7 @@ export function useLogDebtPayment() {
       date,
       status,
       lines,
+      principalDescription,
       priorArrears,
       newestAdvanceDate,
     }: LogDebtPaymentInput) => {
@@ -1657,7 +1716,7 @@ export function useLogDebtPayment() {
           category_id: p.category_id,
           amount: -amt,
           status,
-          description: `Debt payment · ${debt.name}`,
+          description: principalDescription || `Debt payment · ${debt.name}`,
           transaction_date: date,
           cleared_date: status === "cleared" ? date : null,
           linked_debt_id: debt.id,
@@ -1726,6 +1785,12 @@ export type LogBillPaymentInput = {
   priorArrears: number;
   /** ADR-084 addendum: fee/interest lines, same shape as debt payments. */
   lines: PaymentLine[];
+  /**
+   * ADR-046 addendum: overrides the principal transaction's own description
+   * (default `"Bill payment · <name>"`) — used to fold an "Itemize this
+   * amount" breakdown into the single linked transaction's text.
+   */
+  principalDescription?: string;
 };
 
 /**
@@ -1774,6 +1839,7 @@ export function useLogBillPayment() {
       status,
       priorArrears,
       lines,
+      principalDescription,
     }: LogBillPaymentInput) => {
       const p = toPayable("bill", bill);
       const amt = Math.abs(Number(amount) || 0);
@@ -1801,7 +1867,7 @@ export function useLogBillPayment() {
           category_id: p.category_id,
           amount: -amt,
           status,
-          description: `Bill payment · ${bill.name}`,
+          description: principalDescription || `Bill payment · ${bill.name}`,
           transaction_date: date,
           cleared_date: status === "cleared" ? date : null,
           linked_bill_id: bill.id,

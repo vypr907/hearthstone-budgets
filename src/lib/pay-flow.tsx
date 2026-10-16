@@ -4,7 +4,9 @@ import { Plus, Trash2 } from "lucide-react";
 import {
   billCycleDue,
   billRemainingOwed,
+  composeItemizedDescription,
   draftsFromDefaultLines,
+  itemizedAmountTotal,
   LINE_TYPES,
   newPaymentLine,
   payableRemainingOwed,
@@ -13,6 +15,7 @@ import {
   useMarkUnpaid,
   useResetCycle,
   useSaveDefaultFeeLines,
+  type ItemizedAmountLine,
   type Payable,
   type PaymentLine,
   type PaymentLineDraft,
@@ -24,6 +27,7 @@ import { accountLast4, formatMoney } from "@/lib/format";
 import { todayISO } from "@/lib/snapshot";
 import { accountTypeVisual } from "@/lib/visual-meta";
 import { InstitutionLogo } from "@/components/InstitutionLogo";
+import { ItemizeAmountFields } from "@/components/ItemizeAmountFields";
 import { computeArrears, priorCyclesArrears } from "@/lib/arrears";
 
 import {
@@ -73,6 +77,7 @@ export function usePayFlow() {
     amount?: number;
     cycleAmount?: number;
     feeLines?: PaymentLine[];
+    description?: string;
     date?: string;
   } | null>(null);
   const [ask, setAsk] = useState<{
@@ -84,6 +89,8 @@ export function usePayFlow() {
   const [askValue, setAskValue] = useState("");
   // ADR-046/addendum: optional itemized fee/interest/tax lines charged alongside this payment.
   const [feeLines, setFeeLines] = useState<PaymentLineDraft[]>([]);
+  // ADR-046 addendum: optional "Itemize this amount" breakdown (e.g. Base + Tax) for the payment itself.
+  const [itemItems, setItemItems] = useState<ItemizedAmountLine[]>([]);
   // Payment date, defaulting to today — lets a payment be backdated.
   const [dateValue, setDateValue] = useState(todayISO());
   // ADR-100: confirm step for clearing an already-pending payment — the one
@@ -107,6 +114,7 @@ export function usePayFlow() {
     feeLines?: PaymentLine[],
     date?: string,
     clearedDate?: string,
+    description?: string,
   ) {
     try {
       const res = (await (action === "submitted" ? submit : clear).mutateAsync({
@@ -115,6 +123,7 @@ export function usePayFlow() {
         amount,
         cycleAmount,
         feeLines,
+        description,
         date,
         clearedDate,
         // ADR-076: only meaningful for "cleared" — submit never resolves a cycle.
@@ -148,9 +157,10 @@ export function usePayFlow() {
     cycleAmount?: number,
     feeLines?: PaymentLine[],
     date?: string,
+    description?: string,
   ) {
     // Any household account can pay any bill/debt (ADR-007 correction 2026-08-03).
-    setChoice({ payable, action, amount, cycleAmount, feeLines, date });
+    setChoice({ payable, action, amount, cycleAmount, feeLines, date, description });
   }
 
   /** Amount to pre-fill for the "paying now" prompt: whatever is still owed. */
@@ -171,6 +181,7 @@ export function usePayFlow() {
       !!payable.bill?.is_variable_amount &&
       payable.bill?.cycle_amount_due == null;
     setFeeLines(draftsFromDefaultLines(payable.debt?.default_fee_lines));
+    setItemItems([]);
     setDateValue(todayISO());
     if (needsCycle) {
       setAskValue(String(billCycleDue(payable.bill!) || ""));
@@ -209,6 +220,7 @@ export function usePayFlow() {
     }
     // unpaid or partial: submit a new (possibly partial) payment.
     setFeeLines(draftsFromDefaultLines(payable.debt?.default_fee_lines));
+    setItemItems([]);
     setDateValue(todayISO());
     setAskValue(String(info.remaining || defaultPayAmount(payable) || ""));
     setAsk({ payable, action: "submitted", stage: needsCycleAmount(payable) ? "cycle" : "pay" });
@@ -273,6 +285,8 @@ export function usePayFlow() {
                     c.cycleAmount,
                     c.feeLines,
                     c.date,
+                    undefined,
+                    c.description,
                   );
                 }}
               >
@@ -389,9 +403,15 @@ export function usePayFlow() {
             step="0.01"
             inputMode="decimal"
             className="h-12 text-base"
-            value={askValue}
+            value={ask?.stage === "pay" && itemItems.length > 0 ? String(itemizedAmountTotal(itemItems) || "") : askValue}
             onChange={(e) => setAskValue(e.target.value)}
+            disabled={ask?.stage === "pay" && itemItems.length > 0}
           />
+          {ask?.stage === "pay" ? (
+            <div className="pt-1">
+              <ItemizeAmountFields items={itemItems} onChange={setItemItems} />
+            </div>
+          ) : null}
           {ask?.stage === "pay" ? (
             <p className="text-xs text-muted-foreground">
               {paidSoFar > 0
@@ -533,12 +553,15 @@ export function usePayFlow() {
           <Button
             className="h-12 w-full"
             onClick={() => {
-              const value = Number(askValue);
+              const a = ask!;
+              const value =
+                a.stage === "pay" && itemItems.length > 0
+                  ? itemizedAmountTotal(itemItems)
+                  : Number(askValue);
               if (!value || value <= 0) {
                 toast.error("Enter an amount greater than zero");
                 return;
               }
-              const a = ask!;
               if (a.stage === "cycle") {
                 // Variable bill: now ask how much of that is being paid right now.
                 setAsk({ ...a, stage: "pay", cycleAmount: value });
@@ -549,6 +572,13 @@ export function usePayFlow() {
               const charged = feeLines
                 .filter((l) => Math.abs(Number(l.amount) || 0) >= 0.005)
                 .map(({ type, amount, note }) => ({ type, amount, note }));
+              const description =
+                itemItems.length > 0
+                  ? composeItemizedDescription(
+                      `${a.payable.kind === "bill" ? "Bill" : "Debt"} payment · ${a.payable.name}`,
+                      itemItems,
+                    )
+                  : undefined;
               resolveAccount(
                 a.payable,
                 a.action,
@@ -556,6 +586,7 @@ export function usePayFlow() {
                 a.cycleAmount,
                 charged.length > 0 ? charged : undefined,
                 dateValue || undefined,
+                description,
               );
             }}
           >

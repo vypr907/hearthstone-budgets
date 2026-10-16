@@ -22,13 +22,17 @@ import {
 } from "@/components/ui/select";
 
 import { useAccounts, useTransactions } from "@/lib/data-hooks";
+import { ItemizeAmountFields } from "@/components/ItemizeAmountFields";
 import {
   billRemainingOwed,
+  composeItemizedDescription,
   isWithinCurrentBillCycle,
+  itemizedAmountTotal,
   LINE_TYPES,
   newPaymentLine,
   toPayable,
   useLogBillPayment,
+  type ItemizedAmountLine,
   type PaymentLineDraft as Line,
 } from "@/lib/payments";
 import { priorCyclesArrears } from "@/lib/arrears";
@@ -61,9 +65,12 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<"cleared" | "pending">("cleared");
   const [lines, setLines] = useState<Line[]>([]);
+  const [itemItems, setItemItems] = useState<ItemizedAmountLine[]>([]);
 
   const inCycle = isWithinCurrentBillCycle(bill, date);
   const linesTotal = lines.reduce((s, l) => s + (Math.abs(Number(l.amount)) || 0), 0);
+  const amountValue =
+    itemItems.length > 0 ? itemizedAmountTotal(itemItems) : Math.abs(Number(amount)) || 0;
 
   /** Newest ledger date, used for the out-of-order warning. */
   const mostRecentEntryDate = useMemo(() => {
@@ -80,10 +87,11 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
     setAmount(String(billRemainingOwed(bill) || ""));
     setStatus("cleared");
     setLines([]);
+    setItemItems([]);
   }
 
   async function save() {
-    const amt = Math.abs(Number(amount)) || 0;
+    const amt = amountValue;
     if (amt <= 0 && linesTotal <= 0) {
       toast.error("Enter an amount or at least one charge");
       return;
@@ -114,6 +122,10 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
           amount: lineAmount,
           note,
         })),
+        principalDescription:
+          itemItems.length > 0
+            ? composeItemizedDescription(`Bill payment · ${bill.name}`, itemItems)
+            : undefined,
       });
       toast.success(inCycle ? "Payment logged" : "Historical payment logged");
       setOpen(false);
@@ -190,9 +202,13 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
                   step="0.01"
                   inputMode="decimal"
                   className="h-11"
-                  value={amount}
+                  value={itemItems.length > 0 ? String(amountValue || "") : amount}
                   onChange={(e) => setAmount(e.target.value)}
+                  disabled={itemItems.length > 0}
                 />
+                <div className="mt-2">
+                  <ItemizeAmountFields items={itemItems} onChange={setItemItems} />
+                </div>
               </div>
 
               <div>

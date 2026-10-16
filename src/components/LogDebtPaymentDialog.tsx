@@ -22,16 +22,20 @@ import {
 } from "@/components/ui/select";
 
 import { useAccounts, useDebtAdjustments, useTransactions } from "@/lib/data-hooks";
+import { ItemizeAmountFields } from "@/components/ItemizeAmountFields";
 import {
+  composeItemizedDescription,
   debtRemainingOwed,
   draftsFromDefaultLines,
   isPreAdvanceHistoricalPayment,
   isWithinCurrentCycle,
+  itemizedAmountTotal,
   LINE_TYPES,
   newPaymentLine,
   toPayable,
   useLogDebtPayment,
   useSaveDefaultFeeLines,
+  type ItemizedAmountLine,
   type PaymentLineDraft as Line,
 } from "@/lib/payments";
 import { priorCyclesArrears } from "@/lib/arrears";
@@ -90,6 +94,7 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
   const [principal, setPrincipal] = useState("");
   const [status, setStatus] = useState<"cleared" | "pending">("cleared");
   const [lines, setLines] = useState<Line[]>([]);
+  const [itemItems, setItemItems] = useState<ItemizedAmountLine[]>([]);
 
   const inCycle = isWithinCurrentCycle(debt, date);
   const ledgerOnly = isPreAdvanceHistoricalPayment(debt, date, newestAdvanceDate);
@@ -109,13 +114,16 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
     setPrincipal(String(debtRemainingOwed(debt) || ""));
     setStatus("cleared");
     setLines(draftsFromDefaultLines(debt.default_fee_lines));
+    setItemItems([]);
   }
 
   const linesTotal = lines.reduce((s, l) => s + (Math.abs(Number(l.amount)) || 0), 0);
-  const total = (Math.abs(Number(principal)) || 0) + linesTotal;
+  const principalValue =
+    itemItems.length > 0 ? itemizedAmountTotal(itemItems) : Math.abs(Number(principal)) || 0;
+  const total = principalValue + linesTotal;
 
   async function save() {
-    const amt = Math.abs(Number(principal)) || 0;
+    const amt = principalValue;
     if (amt <= 0 && linesTotal <= 0) {
       toast.error("Enter a principal amount or at least one charge");
       return;
@@ -141,6 +149,10 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
         date,
         status,
         lines: lines.map(({ type, amount, note }) => ({ type, amount, note })),
+        principalDescription:
+          itemItems.length > 0
+            ? composeItemizedDescription(`Debt payment · ${debt.name}`, itemItems)
+            : undefined,
         priorArrears: priorCyclesArrears(toPayable("debt", debt)),
         newestAdvanceDate,
       });
@@ -227,14 +239,18 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
                   step="0.01"
                   inputMode="decimal"
                   className="h-11"
-                  value={principal}
+                  value={itemItems.length > 0 ? String(principalValue || "") : principal}
                   onChange={(e) => setPrincipal(e.target.value)}
+                  disabled={itemItems.length > 0}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
                   {ledgerOnly
                     ? "Recorded against the account only — it won't reduce this debt's balance."
                     : "Only this amount reduces the debt balance."}
                 </p>
+                <div className="mt-2">
+                  <ItemizeAmountFields items={itemItems} onChange={setItemItems} />
+                </div>
               </div>
 
               <div>
