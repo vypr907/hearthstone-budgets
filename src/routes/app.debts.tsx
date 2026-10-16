@@ -1632,6 +1632,7 @@ function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string })
   const { data: transactions = [] } = useTransactions();
   const del = useDeleteLinkedTransaction();
   const [detail, setDetail] = useState<Transaction | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   const rows = useMemo(() => {
     const linked = transactions
@@ -1643,10 +1644,21 @@ function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string })
 
   return (
     <div>
-      <SectionLabel>
-        {month ? `Transactions · ${monthLabel(month)}` : "Recent transactions"}
-      </SectionLabel>
-      {rows.length === 0 ? (
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2"
+        onClick={() => setCollapsed((v) => !v)}
+      >
+        <SectionLabel>
+          {month ? `Transactions · ${monthLabel(month)}` : "Recent transactions"}
+        </SectionLabel>
+        {collapsed ? (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
+      {collapsed ? null : rows.length === 0 ? (
         <EmptyState className="mt-1 py-2 text-left">
           {month ? "No transactions this month." : "No payments logged yet."}
         </EmptyState>
@@ -1794,6 +1806,10 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
     () => computeAdvanceEpisodes(debt, allAdjustments, allTransactions, accounts, allAccountBalances),
     [debt, allAdjustments, allTransactions, accounts, allAccountBalances],
   );
+  // Display-only reversal (most recent advance first) — computeAdvanceEpisodes
+  // itself must stay oldest-to-newest, since its carry-forward math threads a
+  // running balance through in that order.
+  const episodesNewestFirst = useMemo(() => episodes.slice().reverse(), [episodes]);
   const add = useAddDebtAdjustment();
   const remove = useDeleteDebtAdjustment();
   const createAdvance = useCreateAdvance();
@@ -1822,6 +1838,10 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       `This date (${newDate}) is older than ${debt.name}'s most recent entry (${mostRecentEntryDate}). Backfilling out of order can produce a wrong balance — continue anyway?`,
     );
   }
+
+  // --- Section collapse state ---
+  const [adjustmentsCollapsed, setAdjustmentsCollapsed] = useState(false);
+  const [advancesCollapsed, setAdvancesCollapsed] = useState(false);
 
   // --- Adjustment dialog state ---
   const [open, setOpen] = useState(false);
@@ -1933,7 +1953,18 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       {/* ---- Adjustments section ---- */}
       <div>
         <div className="flex items-center justify-between">
-          <SectionLabel>Adjustments</SectionLabel>
+          <button
+            type="button"
+            className="flex items-center gap-1"
+            onClick={() => setAdjustmentsCollapsed((v) => !v)}
+          >
+            <SectionLabel>Adjustments</SectionLabel>
+            {adjustmentsCollapsed ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
           {/* ADR-102 addendum (2026-10-13 revision): hidden only for a linked
               NON-advance debt (credit card) -- remaining_balance there is
               derived from the account, so an adjustment would be a silent
@@ -1946,13 +1977,13 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
             </Button>
           )}
         </div>
-        {debt.linked_account_id && debt.debt_type !== "advance" ? (
+        {adjustmentsCollapsed ? null : debt.linked_account_id && debt.debt_type !== "advance" ? (
           <p className="mt-0.5 text-xs text-muted-foreground">
             Managed automatically from the linked account — log purchases and
             payments there instead.
           </p>
         ) : null}
-        {adjustments.length === 0 ? (
+        {adjustmentsCollapsed ? null : adjustments.length === 0 ? (
           <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
             No adjustments yet.
           </p>
@@ -2002,7 +2033,18 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
       {debt.debt_type === "advance" && (
         <div>
           <div className="flex items-center justify-between">
-            <SectionLabel>Advances</SectionLabel>
+            <button
+              type="button"
+              className="flex items-center gap-1"
+              onClick={() => setAdvancesCollapsed((v) => !v)}
+            >
+              <SectionLabel>Advances</SectionLabel>
+              {advancesCollapsed ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
             {/* ADR-102 addendum (2026-10-13 revision): useCreateAdvance has
                 always mirrored correctly onto a linked account (ADR-102,
                 2026-09-11) -- the 2026-09-15 addendum hid this button for
@@ -2013,18 +2055,20 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
               <Plus className="mr-1 h-4 w-4" /> Add
             </Button>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {debt.linked_account_id
-              ? "Record advance draws a new advance; Log a payment above records a repayment. Both post directly to the linked account."
-              : "Money borrowed against this debt — deposits into an account and increases balance owed."}
-          </p>
-          {episodes.length === 0 ? (
+          {advancesCollapsed ? null : (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {debt.linked_account_id
+                ? "Record advance draws a new advance; Log a payment above records a repayment. Both post directly to the linked account."
+                : "Money borrowed against this debt — deposits into an account and increases balance owed."}
+            </p>
+          )}
+          {advancesCollapsed ? null : episodes.length === 0 ? (
             <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
               No advances recorded.
             </p>
           ) : (
             <div className="mt-1 space-y-2">
-              {episodes.map((ep) => (
+              {episodesNewestFirst.map((ep) => (
                 <AdvanceEpisodeCard
                   key={ep.markerId ?? `pre-${ep.startDate}`}
                   episode={ep}

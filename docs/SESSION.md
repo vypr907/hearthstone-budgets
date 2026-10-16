@@ -235,3 +235,16 @@
     destination account. Scoped to `advance_fee` only; the standalone
     "Add adjustment" dialog never passes `mirrorAccountId`, so nothing
     else changes. `tsc --noEmit` clean, 274/274 tests pass.
+- 2026-10-15: Debt detail screen (`src/routes/app.debts.tsx`) — reversed
+  the Advances list to show most-recent-first (display-only:
+  `episodesNewestFirst = episodes.slice().reverse()`, right before the
+  `.map()`; `computeAdvanceEpisodes()` itself is untouched, since its
+  carry-forward math genuinely needs oldest-to-newest order). Added
+  independent collapse/expand toggles (reusing the existing
+  `AdvanceEpisodeCard` `ChevronUp`/`ChevronDown` idiom already in this
+  file) to `RecentDebtTransactions`, and to `DebtAdjustments`'s
+  Adjustments and Advances sections — each a plain, ephemeral
+  `useState(false)`, not persisted. `tsc --noEmit` clean, 274/274 tests
+  pass (no existing test covers component render order/collapse state).
+  Not yet verified in a running browser — same sandbox limitation as
+  always.
