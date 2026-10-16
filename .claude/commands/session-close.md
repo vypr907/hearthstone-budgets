@@ -13,7 +13,9 @@ Read docs/SESSION.md, docs/CONTEXT.md, and docs/CHANGELOG.md.
    and brevity — do not let it grow into a changelog.
 4. Clear docs/SESSION.md back to an empty template (just "## Session Notes",
    no entries).
-
-After all edits, run `git diff -- docs/CHANGELOG.md docs/TODO.md
-docs/CONTEXT.md docs/SESSION.md` and show the output. Do not git add or
-commit — wait for explicit confirmation.
+5. Stage docs/CHANGELOG.md, docs/TODO.md, docs/CONTEXT.md, and docs/SESSION.md,
+   commit with a message summarizing what was folded into CHANGELOG this
+   session (matching this repo's existing "docs: session close — ..." commit
+   style), and push. Do this automatically — no confirmation step.
+6. End your reply with a reminder to run `/clear` now to reset the session
+   state (you cannot run it yourself — it's a client-side command).
