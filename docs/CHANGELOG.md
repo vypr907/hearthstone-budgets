@@ -1,3 +1,84 @@
+## 2026-10-16 — Debt detail screen: reversed Advances order, collapsible sections
+
+* Advances now display most-recent-first (display-only — the underlying
+  `computeAdvanceEpisodes()` carry-forward math still runs
+  oldest-to-newest internally). Recent Transactions, Adjustments, and
+  Advances each gained an independent collapse/expand toggle, reusing
+  the existing per-card chevron idiom.
+
+## 2026-10-15 — Episode-view math audited across every advance debt; "Record advance" gains a Due date field
+
+* Auditing the rest of the household's advance debts (EarnIn, Cleo,
+  Instacash (MoneyLion), OnePay Advance) after the Dave ExtraCash fixes
+  surfaced two more general bugs in the shared episode logic:
+  `useCreateAdvance`'s disbursement insert landing a fraction of a
+  second before its own marker row could misclassify a debt's
+  first-ever advance as a "pre-tracking orphan," double-counting it;
+  `applyCarryForward` floored its running balance to zero after every
+  window instead of once at the very end (matching `debtBalanceAsOf`'s
+  own model), discarding a real overpayment credit instead of letting
+  it offset a later draw. A third: a ledger-only "Fee: " transaction was
+  being counted into the balance total, unlike `debtBalanceAsOf`, which
+  excludes these per ADR-084.
+* Reconciled all four debts' real `remaining_balance`/`minimum_payment`
+  to match the corrected math via user-run SQL — EarnIn and Instacash to
+  $0 (confirmed paid off), OnePay Advance to $231.75 after finding real
+  data gaps (a missing advance marker, two repayments mislabeled as
+  untagged "Fee: " lines, a missing fee adjustment on the still-open
+  cycle).
+* "Record advance" gained a visible, editable Due date field (previously
+  a silent auto-guess); "Log a payment" now warns when the current
+  advance's fee was already logged at draw time, to avoid double-counting
+  it. Clarified — and then fixed — that a fee added at draw time wasn't
+  categorized under "Fees" the way a logged payment's fee line already
+  was; `useAddDebtAdjustment` now categorizes both paths.
+
+## 2026-10-14 — Episode-view fixes (cross-account history, retroactive status) + linked-advance balance-write bug
+
+* The new episode view's linked branch only summed Dave ExtraCash's own
+  account transactions, blind to every pre-link (before 2026-09-11)
+  advance/repayment logged tagged-but-on-a-different-account; episode
+  status also only looked one window ahead instead of resolving
+  retroactively once a later window's payment cleared a shortfall. Both
+  fixed in `computeAdvanceEpisodes()`/`applyCarryForward()`
+  (`src/lib/debt-episodes.ts`). A new `isArrearsOnlyPayment()` helper
+  excludes "Arrears payment" rows from the balance math (they only move
+  `arrears_paid_to_date`, never principal) — found live when one broke
+  an otherwise-exact reconciliation.
+* Two Dave ExtraCash data fixes via user-run SQL: a missing mirror
+  transaction for a real $40 repayment that had been logged via "Log
+  arrears payment" instead of a regular payment (that flow never
+  touches the linked account); and mirrors for two pre-existing
+  "Overdraft Fee" adjustments that predated the mirroring convention.
+* Root-caused a separate bug: `apply_debt_advance`/`apply_debt_adjustment`
+  always added onto the *stored* `remaining_balance` column — correct
+  for an unlinked debt, wrong for a linked one, where that column is
+  only ever corrected on the read path (`effectiveDebtBalance()`).
+  Surfaced when a real $100 advance + $10 fee on Dave ExtraCash pushed
+  `minimum_payment` to $140 instead of $110, and a stale `next_due_date`
+  tripped a false "past due" reading. Both RPCs gained a
+  backward-compatible `p_current_balance_override` param; the due-date
+  fill widened from "once ever, only if blank" to also reset once the
+  prior balance settles. A follow-up migration dropped stale 3-arg RPC
+  overloads left behind by `CREATE OR REPLACE FUNCTION`'s
+  signature-matching behavior (adding a parameter creates a new
+  overload instead of replacing the original).
+
+## 2026-10-13 — ADR-111: per-advance episode history on Debt detail
+
+* Replaced the flat "Advances" list with per-advance episode cards
+  (draw → fees → repayment as one trackable unit, new
+  `src/lib/debt-episodes.ts` `computeAdvanceEpisodes()`), scoped to
+  `debt_type='advance'` debts.
+* Restored the "Record advance"/"Add adjustment" buttons for Dave
+  ExtraCash (a *linked* advance debt) — the 2026-09-15 ADR-102
+  addendum's "hidden once linked" gate had overcorrected for this case;
+  `useCreateAdvance`/`useAddDebtAdjustment` had already mirrored
+  correctly onto the linked account all along.
+* Root-caused and fixed Dave ExtraCash's $15-low balance: a 2026-09-24
+  repayment had been logged twice, once as an untagged plain Transfer
+  invisible to the debt's own payment history. Deleted the duplicate.
+
 ## 2026-10-06 — Bank statement reconciliation: OnePay + USAA, 14 discrepancies resolved
 
 * Reconciled a OnePay September statement PDF and two USAA CSV exports
