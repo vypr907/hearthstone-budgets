@@ -1255,6 +1255,81 @@ uses the household "Fees" category when one exists). Follow-up (2026-08-11):
 `insertFeeTransaction` now auto-creates a "Fees" category if none exists, so fee
 rows are always categorised rather than occasionally uncategorised.
 
+**2026-10-16 addendum — Submit Payment gains itemized, multi-line fees (parity
+with ADR-084's Log a Payment).** The single `fee` amount field is replaced with
+N repeatable lines, each carrying a `type` (Fee / Interest / Late fee /
+Processing fee / Tax / Other charge — "Tax" new, to match itemized receipts
+e.g. a rent-to-own payment's non-renewal fee + protection plan + tax) and an
+optional free-text `note`, reusing the exact `PaymentLine`/`LINE_TYPES` shape
+ADR-084's "Log a Payment to this debt" already established — `LINE_TYPES`,
+the `PaymentLineDraft` helper type, and `newPaymentLine()` move from being
+duplicated in `LogDebtPaymentDialog.tsx`/`LogBillPaymentDialog.tsx` into
+`src/lib/payments.ts` so all three fee-entry UIs (Submit Payment, Log a
+Payment on a debt, Log a Payment on a bill) share one list. `PayInput.fee?:
+number` becomes `PayInput.feeLines?: PaymentLine[]`; a new `insertFeeLines()`
+generalizes `insertFeeTransaction()` from one amount to N lines, writing one
+`"Fee: <name> · <type>[ — <note>]"` transaction per charged line, all sharing
+one `split_group_id` with the payment (and each other) exactly as before —
+`isFeeTransaction`/`clearPairedFees`/`deletePairedFees` only ever match the
+`"Fee: "` prefix, so clear/undo/reset stay atomic regardless of line count.
+`insertFeeTransaction()` itself is untouched and still used as-is by the
+transfer-fee (ADR-097) and ATM-fee (ADR-110) paths, which are out of scope
+here.
+
+Status: addendum decided 2026-10-16. Implemented 2026-10-16 — `tsc --noEmit`
+clean, 274/274 tests pass (no new pure logic — reuses the already-tested
+`insertFeeTransaction`/`hasFee`/`feeCategoryId` shape). Not yet checked in a
+running browser.
+
+## ADR-112: Per-Debt Default Fee Lines (Templated Itemized Charges)
+
+Decision:
+`debts` gains one new nullable column: `default_fee_lines jsonb` — an array of
+`{type, amount, note}` objects, the same shape as a `PaymentLine` (ADR-046
+addendum/ADR-084). Both "Submit Payment" (`pay-flow.tsx`) and "Log a Payment
+to this debt" (`LogDebtPaymentDialog.tsx`) pre-fill their fee/interest lines
+from this column when opened for a debt that has one set, converting each
+into an editable draft line (`draftsFromDefaultLines`, `payments.ts`) — the
+household then only verifies/adjusts amounts instead of re-adding every line
+each time. A "Save as default" action next to each dialog's "Add
+line"/"Add charge" button snapshots the dialog's *current* lines onto the
+debt (`useSaveDefaultFeeLines`, `payments.ts`) — overwriting the previous
+default, or clearing it (writing `null`) when saved with no charged lines.
+
+This is a deliberate household-set snapshot, not derived from the most recent
+payment's transaction description — reconstructing lines by parsing a past
+`"Fee: <name> · <type> — <note>"` string back apart would be fragile (the
+whole point of ADR-046/084's description-prefix convention is write-time
+composition, not read-time parsing) and would conflate "what happened last
+time" with "what we expect every time," which drift apart in practice (e.g. a
+rent-to-own payment's non-renewal fee or tax doesn't necessarily land on
+every cycle).
+
+Scoped to debts only (not bills) per the request that prompted this — a bill
+equivalent (`LogBillPaymentDialog.tsx`) can reuse the same mechanism later if
+wanted, with its own `bills.default_fee_lines` column.
+
+Reason:
+Some debts (e.g. a rent-to-own lease) charge the same itemized set of fees
+on every payment. Without a template, every payment meant manually re-typing
+each line's type/amount/note. Storing the household's own confirmed default
+on the debt row needs no new table (jsonb column, not a join) and reuses the
+existing `PaymentLine` shape end to end, so pre-fill/save-as-default is a
+thin layer over code that already existed for this session's earlier
+addendum.
+
+Status: Decided 2026-10-16. Implemented 2026-10-16 — migration run by the user
+in the Supabase SQL Editor and confirmed live (`default_fee_lines jsonb` on
+`debts`, read back via the read-only MCP). Application code (`src/lib/
+supabase.ts`, `src/lib/payments.ts`, `src/lib/pay-flow.tsx`, `src/components/
+LogDebtPaymentDialog.tsx`) was already in place — `tsc --noEmit` clean,
+274/274 tests pass. Not yet checked in a running browser.
+
+```sql
+alter table public.debts
+  add column default_fee_lines jsonb;
+```
+
 ## ADR-047: Marking an Income Event as Received Auto-Creates Split Transactions
 (Extends ADR-024)
 

@@ -61,8 +61,8 @@ export type PayInput = {
   accountId: string;
   amount?: number;
   cycleAmount?: number;
-  /** ADR-046: optional processing/convenience fee charged with the payment. */
-  fee?: number;
+  /** ADR-046/addendum: optional itemized fee/interest/tax lines charged with the payment. */
+  feeLines?: PaymentLine[];
   /** Payment date; defaults to today when omitted — lets a payment be backdated. */
   date?: string;
   /**
@@ -509,6 +509,45 @@ export async function insertFeeTransaction(
 }
 
 /**
+ * ADR-046 addendum: like `insertFeeTransaction` above, but for N itemized
+ * lines instead of one bare amount — each `PaymentLine` becomes its own
+ * `"Fee: <label> · <type> — <note>"` transaction, all paired to the payment
+ * via the same `splitGroupId`. Mirrors the per-line loop `useLogDebtPayment`
+ * already uses (below) so Submit Payment and Log a Payment write identically
+ * shaped fee rows. A no-op when `lines` has nothing over the fee threshold.
+ */
+export async function insertFeeLines(
+  householdId: string | null | undefined,
+  /** e.g. a bill/debt's name. Used in "Fee: <label> · <type>". */
+  label: string,
+  institutionId: string | null | undefined,
+  accountId: string,
+  lines: PaymentLine[],
+  status: "pending" | "cleared",
+  splitGroupId?: string | null,
+  date?: string,
+  clearedDate?: string,
+) {
+  const charged = lines.filter((l) => hasFee(l.amount));
+  if (charged.length === 0) return;
+  const feeCatId = await feeCategoryId(householdId);
+  const rows = charged.map((l) => ({
+    household_id: householdId,
+    account_id: accountId,
+    category_id: feeCatId ?? null,
+    amount: -Math.abs(Number(l.amount) || 0),
+    status,
+    description: `Fee: ${label} · ${l.type}${l.note ? ` — ${l.note}` : ""}`,
+    transaction_date: date || todayISO(),
+    cleared_date: status === "cleared" ? (clearedDate || date || todayISO()) : null,
+    split_group_id: splitGroupId ?? null,
+    institution_id: institutionId,
+  }));
+  const { error } = await supabase.from("transactions").insert(rows);
+  if (error) throw error;
+}
+
+/**
  * ADR-103: the purchase side of a "Cash Back" combo entry — one or more
  * categorized rows on the from-account, paired to a Cash transfer via
  * `split_group_id = <the transfer's transfer_group_id>`. Generalizes
@@ -721,16 +760,18 @@ export function useMarkSubmitted() {
   const { householdId } = useAuth();
   const done = useAfterPayment();
   return useMutation({
-    mutationFn: async ({ payable, accountId, amount, cycleAmount, fee, date }: PayInput) => {
+    mutationFn: async ({ payable, accountId, amount, cycleAmount, feeLines, date }: PayInput) => {
       const p = await ensureCycleAmount(payable, cycleAmount);
       const amt = Math.abs(Number(amount ?? payableRemainingOwed(p) ?? p.amount) || 0);
       // Mark the payable pending first so a failed status write never leaves an
       // orphan ledger row behind.
       await updateRow(table(p.kind), p.id, { payment_status: "pending" });
-      // ADR-046: pair the payment with its fee via a shared split_group_id so a
-      // later clear/undo/reset touches both atomically. No fee → no group: a
-      // lone payment row must stay a plain transaction, not a 1-line "split".
-      const groupId = hasFee(fee) ? crypto.randomUUID() : null;
+      // ADR-046/addendum: pair the payment with its fee line(s) via a shared
+      // split_group_id so a later clear/undo/reset touches all of them
+      // atomically. No charged lines → no group: a lone payment row must stay
+      // a plain transaction, not a 1-line "split".
+      const hasLines = (feeLines ?? []).some((l) => hasFee(l.amount));
+      const groupId = hasLines ? crypto.randomUUID() : null;
       // ADR-102 addendum: when this debt's balance lives on a real linked
       // account, mirror the payment there too (a credit reducing what's
       // owed) — this time the SAME transfer_group_id goes on both rows (not
@@ -755,7 +796,16 @@ export function useMarkSubmitted() {
       });
       if (error) throw error;
 
-      await insertFeeTransaction(householdId, p.name, p.institution_id, accountId, fee, "pending", groupId, date);
+      await insertFeeLines(
+        householdId,
+        p.name,
+        p.institution_id,
+        accountId,
+        feeLines ?? [],
+        "pending",
+        groupId,
+        date,
+      );
 
       if (mirrorGroupId && p.kind === "debt" && p.debt?.linked_account_id) {
         const { error: mirrorError } = await supabase.from("transactions").insert({
@@ -792,7 +842,7 @@ export function useMarkCleared() {
       accountId,
       amount,
       cycleAmount,
-      fee,
+      feeLines,
       date,
       clearedDate,
       priorArrears,
@@ -838,8 +888,10 @@ export function useMarkCleared() {
         }
       } else {
         // Direct clear (no prior submit): insert a cleared payment, paired with
-        // any fee entered on this clear via split_group_id. No fee → no group.
-        const groupId = hasFee(fee) ? crypto.randomUUID() : null;
+        // any fee line(s) entered on this clear via split_group_id. No
+        // charged lines → no group.
+        const hasLines = (feeLines ?? []).some((l) => hasFee(l.amount));
+        const groupId = hasLines ? crypto.randomUUID() : null;
         const mirrorGroupId =
           p.kind === "debt" && p.debt?.linked_account_id ? crypto.randomUUID() : null;
         const { error } = await supabase.from("transactions").insert({
@@ -859,12 +911,12 @@ export function useMarkCleared() {
           institution_id: p.institution_id,
         });
         if (error) throw error;
-        await insertFeeTransaction(
+        await insertFeeLines(
           householdId,
           p.name,
           p.institution_id,
           accountId,
-          fee,
+          feeLines ?? [],
           "cleared",
           groupId,
           date,
@@ -1369,6 +1421,64 @@ export type PaymentLine = {
   amount: number;
   note?: string | null;
 };
+
+/**
+ * ADR-046 addendum: the line-type options shared by every fee/interest entry
+ * UI (Submit Payment, Log a Payment to this debt, Log a Payment on a bill) so
+ * they stay in sync — "Tax" added to match itemized receipts (e.g. a rent-to-
+ * own payment's non-renewal fee + protection plan + tax lines).
+ */
+export const LINE_TYPES = [
+  { value: "fee", label: "Fee" },
+  { value: "interest", label: "Interest" },
+  { value: "late_fee", label: "Late fee" },
+  { value: "processing_fee", label: "Processing fee" },
+  { value: "tax", label: "Tax" },
+  { value: "other", label: "Other charge" },
+];
+
+export type PaymentLineDraft = PaymentLine & { key: string };
+
+export function newPaymentLine(): PaymentLineDraft {
+  return { key: crypto.randomUUID(), type: "fee", amount: 0, note: "" };
+}
+
+/**
+ * ADR-112: a debt's stored `default_fee_lines` (plain {type,amount,note}
+ * objects, no `key`) turned into editable draft lines with fresh keys —
+ * used to pre-fill Submit Payment / Log a Payment so a recurring itemized
+ * charge (e.g. a lease's non-renewal fee + protection plan + tax) only needs
+ * verifying, not re-entering every time.
+ */
+export function draftsFromDefaultLines(
+  lines?: { type: string; amount: number; note?: string | null }[] | null,
+): PaymentLineDraft[] {
+  return (lines ?? []).map((l) => ({
+    key: crypto.randomUUID(),
+    type: l.type,
+    amount: Number(l.amount) || 0,
+    note: l.note ?? "",
+  }));
+}
+
+/**
+ * ADR-112: save (or clear, when `lines` has nothing charged) this debt's
+ * `default_fee_lines` — a deliberate snapshot the household took, not derived
+ * from any past transaction, so it doesn't drift if a one-off payment had an
+ * unusual charge.
+ */
+export function useSaveDefaultFeeLines() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ debtId, lines }: { debtId: string; lines: PaymentLine[] }) => {
+      const charged = lines
+        .filter((l) => hasFee(l.amount))
+        .map(({ type, amount, note }) => ({ type, amount, note: note || null }));
+      await updateRow("debts", debtId, { default_fee_lines: charged.length ? charged : null });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+  });
+}
 
 export type LogDebtPaymentInput = {
   debt: Debt;

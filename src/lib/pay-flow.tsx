@@ -1,14 +1,21 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { Plus, Trash2 } from "lucide-react";
 import {
   billCycleDue,
   billRemainingOwed,
+  draftsFromDefaultLines,
+  LINE_TYPES,
+  newPaymentLine,
   payableRemainingOwed,
   useMarkCleared,
   useMarkSubmitted,
   useMarkUnpaid,
   useResetCycle,
+  useSaveDefaultFeeLines,
   type Payable,
+  type PaymentLine,
+  type PaymentLineDraft,
 } from "@/lib/payments";
 import type { CycleInfo } from "@/lib/ledger-state";
 import { useAccounts, useInstitutions, useTransactions } from "@/lib/data-hooks";
@@ -29,6 +36,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Action = "submitted" | "cleared";
 type Stage = "cycle" | "pay";
@@ -49,6 +63,7 @@ export function usePayFlow() {
   const clear = useMarkCleared();
   const undo = useMarkUnpaid();
   const reset = useResetCycle();
+  const saveDefault = useSaveDefaultFeeLines();
   const [confirmReset, setConfirmReset] = useState<{ payable: Payable; info: CycleInfo } | null>(
     null,
   );
@@ -57,7 +72,7 @@ export function usePayFlow() {
     action: Action;
     amount?: number;
     cycleAmount?: number;
-    fee?: number;
+    feeLines?: PaymentLine[];
     date?: string;
   } | null>(null);
   const [ask, setAsk] = useState<{
@@ -67,8 +82,8 @@ export function usePayFlow() {
     cycleAmount?: number;
   } | null>(null);
   const [askValue, setAskValue] = useState("");
-  // ADR-046: optional fee charged alongside this payment.
-  const [feeValue, setFeeValue] = useState("");
+  // ADR-046/addendum: optional itemized fee/interest/tax lines charged alongside this payment.
+  const [feeLines, setFeeLines] = useState<PaymentLineDraft[]>([]);
   // Payment date, defaulting to today — lets a payment be backdated.
   const [dateValue, setDateValue] = useState(todayISO());
   // ADR-100: confirm step for clearing an already-pending payment — the one
@@ -89,7 +104,7 @@ export function usePayFlow() {
     accountId: string,
     amount?: number,
     cycleAmount?: number,
-    fee?: number,
+    feeLines?: PaymentLine[],
     date?: string,
     clearedDate?: string,
   ) {
@@ -99,7 +114,7 @@ export function usePayFlow() {
         accountId,
         amount,
         cycleAmount,
-        fee,
+        feeLines,
         date,
         clearedDate,
         // ADR-076: only meaningful for "cleared" — submit never resolves a cycle.
@@ -131,11 +146,11 @@ export function usePayFlow() {
     action: Action,
     amount?: number,
     cycleAmount?: number,
-    fee?: number,
+    feeLines?: PaymentLine[],
     date?: string,
   ) {
     // Any household account can pay any bill/debt (ADR-007 correction 2026-08-03).
-    setChoice({ payable, action, amount, cycleAmount, fee, date });
+    setChoice({ payable, action, amount, cycleAmount, feeLines, date });
   }
 
   /** Amount to pre-fill for the "paying now" prompt: whatever is still owed. */
@@ -155,7 +170,7 @@ export function usePayFlow() {
       payable.kind === "bill" &&
       !!payable.bill?.is_variable_amount &&
       payable.bill?.cycle_amount_due == null;
-    setFeeValue("");
+    setFeeLines(draftsFromDefaultLines(payable.debt?.default_fee_lines));
     setDateValue(todayISO());
     if (needsCycle) {
       setAskValue(String(billCycleDue(payable.bill!) || ""));
@@ -193,7 +208,7 @@ export function usePayFlow() {
       return;
     }
     // unpaid or partial: submit a new (possibly partial) payment.
-    setFeeValue("");
+    setFeeLines(draftsFromDefaultLines(payable.debt?.default_fee_lines));
     setDateValue(todayISO());
     setAskValue(String(info.remaining || defaultPayAmount(payable) || ""));
     setAsk({ payable, action: "submitted", stage: needsCycleAmount(payable) ? "cycle" : "pay" });
@@ -250,7 +265,15 @@ export function usePayFlow() {
                     setConfirmClear({ payable: c.payable, accountId: a.id, amount: c.amount });
                     return;
                   }
-                  void perform(c.payable, c.action, a.id, c.amount, c.cycleAmount, c.fee, c.date);
+                  void perform(
+                    c.payable,
+                    c.action,
+                    a.id,
+                    c.amount,
+                    c.cycleAmount,
+                    c.feeLines,
+                    c.date,
+                  );
                 }}
               >
                 <span aria-hidden className="text-lg" title={a.account_type ?? undefined}>
@@ -391,21 +414,118 @@ export function usePayFlow() {
           ) : null}
           {ask?.stage === "pay" ? (
             <div className="pt-2">
-              <Label htmlFor="pay-fee">Fee (optional)</Label>
-              <Input
-                id="pay-fee"
-                type="number"
-                step="0.01"
-                inputMode="decimal"
-                placeholder="0.00"
-                className="h-11"
-                value={feeValue}
-                onChange={(e) => setFeeValue(e.target.value)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Charged to the same account as its own transaction — it does not count toward this
-                cycle.
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <Label>Fees & other charges</Label>
+                <div className="flex gap-2">
+                  {ask.payable.kind === "debt" && ask.payable.debt ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-xs"
+                      disabled={saveDefault.isPending}
+                      onClick={() => {
+                        const debtId = ask.payable.debt!.id;
+                        const lines = feeLines.map(({ type, amount, note }) => ({
+                          type,
+                          amount,
+                          note,
+                        }));
+                        saveDefault.mutate(
+                          { debtId, lines },
+                          {
+                            onSuccess: () =>
+                              toast.success(
+                                lines.some((l) => Math.abs(Number(l.amount)) >= 0.005)
+                                  ? "Saved as this debt's default charges"
+                                  : "Default charges cleared",
+                              ),
+                            onError: (e) => toast.error((e as Error).message),
+                          },
+                        );
+                      }}
+                    >
+                      Save as default
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() => setFeeLines((l) => [...l, newPaymentLine()])}
+                  >
+                    <Plus className="mr-1 h-4 w-4" /> Add charge
+                  </Button>
+                </div>
+              </div>
+              {feeLines.length === 0 ? (
+                <p className="mt-1 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                  No extra charges. Added lines post their own transactions against the same
+                  account and don't count toward this cycle.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  {feeLines.map((l, i) => (
+                    <div key={l.key} className="flex flex-wrap items-center gap-2">
+                      <Select
+                        value={l.type}
+                        onValueChange={(v) =>
+                          setFeeLines((prev) =>
+                            prev.map((x, xi) => (xi === i ? { ...x, type: v } : x)),
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-10 w-[9.5rem]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LINE_TYPES.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>
+                              {t.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        className="h-10 w-24"
+                        value={l.amount || ""}
+                        onChange={(e) =>
+                          setFeeLines((prev) =>
+                            prev.map((x, xi) =>
+                              xi === i ? { ...x, amount: Number(e.target.value) } : x,
+                            ),
+                          )
+                        }
+                      />
+                      <Input
+                        placeholder="Note (optional)"
+                        className="h-10 min-w-0 flex-1"
+                        value={l.note ?? ""}
+                        onChange={(e) =>
+                          setFeeLines((prev) =>
+                            prev.map((x, xi) => (xi === i ? { ...x, note: e.target.value } : x)),
+                          )
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-10 w-10 shrink-0"
+                        aria-label="Remove charge"
+                        onClick={() => setFeeLines((prev) => prev.filter((_, xi) => xi !== i))}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
         </div>
@@ -426,13 +546,15 @@ export function usePayFlow() {
                 return;
               }
               setAsk(null);
-              const fee = Number(feeValue) > 0 ? Number(feeValue) : undefined;
+              const charged = feeLines
+                .filter((l) => Math.abs(Number(l.amount) || 0) >= 0.005)
+                .map(({ type, amount, note }) => ({ type, amount, note }));
               resolveAccount(
                 a.payable,
                 a.action,
                 value,
                 a.cycleAmount,
-                fee,
+                charged.length > 0 ? charged : undefined,
                 dateValue || undefined,
               );
             }}

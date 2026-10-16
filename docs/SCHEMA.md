@@ -386,6 +386,7 @@ debts (
     plan_final_payment numeric,                  -- ADR-048: final instalment when it differs
     opening_arrears numeric default 0,           -- ADR-049: past due carried in from before tracking
     arrears_as_of date,                          -- ADR-049: date the opening_arrears figure was accurate
+    default_fee_lines jsonb,                     -- ADR-112: [{type,amount,note}], pre-fills Submit Payment / Log a Payment
 
     created_at timestamptz default now(),
     updated_at timestamptz default now()

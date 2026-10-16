@@ -24,11 +24,15 @@ import {
 import { useAccounts, useDebtAdjustments, useTransactions } from "@/lib/data-hooks";
 import {
   debtRemainingOwed,
+  draftsFromDefaultLines,
   isPreAdvanceHistoricalPayment,
   isWithinCurrentCycle,
+  LINE_TYPES,
+  newPaymentLine,
   toPayable,
   useLogDebtPayment,
-  type PaymentLine,
+  useSaveDefaultFeeLines,
+  type PaymentLineDraft as Line,
 } from "@/lib/payments";
 import { priorCyclesArrears } from "@/lib/arrears";
 import { computeAdvanceEpisodes } from "@/lib/debt-episodes";
@@ -36,19 +40,7 @@ import { formatMoney } from "@/lib/format";
 import { todayISO } from "@/lib/snapshot";
 import type { Debt } from "@/lib/supabase";
 
-const LINE_TYPES = [
-  { value: "fee", label: "Fee" },
-  { value: "interest", label: "Interest" },
-  { value: "late_fee", label: "Late fee" },
-  { value: "processing_fee", label: "Processing fee" },
-  { value: "other", label: "Other charge" },
-];
-
-type Line = PaymentLine & { key: string };
-
-function newLine(): Line {
-  return { key: crypto.randomUUID(), type: "fee", amount: 0, note: "" };
-}
+const newLine = newPaymentLine;
 
 /**
  * ADR-084: log a payment against a debt — including an old one. The date drives
@@ -63,6 +55,7 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
   const { data: transactions = [] } = useTransactions();
   const { data: adjustments = [] } = useDebtAdjustments();
   const log = useLogDebtPayment();
+  const saveDefault = useSaveDefaultFeeLines();
 
   /** ADR-084 addendum: newest 'advance' adjustment for this debt, if any. */
   const newestAdvanceDate = useMemo(() => {
@@ -115,7 +108,7 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
     setAccountId(lastAccountId || "");
     setPrincipal(String(debtRemainingOwed(debt) || ""));
     setStatus("cleared");
-    setLines([]);
+    setLines(draftsFromDefaultLines(debt.default_fee_lines));
   }
 
   const linesTotal = lines.reduce((s, l) => s + (Math.abs(Number(l.amount)) || 0), 0);
@@ -245,16 +238,45 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
               </div>
 
               <div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <Label>Fees & interest</Label>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8"
-                    onClick={() => setLines((l) => [...l, newLine()])}
-                  >
-                    <Plus className="mr-1 h-4 w-4" /> Add line
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-xs"
+                      disabled={saveDefault.isPending}
+                      onClick={() => {
+                        const toSave = lines.map(({ type, amount, note }) => ({
+                          type,
+                          amount,
+                          note,
+                        }));
+                        saveDefault.mutate(
+                          { debtId: debt.id, lines: toSave },
+                          {
+                            onSuccess: () =>
+                              toast.success(
+                                toSave.some((l) => Math.abs(Number(l.amount)) >= 0.005)
+                                  ? "Saved as this debt's default charges"
+                                  : "Default charges cleared",
+                              ),
+                            onError: (e) => toast.error((e as Error).message),
+                          },
+                        );
+                      }}
+                    >
+                      Save as default
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={() => setLines((l) => [...l, newLine()])}
+                    >
+                      <Plus className="mr-1 h-4 w-4" /> Add line
+                    </Button>
+                  </div>
                 </div>
                 {alreadyLoggedAdvanceFee != null ? (
                   <p className="mt-1 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">

@@ -147,6 +147,8 @@ export type Debt = {
   linked_account_id?: string | null;
   /** ADR-106: which household member's account at the institution this belongs to, when set (null = joint/not specified). */
   institution_member_account_id?: string | null;
+  /** ADR-112: this debt's usual fee/interest/tax lines, pre-filled into Submit Payment / Log a Payment. Null/absent = no default. */
+  default_fee_lines?: { type: string; amount: number; note?: string | null }[] | null;
 
   created_at: string;
   updated_at: string;

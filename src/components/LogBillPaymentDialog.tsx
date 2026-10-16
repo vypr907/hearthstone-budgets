@@ -25,27 +25,17 @@ import { useAccounts, useTransactions } from "@/lib/data-hooks";
 import {
   billRemainingOwed,
   isWithinCurrentBillCycle,
+  LINE_TYPES,
+  newPaymentLine,
   toPayable,
   useLogBillPayment,
-  type PaymentLine,
+  type PaymentLineDraft as Line,
 } from "@/lib/payments";
 import { priorCyclesArrears } from "@/lib/arrears";
 import { todayISO } from "@/lib/snapshot";
 import type { Bill } from "@/lib/supabase";
 
-const LINE_TYPES = [
-  { value: "fee", label: "Fee" },
-  { value: "interest", label: "Interest" },
-  { value: "late_fee", label: "Late fee" },
-  { value: "processing_fee", label: "Processing fee" },
-  { value: "other", label: "Other charge" },
-];
-
-type Line = PaymentLine & { key: string };
-
-function newLine(): Line {
-  return { key: crypto.randomUUID(), type: "fee", amount: 0, note: "" };
-}
+const newLine = newPaymentLine;
 
 /**
  * Issue #57 / bill equivalent of `LogDebtPaymentDialog` (ADR-084). The date
