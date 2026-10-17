@@ -81,3 +81,42 @@
   "+ Itemize," enter Base $92.04 + Tax $5.06, confirm Principal shows
   $97.10, save, confirm the description and cycle/balance movement via the
   MCP. Repeat on Submit Payment for parity.
+
+- **User applied the Part 1 fix** (2026-09-28 Aarons - Dresser payment) via
+  the app. Verified live via the read-only MCP: payment transaction now
+  -$97.10, `tax` fee line gone, `remaining_balance` $1942.00 (was $1947.06),
+  `payment_status` "cleared" (was "pending"), `cycle_paid_to_date` reset to
+  $0.00 (correct — a resolved cycle resets this). Flagged one anomaly:
+  `next_due_date` stayed at 2026-09-21 instead of rolling forward.
+- **Diagnosed and fixed the `next_due_date` anomaly** (ADR-086 addendum):
+  three debt-side RPCs (`apply_cleared_debt_payment`,
+  `apply_debt_cycle_reset`, `apply_debt_mark_unpaid`) explicitly excluded
+  monthly/one-time debts from ever advancing/reverting `next_due_date` —
+  their bill equivalents have never had this exclusion and already roll
+  forward correctly in production. Root cause confirmed by reading the live
+  function bodies via the read-only MCP; cross-checked `rollback_cleared_debt_
+  payment` (already correct) and `ledger-state.ts`'s monthly cycle-math
+  (already written to tolerate an advancing `next_due_date` — the comment at
+  `src/lib/ledger-state.ts:145-151` anticipates exactly this). No app code
+  change needed — pure DB function fix.
+  Migration run by the user (`scripts/migrations/2026-10-17-monthly-debt-
+  next-due-date-rollforward.sql`), confirmed live via the read-only MCP —
+  function bodies match exactly.
+- **Audited "Our Household" for other stale due dates** (user asked after
+  the fix landed): zero bills stale (expected — bills never had this bug);
+  **12 monthly debts** stuck 9–89 days stale, all already fully resolved
+  (cleared, nothing owed) — Car, Alpine Medical - Stephanie, North Star
+  Radiology, Mom, Providence Alaska, OPA/OrthoAlaska, Yukon Eye, Ticket 1,
+  Ticket 2, Aarons - Dresser, Mission Lane, Milestone. Wrote a one-time data
+  cleanup (`scripts/migrations/2026-10-17-stale-monthly-debt-due-dates-
+  cleanup.sql`, explicit id→date pairs, no runtime recomputation) setting
+  each to the next upcoming occurrence of its own `due_day` — not a replay
+  of exact missed cycles, which proved unreliable for two of these ("Ticket
+  1" and "Mom" don't have a clean matching cleared-payment trail). **Not
+  yet run** — pending the user executing it manually in the Supabase SQL
+  Editor.
+  Cleanup migration run by the user, confirmed live via the MCP — all 12
+  rows match exactly, `payment_status`/`cycle_paid_to_date` untouched on
+  every one. Household-wide re-audit afterward found zero remaining stale
+  cleared monthly debts. Both ADR-086 addendum parts (RPC fix + data
+  cleanup) are fully done.

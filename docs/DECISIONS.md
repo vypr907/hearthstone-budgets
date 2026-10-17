@@ -3462,6 +3462,64 @@ rule both tables can express, and it matches how the household actually thinks
 about a monthly bill.
 Status: Decided 2026-08-26. Implemented.
 
+**2026-10-17 addendum — monthly/one-time debts' `next_due_date` now rolls
+forward too (parity with bills).** Found while investigating why "Aarons -
+Dresser"'s due date stayed stuck at 2026-09-21 after a cycle correctly
+cleared: three debt-side RPCs (`apply_cleared_debt_payment`,
+`apply_debt_cycle_reset`, `apply_debt_mark_unpaid` — all written together in
+the ADR-101 atomic-RPC pass, 2026-09-24, a month *after* this ADR) each
+explicitly excluded `billing_cycle = 'monthly'` (and, for the cleared-payment
+RPC, `'one_time'`) from ever advancing/reverting `next_due_date`. Their bill
+equivalents (`apply_cleared_bill_payment`, `apply_bill_cycle_reset`,
+`apply_bill_mark_unpaid`) have **never** had this exclusion — bills have
+always rolled `next_due_date` forward monthly via `shift_billing_date`
+(which already no-ops for `'onetime'` internally and correctly clamps to the
+target month's last day, so it's safe for every cycle kind) — this ADR's own
+`deriveCycleInfo` monthly-by-calendar-month logic was already written to
+tolerate a monthly `next_due_date` that keeps advancing ("a payment tagged
+with this month's due date still belongs to this month even after clearing
+rolled `next_due_date` into the next one," `src/lib/ledger-state.ts`), so the
+exclusion was never load-bearing — just unexercised for debts. Removed the
+`'monthly'`/`'one_time'` exclusion from all three functions' `next_due_date`
+logic (and from `apply_cleared_debt_payment`'s `resolved_due_date` RETURNING
+expression, which `rollback_cleared_debt_payment` already unconditionally
+expects — matching how `rollback_cleared_bill_payment` has always worked),
+bringing all three to byte-for-byte structural parity with their already-
+correct, already-in-production bill counterparts. No application code
+change: the JS wrappers (`applyClearedPayment`, `useMarkUnpaid`,
+`useResetCycle` in `src/lib/payments.ts`) already pass `resolved_due_date`
+through generically for both bills and debts — purely a database function
+fix, in `scripts/migrations/2026-10-17-monthly-debt-next-due-date-
+rollforward.sql`.
+
+Status: addendum decided 2026-10-17. Function-fix migration run by the user
+and confirmed live via the read-only MCP. No application code changes
+required.
+
+**Data cleanup, same addendum.** The function fix only prevents *future*
+staleness — it doesn't repair rows the bug already froze. An audit of "Our
+Household" (`scripts/migrations/2026-10-17-stale-monthly-debt-due-dates-
+cleanup.sql`) found 12 monthly debts stuck 9–89 days stale, all already
+fully resolved (`payment_status = 'cleared'`, `cycle_paid_to_date = 0`,
+nothing owed): Car, Alpine Medical - Stephanie, North Star Radiology, Mom,
+Providence Alaska, OPA/OrthoAlaska, Yukon Eye, Ticket 1, Ticket 2,
+Aarons - Dresser, Mission Lane, Milestone. Zero bills were stale (confirmed
+via the same query shape — consistent with bills never having had this
+bug). Each is set to the next upcoming occurrence of its own `due_day` from
+today, not a reconstruction of exact missed cycles — a historical
+reconstruction (shift forward by one cycle from each debt's last matching
+cleared payment) was tried first but proved unreliable for at least two
+rows ("Ticket 1"'s last matching cleared payment is from April, long before
+its stale August due date; "Mom" has no matching cleared-payment row at
+all, likely paycheck-deduction-funded, ADR-032) — since every row is
+already fully paid with nothing owed, "what should show as next due right
+now" is the safe question these numbers actually need to answer.
+
+Status: cleanup migration run by the user 2026-10-17, confirmed live via the
+read-only MCP — all 12 rows match exactly, `payment_status`/
+`cycle_paid_to_date` untouched on every one. A household-wide re-audit after
+the cleanup (same stale-cleared-monthly-debt query) found zero remaining.
+
 ## ADR-087: Hybrid Task Tracking (GitHub Issues/Milestones + docs/)
 
 Decision:
