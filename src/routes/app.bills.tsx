@@ -68,7 +68,7 @@ import { SetCycleAmountDueAction } from "@/components/SetCycleAmountDueAction";
 import { LogBillPaymentDialog } from "@/components/LogBillPaymentDialog";
 import { useCycleState, stateVisual } from "@/lib/ledger-state";
 import { Switch } from "@/components/ui/switch";
-import { billCycleDue, toPayable } from "@/lib/payments";
+import { billCycleDue, isArrearsOnlyPayment, toPayable } from "@/lib/payments";
 import { PastDueBadge } from "@/components/PastDueBadge";
 import { PastDueEditor } from "@/components/PastDueEditor";
 import { StrandedBillRepair } from "@/components/StrandedBillRepair";
@@ -770,24 +770,33 @@ function RecentBillTransactions({ bill, month }: { bill: Bill; month?: string })
                 <span className="shrink-0 tabular-nums">
                   {formatMoney(Number(t.amount ?? 0))}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="ml-1 h-9 w-9 shrink-0"
-                  aria-label="Delete transaction"
-                  disabled={del.isPending}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!confirm("Delete this ledger transaction? The bill row is left as-is."))
-                      return;
-                    del.mutate(t, {
-                      onSuccess: () => toast.success("Transaction deleted"),
-                      onError: (e: unknown) => toast.error((e as Error).message),
-                    });
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
+                {/* A cleared, non-arrears row already moved the bill's
+                    balance — a bare delete never undoes that (see
+                    useDeleteLinkedTransaction's own docstring), so only
+                    offer it where deleting is provably a no-op: still
+                    pending, or an arrears-only row (Reverse isn't safe for
+                    those either — separate pre-existing gap). Use Reverse
+                    for a cleared payment instead. */}
+                {t.status !== "cleared" || isArrearsOnlyPayment(t) ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="ml-1 h-9 w-9 shrink-0"
+                    aria-label="Delete transaction"
+                    disabled={del.isPending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!confirm("Delete this ledger transaction? The bill row is left as-is."))
+                        return;
+                      del.mutate(t, {
+                        onSuccess: () => toast.success("Transaction deleted"),
+                        onError: (e: unknown) => toast.error((e as Error).message),
+                      });
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                ) : null}
                 <CorrectPaymentButton transaction={t} payable={toPayable("bill", bill)} />
                 <ReversePaymentButton transaction={t} payable={toPayable("bill", bill)} />
               </div>

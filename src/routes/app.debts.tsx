@@ -32,7 +32,12 @@ import { CycleMonthStepper } from "@/components/CycleMonthStepper";
 import { useCycleState } from "@/lib/ledger-state";
 import { hasRecommendation, useRecommendedPayments } from "@/lib/debt-recommended";
 import { priorArrearsSummary } from "@/lib/arrears";
-import { isAdvanceDisbursement, toPayable, useSyncStoredStatus } from "@/lib/payments";
+import {
+  isAdvanceDisbursement,
+  isArrearsOnlyPayment,
+  toPayable,
+  useSyncStoredStatus,
+} from "@/lib/payments";
 import { nextPayDate, periodRange } from "@/lib/paycheck-budget";
 import { payPeriodForDate } from "@/lib/pay-period";
 import { debtPayoffDatePatch } from "@/lib/debt-payoff-state";
@@ -1690,22 +1695,31 @@ function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string })
                     {disbursement ? "advance" : (t.status ?? "—")}
                   </span>
                   <div className="flex shrink-0 items-center justify-end">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9"
-                      aria-label="Delete transaction"
-                      disabled={del.isPending}
-                      onClick={() => {
-                        if (!confirm("Delete this ledger transaction? The debt row is left as-is.")) return;
-                        del.mutate(t, {
-                          onSuccess: () => toast.success("Transaction deleted"),
-                          onError: (e: unknown) => toast.error((e as Error).message),
-                        });
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    {/* A cleared, non-arrears row already moved the debt's
+                        balance — a bare delete never undoes that (see
+                        useDeleteLinkedTransaction's own docstring), so only
+                        offer it where deleting is provably a no-op: still
+                        pending, or an arrears-only row (Reverse isn't safe
+                        for those either — separate pre-existing gap). Use
+                        Reverse for a cleared payment instead. */}
+                    {t.status !== "cleared" || isArrearsOnlyPayment(t) ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        aria-label="Delete transaction"
+                        disabled={del.isPending}
+                        onClick={() => {
+                          if (!confirm("Delete this ledger transaction? The debt row is left as-is.")) return;
+                          del.mutate(t, {
+                            onSuccess: () => toast.success("Transaction deleted"),
+                            onError: (e: unknown) => toast.error((e as Error).message),
+                          });
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    ) : null}
                     {disbursement ? null : (
                       <>
                         <CorrectPaymentButton transaction={t} payable={toPayable("debt", debt)} />

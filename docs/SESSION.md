@@ -120,3 +120,36 @@
   every one. Household-wide re-audit afterward found zero remaining stale
   cleared monthly debts. Both ADR-086 addendum parts (RPC fix + data
   cleanup) are fully done.
+
+- **Found and fixed the actual cause of the Providence/Yukon Eye drift**:
+  `useDeleteLinkedTransaction` (`src/lib/data-hooks.ts:788-801`) deletes a
+  linked payment row without touching the payable — wired to a plain
+  trash-can button on every row of `RecentDebtTransactions`
+  (`app.debts.tsx`) and `RecentBillTransactions` (`app.bills.tsx`), next to
+  Correct/Reverse, behind a `confirm()` that's technically accurate
+  ("the debt row is left as-is") but easy to click through without
+  realizing the balance is never restored. Full audit of "Our Household"
+  found exactly these two real cases (both historical — nothing is
+  actively drifting now); four more "drift" hits in the audit were debts
+  marked paid off without ledger rows, not this bug.
+  Fix: hide the bare Delete button for a cleared, non-arrears row in both
+  files — `ReversePaymentButton` (already correct, already proven: restores
+  balance via its own atomic RPC, handles ADR-102 mirror accounts, writes
+  an audit-trail row) is right next to it and is now the only way to undo
+  a cleared payment there. Delete stays exactly as-is for pending rows
+  (provably a no-op, same logic the Stranded-repair panels already use)
+  and for arrears-only rows (`isArrearsOnlyPayment`) — the Reverse RPCs
+  have no arrears-awareness at all and would decrement the wrong field,
+  a separate pre-existing gap not introduced here. Advance-disbursement
+  rows are unchanged/out of scope (no Reverse/Correct path exists for them
+  today either). Pure JSX-gating change, no new mutations/RPCs/schema.
+  `tsc --noEmit` clean, 274/274 tests pass.
+  Follow-up: opened a GitHub Issue (`tech-debt`) for the separate
+  Reverse-RPC arrears gap found during this investigation.
+  Corrections applied this session:
+  `scripts/migrations/2026-10-21-debt-balance-and-due-date-corrections.sql`
+  (Providence Alaska remaining_balance $174.66→$54.66, date_paid_off
+  cleared, plan_payment_count=6/plan_final_payment=$24.66; Yukon Eye
+  remaining_balance $67.80→$87.80; due-date corrections for 7 debts
+  mis-set by the 2026-10-17 cleanup migration) — run by the user, verified
+  live via the MCP.
