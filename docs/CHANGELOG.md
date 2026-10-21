@@ -1,3 +1,91 @@
+## 2026-10-21 — Delete-transaction footgun traced, fixed; Providence/Yukon Eye balances corrected
+
+* User reported Providence Alaska showing paid off with only 4 of 6 planned
+  payments logged. Traced via the read-only MCP to the actual cause:
+  `useDeleteLinkedTransaction` (`src/lib/data-hooks.ts`) deletes a linked
+  payment transaction without touching the payable's balance — wired to a
+  plain trash-can button on every row of `RecentDebtTransactions`/
+  `RecentBillTransactions`, next to Correct/Reverse, behind a technically
+  accurate but easy-to-click-through `confirm()`. A full "Our Household"
+  audit found exactly one more real case (Yukon Eye, −$20.00) alongside
+  four unrelated hits (debts marked paid off without ledger rows, not this
+  bug) — both real drifts were historical, nothing was actively drifting.
+* Fixed: the bare Delete button is now hidden for a cleared, non-arrears
+  row in both files — `ReversePaymentButton` (already correct: restores
+  balance via its own atomic RPC, handles ADR-102 mirror accounts, writes
+  an audit-trail row) is the only way to undo a cleared payment there.
+  Delete stays unchanged for pending rows (provably a no-op) and
+  arrears-only rows (Reverse's RPCs have no arrears-awareness at all —
+  filed separately as Issue #80 rather than silently expanding this fix).
+  Advance-disbursement rows are unchanged/out of scope (no Reverse/Correct
+  path exists for them today either). Pure JSX-gating change, no new
+  mutations/RPCs/schema.
+* Corrections applied via user-run SQL
+  (`scripts/migrations/2026-10-21-debt-balance-and-due-date-corrections.sql`):
+  Providence Alaska `remaining_balance` $174.66→$54.66, `date_paid_off`
+  cleared, payment plan encoded (`plan_payment_count=6`,
+  `plan_final_payment=$24.66`); Yukon Eye `remaining_balance` $67.80→$87.80;
+  due-date corrections for 7 debts mis-set by the 2026-10-17 cleanup
+  migration below (that migration's "next upcoming due_day from today"
+  heuristic didn't check whether the current month's payment was already
+  made).
+
+## 2026-10-17 — ADR-086 addendum: monthly/one-time debts' next_due_date now rolls forward
+
+* Diagnosed why "Aarons - Dresser"'s due date stayed stuck at 2026-09-21
+  after its cycle correctly cleared: three debt-only RPCs
+  (`apply_cleared_debt_payment`, `apply_debt_cycle_reset`,
+  `apply_debt_mark_unpaid`, all written together in the 2026-09-24
+  atomic-RPC pass) explicitly excluded monthly/one-time debts from ever
+  advancing or reverting `next_due_date` — their bill equivalents have
+  never had this exclusion and already roll dates forward correctly in
+  production. `ledger-state.ts`'s monthly cycle-math was already written
+  to tolerate an advancing `next_due_date` (ADR-086's own calendar-month
+  model), so the exclusion was never load-bearing, just unexercised for
+  debts. Removed the exclusion from all three functions, matching their
+  bill counterparts byte-for-byte; no application code change needed.
+* Household-wide audit after the fix found 12 monthly debts already stuck
+  9–89 days stale by the bug (all already fully resolved, nothing owed) —
+  Car, Alpine Medical - Stephanie, North Star Radiology, Mom, Providence
+  Alaska, OPA/OrthoAlaska, Yukon Eye, Ticket 1, Ticket 2, Aarons - Dresser,
+  Mission Lane, Milestone. Zero bills were stale (expected — bills never
+  had this bug). One-time cleanup migration set each to the next upcoming
+  occurrence of its own `due_day`; both migrations run by the user and
+  verified live via the read-only MCP (seven of these dates were later
+  found mis-set and corrected 2026-10-21, above).
+
+## 2026-10-16 — Itemized multi-line fees, per-debt templates, payment-edit parity (ADR-046/091/112)
+
+* Submit Payment (debt detail) gained itemized, multi-line fees — a type
+  dropdown (Fee/Interest/Late fee/Processing fee/Tax/Other charge, "Tax"
+  new) + amount + free-text note per line, replacing its single bare
+  fee-amount field, bringing it to parity with "Log a Payment to this
+  debt." `LINE_TYPES`/`PaymentLineDraft`/`newPaymentLine` moved into
+  `src/lib/payments.ts` so all three fee-entry dialogs (Submit Payment, Log
+  a Payment on a debt, Log a Payment on a bill) share one list; new
+  `insertFeeLines()` generalizes the old single-fee helper (ADR-046
+  addendum).
+* Per-debt default fee-line templates (ADR-112): new `debts.default_fee_lines`
+  jsonb column: Submit Payment and Log a Payment pre-fill their lines from
+  it when a debt has one set, and a "Save as default" action snapshots the
+  dialog's current lines onto the debt.
+* Editing an existing payment's fee lines (`LinkedGroupDetail`,
+  `app.transactions.tsx`) gained the same Type/Note fields, and fixed a
+  pre-existing fragility: saved descriptions are now always composed via
+  `composeFeeDescription()` (never a raw user-typed override that could
+  silently strip the `"Fee: "` prefix clear/undo/classification logic
+  depends on); `parseFeeDescription()` reconstructs type/note from existing
+  rows on load (ADR-091 addendum).
+* Diagnosed a real cycle shortfall on "Aarons - Dresser": its 2026-09-28
+  payment had split tax out as its own Fee line, but Fee lines are
+  excluded from `cycle_paid_to_date`/`remaining_balance` everywhere — fixed
+  by hand via `LinkedGroupDetail`. To prevent a repeat, added "+ Itemize
+  this amount" (ADR-046 addendum): Submit Payment/Log a Payment (debt and
+  bill) can now build a single payment's amount from a labeled breakdown
+  (e.g. Base + Tax) that still composes into exactly one linked,
+  balance-affecting transaction — never separate, balance-excluded Fee
+  rows. New shared `src/components/ItemizeAmountFields.tsx`.
+
 ## 2026-10-16 — Debt detail screen: reversed Advances order, collapsible sections
 
 * Advances now display most-recent-first (display-only — the underlying
