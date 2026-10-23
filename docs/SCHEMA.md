@@ -168,13 +168,14 @@ institutions (
 this doc and `INSTITUTION_TYPES`'s own comment in
 `src/components/InstitutionDialog.tsx` previously claimed it was UI-list-only
 with no DB constraint; verified live to be wrong (a reclassification
-migration failed against it). Current 22 allowed values: `bank`,
+migration failed against it). Current 23 allowed values: `bank`,
 `credit_card`, `lendor_lessor`, `financial`, `tool`, `medical`, `utility`,
 `subscription`, `restaurant`, `grocery_store`, `gas_station`,
 `liquor_store`, `department_store`, `specialty_store`, `venue`, `game`,
-`app`, `dispensary`, `personal_care`, `employer`, `delivery`, `other`. Keep
-the constraint and `INSTITUTION_TYPES` in sync — adding a new type needs
-both an app-side array update and a
+`app`, `dispensary`, `personal_care`, `employer`, `delivery`, `person`
+(ADR-113: a friend/family member who fronts money, not a business),
+`other`. Keep the constraint and `INSTITUTION_TYPES` in sync — adding a new
+type needs both an app-side array update and a
 `scripts/migrations/*.sql` constraint migration (see
 `2026-09-09-institution-type-check-constraint.sql` for the pattern).
 
@@ -858,6 +859,20 @@ debt_adjustments (
 Existing rows default to `true`, preserving ADR-045's original behavior.
 This is unrelated to ADR-046's payment-fee transactions, which already never
 touch the cycle — that mechanism is unchanged.
+
+## debt_adjustments.adjustment_type = 'covered_payment' (ADR-113)
+
+"Someone else paid this" — a friend/family member paid a bill/debt directly
+(no money moved through any of the household's own accounts). Generalizes
+ADR-056's advance mechanic: `useLogPaymentCoveredByOther` (`data-hooks.ts`)
+writes a `+X` wash transaction (`description` `"Covered: <bill/debt name>"`,
+its own fresh `transfer_group_id` — deliberately never shared with the real
+-X payment leg, see ADR-113) onto the covering person-debt, plus a
+`debt_adjustments` row (`adjustment_type: 'covered_payment'`,
+`mirror_transaction_id` = the wash transaction) that raises the covering
+debt's `remaining_balance` via `apply_debt_adjustment`. `payments.ts`'s
+`isCoveredPaymentDisbursement`/`isDebtDisbursement` keep the wash leg out of
+the covering debt's own cycle/history math, mirroring `isAdvanceDisbursement`.
 
 ---
 

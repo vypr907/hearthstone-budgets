@@ -32,6 +32,7 @@ import {
   deletePairedFees,
   hasFee,
   feeCategoryId,
+  type Payable,
 } from "./payments";
 import { ATM_FEE_LINK_MAX_DATE_DIFF_DAYS } from "./atm-fee-link";
 import { nextPayDate } from "./paycheck-budget";
@@ -65,7 +66,6 @@ export function useCategories(domain?: string) {
     },
   });
 }
-
 
 export function useBills() {
   const { householdId } = useAuth();
@@ -211,7 +211,9 @@ const MISSING_COLUMN = /Could not find the '([^']+)' column/;
 
 async function saveWithOptionalColumns<T>(
   payload: Record<string, unknown>,
-  run: (p: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>,
+  run: (
+    p: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message?: string } | null }>,
 ): Promise<T> {
   let body = { ...payload };
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -262,7 +264,6 @@ export function useUpsertBill() {
     },
   });
 }
-
 
 export function useDeleteBill() {
   const qc = useQueryClient();
@@ -333,7 +334,7 @@ export function useUpsertDebt() {
   return useMutation({
     mutationFn: async (debt: Partial<Debt> & { name: string }) => {
       const payload = { ...debt, household_id: householdId } as Record<string, unknown>;
-      await saveWithOptionalColumns<Debt>(payload, async (p) =>
+      return await saveWithOptionalColumns<Debt>(payload, async (p) =>
         debt.id
           ? await supabase.from("debts").update(p).eq("id", debt.id!).select("*").single()
           : await supabase.from("debts").insert(p).select("*").single(),
@@ -342,7 +343,6 @@ export function useUpsertDebt() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
   });
 }
-
 
 export function useDeleteDebt() {
   const qc = useQueryClient();
@@ -390,10 +390,7 @@ export function useSetPaymentStatus() {
       status: string;
     }) => {
       const table = kind === "bill" ? "bills" : "debts";
-      const { error } = await supabase
-        .from(table)
-        .update({ payment_status: status })
-        .eq("id", id);
+      const { error } = await supabase.from(table).update({ payment_status: status }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -446,7 +443,6 @@ export function useResetDebtsMonth() {
   });
 }
 
-
 export function useUpsertAccount() {
   const { householdId } = useAuth();
   const qc = useQueryClient();
@@ -458,11 +454,7 @@ export function useUpsertAccount() {
         if (error) throw error;
         return a.id;
       }
-      const { data, error } = await supabase
-        .from("accounts")
-        .insert(payload)
-        .select("id")
-        .single();
+      const { data, error } = await supabase.from("accounts").insert(payload).select("id").single();
       if (error) throw error;
       return (data as { id: string }).id;
     },
@@ -1239,7 +1231,10 @@ export function useSaveTransfer() {
       };
       // Write from-side first; if it fails nothing is written.
       const fromTxn = await saveWithOptionalColumns<Transaction>(
-        { ...base, account_id: args.fromAccountId, amount: -args.amount } as Record<string, unknown>,
+        { ...base, account_id: args.fromAccountId, amount: -args.amount } as Record<
+          string,
+          unknown
+        >,
         async (p) => supabase.from("transactions").insert(p).select("*").single(),
       );
       // Write to-side; if this fails the from-side is orphaned (same risk as
@@ -1260,11 +1255,13 @@ export function useSaveTransfer() {
         args.transferDate,
       );
       if (args.tagIds?.length) {
-        const { error } = await supabase.from("transaction_tags").insert(
-          [fromTxn.id, toTxn.id].flatMap((transaction_id) =>
-            args.tagIds!.map((tag_id) => ({ transaction_id, tag_id })),
-          ),
-        );
+        const { error } = await supabase
+          .from("transaction_tags")
+          .insert(
+            [fromTxn.id, toTxn.id].flatMap((transaction_id) =>
+              args.tagIds!.map((tag_id) => ({ transaction_id, tag_id })),
+            ),
+          );
         if (error) throw error;
       }
       return groupId;
@@ -1398,7 +1395,9 @@ export function useSaveCashBack() {
         throw new Error("Enter a positive cash back amount");
       }
       if (!args.purchaseLines.length) {
-        throw new Error("Add at least one purchase line — for a plain cash withdrawal, use Transfer instead");
+        throw new Error(
+          "Add at least one purchase line — for a plain cash withdrawal, use Transfer instead",
+        );
       }
       const groupId = crypto.randomUUID();
       const base = {
@@ -1410,11 +1409,17 @@ export function useSaveCashBack() {
         transfer_group_id: groupId,
       };
       await saveWithOptionalColumns<Transaction>(
-        { ...base, account_id: args.fromAccountId, amount: -args.cashAmount } as Record<string, unknown>,
+        { ...base, account_id: args.fromAccountId, amount: -args.cashAmount } as Record<
+          string,
+          unknown
+        >,
         async (p) => supabase.from("transactions").insert(p).select("*").single(),
       );
       await saveWithOptionalColumns<Transaction>(
-        { ...base, account_id: args.cashAccountId, amount: args.cashAmount } as Record<string, unknown>,
+        { ...base, account_id: args.cashAccountId, amount: args.cashAmount } as Record<
+          string,
+          unknown
+        >,
         async (p) => supabase.from("transactions").insert(p).select("*").single(),
       );
       await insertCashBackPurchaseRows(
@@ -1478,7 +1483,10 @@ export function useSetTransferFee() {
           );
         }
       } else if (args.existingFee) {
-        const { error } = await supabase.from("transactions").delete().eq("id", args.existingFee.id);
+        const { error } = await supabase
+          .from("transactions")
+          .delete()
+          .eq("id", args.existingFee.id);
         if (error) throw error;
       }
     },
@@ -1673,6 +1681,82 @@ export function useDeleteAdvance() {
       qc.invalidateQueries({ queryKey: ["debts"] });
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["latest_balances"] });
+    },
+  });
+}
+
+/**
+ * ADR-113: "someone else paid this for us" — generalizes the ADR-056 advance
+ * mechanic so the paired leg funds a bill/debt payment instead of landing as
+ * spendable cash. Call this AFTER the normal payment mutation
+ * (useLogBillPayment / useLogDebtPayment) has already written the real -X
+ * payment transaction; this only adds the +X wash leg plus the covering
+ * debt's balance increase.
+ *
+ * Deliberately gives the wash leg its OWN transfer_group_id, never the same
+ * one as the -X payment leg: internalTransferIds() (internal-transfers.ts)
+ * treats any negative+positive pair sharing one transfer_group_id as a
+ * two-sided internal transfer and excludes both legs from spend — sharing
+ * the id here would make the bill/debt's real expense vanish from
+ * spending-by-category instead of showing as spend offset by a debt
+ * increase. `isCoveredPaymentDisbursement` (payments.ts) is what keeps this
+ * +X leg out of the covering debt's own cycle/history math.
+ */
+export function useLogPaymentCoveredByOther() {
+  const { householdId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      /** The bill/debt actually being paid (e.g. the GVEA bill). */
+      payable: Payable;
+      /** The person-debt that grows by this amount (e.g. "Owed to Dave"). */
+      coveringDebt: Debt;
+      /** Same account the real -X payment leg used. */
+      accountId: string;
+      amount: number;
+      date: string;
+    }) => {
+      const groupId = crypto.randomUUID();
+      const wash = await saveWithOptionalColumns<Transaction>(
+        {
+          household_id: householdId!,
+          account_id: args.accountId,
+          amount: args.amount,
+          status: "cleared",
+          description: `Covered: ${args.payable.name}`,
+          transaction_date: args.date,
+          transfer_group_id: groupId,
+          linked_debt_id: args.coveringDebt.id,
+          category_id: args.coveringDebt.category_id,
+          institution_id: args.coveringDebt.institution_id,
+        } as Record<string, unknown>,
+        async (p) => supabase.from("transactions").insert(p).select("*").single(),
+      );
+      // ADR-101: atomic RPC, not a client read-then-write.
+      const { error: debtError } = await supabase.rpc("apply_debt_adjustment", {
+        p_debt_id: args.coveringDebt.id,
+        p_amount: args.amount,
+        p_effective_date: args.date,
+      });
+      if (debtError) throw debtError;
+      // mirror_transaction_id reuses useDeleteDebtAdjustment's existing
+      // cleanup path — deleting this adjustment also deletes the wash leg.
+      const { error: adjError } = await supabase.from("debt_adjustments").insert({
+        household_id: householdId!,
+        debt_id: args.coveringDebt.id,
+        amount: args.amount,
+        adjustment_type: "covered_payment",
+        description: `Covered ${args.payable.kind === "bill" ? "bill" : "debt"} payment: ${args.payable.name}`,
+        adjustment_date: args.date,
+        mirror_transaction_id: wash.id,
+      });
+      if (adjError) throw adjError;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["latest_balances"] });
+      qc.invalidateQueries({ queryKey: ["debt_adjustments"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
     },
   });
 }
@@ -2021,24 +2105,18 @@ export function useSaveDebtStrategySettings() {
   const { householdId } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (patch: {
-      active_strategy?: string;
-      extra_monthly_payment?: number;
-    }) => {
-      const { error } = await supabase
-        .from("debt_strategy_settings")
-        .upsert(
-          {
-            household_id: householdId!,
-            ...patch,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "household_id" },
-        );
+    mutationFn: async (patch: { active_strategy?: string; extra_monthly_payment?: number }) => {
+      const { error } = await supabase.from("debt_strategy_settings").upsert(
+        {
+          household_id: householdId!,
+          ...patch,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "household_id" },
+      );
       if (error) throw error;
     },
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["debt_strategy_settings"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debt_strategy_settings"] }),
   });
 }
 
@@ -2164,7 +2242,11 @@ export function useToggleScheduleCheckoff() {
           .delete()
           .eq("household_id", hh)
           .eq("month", month);
-        if (error) writeLocal(hh, readLocal(hh).filter((m) => m !== month));
+        if (error)
+          writeLocal(
+            hh,
+            readLocal(hh).filter((m) => m !== month),
+          );
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule_checkoffs"] }),

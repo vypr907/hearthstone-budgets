@@ -177,6 +177,8 @@ const INSTITUTION_TYPE_META: Record<string, { icon: string; color: string }> = {
   personal_care: { icon: "💇", color: "#ec4899" },
   employer: { icon: "💼", color: "#64748b" },
   delivery: { icon: "🚕", color: "#f97316" },
+  // ADR-113
+  person: { icon: "👤", color: "#64748b" },
 };
 
 /** "credit_card" / "credit card" → "Credit Card". */

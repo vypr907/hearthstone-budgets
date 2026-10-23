@@ -33,8 +33,8 @@ import { useCycleState } from "@/lib/ledger-state";
 import { hasRecommendation, useRecommendedPayments } from "@/lib/debt-recommended";
 import { priorArrearsSummary } from "@/lib/arrears";
 import {
-  isAdvanceDisbursement,
   isArrearsOnlyPayment,
+  isDebtDisbursement,
   toPayable,
   useSyncStoredStatus,
 } from "@/lib/payments";
@@ -97,7 +97,6 @@ import { PastDueBadge } from "@/components/PastDueBadge";
 import { computeAdvanceEpisodes, type AdvanceEpisode } from "@/lib/debt-episodes";
 import { PastDueEditor } from "@/components/PastDueEditor";
 
-
 /** ADR-045: invoice joins the existing debt_type values. */
 const DEBT_TYPES = ["advance", "credit card", "invoice", "loan", "medical", "other"];
 const ADD_INSTITUTION = "__add_institution__";
@@ -118,7 +117,6 @@ import { PAYCHECK_DEDUCTION_ICON, formatTypeLabel, institutionTypeVisual } from 
 import { InstitutionLogo } from "@/components/InstitutionLogo";
 import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
 
-
 import {
   CustomCycleFields,
   deriveCustomInterval,
@@ -137,7 +135,6 @@ const CYCLES: BillingCycle[] = [
   // ADR-048: invoices and other non-recurring charges.
   "one_time",
 ];
-
 
 // ADR-105: deep-link to a specific debt's detail dialog from another route
 // (e.g. a linked account's "Linked debt" field) — ?open=<debtId>.
@@ -248,11 +245,8 @@ function DebtsPage() {
           categoryName[b.category_id ?? ""] ?? "zzz",
         );
       if (sort === "due")
-        return (debtDueDate(a) ?? "9999-12-31").localeCompare(
-          debtDueDate(b) ?? "9999-12-31",
-        );
-      if (sort === "remaining")
-        return balanceOf(b) - balanceOf(a);
+        return (debtDueDate(a) ?? "9999-12-31").localeCompare(debtDueDate(b) ?? "9999-12-31");
+      if (sort === "remaining") return balanceOf(b) - balanceOf(a);
       return (a.priority_order ?? 9999) - (b.priority_order ?? 9999);
     });
   }, [debts, cats, q, sort, categoryName, showPaidOff, effectiveBalanceById]);
@@ -262,8 +256,7 @@ function DebtsPage() {
     const grouped = groupRows(rows, (d) => {
       if (group === "category") return categoryName[d.category_id ?? ""] ?? "Uncategorized";
       if (group === "due") return d.due_day ? `Day ${d.due_day}` : "No due day";
-      if (group === "remaining")
-        return balanceOf(d) > 0 ? "Outstanding" : "Paid off";
+      if (group === "remaining") return balanceOf(d) > 0 ? "Outstanding" : "Paid off";
       return d.priority_order != null ? `Priority ${d.priority_order}` : "No priority";
     });
     const out: Array<{ header: string; d: Debt }> = [];
@@ -280,7 +273,6 @@ function DebtsPage() {
         <Button className="h-12 w-full text-base" onClick={() => setEditing({})}>
           <Plus className="mr-2 h-5 w-5" /> Add debt
         </Button>
-
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && debts.length === 0 && (
@@ -322,11 +314,7 @@ function DebtsPage() {
               Include debts with a zero balance, sorted to the bottom.
             </p>
           </div>
-          <Switch
-            id="show-paid-off"
-            checked={showPaidOff}
-            onCheckedChange={setShowPaidOff}
-          />
+          <Switch id="show-paid-off" checked={showPaidOff} onCheckedChange={setShowPaidOff} />
         </div>
 
         <div className="space-y-2">
@@ -334,91 +322,77 @@ function DebtsPage() {
             const debtBalance = balanceOf(d);
             const start = Number(d.starting_balance ?? 0) || debtBalance;
             const pctPaid =
-              start > 0
-                ? Math.min(
-                    100,
-                    Math.max(0, ((start - debtBalance) / start) * 100),
-                  )
-                : 0;
+              start > 0 ? Math.min(100, Math.max(0, ((start - debtBalance) / start) * 100)) : 0;
             return (
-            <div key={d.id} className="space-y-2">
-            {header ? (
-              <SectionLabel className="px-1 pt-2">{header}</SectionLabel>
-            ) : null}
-            <Card
-              className="cursor-pointer"
-              onClick={() => setDetail(d)}
-            >
-              <CardContent className="p-3">
-                <div className="flex items-start gap-3">
-                  <ObligationIcon
-                    institution={institutionById[d.institution_id ?? ""]}
-                    name={`${d.name} ${d.debt_type ?? ""}`}
-                    fallback="🏦"
-                  />
+              <div key={d.id} className="space-y-2">
+                {header ? <SectionLabel className="px-1 pt-2">{header}</SectionLabel> : null}
+                <Card className="cursor-pointer" onClick={() => setDetail(d)}>
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-3">
+                      <ObligationIcon
+                        institution={institutionById[d.institution_id ?? ""]}
+                        name={`${d.name} ${d.debt_type ?? ""}`}
+                        fallback="🏦"
+                      />
 
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{d.name}</p>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                      <span>{d.debt_type ? formatTypeLabel(d.debt_type) : "Debt"}</span>
-                      {isPaidOff(d) ? (
-                        <span>
-                          · paid off{d.date_paid_off ? ` ${d.date_paid_off.slice(0, 10)}` : ""}
-                        </span>
-                      ) : (d.billing_cycle ?? "monthly") === "monthly"
-                        ? d.due_day
-                          ? <span>· day {d.due_day}</span>
-                          : null
-                        : d.next_due_date
-                          ? <span>· due {d.next_due_date.slice(0, 10)}</span>
-                          : null}
-                      <span>· {formatTypeLabel(d.billing_cycle ?? "monthly")}</span>
-                      {d.is_paycheck_deduction ? (
-                        <Badge variant="secondary" title="Paid via paycheck/HSA deduction">
-                          {PAYCHECK_DEDUCTION_ICON} Paycheck deduction
-                        </Badge>
-                      ) : null}
-                      {d.interest_rate != null ? (
-                        <span>· {Number(d.interest_rate)}% APR</span>
-                      ) : null}
-                      {memberAccountLabel(d.institution_member_account_id) ? (
-                        <span>· {memberAccountLabel(d.institution_member_account_id)}</span>
-                      ) : null}
-                      <Badge
-                        variant={statusVariant(d.payment_status)}
-                        className="capitalize"
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{d.name}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                          <span>{d.debt_type ? formatTypeLabel(d.debt_type) : "Debt"}</span>
+                          {isPaidOff(d) ? (
+                            <span>
+                              · paid off{d.date_paid_off ? ` ${d.date_paid_off.slice(0, 10)}` : ""}
+                            </span>
+                          ) : (d.billing_cycle ?? "monthly") === "monthly" ? (
+                            d.due_day ? (
+                              <span>· day {d.due_day}</span>
+                            ) : null
+                          ) : d.next_due_date ? (
+                            <span>· due {d.next_due_date.slice(0, 10)}</span>
+                          ) : null}
+                          <span>· {formatTypeLabel(d.billing_cycle ?? "monthly")}</span>
+                          {d.is_paycheck_deduction ? (
+                            <Badge variant="secondary" title="Paid via paycheck/HSA deduction">
+                              {PAYCHECK_DEDUCTION_ICON} Paycheck deduction
+                            </Badge>
+                          ) : null}
+                          {d.interest_rate != null ? (
+                            <span>· {Number(d.interest_rate)}% APR</span>
+                          ) : null}
+                          {memberAccountLabel(d.institution_member_account_id) ? (
+                            <span>· {memberAccountLabel(d.institution_member_account_id)}</span>
+                          ) : null}
+                          <Badge variant={statusVariant(d.payment_status)} className="capitalize">
+                            {d.payment_status || "unpaid"}
+                          </Badge>
+                          {/* ADR-049: how far behind, in money. */}
+                          <PastDueBadge payable={toPayable("debt", d)} />
+                        </div>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditing(d);
+                        }}
+                        aria-label="Edit"
                       >
-                        {d.payment_status || "unpaid"}
-                      </Badge>
-                      {/* ADR-049: how far behind, in money. */}
-                      <PastDueBadge payable={toPayable("debt", d)} />
-
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditing(d);
-                    }}
-                    aria-label="Edit"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <div className="rounded-[12px] bg-muted/50 p-2">
-                    <SectionLabel size="sub">Remaining</SectionLabel>
-                    <p className="text-xl font-extrabold tabular-nums">
-                      {formatMoney(debtBalance)}
-                    </p>
-                  </div>
-                  <div className="rounded-[12px] bg-muted/50 p-2">
-                    <SectionLabel size="sub">Min payment</SectionLabel>
-                    <p className="text-xl font-extrabold tabular-nums">
-                      {formatMoney(Number(d.minimum_payment))}
-                    </p>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div className="rounded-[12px] bg-muted/50 p-2">
+                        <SectionLabel size="sub">Remaining</SectionLabel>
+                        <p className="text-xl font-extrabold tabular-nums">
+                          {formatMoney(debtBalance)}
+                        </p>
+                      </div>
+                      <div className="rounded-[12px] bg-muted/50 p-2">
+                        <SectionLabel size="sub">Min payment</SectionLabel>
+                        <p className="text-xl font-extrabold tabular-nums">
+                          {formatMoney(Number(d.minimum_payment))}
+                        </p>
                         {hasRecommendation(recommended.get(d.id)) ? (
                           <p className="mt-0.5 text-[11px] leading-tight tabular-nums text-muted-foreground">
                             {formatMoney(recommended.get(d.id)!.monthlyMinimum)}/mo min ·{" "}
@@ -427,30 +401,26 @@ function DebtsPage() {
                             </span>
                           </p>
                         ) : null}
-                  </div>
-                </div>
-                {(() => {
-                  const info = infoOf(toPayable("debt", d));
-                  return info.clearedSum > 0 && info.remaining > 0 ? (
-                    <p className="mt-2 text-xs font-medium text-destructive">
-                      {formatMoney(info.remaining)} still owed this cycle
-                    </p>
-                  ) : null;
-                })()}
-                <ItemBar className="mt-2" value={pctPaid} color={itemColor(i)} />
-                <SectionLabel size="sub" className="mt-1">
-                  {Math.round(pctPaid)}% paid off
-                </SectionLabel>
-                <PayActions
-                  payable={toPayable("debt", d)}
-                  className="mt-2"
-                />
-              </CardContent>
-            </Card>
-            </div>
+                      </div>
+                    </div>
+                    {(() => {
+                      const info = infoOf(toPayable("debt", d));
+                      return info.clearedSum > 0 && info.remaining > 0 ? (
+                        <p className="mt-2 text-xs font-medium text-destructive">
+                          {formatMoney(info.remaining)} still owed this cycle
+                        </p>
+                      ) : null;
+                    })()}
+                    <ItemBar className="mt-2" value={pctPaid} color={itemColor(i)} />
+                    <SectionLabel size="sub" className="mt-1">
+                      {Math.round(pctPaid)}% paid off
+                    </SectionLabel>
+                    <PayActions payable={toPayable("debt", d)} className="mt-2" />
+                  </CardContent>
+                </Card>
+              </div>
             );
           })}
-
         </div>
       </div>
 
@@ -498,10 +468,7 @@ function billingPeriodFor(debt: Debt): { start: string; end: string } | null {
   return { start, end };
 }
 
-
-
 export function DebtDetailDialog({
-
   debt,
   onClose,
   onEdit,
@@ -581,11 +548,8 @@ export function DebtDetailDialog({
         : cycle.remaining + prior.amount
       : 0;
 
-
   const open = debt !== null;
   if (!debt || !cycle) return null;
-
-
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -617,7 +581,10 @@ export function DebtDetailDialog({
           )}
           <DetailGrid>
             <DetailItem label="Category" value={<CategoryChip category={category} />} />
-            <DetailItem label="Debt type" value={debt.debt_type ? formatTypeLabel(debt.debt_type) : "—"} />
+            <DetailItem
+              label="Debt type"
+              value={debt.debt_type ? formatTypeLabel(debt.debt_type) : "—"}
+            />
             <DetailItem
               label="Account"
               value={
@@ -646,10 +613,7 @@ export function DebtDetailDialog({
               }
             />
             <DetailMoney label="Starting balance" value={debt.starting_balance} />
-            <DetailMoney
-              label="Program start balance"
-              value={debt.program_start_balance}
-            />
+            <DetailMoney label="Program start balance" value={debt.program_start_balance} />
             <DetailMoney label="Remaining balance" value={debtBalance} />
             <DetailMoney label="Minimum payment" value={debt.minimum_payment} />
             {hasRecommendation(recommended.get(debt.id)) ? (
@@ -688,14 +652,9 @@ export function DebtDetailDialog({
 
             <DetailItem
               label="Interest rate"
-              value={
-                debt.interest_rate != null ? `${debt.interest_rate}%` : "—"
-              }
+              value={debt.interest_rate != null ? `${debt.interest_rate}%` : "—"}
             />
-            <DetailMoney
-              label="Known finance charge"
-              value={debt.known_finance_charge}
-            />
+            <DetailMoney label="Known finance charge" value={debt.known_finance_charge} />
             <DetailItem
               label="Billing cycle"
               value={<ValueChip value={debt.billing_cycle ?? "monthly"} />}
@@ -704,9 +663,7 @@ export function DebtDetailDialog({
               label="Paycheck deduction"
               value={
                 debt.is_paycheck_deduction ? (
-                  <Badge variant="secondary">
-                    {PAYCHECK_DEDUCTION_ICON} Paid via paycheck/HSA
-                  </Badge>
+                  <Badge variant="secondary">{PAYCHECK_DEDUCTION_ICON} Paid via paycheck/HSA</Badge>
                 ) : (
                   "No"
                 )
@@ -776,28 +733,19 @@ export function DebtDetailDialog({
               }
             />
 
-            <DetailItem label="Pay period" value={payPeriod ? formatWindow(payPeriod.start, payPeriod.end) : "—"} />
-
+            <DetailItem
+              label="Pay period"
+              value={payPeriod ? formatWindow(payPeriod.start, payPeriod.end) : "—"}
+            />
 
             <DetailItem
               label="On payment plan"
-              value={
-                debt.on_payment_plan === null
-                  ? "—"
-                  : debt.on_payment_plan
-                    ? "Yes"
-                    : "No"
-              }
+              value={debt.on_payment_plan === null ? "—" : debt.on_payment_plan ? "Yes" : "No"}
             />
-            <DetailItem
-              label="Manual or auto"
-              value={<ValueChip value={debt.manual_or_auto} />}
-            />
+            <DetailItem label="Manual or auto" value={<ValueChip value={debt.manual_or_auto} />} />
             <DetailItem
               label="Priority order"
-              value={
-                debt.priority_order != null ? String(debt.priority_order) : "—"
-              }
+              value={debt.priority_order != null ? String(debt.priority_order) : "—"}
             />
           </DetailGrid>
 
@@ -813,10 +761,7 @@ export function DebtDetailDialog({
           <LogDebtPaymentDialog debt={debt} />
           <PastDueEditor debt={debt} />
 
-          <RecentDebtTransactions
-            debt={debt}
-            month={isCurrentView ? undefined : targetMonthKey}
-          />
+          <RecentDebtTransactions debt={debt} month={isCurrentView ? undefined : targetMonthKey} />
 
           {debt.linked_account_id && account ? (
             <LinkedAccountActivity
@@ -830,9 +775,7 @@ export function DebtDetailDialog({
           {debt.date_paid_off && (
             <div>
               <p className="text-xs text-muted-foreground">Date paid off</p>
-              <p className="mt-1 text-sm">
-                {format(parseISO(debt.date_paid_off), "MMM d, yyyy")}
-              </p>
+              <p className="mt-1 text-sm">{format(parseISO(debt.date_paid_off), "MMM d, yyyy")}</p>
             </div>
           )}
         </div>
@@ -851,15 +794,16 @@ export function DebtDetailDialog({
   );
 }
 
-
-
-
 export function DebtDialog({
   debt,
   onClose,
+  onSaved,
 }: {
   debt: Partial<Debt> | null;
   onClose: () => void;
+  /** ADR-113: lets a caller (e.g. an inline "+ New debt" quick-create) learn
+   * the saved row's id without re-fetching useDebts(). */
+  onSaved?: (debt: Debt) => void;
 }) {
   const upsert = useUpsertDebt();
   const del = useDeleteDebt();
@@ -1017,8 +961,7 @@ export function DebtDialog({
     const originalNum = original ? Number(original) : null;
     // The debts table requires starting_balance; fall back to what's owed today
     // so a quick invoice entry never trips the not-null constraint.
-    const startingBalance =
-      originalNum ?? remainingNum ?? Number(debt?.starting_balance ?? 0) ?? 0;
+    const startingBalance = originalNum ?? remainingNum ?? Number(debt?.starting_balance ?? 0) ?? 0;
     // ADR-068: a reporting-only deduction posts no transaction, so it can't
     // fund a debt — block the save rather than writing a dead link.
     if (fundingDeductionId !== "none") {
@@ -1048,7 +991,7 @@ export function DebtDialog({
     const latestLinkedDate = linkedDates[linkedDates.length - 1] ?? todayISO();
     const datePaidOff =
       nextRemaining == null
-        ? debt?.date_paid_off ?? null
+        ? (debt?.date_paid_off ?? null)
         : (debtPayoffDatePatch(
             debt ?? { debt_type: debtType, date_paid_off: null },
             nextRemaining,
@@ -1070,14 +1013,13 @@ export function DebtDialog({
     // date_paid_off are unaffected: a linked credit card still has its own
     // real minimum payment, distinct from the full derived balance.
     const skipRemainingBalanceField = skipAdvanceLifecycleFields || (isLinked && isEdit);
-    const remainingToWrite = isAdvance
-      ? 0
-      : remainingNum ?? originalNum ?? startingBalance ?? 0;
+    const remainingToWrite = isAdvance ? 0 : (remainingNum ?? originalNum ?? startingBalance ?? 0);
     const minPaymentToWrite = isAdvance ? 0 : minPay ? Number(minPay) : 0;
     // ADR-074: an explicit pick always wins; otherwise fall back to the most
     // recent linked-payment transaction's account, same derivation as the
     // backfill script ran once already.
-    let usualPaymentAccountId2: string | null = usualPaymentAccountId !== "none" ? usualPaymentAccountId : null;
+    let usualPaymentAccountId2: string | null =
+      usualPaymentAccountId !== "none" ? usualPaymentAccountId : null;
     if (!usualPaymentAccountId2) {
       const linked = transactions
         .filter((t) => t.linked_debt_id === debt?.id)
@@ -1085,15 +1027,14 @@ export function DebtDialog({
       usualPaymentAccountId2 = linked[linked.length - 1]?.account_id ?? null;
     }
     try {
-      await upsert.mutateAsync({
+      const saved = await upsert.mutateAsync({
         id: debt?.id,
         name: name.trim(),
         // ADR-094: a new debt lands at the end of the Custom payoff order.
         // Edits never touch priority_order — the reorder editor owns it.
         ...(!isEdit
           ? {
-              priority_order:
-                Math.max(0, ...allDebts.map((d) => d.priority_order ?? 0)) + 1,
+              priority_order: Math.max(0, ...allDebts.map((d) => d.priority_order ?? 0)) + 1,
             }
           : {}),
         // Advance edits: leave remaining_balance / minimum_payment /
@@ -1116,7 +1057,7 @@ export function DebtDialog({
         due_day: dated ? null : dueDay ? Number(dueDay) : null,
         billing_cycle: cycle.trim().toLowerCase() as BillingCycle,
         cycle_interval_days: intervalDays,
-        next_due_date: dated ? nextDue || null : debt?.next_due_date ?? null,
+        next_due_date: dated ? nextDue || null : (debt?.next_due_date ?? null),
         debt_type: debtType || null,
         institution_id: institutionId === "none" ? null : institutionId,
         category_id: categoryId === "none" ? null : categoryId,
@@ -1132,12 +1073,12 @@ export function DebtDialog({
         institution_member_account_id: memberAccountId === "none" ? null : memberAccountId,
       });
       toast.success(isEdit ? "Debt updated" : "Debt added");
+      onSaved?.(saved);
       onClose();
     } catch (e) {
       toast.error((e as Error).message);
     }
   }
-
 
   async function handleDelete() {
     if (!debt?.id) return;
@@ -1170,8 +1111,7 @@ export function DebtDialog({
             />
             {isInvoice && !nameTouched ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                Named automatically from the institution and invoice number — type
-                here to override.
+                Named automatically from the institution and invoice number — type here to override.
               </p>
             ) : null}
           </div>
@@ -1237,11 +1177,7 @@ export function DebtDialog({
                 {institutions.map((i) => (
                   <SelectItem key={i.id} value={i.id} className="py-3 text-base">
                     <span className="flex items-center gap-2">
-                      <InstitutionLogo
-                        logoUrl={i.logo_url}
-                        type={i.institution_type}
-                        size={22}
-                      />
+                      <InstitutionLogo logoUrl={i.logo_url} type={i.institution_type} size={22} />
                       {i.name}
                     </span>
                   </SelectItem>
@@ -1303,8 +1239,8 @@ export function DebtDialog({
               </SelectContent>
             </Select>
             <p className="mt-1 text-xs text-muted-foreground">
-              When the paycheck is marked received, this debt's current cycle is paid
-              automatically. Reporting-only deductions can't fund a debt.
+              When the paycheck is marked received, this debt's current cycle is paid automatically.
+              Reporting-only deductions can't fund a debt.
             </p>
           </div>
           {/* ADR-074: which account this debt is usually paid from, for Paycheck
@@ -1349,9 +1285,8 @@ export function DebtDialog({
               </SelectContent>
             </Select>
             <p className="mt-1 text-xs text-muted-foreground">
-              If this debt is really a real account (e.g. a credit line),
-              linking it here mirrors every advance, fee, and repayment onto
-              that account's own transaction history.
+              If this debt is really a real account (e.g. a credit line), linking it here mirrors
+              every advance, fee, and repayment onto that account's own transaction history.
             </p>
           </div>
           {/* ADR-052: invoice reference number drives the auto-composed name. */}
@@ -1422,13 +1357,13 @@ export function DebtDialog({
               />
               {isAdvance ? (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Managed automatically — record a draw with "Record advance",
-                  and payments bring it down.
+                  Managed automatically — record a draw with "Record advance", and payments bring it
+                  down.
                 </p>
               ) : isLinked ? (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Managed automatically from the linked account's balance —
-                  log purchases and payments there instead.
+                  Managed automatically from the linked account's balance — log purchases and
+                  payments there instead.
                 </p>
               ) : null}
             </div>
@@ -1507,7 +1442,8 @@ export function DebtDialog({
             </Select>
             {cycle === "one_time" ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                One-time charges don't roll into a next cycle — clearing the balance closes them out.
+                One-time charges don't roll into a next cycle — clearing the balance closes them
+                out.
               </p>
             ) : null}
           </div>
@@ -1564,8 +1500,8 @@ export function DebtDialog({
             <div className="col-span-2">
               <Label>Past due carried in</Label>
               <p className="text-xs text-muted-foreground">
-                Amount already overdue before tracking started. Missed cycles after the
-                as-of date are counted automatically.
+                Amount already overdue before tracking started. Missed cycles after the as-of date
+                are counted automatically.
               </p>
             </div>
             <div>
@@ -1626,7 +1562,6 @@ export function DebtDialog({
   );
 }
 
-
 /**
  * Ledger rows linked to this debt, newest first. Default: last 10 ("Recent").
  * `month` ("YYYY-MM", ADR-085 addendum): scope to that calendar month instead,
@@ -1670,9 +1605,10 @@ function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string })
       ) : (
         <div className="mt-1 divide-y divide-border/50">
           {rows.map((t) => {
-            // ADR-056 addendum: the advance disbursement row shows for context
-            // but Correct/Reverse don't apply — it isn't a payment.
-            const disbursement = isAdvanceDisbursement(t);
+            // ADR-056 addendum / ADR-113: a disbursement row (advance draw or
+            // "paid by someone else" cover) shows for context but
+            // Correct/Reverse don't apply — it isn't a payment.
+            const disbursement = isDebtDisbursement(t);
             return (
               <div key={t.id} className="py-2 text-sm">
                 {/* Two-line row: the three action buttons get their own line so
@@ -1710,7 +1646,10 @@ function RecentDebtTransactions({ debt, month }: { debt: Debt; month?: string })
                         aria-label="Delete transaction"
                         disabled={del.isPending}
                         onClick={() => {
-                          if (!confirm("Delete this ledger transaction? The debt row is left as-is.")) return;
+                          if (
+                            !confirm("Delete this ledger transaction? The debt row is left as-is.")
+                          )
+                            return;
                           del.mutate(t, {
                             onSuccess: () => toast.success("Transaction deleted"),
                             onError: (e: unknown) => toast.error((e as Error).message),
@@ -1792,7 +1731,6 @@ function LinkedAccountActivity({ accountId, month }: { accountId: string; month?
   );
 }
 
-
 /**
  * ADR-045: non-payment changes to what a debt owes (insurance coverage,
  * discounts, late/NSF fees). Adjustments only move remaining_balance — they
@@ -1817,7 +1755,8 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   );
   // ADR-111: per-advance episode history, replacing the flat list below.
   const episodes = useMemo(
-    () => computeAdvanceEpisodes(debt, allAdjustments, allTransactions, accounts, allAccountBalances),
+    () =>
+      computeAdvanceEpisodes(debt, allAdjustments, allTransactions, accounts, allAccountBalances),
     [debt, allAdjustments, allTransactions, accounts, allAccountBalances],
   );
   // Display-only reversal (most recent advance first) — computeAdvanceEpisodes
@@ -1839,9 +1778,7 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
   const mostRecentEntryDate = useMemo(() => {
     const dates = [
       ...allAdjustments.filter((a) => a.debt_id === debt.id).map((a) => a.adjustment_date),
-      ...allTransactions
-        .filter((t) => t.linked_debt_id === debt.id)
-        .map((t) => t.transaction_date),
+      ...allTransactions.filter((t) => t.linked_debt_id === debt.id).map((t) => t.transaction_date),
     ].filter((d): d is string => !!d);
     return dates.length ? dates.reduce((max, d) => (d > max ? d : max)) : null;
   }, [allAdjustments, allTransactions, debt.id]);
@@ -1993,8 +1930,8 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
         </div>
         {adjustmentsCollapsed ? null : debt.linked_account_id && debt.debt_type !== "advance" ? (
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Managed automatically from the linked account — log purchases and
-            payments there instead.
+            Managed automatically from the linked account — log purchases and payments there
+            instead.
           </p>
         ) : null}
         {adjustmentsCollapsed ? null : adjustments.length === 0 ? (
@@ -2009,9 +1946,9 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                   <p className="truncate">
                     {formatTypeLabel(a.adjustment_type ?? "other")}
                     {a.description ? ` · ${a.description}` : ""}
-                    {a.affects_balance === false
-                      ? <span className="ml-1 text-xs text-muted-foreground">(record only)</span>
-                      : null}
+                    {a.affects_balance === false ? (
+                      <span className="ml-1 text-xs text-muted-foreground">(record only)</span>
+                    ) : null}
                   </p>
                   <p className="text-xs text-muted-foreground">{a.adjustment_date}</p>
                 </div>
@@ -2089,7 +2026,12 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                   advances={advances}
                   accounts={accounts}
                   onDeleteAdvance={async (a) => {
-                    if (!confirm("Delete this advance? This will also reverse the deposit transaction.")) return;
+                    if (
+                      !confirm(
+                        "Delete this advance? This will also reverse the deposit transaction.",
+                      )
+                    )
+                      return;
                     try {
                       await deleteAdvance.mutateAsync({ adjustment: a, debt });
                       toast.success("Advance deleted");
@@ -2130,8 +2072,8 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                 className="h-11"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Negative reduces what's owed (insurance, discount); positive increases it
-                (late or NSF fee).
+                Negative reduces what's owed (insurance, discount); positive increases it (late or
+                NSF fee).
               </p>
             </div>
             <div>
@@ -2263,13 +2205,17 @@ function DebtAdjustments({ debt }: { debt: Debt }) {
                 className="h-11"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Pre-filled with a guess (your next paycheck after this draw) — edit it to match
-                what the lender actually says is due.
+                Pre-filled with a guess (your next paycheck after this draw) — edit it to match what
+                the lender actually says is due.
               </p>
             </div>
           </div>
           <DialogFooter>
-            <Button className="h-11 w-full" onClick={saveAdvance} disabled={createAdvance.isPending}>
+            <Button
+              className="h-11 w-full"
+              onClick={saveAdvance}
+              disabled={createAdvance.isPending}
+            >
               Record advance
             </Button>
           </DialogFooter>

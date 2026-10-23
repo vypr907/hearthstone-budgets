@@ -20,8 +20,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
-import { useAccounts, useTransactions } from "@/lib/data-hooks";
+import {
+  useAccounts,
+  useDebts,
+  useInstitutions,
+  useLogPaymentCoveredByOther,
+  useTransactions,
+} from "@/lib/data-hooks";
 import { ItemizeAmountFields } from "@/components/ItemizeAmountFields";
 import {
   billRemainingOwed,
@@ -53,7 +60,21 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
   const [open, setOpen] = useState(false);
   const { data: accounts = [] } = useAccounts();
   const { data: transactions = [] } = useTransactions();
+  const { data: institutions = [] } = useInstitutions();
+  const { data: debts = [] } = useDebts();
   const log = useLogBillPayment();
+  const logCoveredByOther = useLogPaymentCoveredByOther();
+
+  // ADR-113: debts owed to a person (not a business) — the only ones this
+  // "someone else paid this" picker offers, so the feature's meaning stays
+  // unambiguous.
+  const personDebts = useMemo(
+    () =>
+      debts.filter(
+        (d) => institutions.find((i) => i.id === d.institution_id)?.institution_type === "person",
+      ),
+    [debts, institutions],
+  );
 
   const lastAccountId = useMemo(
     () => transactions.find((t) => t.linked_bill_id === bill.id)?.account_id ?? "",
@@ -66,6 +87,10 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
   const [status, setStatus] = useState<"cleared" | "pending">("cleared");
   const [lines, setLines] = useState<Line[]>([]);
   const [itemItems, setItemItems] = useState<ItemizedAmountLine[]>([]);
+  // ADR-113: "someone else paid this" — a friend/family member fronted the
+  // money, which both pays this bill and grows what's owed to them.
+  const [coveredByOther, setCoveredByOther] = useState(false);
+  const [coveringDebtId, setCoveringDebtId] = useState("");
 
   const inCycle = isWithinCurrentBillCycle(bill, date);
   const linesTotal = lines.reduce((s, l) => s + (Math.abs(Number(l.amount)) || 0), 0);
@@ -88,6 +113,8 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
     setStatus("cleared");
     setLines([]);
     setItemItems([]);
+    setCoveredByOther(false);
+    setCoveringDebtId("");
   }
 
   async function save() {
@@ -98,6 +125,10 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
     }
     if (!accountId) {
       toast.error("Pick the account this was paid from");
+      return;
+    }
+    if (coveredByOther && !coveringDebtId) {
+      toast.error('Pick who paid this, or turn off "Someone else paid this"');
       return;
     }
     if (
@@ -127,6 +158,18 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
             ? composeItemizedDescription(`Bill payment · ${bill.name}`, itemItems)
             : undefined,
       });
+      if (coveredByOther) {
+        const coveringDebt = personDebts.find((d) => d.id === coveringDebtId);
+        if (coveringDebt) {
+          await logCoveredByOther.mutateAsync({
+            payable: toPayable("bill", bill),
+            coveringDebt,
+            accountId,
+            amount: amt,
+            date,
+          });
+        }
+      }
       toast.success(inCycle ? "Payment logged" : "Historical payment logged");
       setOpen(false);
     } catch (e) {
@@ -155,8 +198,8 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
             <DialogHeader>
               <DialogTitle>Log a payment · {bill.name}</DialogTitle>
               <DialogDescription>
-                Record a payment, including an older one from a past cycle, with any fees
-                charged alongside it.
+                Record a payment, including an older one from a past cycle, with any fees charged
+                alongside it.
               </DialogDescription>
             </DialogHeader>
 
@@ -293,7 +336,11 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
 
               <div>
                 <Label htmlFor="log-bill-status">Status</Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as "cleared" | "pending")}>
+                <Select
+                  value={status}
+                  onValueChange={(v) => setStatus(v as "cleared" | "pending")}
+                  disabled={coveredByOther}
+                >
                   <SelectTrigger id="log-bill-status" className="h-11">
                     <SelectValue />
                   </SelectTrigger>
@@ -303,6 +350,48 @@ export function LogBillPaymentDialog({ bill }: { bill: Bill }) {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+                <div>
+                  <Label htmlFor="log-bill-covered">Someone else paid this</Label>
+                  <p className="text-xs text-muted-foreground">
+                    A friend or family member paid {bill.name} directly — this clears the bill and
+                    adds what you owe them as a debt.
+                  </p>
+                </div>
+                <Switch
+                  id="log-bill-covered"
+                  checked={coveredByOther}
+                  onCheckedChange={(v) => {
+                    setCoveredByOther(v);
+                    if (v) setStatus("cleared");
+                  }}
+                />
+              </div>
+
+              {coveredByOther ? (
+                <div>
+                  <Label htmlFor="log-bill-covering-debt">Paid by</Label>
+                  <Select value={coveringDebtId} onValueChange={setCoveringDebtId}>
+                    <SelectTrigger id="log-bill-covering-debt" className="h-11">
+                      <SelectValue placeholder="Pick who covered this" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {personDebts.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {personDebts.length === 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      No person debts yet — add one on the Debts screen (Institution type "Person")
+                      first.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             <DialogFooter className="gap-2">

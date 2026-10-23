@@ -1,5 +1,5 @@
 import type { Account, AccountBalance, Debt, DebtAdjustment, Transaction } from "./supabase";
-import { isAdvanceDisbursement, isArrearsOnlyPayment, isFeeTransaction } from "./payments";
+import { isArrearsOnlyPayment, isDebtDisbursement, isFeeTransaction } from "./payments";
 import { balanceAsOf } from "./net-worth";
 import { creditOwed } from "./balances";
 import { todayISO } from "./snapshot";
@@ -264,7 +264,7 @@ export function computeAdvanceEpisodes(
         t.linked_debt_id === debt.id &&
         t.status === "cleared" &&
         t.account_id !== debt.linked_account_id &&
-        !isAdvanceDisbursement(t) &&
+        !isDebtDisbursement(t) &&
         !isArrearsOnlyPayment(t) &&
         !(t.transfer_group_id && accountTransferGroups.has(t.transfer_group_id)),
     );
@@ -392,8 +392,8 @@ export function computeAdvanceEpisodes(
   // Unlinked: linked_debt_id-tagged transactions + non-marker adjustments,
   // same sources debt-history.ts's debtBalanceAsOf already uses.
   const debtTx = transactions.filter((t) => t.linked_debt_id === debt.id && t.status === "cleared");
-  const disbursements = debtTx.filter((t) => isAdvanceDisbursement(t));
-  const content = debtTx.filter((t) => !isAdvanceDisbursement(t) && !isArrearsOnlyPayment(t));
+  const disbursements = debtTx.filter((t) => isDebtDisbursement(t));
+  const content = debtTx.filter((t) => !isDebtDisbursement(t) && !isArrearsOnlyPayment(t));
   const txKey = (t: Transaction) =>
     dateCreatedKey(t.cleared_date ?? t.transaction_date, t.created_at);
   const adjKey = (a: DebtAdjustment) => dateCreatedKey(a.adjustment_date, a.created_at);

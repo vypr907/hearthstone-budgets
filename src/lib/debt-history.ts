@@ -1,5 +1,5 @@
 import type { Account, AccountBalance, Debt, DebtAdjustment, Transaction } from "./supabase";
-import { isAdvanceDisbursement, isFeeTransaction } from "./payments";
+import { isDebtDisbursement, isFeeTransaction } from "./payments";
 import { balanceAsOf } from "./net-worth";
 import { creditOwed } from "./balances";
 
@@ -34,10 +34,11 @@ function iso(d: Date): string {
  *  - Cleared ledger transactions linked to the debt (`linked_debt_id`),
  *    dated on or before `date` (compared by `cleared_date ?? transaction_date`,
  *    ADR-100 — matches `balanceAsOf`'s own convention) — a payment's already-
- *    negative `amount` subtracts. An advance's *disbursement* leg
- *    (`isAdvanceDisbursement`) is excluded: `debt_adjustments` already
- *    counts that advance, so adding the linked deposit row too would double
- *    it. A "Fee: …" row (`isFeeTransaction`) is excluded for the same reason
+ *    negative `amount` subtracts. An advance's or a "paid by someone else"
+ *    covered-payment's *disbursement* leg (`isDebtDisbursement`) is
+ *    excluded: `debt_adjustments` already counts that disbursement, so
+ *    adding the linked deposit row too would double it. A "Fee: …" row
+ *    (`isFeeTransaction`) is excluded for the same reason
  *    `deriveCycleInfo` excludes it — normally written unlinked anyway, this
  *    guard only matters if one is ever linked by mistake.
  *
@@ -84,7 +85,7 @@ export function debtBalanceAsOf(
   for (const t of transactions) {
     if (t.linked_debt_id !== debt.id) continue;
     if (t.status !== "cleared") continue;
-    if (isAdvanceDisbursement(t)) continue;
+    if (isDebtDisbursement(t)) continue;
     if (isFeeTransaction(t)) continue;
     const d = (t.cleared_date ?? t.transaction_date).slice(0, 10);
     if (d > day) continue;
@@ -150,7 +151,14 @@ export function totalPaidDownInYear(
   const yearEnd = iso(yearEndDate);
   let paidDown = 0;
   for (const d of debts) {
-    const start = debtBalanceAsOf(d, adjustments, transactions, priorYearEnd, accounts, accountBalances);
+    const start = debtBalanceAsOf(
+      d,
+      adjustments,
+      transactions,
+      priorYearEnd,
+      accounts,
+      accountBalances,
+    );
     const end = debtBalanceAsOf(d, adjustments, transactions, yearEnd, accounts, accountBalances);
     paidDown += Math.max(0, start - end);
   }

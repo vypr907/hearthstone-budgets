@@ -20,8 +20,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
-import { useAccounts, useDebtAdjustments, useTransactions } from "@/lib/data-hooks";
+import {
+  useAccounts,
+  useDebtAdjustments,
+  useDebts,
+  useInstitutions,
+  useLogPaymentCoveredByOther,
+  useTransactions,
+} from "@/lib/data-hooks";
 import { ItemizeAmountFields } from "@/components/ItemizeAmountFields";
 import {
   composeItemizedDescription,
@@ -58,8 +66,23 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
   const { data: accounts = [] } = useAccounts();
   const { data: transactions = [] } = useTransactions();
   const { data: adjustments = [] } = useDebtAdjustments();
+  const { data: institutions = [] } = useInstitutions();
+  const { data: allDebts = [] } = useDebts();
   const log = useLogDebtPayment();
+  const logCoveredByOther = useLogPaymentCoveredByOther();
   const saveDefault = useSaveDefaultFeeLines();
+
+  // ADR-113: debts owed to a person (not a business), excluding this debt
+  // itself — the only ones this "someone else paid this" picker offers.
+  const personDebts = useMemo(
+    () =>
+      allDebts.filter(
+        (d) =>
+          d.id !== debt.id &&
+          institutions.find((i) => i.id === d.institution_id)?.institution_type === "person",
+      ),
+    [allDebts, institutions, debt.id],
+  );
 
   /** ADR-084 addendum: newest 'advance' adjustment for this debt, if any. */
   const newestAdvanceDate = useMemo(() => {
@@ -95,6 +118,10 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
   const [status, setStatus] = useState<"cleared" | "pending">("cleared");
   const [lines, setLines] = useState<Line[]>([]);
   const [itemItems, setItemItems] = useState<ItemizedAmountLine[]>([]);
+  // ADR-113: "someone else paid this" — a friend/family member fronted the
+  // money, which both pays this debt and grows what's owed to them.
+  const [coveredByOther, setCoveredByOther] = useState(false);
+  const [coveringDebtId, setCoveringDebtId] = useState("");
 
   const inCycle = isWithinCurrentCycle(debt, date);
   const ledgerOnly = isPreAdvanceHistoricalPayment(debt, date, newestAdvanceDate);
@@ -115,6 +142,8 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
     setStatus("cleared");
     setLines(draftsFromDefaultLines(debt.default_fee_lines));
     setItemItems([]);
+    setCoveredByOther(false);
+    setCoveringDebtId("");
   }
 
   const linesTotal = lines.reduce((s, l) => s + (Math.abs(Number(l.amount)) || 0), 0);
@@ -130,6 +159,10 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
     }
     if (!accountId) {
       toast.error("Pick the account this was paid from");
+      return;
+    }
+    if (coveredByOther && !coveringDebtId) {
+      toast.error('Pick who paid this, or turn off "Someone else paid this"');
       return;
     }
     if (
@@ -156,6 +189,18 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
         priorArrears: priorCyclesArrears(toPayable("debt", debt)),
         newestAdvanceDate,
       });
+      if (coveredByOther) {
+        const coveringDebt = personDebts.find((d) => d.id === coveringDebtId);
+        if (coveringDebt) {
+          await logCoveredByOther.mutateAsync({
+            payable: toPayable("debt", debt),
+            coveringDebt,
+            accountId,
+            amount: amt,
+            date,
+          });
+        }
+      }
       toast.success(
         ledgerOnly
           ? "Recorded — balance unchanged"
@@ -372,7 +417,11 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
 
               <div>
                 <Label htmlFor="log-status">Status</Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as "cleared" | "pending")}>
+                <Select
+                  value={status}
+                  onValueChange={(v) => setStatus(v as "cleared" | "pending")}
+                  disabled={coveredByOther}
+                >
                   <SelectTrigger id="log-status" className="h-11">
                     <SelectValue />
                   </SelectTrigger>
@@ -382,6 +431,48 @@ export function LogDebtPaymentDialog({ debt }: { debt: Debt }) {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+                <div>
+                  <Label htmlFor="log-debt-covered">Someone else paid this</Label>
+                  <p className="text-xs text-muted-foreground">
+                    A friend or family member paid {debt.name} directly — this applies the payment
+                    and adds what you owe them as a debt.
+                  </p>
+                </div>
+                <Switch
+                  id="log-debt-covered"
+                  checked={coveredByOther}
+                  onCheckedChange={(v) => {
+                    setCoveredByOther(v);
+                    if (v) setStatus("cleared");
+                  }}
+                />
+              </div>
+
+              {coveredByOther ? (
+                <div>
+                  <Label htmlFor="log-debt-covering-debt">Paid by</Label>
+                  <Select value={coveringDebtId} onValueChange={setCoveringDebtId}>
+                    <SelectTrigger id="log-debt-covering-debt" className="h-11">
+                      <SelectValue placeholder="Pick who covered this" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {personDebts.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {personDebts.length === 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      No person debts yet — add one on the Debts screen (Institution type "Person")
+                      first.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               <p className="text-sm">
                 Total charged to the account:{" "}

@@ -79,6 +79,9 @@ export const INSTITUTION_TYPES = [
   "personal_care",
   "employer",
   "delivery",
+  // ADR-113: a friend/family member who fronts money (covers a bill, loans
+  // cash) rather than a business.
+  "person",
   "other",
 ];
 
@@ -171,9 +174,7 @@ export function InstitutionDialog({
   const linkedAccounts = institution?.id
     ? accounts.filter((a) => a.institution_id === institution.id)
     : [];
-  const links = institution?.id
-    ? allLinks.filter((l) => l.institution_id === institution.id)
-    : [];
+  const links = institution?.id ? allLinks.filter((l) => l.institution_id === institution.id) : [];
   const memberAccounts = institution?.id
     ? allMemberAccounts.filter((m) => m.institution_id === institution.id)
     : [];
@@ -256,7 +257,11 @@ export function InstitutionDialog({
             {/* Dropdown multi-select — matches the category filter elsewhere. */}
             <Popover>
               <PopoverTrigger asChild>
-                <Button type="button" variant="outline" className="mt-1 h-11 w-full justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-1 h-11 w-full justify-between"
+                >
                   <span className="truncate">
                     {catIds.length === 0
                       ? "None selected"
@@ -338,8 +343,8 @@ export function InstitutionDialog({
               </SelectContent>
             </Select>
             <p className="mt-1 text-xs text-muted-foreground">
-              Optional — e.g. mark "Prime" as part of "Amazon" so its totals
-              roll up into Amazon's on the Institutions screen.
+              Optional — e.g. mark "Prime" as part of "Amazon" so its totals roll up into Amazon's
+              on the Institutions screen.
             </p>
           </div>
           <div>
@@ -378,7 +383,10 @@ export function InstitutionDialog({
                 {links.length > 0 ? (
                   <div className="mt-1 divide-y divide-border/50 rounded-md border">
                     {links.map((l) => (
-                      <div key={l.id} className="flex items-center justify-between gap-2 px-2 py-2 text-sm">
+                      <div
+                        key={l.id}
+                        className="flex items-center justify-between gap-2 px-2 py-2 text-sm"
+                      >
                         <span className="min-w-0 flex-1 truncate">
                           <span className="font-medium">
                             {l.kind === "bill_pay"
@@ -605,7 +613,10 @@ export function InstitutionDialog({
                         placeholder="Notes"
                         value={f.notes}
                         onChange={(e) =>
-                          setMemberFields((prev) => ({ ...prev, [m.id]: { ...f, notes: e.target.value } }))
+                          setMemberFields((prev) => ({
+                            ...prev,
+                            [m.id]: { ...f, notes: e.target.value },
+                          }))
                         }
                         className="h-9"
                       />

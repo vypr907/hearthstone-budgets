@@ -4,6 +4,8 @@ import {
   advanceReactivationPatch,
   billCycleWindowStart,
   isAdvanceDisbursement,
+  isCoveredPaymentDisbursement,
+  isDebtDisbursement,
   isFeeTransaction,
   isPreAdvanceHistoricalPayment,
   isWithinCurrentBillCycle,
@@ -78,6 +80,33 @@ describe("isAdvanceDisbursement (ADR-056 addendum)", () => {
     expect(isAdvanceDisbursement(repayment)).toBe(false);
     expect(isAdvanceDisbursement(unlinked)).toBe(false);
     expect(isAdvanceDisbursement(refund)).toBe(false);
+  });
+});
+
+describe("isCoveredPaymentDisbursement / isDebtDisbursement (ADR-113)", () => {
+  const tx = (over: Partial<Transaction>): Transaction => ({ ...over }) as Transaction;
+
+  it("is true for a linked positive 'Covered: …' row", () => {
+    const covered = tx({ linked_debt_id: "d1", amount: 187.42, description: "Covered: GVEA" });
+    expect(isCoveredPaymentDisbursement(covered)).toBe(true);
+    expect(isDebtDisbursement(covered)).toBe(true);
+  });
+
+  it("is false for a repayment, an unlinked leg, or a differently-described credit", () => {
+    const repayment = tx({ linked_debt_id: "d1", amount: -40, description: "Debt payment · Dave" });
+    const unlinked = tx({ linked_debt_id: null, amount: 40, description: "Covered: GVEA" });
+    const refund = tx({ linked_debt_id: "d1", amount: 40, description: "Refund" });
+    expect(isCoveredPaymentDisbursement(repayment)).toBe(false);
+    expect(isCoveredPaymentDisbursement(unlinked)).toBe(false);
+    expect(isCoveredPaymentDisbursement(refund)).toBe(false);
+    expect(isDebtDisbursement(repayment)).toBe(false);
+  });
+
+  it("isDebtDisbursement is true for either an advance draw or a covered payment", () => {
+    const advance = tx({ linked_debt_id: "d1", amount: 40, description: "Advance: Cleo" });
+    const covered = tx({ linked_debt_id: "d1", amount: 40, description: "Covered: GVEA" });
+    expect(isDebtDisbursement(advance)).toBe(true);
+    expect(isDebtDisbursement(covered)).toBe(true);
   });
 });
 
@@ -212,9 +241,7 @@ describe("rebuiltCycleAmountDue (ADR-058 addendum)", () => {
   });
 
   it("ignores adjustments for a different bill", () => {
-    expect(
-      rebuiltCycleAmountDue(bill(), [adj({ bill_id: "other" })], "2026-08-01"),
-    ).toBeNull();
+    expect(rebuiltCycleAmountDue(bill(), [adj({ bill_id: "other" })], "2026-08-01")).toBeNull();
   });
 
   it("ignores an adjustment dated in the previous cycle", () => {
@@ -231,7 +258,11 @@ describe("rebuiltCycleAmountDue (ADR-058 addendum)", () => {
 
   it("includes an adjustment dated after the due date but within this cycle", () => {
     expect(
-      rebuiltCycleAmountDue(bill(), [adj({ adjustment_date: "2026-08-28", amount: 30 })], "2026-08-01"),
+      rebuiltCycleAmountDue(
+        bill(),
+        [adj({ adjustment_date: "2026-08-28", amount: 30 })],
+        "2026-08-01",
+      ),
     ).toBe(130);
   });
 

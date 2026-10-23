@@ -5,7 +5,7 @@ import { shiftDateSafe } from "./format";
 import {
   billCycleDue,
   debtCycleDue,
-  isAdvanceDisbursement,
+  isDebtDisbursement,
   isFeeTransaction,
   type Payable,
 } from "./payments";
@@ -30,7 +30,6 @@ export type CycleInfo = {
   windowEnd: string | null;
 };
 
-
 function todayISO() {
   const n = new Date();
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(
@@ -52,30 +51,25 @@ const day = (d: string | null | undefined) => (d ? d.slice(0, 10) : "");
  * payments that resolved it now sit in the *previous* window — that window is
  * still the cycle covering today, hence the `resolved` lookback below.
  */
-export function deriveCycleInfo(
-  p: Payable,
-  transactions: Transaction[],
-  today: string,
-): CycleInfo {
+export function deriveCycleInfo(p: Payable, transactions: Transaction[], today: string): CycleInfo {
   const monthStart = `${today.slice(0, 7)}-01`;
   {
     {
       const linked = transactions.filter(
         (t) =>
           (p.kind === "bill" ? t.linked_bill_id === p.id : t.linked_debt_id === p.id) &&
-          // ADR-056 addendum: an advance's disbursement row is linked for
+          // ADR-056 addendum / ADR-113: an advance's or a "paid by someone
+          // else" covered-payment's disbursement row is linked for
           // visibility but is not a repayment. ADR-046: a "Fee:" row never
-          // credits the cycle even when linked. Keep both out of cycle math.
-          !isAdvanceDisbursement(t) &&
+          // credits the cycle even when linked. Keep all out of cycle math.
+          !isDebtDisbursement(t) &&
           !isFeeTransaction(t),
       );
 
       const due = p.kind === "bill" ? billCycleDue(p.bill!) : debtCycleDue(p.debt!);
       const cycleName =
         p.kind === "bill" ? p.bill?.billing_cycle : (p.debt?.billing_cycle ?? "monthly");
-      const dueDate = day(
-        p.kind === "bill" ? p.bill?.next_due_date : p.debt?.next_due_date,
-      );
+      const dueDate = day(p.kind === "bill" ? p.bill?.next_due_date : p.debt?.next_due_date);
       const cycleDays =
         p.kind === "bill" ? p.bill?.cycle_interval_days : p.debt?.cycle_interval_days;
       const openStart = dueDate ? shiftDateSafe(dueDate, cycleName, -1, cycleDays) : monthStart;
@@ -125,8 +119,7 @@ export function deriveCycleInfo(
       // by magnitude; every other row (including a `Reversed: …` correction)
       // keeps the signed behaviour so reversals still cancel payments.
       const fundingDeductionId =
-        (p.kind === "bill" ? p.bill?.funding_deduction_id : p.debt?.funding_deduction_id) ??
-        null;
+        (p.kind === "bill" ? p.bill?.funding_deduction_id : p.debt?.funding_deduction_id) ?? null;
       const isDeductionDeposit = (t: Transaction) =>
         !!fundingDeductionId &&
         Number(t.amount ?? 0) > 0 &&
@@ -134,7 +127,6 @@ export function deriveCycleInfo(
       /** Signed contribution of a transaction toward the amount paid this cycle. */
       const paidBy = (t: Transaction) =>
         isDeductionDeposit(t) ? Math.abs(Number(t.amount ?? 0)) : -Number(t.amount ?? 0);
-
 
       // ADR-048: a one-time charge (invoice) has no rolling window — every
       // linked payment belongs to its single, open cycle. Windowing it by
@@ -178,9 +170,6 @@ export function deriveCycleInfo(
             ? today
             : dueDate || today;
 
-
-
-
       if (!monthly && cycleTx.length === 0 && dueDate && today <= openStart) {
         // The cycle covering today may already have been resolved and rolled forward.
         const prevStart = shiftDateSafe(openStart, cycleName, -1, cycleDays);
@@ -190,9 +179,7 @@ export function deriveCycleInfo(
         // instead of double-counting alongside it.
         const clearedPrev = Math.max(
           0,
-          prev
-            .filter((t) => t.status === "cleared")
-            .reduce((s, t) => s + paidBy(t), 0),
+          prev.filter((t) => t.status === "cleared").reduce((s, t) => s + paidBy(t), 0),
         );
         if (prev.length > 0 && due > 0 && clearedPrev + 0.005 >= due) {
           cycleTx = prev;
@@ -202,19 +189,17 @@ export function deriveCycleInfo(
         }
       }
 
-
       const pending =
-        cycleTx.filter((t) => t.status === "pending").sort((a, b) =>
-          day(b.transaction_date).localeCompare(day(a.transaction_date)),
-        )[0] ?? null;
+        cycleTx
+          .filter((t) => t.status === "pending")
+          .sort((a, b) => day(b.transaction_date).localeCompare(day(a.transaction_date)))[0] ??
+        null;
       // ADR-008: net signed amounts rather than summing absolute values, so a
       // correcting/reversal transaction offsets the payment it reverses
       // instead of double-counting alongside it.
       const clearedSum = Math.max(
         0,
-        cycleTx
-          .filter((t) => t.status === "cleared")
-          .reduce((s, t) => s + paidBy(t), 0),
+        cycleTx.filter((t) => t.status === "cleared").reduce((s, t) => s + paidBy(t), 0),
       );
 
       let state: LedgerState = "unpaid";
@@ -239,7 +224,6 @@ export function deriveCycleInfo(
         resolved = true;
       }
 
-
       return {
         state,
         due,
@@ -251,7 +235,6 @@ export function deriveCycleInfo(
         windowStart,
         windowEnd,
       };
-
     }
   }
 }

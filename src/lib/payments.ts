@@ -137,6 +137,36 @@ export function isAdvanceDisbursement(
 }
 
 /**
+ * ADR-113: the money-in row `useLogPaymentCoveredByOther` writes onto a
+ * person-debt when a bill/debt payment was actually funded by someone else
+ * paying it directly. Same shape and same reason as `isAdvanceDisbursement`
+ * above — a DISBURSEMENT onto the covering debt, never a repayment of it.
+ * Identified by the positive amount + the "Covered: <name>" description
+ * convention the hook writes.
+ */
+export function isCoveredPaymentDisbursement(
+  t: Pick<Transaction, "amount" | "description" | "linked_debt_id">,
+): boolean {
+  return (
+    !!t.linked_debt_id &&
+    Number(t.amount ?? 0) > 0 &&
+    (t.description ?? "").trim().toLowerCase().startsWith("covered:")
+  );
+}
+
+/**
+ * ADR-113: any linked-debt disbursement that isn't a repayment — combines
+ * `isAdvanceDisbursement` and `isCoveredPaymentDisbursement` so cycle/history
+ * math only needs one exclusion check regardless of which kind of
+ * disbursement produced the row.
+ */
+export function isDebtDisbursement(
+  t: Pick<Transaction, "amount" | "description" | "linked_debt_id">,
+): boolean {
+  return isAdvanceDisbursement(t) || isCoveredPaymentDisbursement(t);
+}
+
+/**
  * ADR-046: a "Fee: …" row is a payment fee / advance fee — it rides alongside a
  * payment but never credits the cycle. They're normally written unlinked; a
  * linked one (e.g. an advance's express fee, ADR-056 addendum) must still be
@@ -199,10 +229,7 @@ export function rebuiltCycleAmountDue(
     Bill,
     "id" | "amount" | "billing_cycle" | "cycle_interval_days" | "is_variable_amount"
   >,
-  adjustments: Pick<
-    BillAdjustment,
-    "bill_id" | "amount" | "affects_balance" | "adjustment_date"
-  >[],
+  adjustments: Pick<BillAdjustment, "bill_id" | "amount" | "affects_balance" | "adjustment_date">[],
   dueDate: string | null | undefined,
 ): number | null {
   const due = dueDate?.slice(0, 10);
@@ -211,13 +238,7 @@ export function rebuiltCycleAmountDue(
   const end = shiftDateSafe(due, bill.billing_cycle, 1, bill.cycle_interval_days);
   const active = adjustments.filter((a) => {
     const d = a.adjustment_date?.slice(0, 10);
-    return (
-      a.bill_id === bill.id &&
-      a.affects_balance !== false &&
-      !!d &&
-      d > start &&
-      d <= end
-    );
+    return a.bill_id === bill.id && a.affects_balance !== false && !!d && d > start && d <= end;
   });
   if (active.length === 0) return null;
   const delta = active.reduce((s, a) => s + Number(a.amount ?? 0), 0);
@@ -446,12 +467,14 @@ export function hasFee(fee: number | undefined): boolean {
  * doesn't exist so fee rows are always categorised.
  */
 export async function feeCategoryId(householdId: string | null | undefined) {
-  let feeCatId = (await supabase
-    .from("categories")
-    .select("id")
-    .eq("household_id", householdId!)
-    .ilike("name", "fees")
-    .limit(1)).data?.[0]?.id;
+  let feeCatId = (
+    await supabase
+      .from("categories")
+      .select("id")
+      .eq("household_id", householdId!)
+      .ilike("name", "fees")
+      .limit(1)
+  ).data?.[0]?.id;
   if (!feeCatId && householdId) {
     const { data: created, error: catErr } = await supabase
       .from("categories")
@@ -466,7 +489,6 @@ export async function feeCategoryId(householdId: string | null | undefined) {
   }
   return feeCatId ?? null;
 }
-
 
 /**
  * ADR-046: fees ride alongside a payment as their own ledger row so they hit the
@@ -506,7 +528,7 @@ export async function insertFeeTransaction(
     status,
     description: `Fee: ${label}`,
     transaction_date: date || todayISO(),
-    cleared_date: status === "cleared" ? (clearedDate || date || todayISO()) : null,
+    cleared_date: status === "cleared" ? clearedDate || date || todayISO() : null,
     // Paired to the payment/transfer, NOT linked to the payable — see ADR-046 note above.
     split_group_id: splitGroupId ?? null,
     // ADR-065: inherit the paired row's own institution.
@@ -546,7 +568,7 @@ export async function insertFeeLines(
     status,
     description: composeFeeDescription(label, l.type, l.note),
     transaction_date: date || todayISO(),
-    cleared_date: status === "cleared" ? (clearedDate || date || todayISO()) : null,
+    cleared_date: status === "cleared" ? clearedDate || date || todayISO() : null,
     split_group_id: splitGroupId ?? null,
     institution_id: institutionId,
   }));
@@ -642,7 +664,7 @@ async function groupIdsFor(transactionIds: string[]): Promise<string[]> {
     .select("split_group_id")
     .in("id", transactionIds);
   if (error) throw error;
-  return (data as { split_group_id: string | null }[] | null ?? [])
+  return ((data as { split_group_id: string | null }[] | null) ?? [])
     .map((r) => r.split_group_id)
     .filter((g): g is string => !!g);
 }
@@ -669,10 +691,7 @@ async function transferGroupIdsFor(transactionIds: string[]): Promise<string[]> 
  * payment — every row sharing its transfer_group_id except itself. A no-op
  * when the payment carries no transfer_group_id (never linked, or a bill).
  */
-async function deleteMirrorTransaction(
-  transferGroupId: string | null | undefined,
-  ownId: string,
-) {
+async function deleteMirrorTransaction(transferGroupId: string | null | undefined, ownId: string) {
   if (!transferGroupId) return;
   const { error } = await supabase
     .from("transactions")
@@ -683,10 +702,7 @@ async function deleteMirrorTransaction(
 }
 
 /** ADR-102 addendum: the account mirror paired with a linked-debt payment, if any. */
-async function findMirrorTransaction(
-  transferGroupId: string | null | undefined,
-  ownId: string,
-) {
+async function findMirrorTransaction(transferGroupId: string | null | undefined, ownId: string) {
   if (!transferGroupId) return null;
   const { data, error } = await supabase
     .from("transactions")
@@ -874,7 +890,12 @@ export function useMarkCleared() {
 
       // Update the bill/debt FIRST: if that fails we bail out before touching the
       // ledger, instead of stranding a cleared transaction with no effect.
-      const result = await applyClearedPayment(p, clearedAmount, priorArrears ?? 0, effectiveClearedDate);
+      const result = await applyClearedPayment(
+        p,
+        clearedAmount,
+        priorArrears ?? 0,
+        effectiveClearedDate,
+      );
 
       // ADR-075: this write happens after applyClearedPayment already ran, so
       // it's not caught by that function's own bulk tag — tag it here if this
@@ -885,7 +906,9 @@ export function useMarkCleared() {
           .update({
             status: "cleared",
             cleared_date: effectiveClearedDate,
-            ...(result.resolved_due_date ? { resolved_cycle_due_date: result.resolved_due_date } : {}),
+            ...(result.resolved_due_date
+              ? { resolved_cycle_due_date: result.resolved_due_date }
+              : {}),
           })
           .eq("id", existing.id);
         if (error) throw error;
@@ -1396,7 +1419,6 @@ export function useEditLinkedTransaction() {
       if (input.categoryId !== undefined) patch.category_id = input.categoryId;
       if (input.institutionId !== undefined) patch.institution_id = input.institutionId;
 
-
       const { error } = await supabase.from("transactions").update(patch).eq("id", transaction.id);
       if (error) throw error;
 
@@ -1512,9 +1534,7 @@ export function composeItemizedDescription(
   base: string,
   items: ItemizedAmountLine[],
 ): string | undefined {
-  const charged = items.filter(
-    (i) => i.label.trim() && Math.abs(Number(i.amount) || 0) >= 0.005,
-  );
+  const charged = items.filter((i) => i.label.trim() && Math.abs(Number(i.amount) || 0) >= 0.005);
   if (charged.length === 0) return undefined;
   return `${base} (${charged
     .map((i) => `${i.label.trim()} ${formatMoney(Math.abs(Number(i.amount)) || 0)}`)
