@@ -7,12 +7,15 @@ import { todayISO } from "./snapshot";
 export type AdvanceEpisodeStatus = "open" | "repaid" | "carried_forward";
 
 /**
- * ADR-111: one advance "episode" — a single draw, from disbursement through
- * any fees to repayment — for a `debt_type='advance'` debt. Advances on a
- * debt are always sequential, never overlapping (confirmed with the user
- * after the 2026-08-24 OnePay Advance incident, ADR-084 addendum): a debt
- * can only have one open advance at a time. This is a read-only history view
- * over those sequential draws, not a change to that model.
+ * ADR-111 / ADR-111 addendum (2026-11-03, Issue #82): one advance "episode" —
+ * a single draw, from disbursement through any fees to repayment — for a
+ * `debt_type='advance'` debt. ADR-111 originally assumed advances on a debt
+ * are always sequential (one open draw at a time) — confirmed WRONG live on
+ * Cleo, which allows several concurrent open draws up to a credit limit.
+ * Episodes are now computed by a FIFO allocation walk (`runFifoAllocation`,
+ * below) instead of fixed date windows between markers — see that function's
+ * doc comment for the model. This remains a read-only history view; nothing
+ * about how advances/fees/repayments are logged changes.
  */
 export type AdvanceEpisode = {
   /** The debt_adjustments row (adjustment_type='advance') that opened this
@@ -20,25 +23,34 @@ export type AdvanceEpisode = {
    * earliest advance marker — a real gap found on OnePay Advance). */
   markerId: string | null;
   startDate: string;
-  /** Exclusive; null when this is the still-open, most recent episode. */
+  /** The date THIS draw's own remaining balance resolved to zero; null while
+   * still open. (Before the 2026-11-03 addendum this meant "the date the
+   * NEXT marker opened" — a date-window boundary, not a resolution fact;
+   * that meaning no longer applies now that each draw tracks its own
+   * balance independently.) */
   endDate: string | null;
-  /** This window's own draw amount (0 for the pre-tracking bucket, unless an
-   * orphaned disbursement predates the first marker — the real OnePay case). */
+  /** This draw's own advance amount (0 for the pre-tracking bucket, unless
+   * an orphaned disbursement predates the first marker — the real OnePay
+   * case). */
   advanceAmount: number;
-  /** Fees incurred within this window only. */
+  /** Fees attributed to this draw specifically (see `resolveFeeMarkerHint`
+   * for how attribution works) — excludes ledger-only `"Fee: "` transactions
+   * (ADR-084), which still appear in `transactions` for display but never
+   * affect this total or `net`, same exclusion as before the addendum. */
   feesTotal: number;
-  /** Repaid within this window only. */
+  /** Repaid against this draw specifically. */
   repaidTotal: number;
-  /** Running balance at the end of this episode: the unpaid remainder from
-   * every prior episode plus this one's own advanceAmount + feesTotal, minus
-   * repaidTotal, floored at 0 — a debt carries one continuous balance
-   * (confirmed single-open-advance model), so an underpaid draw's shortfall
-   * rolls into the next one instead of resetting. */
+  /** This draw's OWN remaining balance (floored at 0) — before the 2026-11-03
+   * addendum this was the cumulative running balance of the WHOLE debt as of
+   * this point in a single shared chain; now each episode's `net` is
+   * independent of every other episode's. */
   net: number;
   status: AdvanceEpisodeStatus;
-  /** In-window transactions, for an expandable detail view. */
+  /** Transactions attributed to this draw, for an expandable detail view. A
+   * repayment that FIFO-cascades across multiple draws appears in every
+   * draw's list it actually paid down (see `runFifoAllocation`). */
   transactions: Transaction[];
-  /** In-window non-advance adjustments (fees/corrections), for display. */
+  /** Non-advance adjustments (fees/corrections) attributed to this draw. */
   adjustments: DebtAdjustment[];
 };
 
@@ -47,134 +59,282 @@ export type AdvanceEpisode = {
  * any row id — when two events genuinely tie on both (the real case: two
  * Dave ExtraCash $50 draws both dated 2026-09-04 with no `created_at`),
  * there is no meaningful causal signal left to break the tie with, so a
- * content item tying with a window's END boundary consistently falls into
- * the NEXT episode rather than depending on arbitrary id-string ordering. */
+ * content item tying with a marker's own open-key consistently falls into
+ * that marker (opens are processed before same-key content, see
+ * `buildTimeline`) rather than depending on arbitrary id-string ordering. */
 function dateCreatedKey(date: string, created: string | null | undefined): string {
   return `${date.slice(0, 10)}T${created ?? ""}`;
-}
-
-/** True when `key` falls within `[lower, upper)` — `upper === null` means open-ended. */
-function inWindow(key: string, lower: string, upper: string | null): boolean {
-  if (key < lower) return false;
-  if (upper !== null && key >= upper) return false;
-  return true;
 }
 
 type Marker = { adjustment: DebtAdjustment; key: string };
 
 /**
- * Splits a window's non-disbursement content into { feesTotal, repaidTotal }
- * for the unlinked branch, matching `debtBalanceAsOf`'s `balance += amount`
- * sign convention (negative reduces what's owed, positive increases it):
- * - A `"Fee: "`-prefixed transaction is excluded entirely — same as
- *   `debtBalanceAsOf` (`isFeeTransaction` -> skip). ADR-084: a fee/interest
- *   line attached to a logged payment is ledger-only, never touching
- *   `remaining_balance`. An earlier version of this function counted these
- *   toward `feesTotal` anyway ("surfaced here on purpose") — found live,
- *   against two real debts (Cleo, Instacash), that this inflated the
- *   reconstructed net above the real, confirmed-correct balance by exactly
- *   each debt's own "Fee: " transaction total; excluding them (matching
- *   `debtBalanceAsOf`) reconciled both exactly.
- * - Any other content: negative amount -> repaidTotal; positive amount ->
- *   feesTotal. A positive non-fee amount is rare but real — e.g. a reversed
- *   repayment (ADR-008) restoring what was paid, or a genuine
- *   `debt_adjustments`-sourced fee (which DOES touch `remaining_balance` via
- *   `apply_debt_adjustment`, unlike a ledger-only "Fee: " transaction) — and
- *   must increase net, not be silently dropped.
- * - A non-marker `debt_adjustments` row contributes by its own sign the same
- *   way (positive = owed increase, e.g. `late_fee`; negative = owed decrease,
- *   e.g. `insurance_covered`).
+ * One draw, generalized so the FIFO engine doesn't need to know whether it's
+ * a real `debt_adjustments` marker or the synthetic "before tracking" bucket
+ * (`id: null`) that holds whatever predates the earliest real marker.
  */
-function splitFeesAndRepaid(
-  content: Transaction[],
-  nonMarkerAdjustments: DebtAdjustment[],
-): { feesTotal: number; repaidTotal: number } {
-  let feesTotal = 0;
-  let repaidTotal = 0;
-  for (const t of content) {
-    if (isFeeTransaction(t)) continue;
-    const amt = Number(t.amount);
-    if (amt > 0) feesTotal += amt;
-    else if (amt < 0) repaidTotal += Math.abs(amt);
-  }
-  for (const a of nonMarkerAdjustments) {
-    const amt = Number(a.amount);
-    if (amt > 0) feesTotal += amt;
-    else if (amt < 0) repaidTotal += Math.abs(amt);
-  }
-  return { feesTotal, repaidTotal };
+type MarkerRef = {
+  id: string | null;
+  key: string;
+  advanceAmount: number;
+  /** Fixed display start date. For the pre-tracking bucket this is forced to
+   * the first real marker's date (matches the pre-addendum display, which
+   * always showed the bucket as `startDate === endDate === firstMarkerDate`
+   * regardless of its own content's actual dates — preserved as-is here,
+   * it's cosmetic and wasn't part of what Issue #82 asked to fix). */
+  startDate: string;
+};
+
+/**
+ * One signed event in the FIFO allocation walk — already reduced to a single
+ * delta on whichever marker's remaining balance it ends up attributed to,
+ * using the EXACT same sign conventions `splitFeesAndRepaid`/
+ * `accountCentricSplit`/`payingAccountSplit` used before the addendum
+ * (negative delta = reduces what's owed/repayment-like; positive = increases
+ * it/fee-like). `affectsBalance: false` is the ADR-084 ledger-only-fee case:
+ * still attributed to a specific draw for display, but never changes that
+ * draw's `remaining`/`feesTotal`/`repaidTotal`.
+ */
+type AllocEvent = {
+  key: string;
+  id: string;
+  delta: number;
+  affectsBalance: boolean;
+  /** Parsed "(M/D advance)" hint from a fee's own description/note, if any
+   * — see `resolveFeeMarkerHint`. Only ever set for delta >= 0 (fee-like)
+   * events; a repayment never carries one (confirmed: nothing in the data
+   * model links a repayment to a specific draw). */
+  hintDate: string | null;
+  transaction?: Transaction;
+  adjustment?: DebtAdjustment;
+};
+
+/**
+ * Best-effort attribution for a fee event with no structural link to a
+ * specific draw (none exists anywhere in the schema — confirmed for both
+ * `transactions` and `debt_adjustments` while designing the 2026-11-03
+ * addendum). Parses the "(M/D advance)" convention already present in this
+ * household's own fee descriptions (e.g. "Fee: Cleo · advance fee — Express
+ * fee (10/15 advance)", `src/lib/payments.ts`'s `composeFeeDescription`
+ * free-text `note` portion) and matches it against this debt's own markers
+ * by month/day. Same family of trick as `isAdvanceDisbursement`/
+ * `isFeeTransaction`/`isArrearsOnlyPayment` (description-prefix-as-type-
+ * system) — fragile by nature: a future fee logged without this exact
+ * phrasing, or an ambiguous month/day shared by two markers, silently falls
+ * back to FIFO-oldest-open in the caller. Not a durable guarantee; a real
+ * structural link (a new nullable FK column) was considered and deliberately
+ * deferred — see the ADR-111 addendum.
+ */
+function resolveFeeMarkerHint(
+  description: string | null | undefined,
+  markers: readonly Marker[],
+): string | null {
+  const m = /\((\d{1,2})\/(\d{1,2})\s+advance\)/i.exec(description ?? "");
+  if (!m) return null;
+  const [, monStr, dayStr] = m;
+  const matches = markers.filter((mk) => {
+    const d = mk.adjustment.adjustment_date.slice(0, 10);
+    const [, mon, day] = /^\d{4}-(\d{2})-(\d{2})$/.exec(d) ?? [];
+    return mon != null && Number(mon) === Number(monStr) && Number(day) === Number(dayStr);
+  });
+  // Ambiguous (two markers share the same month/day, e.g. across different
+  // years) — don't guess, let the caller's FIFO fallback handle it.
+  return matches.length === 1 ? matches[0].adjustment.id : null;
 }
 
-/** A window's raw, independent contribution — before the running-balance
- * carry-forward pass that turns these into final `AdvanceEpisode`s. */
-type RawWindow = {
-  markerId: string | null;
-  startDate: string;
-  endDate: string | null;
-  advanceAmount: number;
+type MarkerState = {
+  ref: MarkerRef;
+  remaining: number;
   feesTotal: number;
   repaidTotal: number;
   transactions: Transaction[];
   adjustments: DebtAdjustment[];
+  resolvedDate: string | null;
 };
 
+type TimelineItem =
+  | { kind: "open"; key: string; index: number }
+  | { kind: "event"; key: string; event: AllocEvent };
+
+/** Opens sort before same-key content (a same-day fee/repayment belongs to
+ * the draw that just opened, not whatever was open before it) — the direct
+ * generalization of `dateCreatedKey`'s existing "ties fall into the next
+ * thing" convention. Same-key opens (a same-day double-advance) tie-break by
+ * marker id ascending; same-key events tie-break by their own row id
+ * ascending — both explicit and deterministic, where the pre-addendum code
+ * relied on incidental array-concat order. */
+function buildTimeline(markerRefs: readonly MarkerRef[], events: readonly AllocEvent[]): TimelineItem[] {
+  const items: TimelineItem[] = [
+    ...markerRefs.map((m, index): TimelineItem => ({ kind: "open", key: m.key, index })),
+    ...events.map((event): TimelineItem => ({ kind: "event", key: event.key, event })),
+  ];
+  items.sort((a, b) => {
+    if (a.key !== b.key) return a.key < b.key ? -1 : 1;
+    const rank = (x: TimelineItem) => (x.kind === "open" ? 0 : 1);
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    if (a.kind === "open" && b.kind === "open") {
+      const aid = markerRefs[a.index].id ?? "";
+      const bid = markerRefs[b.index].id ?? "";
+      return aid < bid ? -1 : aid > bid ? 1 : 0;
+    }
+    if (a.kind === "event" && b.kind === "event") {
+      return a.event.id < b.event.id ? -1 : a.event.id > b.event.id ? 1 : 0;
+    }
+    return 0;
+  });
+  return items;
+}
+
 /**
- * Threads a running balance through chronologically-ordered windows so an
- * underpaid draw's shortfall carries into the next one(s), matching the
- * real single-running-balance model instead of resetting every window to 0.
+ * Replaces the pre-addendum `applyCarryForward`: instead of threading one
+ * cumulative balance through fixed date windows, each draw gets its OWN
+ * independent `remaining`, and every fee/repayment is allocated to a
+ * specific draw as the walk processes it in true chronological order —
+ * nothing is retroactively reinterpreted afterward.
  *
- * `carry` is deliberately NOT floored at 0 between windows — only the
- * DISPLAYED `net` is (`Math.max(0, carry)`, never show a negative "owed"
- * figure). This matches `debtBalanceAsOf`'s own model exactly: one
- * continuous running sum, floored once at the very end of the walk, not
- * after every individual event. Flooring `carry` itself at each window
- * boundary silently discards a real, transient overpayment credit instead
- * of letting it offset the next draw — found live on OnePay Advance: an
- * early cycle was overpaid by $6.75 (fee paid out of pocket but never added
- * to what the debt itself owed), and per-window flooring lost that credit
- * instead of carrying it forward, inflating the final reconstructed
- * balance by exactly $6.75 relative to `debtBalanceAsOf`'s own math on the
- * same data.
+ * Allocation rules:
+ * - A repayment (negative delta) is NEVER hinted (nothing links a repayment
+ *   to a specific draw) — always FIFO: drains the oldest still-open draw
+ *   first, cascading into the next-oldest open draw once the first is fully
+ *   zeroed. This makes "the oldest open draw resolves first" a true,
+ *   provable property of the algorithm — but it's an allocation CONVENTION,
+ *   not a recovered fact; the household's own repayment transactions carry
+ *   no signal for which draw they actually closed.
+ * - A fee/charge (positive delta) with a resolved `hintDate` match applies
+ *   directly to that draw — even one already resolved, which REOPENS it (a
+ *   late-assessed fee can genuinely re-inflate a "done" draw; the old model
+ *   had no way to represent this at all).
+ * - A fee/charge with no hint falls back to the same FIFO-oldest-open rule.
+ * - A ledger-only event (`affectsBalance: false`, a "Fee: " transaction,
+ *   ADR-084) is attributed the same way (hint, else FIFO-oldest-open) for
+ *   DISPLAY only — it never changes `remaining`/`feesTotal`/`repaidTotal`.
  *
- * Status is resolved RETROACTIVELY: a window only ever knows "did the carry
- * return to zero by my own end boundary" in isolation, but a real shortfall
- * can legitimately get absorbed one or more windows later (e.g. a payment
- * landing inside the *next* window rather than exactly at this one's own
- * boundary — confirmed on Dave ExtraCash's real history, where the $40
- * 7/17 draw's shortfall is cleared by a payment dated 7/31, inside the
- * following window). Whenever carry returns to zero (or below) at window
- * i, every window back to the last resolution point gets marked "repaid"
- * too, not just window i itself — "carried_forward" only survives for a
- * window whose shortfall is still outstanding by the very end of the
- * chain (i.e. it never got resolved before the final, still-open window).
+ * An overpayment beyond every currently-open draw parks as a pending credit
+ * that offsets the very next draw to open (generalizes the pre-addendum
+ * un-floored `carry`, now scoped as a scalar between the open-set going
+ * empty and the next marker-open event, instead of threaded through every
+ * window regardless of whether anything was open).
  */
-function applyCarryForward(windows: RawWindow[]): AdvanceEpisode[] {
-  const results: AdvanceEpisode[] = windows.map((w) => ({
-    ...w,
-    net: 0,
-    status: "carried_forward" as AdvanceEpisodeStatus,
+function runFifoAllocation(markerRefs: readonly MarkerRef[], events: readonly AllocEvent[]): AdvanceEpisode[] {
+  const states: MarkerState[] = markerRefs.map((ref) => ({
+    ref,
+    remaining: 0,
+    feesTotal: 0,
+    repaidTotal: 0,
+    transactions: [],
+    adjustments: [],
+    resolvedDate: null,
   }));
-  let carry = 0;
-  let pendingSince = 0;
-  for (let i = 0; i < windows.length; i++) {
-    const w = windows[i];
-    carry = carry + w.advanceAmount + w.feesTotal - w.repaidTotal;
-    const net = Math.max(0, carry);
-    results[i].net = net;
-    const isLast = i === windows.length - 1;
-    if (net <= 0.005) {
-      // Resolved here — retroactively repay every pending window back to
-      // the last resolution point, EVEN when this is the last window: a
-      // debt that's fully paid off by its own final episode must not leave
-      // earlier, still-"pending" episodes stuck showing carried_forward
-      // just because the resolution happened to land on the last window.
-      for (let j = pendingSince; j <= i; j++) results[j].status = "repaid";
-      pendingSince = i + 1;
-    } else if (isLast) {
-      results[i].status = "open";
+  const idIndex = new Map<string, number>();
+  markerRefs.forEach((m, i) => {
+    if (m.id) idIndex.set(m.id, i);
+  });
+
+  const openSet: number[] = []; // front = oldest still-open draw
+  const inOpenSet = new Set<number>();
+  let lastOpenedIndex = -1;
+  let unspentCredit = 0; // >0 = shortfall waiting for the next draw to open; <0 = credit that will offset it
+
+  function openFront(i: number) {
+    if (!inOpenSet.has(i)) {
+      openSet.unshift(i);
+      inOpenSet.add(i);
     }
   }
-  return results;
+  function openBack(i: number) {
+    if (!inOpenSet.has(i)) {
+      openSet.push(i);
+      inOpenSet.add(i);
+    }
+  }
+  function closeMarker(i: number, dateKey: string) {
+    const idx = openSet.indexOf(i);
+    if (idx !== -1) openSet.splice(idx, 1);
+    inOpenSet.delete(i);
+    states[i].resolvedDate = dateKey.slice(0, 10);
+  }
+
+  function attachDisplay(i: number, event: AllocEvent) {
+    if (event.transaction) states[i].transactions.push(event.transaction);
+    if (event.adjustment) states[i].adjustments.push(event.adjustment);
+  }
+
+  /** Where an event with no FIFO-affecting target yet (a hint, or the
+   * "attribute to whoever's oldest-open" default) should land. */
+  function resolveTarget(event: AllocEvent): number {
+    if (event.hintDate) {
+      const hinted = idIndex.get(event.hintDate);
+      if (hinted != null) return hinted;
+    }
+    if (openSet.length > 0) return openSet[0];
+    return lastOpenedIndex >= 0 ? lastOpenedIndex : states.length - 1;
+  }
+
+  for (const item of buildTimeline(markerRefs, events)) {
+    if (item.kind === "open") {
+      const i = item.index;
+      const s = states[i];
+      s.remaining = s.ref.advanceAmount;
+      if (unspentCredit !== 0) {
+        s.remaining += unspentCredit;
+        unspentCredit = 0;
+      }
+      lastOpenedIndex = i;
+      if (s.remaining > 0.005) openBack(i);
+      else s.resolvedDate = s.ref.key.slice(0, 10);
+      continue;
+    }
+
+    const { event } = item;
+    if (!event.affectsBalance) {
+      attachDisplay(resolveTarget(event), event);
+      continue;
+    }
+
+    if (event.delta < 0) {
+      let left = -event.delta;
+      const touched: number[] = [];
+      while (left > 0.005 && openSet.length > 0) {
+        const i = openSet[0];
+        const s = states[i];
+        const applied = Math.min(left, s.remaining);
+        s.remaining -= applied;
+        s.repaidTotal += applied;
+        left -= applied;
+        touched.push(i);
+        if (s.remaining <= 0.005) closeMarker(i, event.key);
+      }
+      if (left > 0.005) unspentCredit -= left;
+      if (touched.length === 0) touched.push(resolveTarget(event));
+      for (const i of touched) attachDisplay(i, event);
+      continue;
+    }
+
+    // delta > 0: fee/charge-like — hinted draw, else FIFO-oldest-open.
+    const i = resolveTarget(event);
+    const s = states[i];
+    const wasOpen = inOpenSet.has(i);
+    s.remaining += event.delta;
+    s.feesTotal += event.delta;
+    attachDisplay(i, event);
+    if (s.remaining > 0.005 && !wasOpen) {
+      s.resolvedDate = null;
+      openFront(i); // reopened — it's the oldest thing outstanding again
+    }
+  }
+
+  return states.map((s) => ({
+    markerId: s.ref.id,
+    startDate: s.ref.startDate,
+    endDate: s.resolvedDate,
+    advanceAmount: s.ref.advanceAmount,
+    feesTotal: s.feesTotal,
+    repaidTotal: s.repaidTotal,
+    net: Math.max(0, s.remaining),
+    status: s.remaining <= 0.005 ? "repaid" : "open",
+    transactions: s.transactions,
+    adjustments: s.adjustments,
+  }));
 }
 
 /**
@@ -186,41 +346,50 @@ function applyCarryForward(windows: RawWindow[]): AdvanceEpisode[] {
  * yet (the caller falls back to an empty-state).
  *
  * Linked debts (`debt.linked_account_id` set) sum the account's OWN
- * transaction history in each window, PLUS any other `linked_debt_id`-tagged
- * transaction for this debt found on a DIFFERENT account — necessary
- * because the account is usually only linked partway through a debt's real
- * history (ADR-102): every advance/repayment from before that point was
- * logged the old way, tagged to the debt but never mirrored onto its
- * account, and is otherwise invisible to an account-only sum. Confirmed live
- * on Dave ExtraCash: real $75/$25/$25/$105 payments logged on Checking,
- * tagged to this debt, fully explain how $275 of old advances is already
- * settled — an account-only sum saw none of them and treated every one of
- * those advances as still outstanding. A tagged transaction that shares a
- * `transfer_group_id` with one already counted via the account's own history
- * is skipped — it's the other leg of an already-mirrored pair, and counting
- * both would double the event. `isArrearsOnlyPayment` rows are excluded
- * entirely: they only ever move `arrears_paid_to_date` (ADR-076), never
- * principal — confirmed live that including one broke an otherwise-exact
- * reconciliation.
+ * transaction history, PLUS any other `linked_debt_id`-tagged transaction for
+ * this debt found on a DIFFERENT account — necessary because the account is
+ * usually only linked partway through a debt's real history (ADR-102): every
+ * advance/repayment from before that point was logged the old way, tagged to
+ * the debt but never mirrored onto its account, and is otherwise invisible to
+ * an account-only sum. Confirmed live on Dave ExtraCash: real $75/$25/$25/
+ * $105 payments logged on Checking, tagged to this debt, fully explain how
+ * $275 of old advances is already settled — an account-only sum saw none of
+ * them and treated every one of those advances as still outstanding. A
+ * tagged transaction that shares a `transfer_group_id` with one already
+ * counted via the account's own history is skipped — it's the other leg of
+ * an already-mirrored pair, and counting both would double the event.
+ * `isArrearsOnlyPayment` rows are excluded entirely: they only ever move
+ * `arrears_paid_to_date` (ADR-076), never principal — confirmed live that
+ * including one broke an otherwise-exact reconciliation.
  *
- * The LAST (still-open) episode's `net` is overridden to match
+ * The LAST (most-recently-opened) episode's `net` is overridden to match
  * `effectiveDebtBalance()` exactly, via the same `balanceAsOf()` the rest of
  * the app already uses — found necessary live against Dave ExtraCash's real
- * data: naively replaying the carry-forward chain from the very first advance
- * ignores any `account_balances` snapshot anchor taken partway through (a
- * deliberate balance-correction checkpoint), producing a wildly inflated
- * number instead of the one figure users will actually cross-check against
- * the Debt card's own displayed balance. Earlier (closed) episodes keep the
- * merged-content chain — informational history, not something users compare
- * live. Requires `accounts`/`accountBalances` to apply; falls back to the
- * naive value when a caller doesn't have that data (e.g. existing unit
- * fixtures).
+ * data: naively replaying the ledger from the very first advance ignores any
+ * `account_balances` snapshot anchor taken partway through (a deliberate
+ * balance-correction checkpoint), producing a wildly inflated number instead
+ * of the one figure users will actually cross-check against the Debt card's
+ * own displayed balance. Earlier episodes keep the FIFO-allocated history —
+ * informational, not something users compare live. Requires
+ * `accounts`/`accountBalances` to apply; falls back to the FIFO value when a
+ * caller doesn't have that data (e.g. existing unit fixtures).
  *
- * Unlinked debts (e.g. OnePay Advance) have no backing account, so content
- * comes from `linked_debt_id`-tagged transactions plus non-marker
- * `debt_adjustments` rows — the same two sources `debt-history.ts`'s
- * `debtBalanceAsOf` already uses, just partitioned per advance instead of
- * summed for the whole debt.
+ * Unlinked debts (e.g. Cleo, EarnIn, Instacash/MoneyLion, OnePay Advance)
+ * have no backing account, so content comes from `linked_debt_id`-tagged
+ * transactions plus non-marker `debt_adjustments` rows — the same two
+ * sources `debt-history.ts`'s `debtBalanceAsOf` already uses, just
+ * partitioned per draw instead of summed for the whole debt.
+ *
+ * 2026-11-03 addendum (Issue #82, ADR-111 addendum): both branches used to
+ * assume advances are always sequential (one open draw at a time) and
+ * bucketed every fee/repayment by which fixed date window it fell in. That's
+ * confirmed wrong — see `runFifoAllocation`'s doc comment for the replacement
+ * model (each draw gets an independent balance; FIFO-oldest-open allocation,
+ * or a parsed date hint for fees). The "pre-tracking" bucket (events before
+ * the earliest marker) is now just the first entry in the same FIFO walk
+ * (`id: null`), not a separately-computed special case — it behaves exactly
+ * like any other draw once opened, it just has no originating
+ * `debt_adjustments` row of its own.
  */
 export function computeAdvanceEpisodes(
   debt: Pick<Debt, "id" | "debt_type" | "linked_account_id">,
@@ -236,16 +405,31 @@ export function computeAdvanceEpisodes(
     .filter((a) => a.adjustment_type === "advance")
     .map((a) => ({ adjustment: a, key: dateCreatedKey(a.adjustment_date, a.created_at) }))
     // Stable tie-break for markers sharing the exact same (date, created_at)
-    // — only matters for the relative order of draws made on the same day;
-    // doesn't affect where other content gets bucketed (see dateCreatedKey).
+    // — only matters for the relative open-order of draws made on the same
+    // day; doesn't affect where other content gets attributed (FIFO-oldest-
+    // open already resolves that independently of marker order ties).
     .sort((x, y) =>
       x.key !== y.key ? (x.key < y.key ? -1 : 1) : x.adjustment.id < y.adjustment.id ? -1 : 1,
     );
   if (markers.length === 0) return [];
 
   const nonMarkerAdjustments = debtAdjustments.filter((a) => a.adjustment_type !== "advance");
-  const firstKey = markers[0].key;
-  const windows: RawWindow[] = [];
+  const firstMarkerDate = markers[0].adjustment.adjustment_date.slice(0, 10);
+
+  function finalize(preAdvanceAmount: number, markerRefs: MarkerRef[], events: AllocEvent[]): AdvanceEpisode[] {
+    const allRefs: MarkerRef[] = [
+      { id: null, key: "", advanceAmount: preAdvanceAmount, startDate: firstMarkerDate },
+      ...markerRefs,
+    ];
+    const episodes = runFifoAllocation(allRefs, events);
+    // Drop the pre-tracking episode when nothing actually predates the first
+    // marker — matches the pre-addendum inclusion condition exactly (any
+    // pre-first-marker orphan disbursement, transaction, or adjustment).
+    const [pre, ...rest] = episodes;
+    const preNonEmpty =
+      pre.advanceAmount !== 0 || pre.transactions.length > 0 || pre.adjustments.length > 0;
+    return preNonEmpty ? episodes : rest;
+  }
 
   if (debt.linked_account_id) {
     const accountTx = transactions.filter(
@@ -256,7 +440,7 @@ export function computeAdvanceEpisodes(
     );
     // Any other transaction tagged to this debt, on a DIFFERENT account —
     // real pre-link history (or any other never-mirrored entry). Excludes
-    // disbursements (already counted via the marker's own advanceAmount),
+    // disbursements (already counted via a marker's own advanceAmount),
     // arrears-only rows (never affect principal), and the other leg of a
     // pair already represented via accountTx.
     const crossAccountTx = transactions.filter(
@@ -286,99 +470,69 @@ export function computeAdvanceEpisodes(
       dateCreatedKey(t.cleared_date ?? t.transaction_date, t.created_at);
     const adjKey = (a: DebtAdjustment) => dateCreatedKey(a.adjustment_date, a.created_at);
 
-    // accountTx entries keep the account-centric convention (positive =
-    // repaid, negative = fee); crossAccountTx entries use the paying
-    // account's own convention (negative = repaid, positive = fee) — the
-    // same one debt-history.ts's debtBalanceAsOf/splitFeesAndRepaid already
-    // use for tagged transactions. Mixing them up would silently invert half
-    // the totals.
-    function accountCentricSplit(tx: Transaction[]): { feesTotal: number; repaidTotal: number } {
-      let feesTotal = 0;
-      let repaidTotal = 0;
-      for (const t of tx) {
-        const amt = Number(t.amount);
-        if (amt > 0) repaidTotal += amt;
-        else if (amt < 0) feesTotal += Math.abs(amt);
-      }
-      return { feesTotal, repaidTotal };
-    }
-    function payingAccountSplit(tx: Transaction[]): { feesTotal: number; repaidTotal: number } {
-      let feesTotal = 0;
-      let repaidTotal = 0;
-      for (const t of tx) {
-        const amt = Number(t.amount);
-        if (amt < 0) repaidTotal += Math.abs(amt);
-        else if (amt > 0) feesTotal += amt;
-      }
-      return { feesTotal, repaidTotal };
-    }
-    // A non-marker adjustment with no mirror on record contributes directly
-    // — it's the one case (the two pre-mirroring-convention "Overdraft Fee"
-    // rows found live on Dave ExtraCash) where nothing on any account
-    // already represents it. A mirrored adjustment is skipped here: its
-    // mirror transaction is already in accountTx, counting both would
-    // double it.
-    function unmirroredAdjustmentSplit(adj: DebtAdjustment[]): {
-      feesTotal: number;
-      repaidTotal: number;
-    } {
-      let feesTotal = 0;
-      let repaidTotal = 0;
-      for (const a of adj) {
-        if (a.mirror_transaction_id) continue;
-        const amt = Number(a.amount);
-        if (amt > 0) feesTotal += amt;
-        else if (amt < 0) repaidTotal += Math.abs(amt);
-      }
-      return { feesTotal, repaidTotal };
-    }
+    // No orphan-disbursement concept on the linked branch (matches the
+    // pre-addendum code, which always pushed `advanceAmount: 0` for its
+    // pretracking window here too) — any genuinely pre-first-marker content
+    // is still captured, just with a $0 pretracking advance amount; the FIFO
+    // walk routes it there automatically since the pretracking marker (id:
+    // null) always opens first.
+    const preAdvanceAmount = 0;
 
-    const preAccountTx = remainingAccountTx.filter((t) => txKey(t) < firstKey);
-    const preCrossTx = crossAccountTx.filter((t) => txKey(t) < firstKey);
-    const preAdj = nonMarkerAdjustments.filter((a) => adjKey(a) < firstKey);
-    if (preAccountTx.length > 0 || preCrossTx.length > 0 || preAdj.length > 0) {
-      const a1 = accountCentricSplit(preAccountTx);
-      const a2 = payingAccountSplit(preCrossTx);
-      const a3 = unmirroredAdjustmentSplit(preAdj);
-      const d = markers[0].adjustment.adjustment_date.slice(0, 10);
-      windows.push({
-        markerId: null,
-        startDate: d,
-        endDate: d,
-        advanceAmount: 0,
-        feesTotal: a1.feesTotal + a2.feesTotal + a3.feesTotal,
-        repaidTotal: a1.repaidTotal + a2.repaidTotal + a3.repaidTotal,
-        transactions: [...preAccountTx, ...preCrossTx],
-        adjustments: preAdj,
-      });
-    }
-    for (let i = 0; i < markers.length; i++) {
-      const m = markers[i];
-      const next = markers[i + 1] ?? null;
-      const inWindowAccountTx = remainingAccountTx.filter((t) =>
-        inWindow(txKey(t), m.key, next?.key ?? null),
-      );
-      const inWindowCrossTx = crossAccountTx.filter((t) =>
-        inWindow(txKey(t), m.key, next?.key ?? null),
-      );
-      const inWindowAdj = nonMarkerAdjustments.filter((a) =>
-        inWindow(adjKey(a), m.key, next?.key ?? null),
-      );
-      const a1 = accountCentricSplit(inWindowAccountTx);
-      const a2 = payingAccountSplit(inWindowCrossTx);
-      const a3 = unmirroredAdjustmentSplit(inWindowAdj);
-      windows.push({
-        markerId: m.adjustment.id,
-        startDate: m.adjustment.adjustment_date.slice(0, 10),
-        endDate: next ? next.adjustment.adjustment_date.slice(0, 10) : null,
-        advanceAmount: Number(m.adjustment.amount),
-        feesTotal: a1.feesTotal + a2.feesTotal + a3.feesTotal,
-        repaidTotal: a1.repaidTotal + a2.repaidTotal + a3.repaidTotal,
-        transactions: [...inWindowAccountTx, ...inWindowCrossTx],
-        adjustments: inWindowAdj,
-      });
-    }
-    const linkedEpisodes = applyCarryForward(windows);
+    const markerRefs: MarkerRef[] = markers.map((m) => ({
+      id: m.adjustment.id,
+      key: m.key,
+      advanceAmount: Number(m.adjustment.amount),
+      startDate: m.adjustment.adjustment_date.slice(0, 10),
+    }));
+
+    // accountTx entries keep the account-centric convention (positive =
+    // repaid -> delta reduces remaining; negative = fee -> delta increases
+    // it); crossAccountTx entries use the paying account's own convention
+    // (negative = repaid; positive = fee) — the same two conventions
+    // `accountCentricSplit`/`payingAccountSplit` used before the addendum.
+    // Mixing them up would silently invert half the totals.
+    const events: AllocEvent[] = [
+      ...remainingAccountTx.map(
+        (t): AllocEvent => ({
+          key: txKey(t),
+          id: t.id,
+          delta: -Number(t.amount),
+          affectsBalance: true,
+          hintDate: resolveFeeMarkerHint(t.description, markers),
+          transaction: t,
+        }),
+      ),
+      ...crossAccountTx.map(
+        (t): AllocEvent => ({
+          key: txKey(t),
+          id: t.id,
+          delta: Number(t.amount),
+          affectsBalance: true,
+          hintDate: resolveFeeMarkerHint(t.description, markers),
+          transaction: t,
+        }),
+      ),
+      // A non-marker adjustment with no mirror on record contributes
+      // directly — it's the one case (the two pre-mirroring-convention
+      // "Overdraft Fee" rows found live on Dave ExtraCash) where nothing on
+      // any account already represents it. A mirrored adjustment is
+      // skipped: its mirror transaction is already in accountTx, counting
+      // both would double it.
+      ...nonMarkerAdjustments
+        .filter((a) => !a.mirror_transaction_id)
+        .map(
+          (a): AllocEvent => ({
+            key: adjKey(a),
+            id: a.id,
+            delta: Number(a.amount),
+            affectsBalance: true,
+            hintDate: resolveFeeMarkerHint(a.description, markers),
+            adjustment: a,
+          }),
+        ),
+    ];
+
+    const linkedEpisodes = finalize(preAdvanceAmount, markerRefs, events);
     const account = accounts.find((a) => a.id === debt.linked_account_id);
     if (account && linkedEpisodes.length > 0) {
       const liveNet = creditOwed(balanceAsOf(account, accountBalances, transactions, todayISO()));
@@ -398,16 +552,13 @@ export function computeAdvanceEpisodes(
     dateCreatedKey(t.cleared_date ?? t.transaction_date, t.created_at);
   const adjKey = (a: DebtAdjustment) => dateCreatedKey(a.adjustment_date, a.created_at);
 
-  // Match each marker to its own disbursement transaction (same amount,
-  // same date) rather than relying on txKey < firstKey alone: useCreateAdvance
-  // inserts the disbursement (Step 1) a fraction of a second BEFORE its
+  // Match each marker to its own disbursement transaction (same amount, same
+  // date) rather than relying on key-order alone: useCreateAdvance inserts
+  // the disbursement (Step 1) a fraction of a second BEFORE its
   // debt_adjustments row (Step 3), so the very first marker's own
   // disbursement can sort as if it predates the marker itself — found live
   // on EarnIn, where this misclassified the first $100 advance's own
-  // disbursement as a "pre-tracking orphan," double-counting that $100
-  // (once via the orphan bucket, once via the marker's own advanceAmount)
-  // and permanently inflating every later episode's carried balance so
-  // nothing ever retroactively resolved to "repaid."
+  // disbursement as a "pre-tracking orphan," double-counting that $100.
   const consumedDisbursements = new Set<string>();
   for (const m of markers) {
     const match = disbursements.find(
@@ -419,46 +570,64 @@ export function computeAdvanceEpisodes(
     if (match) consumedDisbursements.add(match.id);
   }
   const orphanDisbursements = disbursements.filter((t) => !consumedDisbursements.has(t.id));
+  // Orphan disbursements dated on/after the first marker are left
+  // unaccounted-for, same as before the addendum — a genuinely undocumented
+  // edge case this change doesn't attempt to newly resolve.
+  const preAdvanceAmount = orphanDisbursements
+    .filter((t) => txKey(t) < markers[0].key)
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const preOrphanTx = orphanDisbursements.filter((t) => txKey(t) < markers[0].key);
 
-  const preDisbursements = orphanDisbursements.filter((t) => txKey(t) < firstKey);
-  const preContent = content.filter((t) => txKey(t) < firstKey);
-  const preAdj = nonMarkerAdjustments.filter(
-    (a) => a.affects_balance !== false && adjKey(a) < firstKey,
-  );
-  if (preDisbursements.length > 0 || preContent.length > 0 || preAdj.length > 0) {
-    const advanceAmount = preDisbursements.reduce((s, t) => s + Number(t.amount), 0);
-    const { feesTotal, repaidTotal } = splitFeesAndRepaid(preContent, preAdj);
-    const d = markers[0].adjustment.adjustment_date.slice(0, 10);
-    windows.push({
-      markerId: null,
-      startDate: d,
-      endDate: d,
-      advanceAmount,
-      feesTotal,
-      repaidTotal,
-      transactions: [...preDisbursements, ...preContent],
-      adjustments: preAdj,
-    });
-  }
+  const markerRefs: MarkerRef[] = markers.map((m) => ({
+    id: m.adjustment.id,
+    key: m.key,
+    advanceAmount: Number(m.adjustment.amount),
+    startDate: m.adjustment.adjustment_date.slice(0, 10),
+  }));
 
-  for (let i = 0; i < markers.length; i++) {
-    const m = markers[i];
-    const next = markers[i + 1] ?? null;
-    const inWindowContent = content.filter((t) => inWindow(txKey(t), m.key, next?.key ?? null));
-    const inWindowAdj = nonMarkerAdjustments.filter(
-      (a) => a.affects_balance !== false && inWindow(adjKey(a), m.key, next?.key ?? null),
-    );
-    const { feesTotal, repaidTotal } = splitFeesAndRepaid(inWindowContent, inWindowAdj);
-    windows.push({
-      markerId: m.adjustment.id,
-      startDate: m.adjustment.adjustment_date.slice(0, 10),
-      endDate: next ? next.adjustment.adjustment_date.slice(0, 10) : null,
-      advanceAmount: Number(m.adjustment.amount),
-      feesTotal,
-      repaidTotal,
-      transactions: inWindowContent,
-      adjustments: inWindowAdj,
-    });
-  }
-  return applyCarryForward(windows);
+  // A "Fee: "-prefixed transaction is ledger-only (ADR-084) — attributed for
+  // DISPLAY to a specific draw (hint, else FIFO-oldest-open) but never
+  // affects that draw's remaining/feesTotal/repaidTotal. Anything else:
+  // negative amount -> repayment (delta = amount, reduces remaining);
+  // positive amount -> fee-like increase (rare — e.g. a reversed repayment,
+  // ADR-008). A non-marker debt_adjustments row contributes by its own sign
+  // the same way (positive = owed increase, e.g. a fee adjustment; negative
+  // = owed decrease, e.g. `insurance_covered`).
+  const events: AllocEvent[] = [
+    ...preOrphanTx.map(
+      (t): AllocEvent => ({
+        key: txKey(t),
+        id: t.id,
+        delta: 0,
+        affectsBalance: false,
+        hintDate: null,
+        transaction: t,
+      }),
+    ),
+    ...content.map((t): AllocEvent => {
+      const feeTx = isFeeTransaction(t);
+      return {
+        key: txKey(t),
+        id: t.id,
+        delta: feeTx ? 0 : Number(t.amount),
+        affectsBalance: !feeTx,
+        hintDate: feeTx ? resolveFeeMarkerHint(t.description, markers) : null,
+        transaction: t,
+      };
+    }),
+    ...nonMarkerAdjustments
+      .filter((a) => a.affects_balance !== false)
+      .map(
+        (a): AllocEvent => ({
+          key: adjKey(a),
+          id: a.id,
+          delta: Number(a.amount),
+          affectsBalance: true,
+          hintDate: resolveFeeMarkerHint(a.description, markers),
+          adjustment: a,
+        }),
+      ),
+  ];
+
+  return finalize(preAdvanceAmount, markerRefs, events);
 }

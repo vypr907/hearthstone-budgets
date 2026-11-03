@@ -99,6 +99,20 @@ const MERCHANT_INSTITUTIONS = [
   [/GOOGLE\s*\*?\s*GigU/i, "2951b5c8-5fd5-48d3-a62d-275a4e779df8"],
   [/SP THESHEETCODE\.COM/i, "2f4cecec-e803-46b8-8e76-0806064a27dc"],
   [/LOVABLE/i, "13745bd0-20c1-4862-adf7-b25f32cb07c7"],
+  // 2026-11-02: Sep/Oct catch-up pass — already-existing institutions found
+  // live via the read-only MCP, just missing from this map.
+  [/SALLY BEAUTY/i, "2ad8afea-c5ec-4092-95f0-5f18f1a66cf8"],
+  [/ANTHROPIC\*? ?CLAUDE/i, "394f7585-05fe-4d76-9897-06e7f387042a"],
+  [/CLEO\*? ?ADVANCE/i, "32ddce8d-df53-4de5-aadc-7818079f10da"],
+  [/CASH APP/i, "d10d7b32-aa01-45ac-9017-83ccbf938f35"],
+  [/Flexible Finance/i, "87f4dc7e-11d1-43e0-a40a-25a0092399a6"],
+  [/Peacock/i, "ebf3f8eb-9807-4fb3-8a9c-f5cb2c25b2a8"],
+  [/ULTA/i, "c3155db5-e95a-4db4-bcc5-8b44cd4003a6"],
+  [/WENDYS/i, "e97eb306-7063-4fc9-99b8-060ce76b7ce3"],
+  [/\d+ \d+ SPEEDWAY/i, "33d001ac-a64b-42eb-b772-393b0b666745"],
+  [/BARNES & NOBLE/i, "95f86315-b27c-4461-bd84-c39eade6b464"],
+  [/BAMBOO PANDA/i, "6ee0a791-23ee-4323-8be1-e092671a25c9"],
+  [/DoorDash/i, "63047dee-3cad-429d-92ed-7067569f41f5"],
 ];
 function tagInstitution(label) {
   for (const [re, inst] of MERCHANT_INSTITUTIONS) if (re.test(label || "")) return inst;
@@ -211,7 +225,11 @@ function loadCsvFile(path) {
 }
 
 function loadCsvRows() {
-  const files = readdirSync(PLANNING_DIR).filter((f) => f.endsWith(".csv"));
+  // planning/ also accumulates other accounts' scratch CSVs (USAA, OnePay —
+  // different header shape entirely) between reconcile passes — only read
+  // Venmo's own statement export filename shape, or loadCsvFile throws on
+  // the first non-Venmo file it hits.
+  const files = readdirSync(PLANNING_DIR).filter((f) => /^VenmoStatement.*\.csv$/i.test(f));
   let rows = [];
   for (const f of files) rows = rows.concat(loadCsvFile(join(PLANNING_DIR, f)));
   rows.sort((a, b) => a.datetime.localeCompare(b.datetime));

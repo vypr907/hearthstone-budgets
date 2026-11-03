@@ -240,32 +240,37 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
     expect(episodes.map((e) => e.markerId)).toEqual(["1", "2", "3", "4", "5", "8"]);
   });
 
-  it("carries an underpaid draw's shortfall into the next episode, then retroactively resolves both once it's paid off", () => {
+  it("FIFO-splits a repayment spanning two draws across both, oldest-open first — 2026-11-03 addendum (Issue #82)", () => {
     const episodes = computeAdvanceEpisodes(daveUnlinked, daveAdjustments, daveTransactions);
-    // Episode for marker "1" ($40, 7/17): no repayment before the 7/18 draw, so its
-    // own window carries a shortfall — but the 7/31 payment (inside marker 2's
-    // window) clears it, so it retroactively reads "repaid," not stuck at
-    // "carried forward" forever just because the resolution landed one window later.
+    // Marker "1" ($40, 7/17) and marker "2" ($35, 7/18) are both still open
+    // when the 7/31 $75 payment lands — FIFO drains the oldest (marker 1)
+    // first: $40 fully closes it, the remaining $35 closes marker 2. Before
+    // the addendum this was bucketed entirely into marker 2's date window
+    // (repaidTotal 0/75) and marker 1's own `net` stayed at its un-zeroed
+    // $40 even though `status` was retroactively flipped to "repaid" — the
+    // exact kind of mismatch Issue #82 is about.
     expect(episodes[0]).toMatchObject({
       advanceAmount: 40,
       feesTotal: 0,
-      repaidTotal: 0,
-      net: 40,
+      repaidTotal: 40,
+      net: 0,
       status: "repaid",
     });
-    // Episode for marker "2" ($35, 7/18): the 7/31 $75 payment covers both it and marker 1's carry-in.
     expect(episodes[1]).toMatchObject({
       advanceAmount: 35,
-      repaidTotal: 75,
+      repaidTotal: 35,
       net: 0,
       status: "repaid",
     });
   });
 
-  it("leaves a shortfall genuinely marked carried_forward when it's never resolved before the end of the chain", () => {
-    // A debt whose first advance is never repaid before the second (unlike
-    // Dave's real history, where every shortfall eventually clears) must
-    // still show the truth: carried_forward, not a false "repaid."
+  it("tracks two never-repaid draws independently — no more conflating them into one cumulative 'carried forward' balance", () => {
+    // Before the 2026-11-03 addendum, a debt's draws shared one cumulative
+    // balance threaded through date windows, and an unresolved early draw
+    // showed a distinct "carried_forward" status (retired — see the
+    // addendum's ADR). Now each draw's own balance is tracked independently
+    // and exactly, so both of these show "open" with their own amount, not
+    // one contaminating the other's number.
     const neverResolvedId = "never-resolved-1";
     const neverResolved: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
       id: neverResolvedId,
@@ -296,8 +301,8 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
     ];
     const episodes = computeAdvanceEpisodes(neverResolved, adj, []);
     expect(episodes).toHaveLength(2);
-    expect(episodes[0]).toMatchObject({ net: 100, status: "carried_forward" });
-    expect(episodes[1]).toMatchObject({ net: 150, status: "open" });
+    expect(episodes[0]).toMatchObject({ net: 100, status: "open" });
+    expect(episodes[1]).toMatchObject({ net: 50, status: "open" });
   });
 
   it("attributes the two same-day 2026-09-04 $5 fees to whichever episode they fall into, without double-counting or dropping either", () => {
@@ -374,7 +379,7 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
     expect(episodes[0]).toMatchObject({ advanceAmount: 225, net: 0, status: "repaid" });
   });
 
-  it("buckets a pre-tracking orphan disbursement into an unmarked episode 0, and carries an unpaid draw forward when a later draw follows", () => {
+  it("buckets a pre-tracking orphan disbursement into an unmarked episode 0, and tracks each later draw independently when nothing is ever repaid", () => {
     const onePayId = "onepay-2";
     const onePay: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
       id: onePayId,
@@ -433,21 +438,24 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
     ];
     const episodes = computeAdvanceEpisodes(onePay, adjustments, transactions);
     expect(episodes).toHaveLength(3);
+    // None of the three draws ever gets repaid, so each independently shows
+    // its own $225 as still "open" — not a cumulative 225/450/675 chain.
     expect(episodes[0]).toMatchObject({
       markerId: null,
       advanceAmount: 225,
-      status: "carried_forward",
+      net: 225,
+      status: "open",
     });
     expect(episodes[1]).toMatchObject({
       markerId: "m1",
       advanceAmount: 225,
-      net: 450,
-      status: "carried_forward",
+      net: 225,
+      status: "open",
     });
     expect(episodes[2]).toMatchObject({
       markerId: "m2",
       advanceAmount: 225,
-      net: 675,
+      net: 225,
       status: "open",
     });
   });
@@ -512,12 +520,10 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
     });
   });
 
-  it("REGRESSION: a debt fully paid off by its own final episode retroactively resolves every earlier pending episode too — found live on EarnIn", () => {
-    // The chain's shortfall never clears exactly at any INTERMEDIATE
-    // window boundary, only by the time the final (otherwise 'open')
-    // window's own payment lands — a debt that's actually fully settled
-    // must not leave earlier episodes stuck showing "carried forward"
-    // just because the resolution happened to land on the very last window.
+  it("REGRESSION: a single payment covering two draws' combined balance fully resolves both via FIFO — found live on EarnIn", () => {
+    // Nothing is repaid until one payment, dated after both draws opened,
+    // happens to cover their entire combined balance (100 + 50) — FIFO
+    // drains the older draw first, then the newer, fully zeroing both.
     const id = "earnin-regression-2";
     const debt: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
       id,
@@ -573,8 +579,8 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
     ];
     const episodes = computeAdvanceEpisodes(debt, adjustments, transactions);
     expect(episodes).toHaveLength(2);
-    expect(episodes[0]).toMatchObject({ markerId: "m1", net: 100, status: "repaid" });
-    expect(episodes[1]).toMatchObject({ markerId: "m2", net: 0, status: "repaid" });
+    expect(episodes[0]).toMatchObject({ markerId: "m1", net: 0, repaidTotal: 100, status: "repaid" });
+    expect(episodes[1]).toMatchObject({ markerId: "m2", net: 0, repaidTotal: 50, status: "repaid" });
   });
 
   it("REGRESSION: a 'Fee: ' transaction never affects net — it's ledger-only (ADR-084), matching debtBalanceAsOf — found live on Cleo and Instacash", () => {
@@ -716,6 +722,178 @@ describe("computeAdvanceEpisodes — unlinked (Dave ExtraCash's real history)", 
   });
 });
 
+describe("computeAdvanceEpisodes — concurrent advances (2026-11-03 addendum, Issue #82)", () => {
+  // Modeled on the real Cleo history reconciled this session: several draws
+  // open before the first repayment, violating ADR-111's original
+  // single-open-advance assumption.
+  const debtId = "concurrent-1";
+  const debt: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
+    id: debtId,
+    debt_type: "advance",
+    linked_account_id: null,
+  };
+  function marker(
+    id: string,
+    amount: number,
+    date: string,
+    extra: Partial<DebtAdjustment> = {},
+  ): DebtAdjustment {
+    return {
+      id,
+      household_id: "h",
+      debt_id: debtId,
+      amount,
+      adjustment_type: "advance",
+      description: null,
+      adjustment_date: date,
+      affects_balance: true,
+      ...extra,
+    } as DebtAdjustment;
+  }
+
+  it("a repayment that exactly covers the older of two open draws resolves only that one", () => {
+    const markers = [marker("a", 50, "2026-01-01"), marker("b", 50, "2026-01-02")];
+    const transactions = [
+      tx({
+        id: "pay",
+        amount: -50,
+        transaction_date: "2026-01-05",
+        description: "Debt payment",
+        linked_debt_id: debtId,
+      }),
+    ];
+    const episodes = computeAdvanceEpisodes(debt, markers, transactions);
+    expect(episodes).toHaveLength(2);
+    expect(episodes[0]).toMatchObject({ markerId: "a", net: 0, repaidTotal: 50, status: "repaid" });
+    expect(episodes[1]).toMatchObject({ markerId: "b", net: 50, repaidTotal: 0, status: "open" });
+  });
+
+  it("a repayment exceeding the older open draw's remaining cascades into the next-oldest open draw", () => {
+    const markers = [marker("a", 50, "2026-01-01"), marker("b", 50, "2026-01-02")];
+    const transactions = [
+      tx({
+        id: "pay",
+        amount: -70,
+        transaction_date: "2026-01-05",
+        description: "Debt payment",
+        linked_debt_id: debtId,
+      }),
+    ];
+    const episodes = computeAdvanceEpisodes(debt, markers, transactions);
+    expect(episodes).toHaveLength(2);
+    expect(episodes[0]).toMatchObject({ markerId: "a", net: 0, repaidTotal: 50, status: "repaid" });
+    expect(episodes[1]).toMatchObject({ markerId: "b", net: 30, repaidTotal: 20, status: "open" });
+  });
+
+  it("a date-hinted ledger-only fee attributes to its own named draw for display, even when it's not the oldest open one — never affects net/feesTotal (ADR-084)", () => {
+    const markers = [
+      marker("a", 55, "2026-01-01"),
+      marker("b", 55, "2026-01-02"),
+      marker("c", 55, "2026-01-03"),
+    ];
+    const transactions = [
+      tx({
+        id: "fee-b",
+        amount: -8.99,
+        transaction_date: "2026-01-10",
+        description: "Fee: Cleo · advance fee — Express fee (1/2 advance)",
+        linked_debt_id: debtId,
+      }),
+    ];
+    const episodes = computeAdvanceEpisodes(debt, markers, transactions);
+    expect(episodes).toHaveLength(3);
+    const [a, b, c] = episodes;
+    expect(a.transactions.map((t) => t.id)).not.toContain("fee-b");
+    expect(b.transactions.map((t) => t.id)).toContain("fee-b");
+    expect(c.transactions.map((t) => t.id)).not.toContain("fee-b");
+    // Ledger-only "Fee: " transaction — attributed for display, but never
+    // touches net/feesTotal for any draw (ADR-084).
+    for (const e of episodes) {
+      expect(e.feesTotal).toBe(0);
+      expect(e.net).toBeCloseTo(55, 2);
+      expect(e.status).toBe("open");
+    }
+  });
+
+  it("a date-hinted, balance-affecting fee adjustment reopens an already-resolved draw", () => {
+    const markers = [marker("a", 50, "2026-01-01")];
+    const transactions = [
+      tx({
+        id: "pay",
+        amount: -50,
+        transaction_date: "2026-01-02",
+        description: "Debt payment",
+        linked_debt_id: debtId,
+      }),
+    ];
+    const adjustments = [
+      marker("a", 50, "2026-01-01"), // the draw itself
+      {
+        id: "late-fee",
+        household_id: "h",
+        debt_id: debtId,
+        amount: 10,
+        adjustment_type: "advance_fee",
+        description: "Express fee (1/1 advance)",
+        adjustment_date: "2026-01-10",
+        affects_balance: true,
+      } as DebtAdjustment,
+    ];
+    const episodes = computeAdvanceEpisodes(debt, adjustments, transactions);
+    expect(episodes).toHaveLength(1);
+    // Resolved by the 1/2 payment, then reopened by the 1/10 fee assessed
+    // against this same draw — a case the old single-shared-balance model
+    // had no way to represent at all.
+    expect(episodes[0]).toMatchObject({
+      markerId: "a",
+      net: 10,
+      feesTotal: 10,
+      repaidTotal: 50,
+      status: "open",
+      endDate: null,
+    });
+  });
+
+  it("an unresolvable fee (no date match) falls back to the oldest currently-open draw", () => {
+    const markers = [marker("a", 50, "2026-01-01"), marker("b", 50, "2026-01-02")];
+    const adjustments = [
+      ...markers,
+      {
+        id: "late-fee",
+        household_id: "h",
+        debt_id: debtId,
+        amount: 5,
+        adjustment_type: "other",
+        description: "Late fee", // no "(M/D advance)" — unresolvable
+        adjustment_date: "2026-01-10",
+        affects_balance: true,
+      } as DebtAdjustment,
+    ];
+    const episodes = computeAdvanceEpisodes(debt, adjustments, []);
+    expect(episodes).toHaveLength(2);
+    expect(episodes[0]).toMatchObject({ markerId: "a", net: 55, feesTotal: 5, status: "open" });
+    expect(episodes[1]).toMatchObject({ markerId: "b", net: 50, feesTotal: 0, status: "open" });
+  });
+
+  it("an overpayment beyond every open draw's combined remaining parks as credit that offsets the next draw to open", () => {
+    const markers = [marker("a", 30, "2026-01-01"), marker("b", 50, "2026-01-05")];
+    const transactions = [
+      tx({
+        id: "pay",
+        amount: -50,
+        transaction_date: "2026-01-02",
+        description: "Debt payment",
+        linked_debt_id: debtId,
+      }),
+    ];
+    const episodes = computeAdvanceEpisodes(debt, markers, transactions);
+    expect(episodes).toHaveLength(2);
+    expect(episodes[0]).toMatchObject({ markerId: "a", net: 0, repaidTotal: 30, status: "repaid" });
+    // $20 overpayment credit carries forward and offsets draw b's own $50.
+    expect(episodes[1]).toMatchObject({ markerId: "b", advanceAmount: 50, net: 30, status: "open" });
+  });
+});
+
 describe("computeAdvanceEpisodes — linked (the Problem 2 regression case)", () => {
   const linkedAccountId = "e62e92f6-5029-4ce2-b28c-23c3db6dc50e";
   const daveLinked: Pick<Debt, "id" | "debt_type" | "linked_account_id"> = {
@@ -852,10 +1030,12 @@ describe("computeAdvanceEpisodes — linked (the Problem 2 regression case)", ()
     ];
     const episodes = computeAdvanceEpisodes(daveLinked, markers, transactions);
     expect(episodes).toHaveLength(2);
-    // Both mirror legs consumed (excluded from content); neither episode's window has any leftover
-    // transactions, so advanceAmount is the only contribution to each episode's net.
+    // Both mirror legs consumed (excluded from content); neither draw has any
+    // leftover transactions, so advanceAmount is the only contribution to
+    // each draw's own net — independent of the other (2026-11-03 addendum:
+    // before this, marker B's net was the cumulative $100 of both combined).
     expect(episodes[0]).toMatchObject({ advanceAmount: 50, feesTotal: 0, repaidTotal: 0 });
-    expect(episodes[1].net).toBeCloseTo(100, 2); // marker A's $50 carries into marker B's own $50
+    expect(episodes[1].net).toBeCloseTo(50, 2); // marker B's own $50 only
   });
 
   it("REGRESSION: the open episode's net matches effectiveDebtBalance's account_balances anchor, not a naive full-history replay — found live against Dave ExtraCash's real data", () => {
@@ -945,7 +1125,15 @@ describe("computeAdvanceEpisodes — linked (the Problem 2 regression case)", ()
     ];
 
     const naive = computeAdvanceEpisodes(daveLinked, markers, transactions); // no accounts/accountBalances passed
-    expect(naive[naive.length - 1].net).toBeGreaterThan(100); // the inflated, wrong number
+    // Without the anchor, the $15 repayment (9/24) is FIFO-allocated to the
+    // OLDEST still-open draw ("old1", 7/17), not "current" — so "current"'s
+    // own naive net is just its untouched $50, nowhere close to the real
+    // live balance ($40) the anchor below produces. (Before the 2026-11-03
+    // addendum, this value was the whole chain's cumulative balance instead
+    // of a per-draw one, so the wrongness showed up as ">100" rather than a
+    // too-small, differently-wrong $50 — same underlying bug, different
+    // symptom under the old cumulative model.)
+    expect(naive[naive.length - 1].net).toBeCloseTo(50, 2);
 
     const anchored = computeAdvanceEpisodes(
       daveLinked,

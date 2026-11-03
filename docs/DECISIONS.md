@@ -5620,6 +5620,88 @@ Status: addendum decided 2026-10-15. Implemented 2026-10-15 — `tsc
 --noEmit` clean, 274/274 tests pass. Not yet checked in a running
 browser.
 
+**2026-11-03 addendum — concurrent advances (Issue #82): the single-open-
+advance assumption was wrong, replaced the date-window model with FIFO
+per-draw allocation.** This ADR's original Reason section stated "An
+advance-type debt can only have one open advance at a time... must repay
+before taking another" (confirmed with the user at the time, ADR-084's
+2026-09-04 addendum). That's now confirmed WRONG, surfaced by this
+session's Cleo reconciliation: the household took 3 concurrent $55 draws
+(10/15, 10/16, 10/20) before repaying any of them, which is normal
+behavior for this class of app (a credit limit, not a one-open-advance
+rule, bounds how much can be drawn).
+
+The original implementation built a fixed date window between each marker
+and the next (`[marker[i].date, marker[i+1].date)`) and bucketed every
+fee/repayment by which window its date fell in. The last marker's window
+was open-ended and silently absorbed everything dated on/after it —
+visibly wrong on Cleo's real episode cards (fees and repayments for
+earlier draws all showing up attributed to the most recent draw).
+
+`computeAdvanceEpisodes` (`src/lib/debt-episodes.ts`) now gives each draw
+its own independent running balance and allocates every fee/repayment to a
+specific draw via a single chronological walk (`runFifoAllocation`),
+replacing `applyCarryForward`/`RawWindow`/`inWindow` entirely:
+- A repayment is always FIFO-allocated: drains the oldest still-open draw
+  first, cascading into the next-oldest open draw once the first is fully
+  zeroed. This is a stated allocation CONVENTION, not a recovered fact —
+  nothing in the data model (`transactions` or `debt_adjustments`) links a
+  repayment to the specific draw it closes, confirmed while designing this.
+- A fee/charge can be attributed to a specific draw via `resolveFeeMarkerHint`,
+  which parses the existing `"(M/D advance)"` convention already present in
+  this household's own fee descriptions (e.g. "Express fee (10/15
+  advance)") — the same description-prefix-as-type-system trick
+  `isAdvanceDisbursement`/`isFeeTransaction`/`isArrearsOnlyPayment` already
+  use. No match (wrong format, or an ambiguous month/day shared by two
+  markers) falls back to the same FIFO-oldest-open rule as a repayment. A
+  resolved hint can REOPEN an already-resolved draw (a late-assessed fee
+  genuinely re-inflates it) — something the old single-shared-balance model
+  had no way to represent at all.
+- A real structural link (a new nullable FK column on `transactions`/
+  `debt_adjustments` pointing at the originating marker, plus a "which draw
+  is this for?" UI picker) was considered and deliberately DEFERRED — it
+  would need its own ADR + migration + UI work, and wouldn't by itself
+  eliminate the need for the text-parsing fallback (historical rows have no
+  column to populate without a backfill). Revisit if the fallback proves
+  unreliable in practice.
+- `"Fee: "`-prefixed ledger-only transactions keep their ADR-084 exclusion
+  from `feesTotal`/`net` exactly as before — they're still attributed to a
+  specific draw's `transactions` list for display, just never change that
+  draw's balance. Confirmed this session that fixing attribution doesn't
+  require redefining what counts toward the stat; left alone.
+- `AdvanceEpisodeStatus`'s `"carried_forward"` value is retired (confirmed
+  with the user) — the ambiguity it flagged ("we can't tell if this
+  shortfall was secretly resolved elsewhere") no longer exists once every
+  draw's balance is tracked independently and exactly; every episode now
+  reads `"open"` or `"repaid"`. The type keeps the string for consumer
+  compatibility (`app.debts.tsx`'s status-label/variant `Record`s key off
+  all three); the engine just never emits it.
+- Two `AdvanceEpisode` fields change MEANING, not type (invisible to
+  `tsc`, verified instead by hand-tracing the real Cleo data and a browser
+  check): `net` was the whole debt's cumulative running balance, now it's
+  this draw's own remaining balance; `endDate` was "the date the next
+  marker opened" (a window boundary), now it's "the date this draw's own
+  balance resolved to zero, or `null` while open."
+- The "pre-tracking" bucket (events predating the earliest marker) is no
+  longer a separately-computed special case — it's just the first entry in
+  the same FIFO walk (`id: null`), behaving exactly like any other draw
+  once "opened," with its own independent balance like everything else.
+
+`LogDebtPaymentDialog.tsx`'s advance-fee double-logging warning (only ever
+checks the LATEST episode) has a real, pre-existing gap that concurrent-
+draw support makes more likely to matter — no UI exists yet to say "this
+payment is for THIS specific open draw." Flagged as a known limitation,
+not fixed here (would need the deferred schema/UI work above; out of scope
+for a read-side history-display fix).
+
+Status: addendum decided 2026-11-03. Implemented 2026-11-03 — `tsc
+--noEmit` clean, 283/283 tests pass (6 new concurrent-draw fixtures; 5
+existing tests updated to the new per-draw `net`/FIFO-split semantics, all
+other existing tests — including every real-household-data regression for
+Dave ExtraCash/EarnIn/OnePay Advance — pass unchanged). Live sanity-checked
+against the real Cleo debt via the read-only MCP. Not yet checked in a
+running browser.
+
 ## ADR-112: Per-Debt Default Fee Lines (Templated Itemized Charges)
 
 Decision:
