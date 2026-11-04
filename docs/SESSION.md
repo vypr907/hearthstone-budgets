@@ -2,6 +2,46 @@
 
 ## Session Notes
 
+- **ADR-114: per-line place for split / Cash Back entries.** User hit a real
+  gap entering an ATM withdrawal: $3 ATM-operator fee and $2.50 Cash App
+  network fee need two different places, but a split/Cash Back entry only
+  had one shared place for the whole thing (same scenario manually patched
+  via raw SQL in the 2026-11-03 Venmo migration).
+  - `SplitRow` (`src/components/SplitLinesEditor.tsx`) gains
+    `institutionId: string | null`; new local `CompactPlacePicker` wraps
+    `PlacePicker` in a `Popover` (mirrors `TagPicker`'s `compact` mode —
+    `PlacePicker` itself is block-level, never built for an inline row).
+    Row layout changed from one flex line to a bordered two-line card
+    (category/amount/delete, then tags/place) to fit the extra picker on
+    phone width.
+  - Both write paths resolve `institution_id` as `line.institutionId ??
+    <shared institutionId> ?? null` — `insertCashBackPurchaseRows`
+    (`src/lib/payments.ts`) and `useSaveSplitTransaction`
+    (`src/lib/data-hooks.ts`, `SplitLine` type). Same fallback convention
+    `submitTransfer`'s fee leg already used.
+  - `AddTransactionFab.tsx`'s split branch and Cash Back submit handlers
+    now pass `r.institutionId` per line. `app.transactions.tsx`'s
+    `SplitTransactionDetail` (plain-split edit dialog) seeds + saves
+    per-line institution the same way it already does tags, and its
+    read-only summary now shows each line's place.
+  - Cash Back purchase-line groups don't go through the split edit dialog
+    at all (`assertCategorySplitGroup` already excludes them from it) — no
+    edit-path work needed there; each row is already editable individually
+    via the normal single-transaction edit dialog, same as before.
+  - No schema change — `transactions.institution_id` already existed per
+    row; this was a UI + write-path gap only.
+  - Files touched: `src/components/SplitLinesEditor.tsx`,
+    `src/lib/payments.ts`, `src/lib/data-hooks.ts`,
+    `src/components/AddTransactionFab.tsx`, `src/routes/app.transactions.tsx`,
+    `docs/DECISIONS.md` (ADR-114).
+  - `tsc --noEmit` clean, 283/283 tests pass (additive field + preserved
+    fallback, no new pure-logic fixtures needed).
+  - Known issues: not yet checked in a running browser.
+  - Next step: browser check — recreate the motivating ATM example (cash +
+    2 fee lines, 2 different places) and confirm both lines save with
+    distinct `institution_id`, and a blank line correctly falls back to the
+    entry's shared place.
+
 - **Issue #82 / ADR-111 addendum: concurrent advances for `debt_type='advance'` debts.**
   Fixed the root cause behind the Cleo episode-card misattribution the user
   flagged (fees/repayments for earlier draws all showing up on the most

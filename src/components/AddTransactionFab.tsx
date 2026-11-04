@@ -323,6 +323,7 @@ export function AddTransactionFab() {
             categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
             amount: n > 0 ? -Number(r.amount) : Number(r.amount),
             tagIds: r.tagIds,
+            institutionId: r.institutionId,
           })),
           institutionId: merchantId,
         });
@@ -416,6 +417,7 @@ export function AddTransactionFab() {
           categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
           amount: Number(r.amount),
           tagIds: r.tagIds,
+          institutionId: r.institutionId,
         })),
         description: cbDescription.trim() || null,
         institutionId: cbMerchantId,

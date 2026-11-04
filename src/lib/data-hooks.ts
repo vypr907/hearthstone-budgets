@@ -800,6 +800,8 @@ export type SplitLine = {
   /** ADR-104: tags for this one line — the transaction_tags rows are written
    *  against the line's own (post-insert) transaction id. */
   tagIds?: string[];
+  /** Overrides the group's shared `institutionId` for this one line. */
+  institutionId?: string | null;
 };
 
 /**
@@ -866,7 +868,7 @@ export function useSaveSplitTransaction() {
         transaction_date: args.transactionDate,
         cleared_date: clearedDate,
         split_group_id: singleLine ? null : groupId,
-        institution_id: args.institutionId ?? null,
+        institution_id: l.institutionId ?? args.institutionId ?? null,
       }));
       // ADR-104: .select("id") so each line's tags can be attached below — a
       // single insert call returns rows in the same order they were given,

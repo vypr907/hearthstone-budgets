@@ -589,7 +589,13 @@ export async function insertCashBackPurchaseRows(
   householdId: string | null | undefined,
   accountId: string,
   groupId: string,
-  lines: { categoryId: string | null; amount: number; tagIds?: string[] }[],
+  lines: {
+    categoryId: string | null;
+    amount: number;
+    tagIds?: string[];
+    /** Overrides the entry's shared `institutionId` for this one line. */
+    institutionId?: string | null;
+  }[],
   description: string | null,
   institutionId: string | null | undefined,
   date: string,
@@ -604,7 +610,7 @@ export async function insertCashBackPurchaseRows(
     transaction_date: date,
     cleared_date: date,
     split_group_id: groupId,
-    institution_id: institutionId ?? null,
+    institution_id: l.institutionId ?? institutionId ?? null,
   }));
   // ADR-104 addendum: .select("id") so each purchase line's own tags can be
   // attached below — the withdrawal (cash-back) leg itself stays untagged,

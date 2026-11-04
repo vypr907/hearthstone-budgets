@@ -1332,6 +1332,7 @@ function SplitTransactionDetail({
   const { data: transactions = [] } = useTransactions();
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
+  const { data: institutions = [] } = useInstitutions();
   const { data: txTags = {} } = useTransactionTags();
   const saveSplit = useSaveSplitTransaction();
   const delSplit = useDeleteSplitTransaction();
@@ -1368,8 +1369,10 @@ function SplitTransactionDetail({
         amount: String(Math.abs(Number(l.amount ?? 0))),
         // ADR-104: seed each line's current tags from its own transaction id
         // — required, since saveSplit deletes + re-inserts every line on
-        // save, so whatever isn't carried forward here is lost.
+        // save, so whatever isn't carried forward here is lost. Same
+        // reasoning for institutionId, now per-line too.
         tagIds: txTags[l.id] ?? [],
+        institutionId: l.institution_id ?? null,
       })),
     );
   }
@@ -1398,6 +1401,7 @@ function SplitTransactionDetail({
           categoryId: r.categoryId === NO_SPLIT_CATEGORY ? null : r.categoryId,
           amount: sign * Math.abs(Number(r.amount)),
           tagIds: r.tagIds,
+          institutionId: r.institutionId,
         })),
         institutionId: transaction.institution_id,
       });
@@ -1461,11 +1465,14 @@ function SplitTransactionDetail({
                     key={l.id}
                     className="flex items-center justify-between px-2 py-2 text-sm"
                   >
-                    <span className="truncate">
+                    <span className="min-w-0 flex-1 truncate">
                       {categories.find((c) => c.id === l.category_id)?.name ??
                         "No category"}
+                      {l.institution_id
+                        ? ` · 🏪 ${institutions.find((i) => i.id === l.institution_id)?.name ?? ""}`
+                        : ""}
                     </span>
-                    <span className="tabular-nums">{formatMoney(Number(l.amount))}</span>
+                    <span className="shrink-0 tabular-nums">{formatMoney(Number(l.amount))}</span>
                   </div>
                 ))}
               </div>
