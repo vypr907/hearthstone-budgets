@@ -278,6 +278,8 @@ export type Institution = {
   logo_url?: string | null;
   /** ADR-106: Amazon/Prime-style grouping — this institution's totals roll up into its parent's. */
   parent_institution_id?: string | null;
+  /** ADR-115: visibility-only — never read by balance/total calculations. */
+  is_active?: boolean | null;
   created_at: string;
   updated_at: string;
 };

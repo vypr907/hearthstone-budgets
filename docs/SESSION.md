@@ -2,6 +2,31 @@
 
 ## Session Notes
 
+- **Data fix: pre-ADR-114 dispensary ATM fee lines.** After shipping
+  per-line place, scanned the household's full history (not just Nature's
+  Releaf — checked globally for the $3 ATM-operator + $2.50 card-network
+  fee combo) for past entries still showing the old single-place problem.
+  Found 12: 4 already split into two $3/$2.50 lines but both mistagged to
+  the dispensary instead of the $2.50 one going to Venmo/Cash App; 8 never
+  split at all (one lumped -$5.50 line, no description) across Nature's
+  Releaf, Honeypot, and Pakalolo Supply Co. The 8 lumped ones pair with a
+  real transfer leg (Cash Back style, ADR-103), so even with today's
+  per-line-place feature they can't be fixed through the split editor
+  (same exclusion as live Cash Back entries) — fixed via migration instead,
+  adding a second row under the same `split_group_id` rather than asking
+  the user to do it by hand as a disconnected new transaction.
+  - `scripts/migrations/2026-11-04-dispensary-atm-fee-place-fix.sql` (+
+    verify): 9 updates + 8 inserts. One exception caught during drafting —
+    the 10/25 entry is on the vypr907 Cash App account, not Venmo, so its
+    network fee goes to Cash App instead of Venmo.
+  - Also found and ruled out as unrelated: 5 very old (July 2026) entries
+    with no fee breakdown at all (predate fee-tracking entirely) — flagged
+    to the user, not touched, since that's a different problem (nothing to
+    re-tag, just never itemized).
+  - Migration run by the user and verified via MCP (all 3 verify queries
+    passed exactly as expected). Not yet committed/pushed — carried forward
+    as a loose end into the next unit of work below.
+
 - **ADR-114: per-line place for split / Cash Back entries.** User hit a real
   gap entering an ATM withdrawal: $3 ATM-operator fee and $2.50 Cash App
   network fee need two different places, but a split/Cash Back entry only
@@ -41,6 +66,104 @@
     2 fee lines, 2 different places) and confirm both lines save with
     distinct `institution_id`, and a blank line correctly falls back to the
     entry's shared place.
+
+- **SCRATCHPAD.md cleanup + "Next Steps" backlog plan (Phase A of 5 fixes shipped).**
+  User added 6 new notes to `docs/SCRATCHPAD.md`'s "# Next Steps" section
+  directly and asked for the file pruned of completed items (headers kept)
+  and a plan built for those 6. Pruned 16 `[x]`/struck-through completed
+  entries across `# Features I want`, `# Views`, `# Next Steps`, and
+  `# Things to work on`, keeping every header and the still-open items.
+  Split the 6 into Phase A (5 small independent fixes, done this unit) and
+  Phase B (a new "Stephanie view" on Everything — bigger, own ADR, not yet
+  started).
+  - **A1 — Institutions collapsible sort groups**: `app.institutions.tsx`'s
+    type/category groups now wrap in the existing `Collapsible`
+    (`src/components/ui/collapsible.tsx`, same pattern already live in
+    `app.daily-financials.tsx`), collapsed by default (no `defaultOpen`
+    prop). `groupBy === "none"` still renders a flat list, unwrapped.
+  - **A2 — Everything: paid-off debts/invoices no longer linger.** Root
+    cause: the filter trusted a possibly-stale `date_paid_off` column and
+    had a `!period → always show` escape hatch that went fully inert
+    whenever `currentPayPeriod()` resolved to `null`. Replaced with the
+    same balance-based check `app.debts.tsx` already uses —
+    `effectiveDebtBalance()` + `isDebtPaidOff()` (works identically for
+    invoices) — with the pay-period grace window layered on top, not as a
+    bypass. Added `useAccounts`/`useLatestBalances`/`useTransactions` to
+    `app.everything.tsx` (not previously loaded there).
+  - **A3 — Institutions active/inactive toggle (ADR-115, new column).**
+    `institutions.is_active boolean not null default true`
+    — visibility-only, confirmed with the user: no balance/total
+    calculation reads it. `InstitutionDialog.tsx` gets the same `Switch`
+    pattern `BillDialog` already has; the Institutions list dims/labels
+    `· Inactive` the same way `BillRow`/`DebtRow` already do; new
+    page-level "Show inactive institutions" `Switch` (no existing
+    show/hide-inactive toggle anywhere else to copy — net-new UI), default
+    off.
+    - `scripts/migrations/2026-11-05-institutions-active-toggle.sql` (+
+      verify) — not yet run by the user.
+  - **A4 — Institution detail: linked bills/debts now clickable.**
+    `BillRow`/`DebtRow` inside `InstitutionDetail` gained `onClick`,
+    wired to the ADR-105 `?open=<id>` deep-link convention. `/app/debts`
+    already supported it; added the identical `validateSearch`/mount-effect
+    pair to `/app/bills` (ADR-105 addendum). This list is never filtered by
+    paid-off status, so a paid-off invoice (e.g. "Beautifully Wicked")
+    stays reachable from its institution's own detail page even after A2.
+  - **A5 — Edit Institution Categories dropdown scroll fix.** Root cause:
+    `PopoverContent`'s className had `w-[--radix-popover-trigger-width]` —
+    invalid CSS (bare custom-property name, not `var(...)`), confirmed by
+    compiling with this repo's pinned Tailwind v4; the width constraint did
+    nothing. Changed to `w-64`, matching the two other working instances of
+    this same Popover+Checkbox pattern (`ListControls.tsx`, `TagPicker.tsx`).
+  - Files touched: `docs/SCRATCHPAD.md`, `src/routes/app.institutions.tsx`,
+    `src/routes/app.everything.tsx`, `src/routes/app.bills.tsx`,
+    `src/components/InstitutionDialog.tsx`, `src/lib/supabase.ts`
+    (`Institution.is_active`), `docs/DECISIONS.md` (ADR-115, ADR-116,
+    ADR-105 addendum), `scripts/migrations/2026-11-05-institutions-active-toggle.sql` (+ verify).
+  - `tsc --noEmit` clean, 283/283 tests pass. `graphify update .` run.
+  - A3's migration run by the user and verified via MCP 2026-11-05: column
+    present (`boolean not null default true`), all 172 existing
+    institutions defaulted to active. `docs/SCHEMA.md` updated (new "ADR-115
+    column" section), ADR-115 marked Implemented.
+  - Known issues: none of A1-A5 checked in a running browser yet.
+
+- **Phase B: "Stephanie view" (ADR-116) shipped on `app.everything.tsx`.**
+  New `Tabs` ("Everything" / "Stephanie view") wrapping the page — no
+  existing view-mode mechanism there to extend, confirmed by Explore
+  research, so this is net-new UI following the `Tabs` convention already
+  used in `app.paycheck.tsx`.
+  - Split the page's data pipeline into `baseRows` (merged bills+debts,
+    paid-off-debt filter only) → `rows` (+ the standard tab's own
+    filters/sort) and a new `stephanieRows` (+ its own independent search,
+    always sorted by due date) — so switching tabs never leaks one tab's
+    filter state into the other. Also fixed a latent bug while splitting
+    this out: the old single `rows` memo's dependency array was missing
+    `balanceAccounts`/`latestBalances`/`balanceTransactions`, so A2's new
+    balance-based paid-off check wouldn't have recomputed on a balance
+    change.
+  - New `stephanieStatus()`: extends `stateVisual()`'s ADR-036 4-state model
+    with "issue" (`computeArrears().amountOverdue > 0`, yellow
+    `AlertTriangle`) and "due" (not cleared + no arrears, blue
+    `CalendarClock`) — confirmed the "auto-flip from paid to due on the 1st
+    of the month" behavior needs no new logic at all: `useCycleState`
+    already resets a cycle's `state` to `"unpaid"` once a new billing-cycle
+    window starts, and "unpaid" falls through to "due" here. Priority
+    Issue > Pending > Due > Paid, per the user's confirmed answer.
+  - Row shows: status icon, name + category/kind subheading, due date,
+    amount owed (via existing `monthlyEquivalent()`), total owed for debts
+    only (`effectiveDebtBalance()`), and login info — reused
+    `InstitutionLoginButton` (non-compact) rather than hand-rolling plain
+    text, so Stephanie also gets a working "Log In" button that opens the
+    real sign-in page (ADR-093), not just a username string.
+  - Files touched: `src/routes/app.everything.tsx`, `docs/DECISIONS.md`
+    (ADR-116, now Implemented).
+  - `tsc --noEmit` clean, 283/283 tests pass. `graphify update .` run.
+  - Known issues: not yet checked in a running browser. The 2 new status
+    colors are plain Tailwind, not per-theme tokens (documented as a
+    deliberate scope decision in ADR-116, not an oversight).
+  - Next step: browser-check A1-A5 and the Stephanie view end-to-end
+    (collapsible groups, Everything's paid-off filter, active-toggle
+    dim/hide, Institution-detail click-through, Categories scroll, and all
+    4 Stephanie status icons / search / login button).
 
 - **Issue #82 / ADR-111 addendum: concurrent advances for `debt_type='advance'` debts.**
   Fixed the root cause behind the Cleo episode-card misattribution the user

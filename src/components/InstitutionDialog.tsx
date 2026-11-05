@@ -121,6 +121,7 @@ export function InstitutionDialog({
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [active, setActive] = useState(true);
   const [addingAccount, setAddingAccount] = useState(false);
   const [parentId, setParentId] = useState("");
   // ADR-106: a link's kind/label/url being composed before "Add link" is pressed.
@@ -147,6 +148,7 @@ export function InstitutionDialog({
     setDescription(institution?.description ?? "");
     setNotes(institution?.notes ?? "");
     setLogoUrl(institution?.logo_url ?? (suggestedLogoUrl(institution?.login_url) || ""));
+    setActive(institution?.is_active !== false);
     setCatIds(institution?.id ? (instCats[institution.id] ?? []) : []);
     setParentId(institution?.parent_institution_id ?? "");
     const existingLinks = institution?.id
@@ -203,6 +205,7 @@ export function InstitutionDialog({
         notes: notes || null,
         logo_url: logoUrl.trim() || null,
         parent_institution_id: parentId || null,
+        is_active: active,
       });
       await setCats.mutateAsync({ institutionId: id, categoryIds: catIds });
       // ADR-106: save a member-account row for any member with at least one
@@ -273,7 +276,7 @@ export function InstitutionDialog({
                   <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="max-h-72 w-[--radix-popover-trigger-width] overflow-y-auto p-2">
+              <PopoverContent className="max-h-72 w-64 overflow-y-auto p-2">
                 {categories.length === 0 ? (
                   <p className="p-2 text-sm text-muted-foreground">No categories yet.</p>
                 ) : (
@@ -346,6 +349,16 @@ export function InstitutionDialog({
               Optional — e.g. mark "Prime" as part of "Amazon" so its totals roll up into Amazon's
               on the Institutions screen.
             </p>
+          </div>
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="pr-3">
+              <Label htmlFor="inst-active">Active</Label>
+              <p className="text-xs text-muted-foreground">
+                Inactive institutions are hidden from the default Institutions list. Doesn't
+                affect any balance or total.
+              </p>
+            </div>
+            <Switch id="inst-active" checked={active} onCheckedChange={setActive} />
           </div>
           <div>
             <Label>Main site</Label>

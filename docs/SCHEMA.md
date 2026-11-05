@@ -1208,3 +1208,18 @@ institutions (Amazon/Prime), not a second way to express "this is the same
 place, split by who it belongs to." Applied via
 `scripts/migrations/2026-09-17-merge-split-institutions.sql` (data-only,
 no schema change) for Labcorp/Alpine Medical/Planet Fitness.
+
+## ADR-115 column (2026-11-05)
+
+```sql
+alter table institutions add column is_active boolean not null default true;
+```
+
+`institutions.is_active`: visibility-only toggle, mirroring the shape of
+`bills.is_active`/`auto_transfers.is_active` but **not** their behavior —
+an inactive institution is hidden/dimmed in the Institutions list (and
+excluded unless a page-level "Show inactive institutions" switch is on),
+but no balance/total calculation (`computeInstitutionTotals`, paycheck
+budgeting, spending actuals) reads this column. Applied via
+`scripts/migrations/2026-11-05-institutions-active-toggle.sql`; verified
+2026-11-05 — all 172 existing institutions defaulted to `true`.

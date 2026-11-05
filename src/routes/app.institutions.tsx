@@ -19,6 +19,7 @@ import { computeBalances, computeInstitutionTotals, isDebtPaidOff } from "@/lib/
 import { internalTransferIds, opaqueTransferAccountIds } from "@/lib/internal-transfers";
 import { setTxPreFilter } from "@/lib/tx-filter-store";
 import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { CheckCircle2, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 import type { Bill, Debt, Institution, Transaction } from "@/lib/supabase";
@@ -85,12 +87,16 @@ function InstitutionsPage() {
   const [editing, setEditing] = useState<Partial<Institution> | null>(null);
   const [detail, setDetail] = useState<Institution | null>(null);
   const [groupBy, setGroupBy] = useState<"none" | "type" | "category">("none");
+  // ADR-115: visibility-only — hidden here, but still counted in every total.
+  const [showInactive, setShowInactive] = useState(false);
 
   // ADR-106: a child institution's money is already counted in its parent's
   // total (computeInstitutionTotals rolls it up) — showing both here would
   // double-count. Children stay fully reachable via the parent's own detail
   // dialog ("Sub-institutions" section below).
-  const rootInstitutions = institutions.filter((i) => !i.parent_institution_id);
+  const rootInstitutions = institutions.filter(
+    (i) => !i.parent_institution_id && (showInactive || i.is_active !== false),
+  );
 
   // UI-only grouping: an institution with several categories appears under each.
   const groups: Array<{ key: string; label: string; rows: Institution[] }> = (() => {
@@ -134,6 +140,12 @@ function InstitutionsPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex items-center gap-2">
+          <Switch id="show-inactive" checked={showInactive} onCheckedChange={setShowInactive} />
+          <Label htmlFor="show-inactive" className="text-sm text-muted-foreground">
+            Show inactive institutions
+          </Label>
+        </div>
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!isLoading && rootInstitutions.length === 0 && (
@@ -145,72 +157,96 @@ function InstitutionsPage() {
         )}
 
         <div className="space-y-4">
-          {groups.map((g) => (
-            <div key={g.key} className="space-y-2">
-              {g.label ? (
-                <p className="px-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  {g.label}
-                </p>
-              ) : null}
-              {g.rows.map((i) => {
-                const totals = computeInstitutionTotals(
-                  i.id,
-                  accounts,
-                  balances,
-                  bills,
-                  debts,
-                  institutions,
-                );
-                return (
-                  <Card key={i.id} className="cursor-pointer" onClick={() => setDetail(i)}>
-                    <CardContent className="flex items-start gap-3 p-3">
-                      <InstitutionLogo logoUrl={i.logo_url} type={i.institution_type} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{i.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {formatTypeLabel(i.institution_type)}
-                          {i.sign_in_with_google ? " · Google sign-in" : ""}
+          {groups.map((g) => {
+            const rows = g.rows.map((i) => {
+              const totals = computeInstitutionTotals(
+                i.id,
+                accounts,
+                balances,
+                bills,
+                debts,
+                institutions,
+              );
+              return (
+                <Card
+                  key={i.id}
+                  className={`cursor-pointer ${i.is_active === false ? "opacity-60" : ""}`}
+                  onClick={() => setDetail(i)}
+                >
+                  <CardContent className="flex items-start gap-3 p-3">
+                    <InstitutionLogo logoUrl={i.logo_url} type={i.institution_type} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">
+                        {i.name}
+                        {i.is_active === false ? (
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                            · Inactive
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {formatTypeLabel(i.institution_type)}
+                        {i.sign_in_with_google ? " · Google sign-in" : ""}
+                      </p>
+                      {(instCats[i.id] ?? []).length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {(instCats[i.id] ?? []).map((cid) => (
+                            <Badge key={cid} variant="secondary" className="text-[10px]">
+                              {categoryName[cid] ?? "Category"}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                      {i.description ? (
+                        <p className="truncate text-xs text-muted-foreground">{i.description}</p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-semibold">
+                        {totals.currentBalance == null ? "—" : formatMoney(totals.currentBalance)}
+                      </p>
+                      {totals.currentDue != null ? (
+                        <p className="text-xs text-muted-foreground">
+                          Due {formatMoney(totals.currentDue)}
                         </p>
-                        {(instCats[i.id] ?? []).length > 0 ? (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {(instCats[i.id] ?? []).map((cid) => (
-                              <Badge key={cid} variant="secondary" className="text-[10px]">
-                                {categoryName[cid] ?? "Category"}
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : null}
-                        {i.description ? (
-                          <p className="truncate text-xs text-muted-foreground">{i.description}</p>
-                        ) : null}
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="font-semibold">
-                          {totals.currentBalance == null ? "—" : formatMoney(totals.currentBalance)}
-                        </p>
-                        {totals.currentDue != null ? (
-                          <p className="text-xs text-muted-foreground">
-                            Due {formatMoney(totals.currentDue)}
-                          </p>
-                        ) : null}
-                      </div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label="Edit"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditing(i);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          ))}
+                      ) : null}
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label="Edit"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditing(i);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            });
+
+            if (!g.label) {
+              return (
+                <div key={g.key} className="space-y-2">
+                  {rows}
+                </div>
+              );
+            }
+
+            return (
+              <Collapsible key={g.key}>
+                <CollapsibleTrigger className="flex w-full items-center justify-between px-1 text-left">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    {g.label}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{g.rows.length}</span>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-2">{rows}</CollapsibleContent>
+              </Collapsible>
+            );
+          })}
         </div>
       </div>
 
@@ -329,9 +365,12 @@ function groupObligationsByMember(
 }
 
 /** One bill row — shared between the flat and member-grouped renderings. */
-function BillRow({ bill }: { bill: Bill }) {
+function BillRow({ bill, onClick }: { bill: Bill; onClick: () => void }) {
   return (
-    <Card className={bill.is_active === false ? "opacity-60" : undefined}>
+    <Card
+      className={`cursor-pointer ${bill.is_active === false ? "opacity-60" : ""}`}
+      onClick={onClick}
+    >
       <CardContent className="flex items-center gap-3 p-3">
         <p className="min-w-0 flex-1 truncate font-medium">
           {bill.name}
@@ -346,10 +385,10 @@ function BillRow({ bill }: { bill: Bill }) {
 }
 
 /** One debt row — shared between the flat and member-grouped renderings. */
-function DebtRow({ debt }: { debt: Debt }) {
+function DebtRow({ debt, onClick }: { debt: Debt; onClick: () => void }) {
   const paidOff = isDebtPaidOff(debt, Number(debt.remaining_balance ?? 0));
   return (
-    <Card className={paidOff ? "opacity-60" : undefined}>
+    <Card className={`cursor-pointer ${paidOff ? "opacity-60" : ""}`} onClick={onClick}>
       <CardContent className="flex items-center gap-3 p-3">
         {paidOff ? (
           <CheckCircle2 className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -399,6 +438,17 @@ function InstitutionDetail({
   const { openWithPreset } = useAddTransactionPreset();
   const navigate = useNavigate();
   const [txDetail, setTxDetail] = useState<Transaction | null>(null);
+  // ADR-105: hand off to a bill/debt's own detail dialog via ?open=<id> —
+  // this detail list is never filtered by paid-off status, so a linked item
+  // hidden elsewhere (Everything, active Debts) stays reachable from here.
+  const openBill = (id: string) => {
+    onClose();
+    void navigate({ to: "/app/bills", search: { open: id } });
+  };
+  const openDebt = (id: string) => {
+    onClose();
+    void navigate({ to: "/app/debts", search: { open: id } });
+  };
   if (!institution) return null;
   const totals = computeInstitutionTotals(
     institution.id,
@@ -616,10 +666,10 @@ function InstitutionDetail({
                     ) : (
                       <div className="space-y-2">
                         {g.bills.map((b) => (
-                          <BillRow key={b.id} bill={b} />
+                          <BillRow key={b.id} bill={b} onClick={() => openBill(b.id)} />
                         ))}
                         {g.debts.map((d) => (
-                          <DebtRow key={d.id} debt={d} />
+                          <DebtRow key={d.id} debt={d} onClick={() => openDebt(d.id)} />
                         ))}
                       </div>
                     )}
@@ -638,7 +688,7 @@ function InstitutionDetail({
                 ) : (
                   <div className="space-y-2">
                     {linkedBills.map((b) => (
-                      <BillRow key={b.id} bill={b} />
+                      <BillRow key={b.id} bill={b} onClick={() => openBill(b.id)} />
                     ))}
                   </div>
                 )}
@@ -653,7 +703,7 @@ function InstitutionDetail({
                 ) : (
                   <div className="space-y-2">
                     {linkedDebts.map((d) => (
-                      <DebtRow key={d.id} debt={d} />
+                      <DebtRow key={d.id} debt={d} onClick={() => openDebt(d.id)} />
                     ))}
                   </div>
                 )}

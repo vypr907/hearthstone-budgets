@@ -1,24 +1,11 @@
 # Features I want
-- [x] [high] per-paycheck budgeting
-- [x] [med] future budgeting
 - [ ] [med] bill calendar (sync with Google calendar)
 - [ ] [low] tracking for side income, like UberEats driving
-- [x] [high] be able to handle partial payments and payment reversals
-- [x] [med] bill/debt that is pending should not show 'Submitted' button
 - [ ] [low] simple AI chatbot to help answer questions, generate summaries, guide user around the app, etc
 - [ ] [low] sync with banks like Rocket or Tilt
-- [x] [high] ability to add fees/extras
-- [x] [high] generate 1 page reports
-- [x] [low] colour themes customization
 - [ ] [med] ability to add PDF/image receipts
-- [x] [med] ability to split transactions
-- [x] [med] ability to add invoices (treat as debts?)
-- [x] [high] ability to split paycheck to accounts | marking income as received adds transaction to appropriate account
 
 # Views
-- [x] bill detail
-- [x] institutions - category icons / capitalization / group by / linked bills/debts
-- [x] account detail
 - [ ] 
 
 
@@ -27,30 +14,20 @@
 
 
 # Next Steps
-- ~~Advances section should only show on debt type: Advance~~ DONE
-  2026-09-16 — gated on `debt_type === "advance"` in `DebtAdjustments`
-  (`app.debts.tsx`).
-- ~~on account detail view for type: account, should have a "add
-  transaction" button that preloads details into an add transaction form,
-  instead of having to click out of the detail, then click the add
-  transaction button and manually reselect the account. Same with
-  institutions.~~ DONE 2026-09-16 — `AddTransactionPresetProvider`
-  (`src/components/AddTransactionPreset.tsx`); "Add transaction" buttons
-  on Account and Institution detail now open the FAB pre-filled.
-- ~~on credit card debt it shows the account, but I'd like it to be
-  clickable, so that it takes you to the account details. Conversely, on
-  the account details, there's nothing indicating that there is a linked
-  debt/no clickable link~~ DONE 2026-09-16 (ADR-105) — `?open=<id>`
-  deep-link convention on `/app/accounts` and `/app/debts`; both fields
-  now clickable, both directions.
-- ~~for Accounts and balances, I'd like it to default to being grouped by
-  institution (with a total)~~ DONE 2026-09-16 — `app.accounts.tsx` always
-  groups by institution now, per-group subtotal + grand total.
-- ~~on Dashboard/Simple, for the Bills and Debts sections, where it lists
-  "Paid so far, Remaining, Pending, Overdue", I'd like them to show the
-  associated Bills/Debts on tap in a little pop.~~ DONE 2026-09-16 — each
-  figure is a tap target opening a popover listing the matching items
-  (`StatusRow` in `app.index.tsx`).
+- on institutions, when I select sort by type or category, I'd like each type or category to be collapsible, with the default being collapsed
+- on Everything screen, it still shows invoices that were paid off in August. Invoices or debts that have been paid off should not show.
+- Institutions should have an active toggle, and the view Institutions should have a toggle to view inactive institutions.
+- in Institution detail view, you can see linked debts/bills/etc, but any linked bills or debts aren't clickable. For example, Beautifully Wicked has two invoices. Both paid off, I don't want them to show in Everything or in active Debts, but if I go to Beautifully Wicked's details, I want to be able to view the invoice details.
+- on the Edit Institution view, for the Categories drop-down, I can't seem to scroll.
+- I want to build a view specifically for Stephanie's use, it should be very similar to the Everything view (in fact, put it as a toggleable view on that page) but it should have this information, in this order:
+  - Status icon (green check for paid, yellow caution symbol for some issue, orange clock for pending, blue <need icon suggestions> for due). Icons should automatically switch from paid to due on the first of the month (if monthly bill/debt) 
+  - Name of Bill or Debt
+    - subheading with category/type
+  - Date due
+  - Amount Owed (Monthly Amt/Minimum Payment/Etc)
+  - Total Owed (Remaining Balance/Overdue Amounts/etc)
+  - login info (email address or google account to sign in with, etc)
+  by default this view should be sorted by due date. should have search bar at top though
 
 
 
@@ -75,18 +52,6 @@ Show me the diffs for all three files before finalizing.
 
 
 # Things to work on
-- ~~no way to denote an account as mine vs my wife's; her accounts inflate
-  checking/spendable~~ DONE 2026-08-27 (ADR-088, Issue #36, PR #39) —
-  `accounts.owner_member_id` + "Belongs to" picker; a personal account drops
-  out of the other member's spendable + net-worth totals. Migration run.
-  Ledger stays whole-household.
-- ~~card/account number on accounts~~ DONE 2026-08-27 (ADR-021 addendum) —
-  "Account / card number" field added to AccountDialog; `accounts.account_number`
-  already existed. No `cards` table (an account still stands in for its card).
-- ~~Debt (type: Advance) added at zero balance shows paid / advance not in
-  balances~~ DONE 2026-08-27 (ADR-056 addendum) — advance balance/min-payment
-  now form-read-only, form never stamps an advance paid-off, and a 0/0 new debt
-  of any type stays active. Manual data fix for "Dave ExtraCash" still pending.
 ---
 
 ## Idea: smarter institution_type for inline-created merchants (Add Transaction)

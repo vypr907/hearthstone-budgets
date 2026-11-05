@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppHeader } from "@/components/AppHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { SectionLabel } from "@/components/SectionLabel";
@@ -106,7 +106,14 @@ const BILL_ADJUSTMENT_TYPES = [
   "nsf_fee",
   "other",
 ];
+// ADR-105: deep-link to a specific bill's detail dialog from another route
+// (e.g. an institution's "linked bills" list) — ?open=<billId>.
+type BillsSearch = { open?: string };
+
 export const Route = createFileRoute("/app/bills")({
+  validateSearch: (search: Record<string, unknown>): BillsSearch => ({
+    open: typeof search.open === "string" ? search.open : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Bills — Hearthstone" },
@@ -144,6 +151,16 @@ function BillsPage() {
   const [editing, setEditing] = useState<Partial<Bill> | null>(null);
   const [detail, setDetail] = useState<Bill | null>(null);
   const [editingAT, setEditingAT] = useState<Partial<AutoTransfer> | null>(null);
+  const search = Route.useSearch();
+  const navigate = useNavigate();
+  // ADR-105: ?open=<billId> deep-link — opens that bill's detail and clears
+  // the param so back/refresh doesn't keep reopening it.
+  useEffect(() => {
+    if (!search.open) return;
+    const match = bills.find((b) => b.id === search.open);
+    if (match) setDetail(match);
+    navigate({ to: "/app/bills", search: {}, replace: true });
+  }, [search.open, bills, navigate]);
   const infoOf = useCycleState();
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("due");

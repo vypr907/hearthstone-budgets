@@ -4854,6 +4854,15 @@ only for a debt that isn't linked.
 
 Status: Decided 2026-09-16. Implemented 2026-09-16.
 
+Addendum 2026-11-05: `/app/bills` is the anticipated "third cross-entity
+link" — it now has the identical `validateSearch`/mount-effect pair
+`/app/debts` already had, so `BillRow`/`DebtRow` inside Institution detail
+(`app.institutions.tsx`) can navigate to `/app/bills?open=<id>` or
+`/app/debts?open=<id>` and open the right detail dialog, regardless of
+whether that bill/debt is currently filtered out of Everything/the Debts
+list elsewhere (Institution detail's own linked-bills/debts list is never
+filtered by paid-off/active status, by design).
+
 ## ADR-106: Institution Links, Per-Member Accounts, Institution Parent/Child, Bill Active Toggle
 
 Decision:
@@ -5922,3 +5931,81 @@ Status: Decided 2026-11-04. Implemented 2026-11-04 — `tsc --noEmit` clean,
 283/283 tests pass (no new pure logic needing its own fixtures; this is a
 UI + write-path field addition with existing fallback behavior preserved
 for every pre-existing row). Not yet checked in a running browser.
+
+---
+
+## ADR-115: Institution Active/Inactive Toggle (Visibility-Only)
+
+Decision:
+New column `institutions.is_active boolean not null default true`.
+Mirrors `bills.is_active`/`auto_transfers.is_active`'s UI pattern exactly
+— `InstitutionDialog.tsx` gets the same `Switch` block `BillDialog` has,
+seeded `institution?.is_active !== false`; the institution list's Card
+rows get the same `opacity-60` + `· Inactive` dim treatment `BillRow`/
+`DebtRow` already use in `app.institutions.tsx`; a new page-level
+`Switch` next to the existing "Group by" control defaults to hiding
+inactive institutions, with no existing show/hide-inactive toggle
+anywhere else in the app to copy — this one is net-new UI.
+
+Unlike `bills.is_active`, this toggle is **visibility-only**: an inactive
+institution still counts toward every existing balance/total calculation
+(`computeInstitutionTotals`, paycheck budgeting, spending actuals) exactly
+as before. `balances.ts` and its callers are untouched.
+
+Reason:
+The user wants a way to retire an institution from the default Institutions
+list (e.g. a closed account, a cancelled subscription's merchant) without
+deleting it or losing its linked history. Unlike a bill going inactive —
+which should stop pulling money toward budget calculations — an inactive
+institution is just a dormant record; its past bills/debts/transactions
+already carry their own independent `is_active`/paid-off state, so nothing
+about the institution being "inactive" should silently change a dollar
+total elsewhere. Scope confirmed with the user directly (visibility-only,
+not the heavier "also exclude from totals" option).
+
+Status: Decided 2026-11-05. Implemented 2026-11-05 — migration run by the
+user and verified via MCP (column present, `boolean not null default
+true`, all 172 existing institutions defaulted to active). `tsc --noEmit`
+clean, 283/283 tests pass.
+
+---
+
+## ADR-116: "Stephanie View" — Alternate Everything Display + Status-Icon Extension
+
+Decision:
+A new toggleable display mode on `/app/everything` (net-new `Tabs`/
+`ToggleGroup` in `EverythingPage()` — no existing view-mode mechanism was
+there to extend) showing, per row: a 4-state status icon, name + category/
+type subheading, due date, amount owed (run through `monthlyEquivalent()`),
+total owed (debts only, via `effectiveDebtBalance()`), and institution-level
+login info (`institutionIndex[...].login_username`/`.sign_in_with_google`
+— already loaded on Everything, zero new fetches). Default sort by due
+date; reuses `ListControls`'s existing search input verbatim.
+
+The status icon extends `stateVisual()`'s existing 4-state model
+(ADR-036: unpaid/pending/partial/cleared) with two states it doesn't
+cover — "issue" (yellow caution, driven by `computeArrears`/
+`priorArrearsSummary` resolving to any overdue amount > 0) and "due" (blue
+`CalendarClock`, a new helper for "unpaid, no arrears, due date has
+arrived/passed into the current cycle" — including the auto-flip from
+"paid" to "due" on the 1st of the month for monthly items). User-confirmed
+priority when states overlap: Issue > Pending > Due > Paid.
+
+Reason:
+The user wants a simpler, read-only-friendly view of the household's bills/
+debts for their spouse — fewer controls, clearer at-a-glance status, and
+sign-in info so a bill can actually be paid without asking where to log in.
+Building it as a toggle on the existing Everything screen (rather than a
+new route) keeps one source of truth for the underlying row data; the two
+new status states were a genuine gap, not a reuse of anything that already
+existed, since ADR-036's 4 ledger states track payment-cycle state, not
+calendar-driven "is this now due" or arrears-driven "is this a problem."
+
+Status: Decided 2026-11-05. Implemented 2026-11-05 — `tsc --noEmit` clean,
+283/283 tests pass. The two new states ("issue"/"due") use plain Tailwind
+colors (`text-amber-500`/`text-sky-500`), not the per-theme `--state-*` CSS
+tokens the 3 reused states ride on (`stateVisual()`'s `pending`/`partial`/
+`cleared`) — adding 2 new tokens across all ~8 theme variants in
+`src/styles.css` was judged disproportionate scope for an icon-color choice
+on one view; a deliberate simplification, not an oversight. Not yet checked
+in a running browser.

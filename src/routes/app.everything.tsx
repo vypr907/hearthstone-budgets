@@ -6,17 +6,25 @@ import {
   useCategories,
   useResetDebtsMonth,
   useInstitutions,
+  useInstitutionLinks,
+  useAccounts,
+  useLatestBalances,
+  useTransactions,
 } from "@/lib/data-hooks";
+import { effectiveDebtBalance, isDebtPaidOff } from "@/lib/balances";
 import { hasRecommendation, useRecommendedPayments } from "@/lib/debt-recommended";
 import { usePayFlow } from "@/lib/pay-flow";
 import { toPayable, type Payable } from "@/lib/payments";
 import { useCycleState, stateVisual, type CycleInfo, type LedgerState } from "@/lib/ledger-state";
-import { formatMoney, debtDueDate } from "@/lib/format";
+import { computeArrears } from "@/lib/arrears";
+import { formatMoney, debtDueDate, monthlyEquivalent } from "@/lib/format";
 import { useIncomeSources, useIncomeEvents } from "@/lib/income-hooks";
 import { currentPayPeriod, currentMonthWindow, dueInPeriod, dateInPeriod } from "@/lib/pay-period";
 import { todayISO } from "@/lib/snapshot";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -25,12 +33,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState, useMemo } from "react";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, CalendarClock, AlertTriangle, Search, Clock, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Bill, Debt } from "@/lib/supabase";
 import { useInstitutionIndex } from "@/components/ObligationIcon";
 import { categoryVisual } from "@/lib/visual-meta";
 import { SectionLabel } from "@/components/SectionLabel";
+import { InstitutionLoginButton } from "@/components/InstitutionLoginButton";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ListControls, groupRows } from "@/components/ListControls";
@@ -91,6 +100,30 @@ function shortDate(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/**
+ * ADR-116: Stephanie view's 4-state status icon. Extends `stateVisual()`'s
+ * ADR-036 model with two states it doesn't cover — "issue" (any carried-over
+ * arrears, regardless of this cycle's own state) and "due" (not cleared, no
+ * arrears — this doubles as "unpaid", so a bill/debt that was paid last cycle
+ * automatically shows as "due" again once a new cycle's window starts; no
+ * separate calendar-flip logic needed, `useCycleState`/`CycleInfo` already
+ * resets `state` to "unpaid" for a fresh cycle). Priority when states would
+ * overlap (user-confirmed): Issue > Pending > Due > Paid.
+ */
+function stephanieStatus(r: Row, today: string) {
+  const arrears = computeArrears(r.payable, today);
+  if (arrears.amountOverdue > 0.005) {
+    return { Icon: AlertTriangle, className: "text-amber-500", label: "Issue" };
+  }
+  if (r.state === "pending" || r.state === "partial") {
+    return { Icon: Clock, className: "text-orange-500", label: "Pending" };
+  }
+  if (r.state === "cleared") {
+    return { Icon: CheckCircle2, className: "text-emerald-600", label: "Paid" };
+  }
+  return { Icon: CalendarClock, className: "text-sky-500", label: "Due" };
+}
+
 function EverythingPage() {
   const { data: bills = [] } = useBills();
   // ADR-102 addendum: `debts` stays raw -- it feeds `toPayable`, which flows
@@ -101,10 +134,14 @@ function EverythingPage() {
   // balance internally from this same raw object, so no separate hydrated
   // list is needed here.
   const { data: debts = [] } = useDebts();
+  const { data: balanceAccounts = [] } = useAccounts();
+  const { data: latestBalances = {} } = useLatestBalances();
+  const { data: balanceTransactions = [] } = useTransactions();
   const { data: categories = [] } = useCategories();
   const { data: incomeSources = [] } = useIncomeSources();
   const { data: incomeEvents = [] } = useIncomeEvents();
   const { data: institutions = [] } = useInstitutions();
+  const { data: institutionLinks = [] } = useInstitutionLinks();
   const resetDebts = useResetDebtsMonth();
   const { tap, busy, picker } = usePayFlow();
   const infoOf = useCycleState();
@@ -147,7 +184,10 @@ function EverythingPage() {
 
   const institutionIndex = useInstitutionIndex(institutions);
 
-  const rows = useMemo<Row[]>(() => {
+  // Merged bills + debts, with the paid-off-debt filter applied — shared by
+  // both the standard list (further filtered/sorted below) and the
+  // Stephanie view (its own search + always-due-date sort, see below).
+  const baseRows = useMemo<Row[]>(() => {
     const build = (
       base: Omit<Row, "inPeriod" | "inMonth" | "overdue" | "state" | "info">,
       info: CycleInfo,
@@ -184,10 +224,21 @@ function EverythingPage() {
       }),
       ...debts
         .filter((d) => {
-          // Hide paid-off non-Advance debts whose payoff date is outside the current pay period.
+          // Hide paid-off non-Advance debts, same balance-based check as
+          // app.debts.tsx (never trusts date_paid_off alone — it can be
+          // missing/stale). A grace window keeps a debt visible for the rest
+          // of the pay period it cleared in, same as before, but layered on
+          // top of a correct check rather than as a full bypass of it.
           if (d.debt_type === "advance") return true;
-          if (!d.date_paid_off) return true;
-          if (!period) return true;
+          const balance = effectiveDebtBalance(
+            d,
+            balanceAccounts,
+            latestBalances,
+            balanceTransactions,
+          );
+          if (!isDebtPaidOff(d, balance)) return true;
+          if (!d.date_paid_off) return false;
+          if (!period) return false;
           return dateInPeriod(d.date_paid_off, period);
         })
         .map((d) => {
@@ -212,7 +263,22 @@ function EverythingPage() {
         }),
     ];
 
-    let out = all;
+    return all;
+  }, [
+    bills,
+    debts,
+    infoOf,
+    institutionIndex,
+    period,
+    month,
+    today,
+    balanceAccounts,
+    latestBalances,
+    balanceTransactions,
+  ]);
+
+  const rows = useMemo<Row[]>(() => {
+    let out = baseRows;
     if (kindFilter === "bills") out = out.filter((r) => r.kind === "Bill");
     if (kindFilter === "debts") out = out.filter((r) => r.kind === "Debt");
     if (statusFilter !== "all") out = out.filter((r) => r.state === statusFilter);
@@ -235,21 +301,21 @@ function EverythingPage() {
       return (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31");
     });
     return out;
-  }, [
-    bills,
-    debts,
-    kindFilter,
-    statusFilter,
-    dueFilter,
-    selectedCategories,
-    q,
-    sort,
-    infoOf,
-    institutionIndex,
-    period,
-    month,
-    today,
-  ]);
+  }, [baseRows, kindFilter, statusFilter, dueFilter, selectedCategories, q, sort]);
+
+  // Stephanie view: independent of the standard tab's filters — just its own
+  // search, always sorted by due date (ADR-116).
+  const [stephanieQuery, setStephanieQuery] = useState("");
+  const stephanieRows = useMemo<Row[]>(() => {
+    let out = baseRows;
+    if (stephanieQuery.trim()) {
+      const t = stephanieQuery.toLowerCase();
+      out = out.filter((r) => r.name.toLowerCase().includes(t));
+    }
+    return [...out].sort((a, b) =>
+      (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31"),
+    );
+  }, [baseRows, stephanieQuery]);
 
   const groups = useMemo<Array<[string, Row[]]>>(() => {
     if (group === "none") return [["", rows]];
@@ -288,192 +354,290 @@ function EverythingPage() {
     <>
       <AppHeader title="Everything" />
       <div className="space-y-3 p-4">
-        <ListControls
-          query={q}
-          onQueryChange={setQ}
-          sort={sort}
-          onSortChange={(v) => setSort(v as typeof sort)}
-          sortOptions={[
-            { value: "due", label: "Due date" },
-            { value: "amount", label: "Amount" },
-            { value: "alpha", label: "A–Z" },
-          ]}
-          group={group}
-          onGroupChange={(v) => setGroup(v as typeof group)}
-          groupOptions={[
-            { value: "category", label: "Category" },
-            { value: "kind", label: "Bill / Debt" },
-            { value: "status", label: "Paid status" },
-            { value: "period", label: "Due this pay period" },
-            { value: "month", label: "Due this month" },
-          ]}
-          categories={categories}
-          selectedCategories={selectedCategories}
-          onSelectedCategoriesChange={setSelectedCategories}
-        />
+        <Tabs defaultValue="everything">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="everything">Everything</TabsTrigger>
+            <TabsTrigger value="stephanie">Stephanie view</TabsTrigger>
+          </TabsList>
 
-        <div className="grid grid-cols-3 gap-2">
-          <Select value={kindFilter} onValueChange={(v) => setKindFilter(v as typeof kindFilter)}>
-            <SelectTrigger className="h-11">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All types</SelectItem>
-              <SelectItem value="bills">Bills only</SelectItem>
-              <SelectItem value="debts">Debts only</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
-          >
-            <SelectTrigger className="h-11">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Any status</SelectItem>
-              <SelectItem value="unpaid">Unpaid</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="partial">Partial</SelectItem>
-              <SelectItem value="cleared">Cleared</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={dueFilter} onValueChange={(v) => setDueFilter(v as typeof dueFilter)}>
-            <SelectTrigger className="h-11">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="any">Any due date</SelectItem>
-              <SelectItem value="period" disabled={!period}>
-                Due this pay period
-              </SelectItem>
-              <SelectItem value="month">Due this month</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+          <TabsContent value="everything" className="space-y-3 pt-3">
+            <ListControls
+              query={q}
+              onQueryChange={setQ}
+              sort={sort}
+              onSortChange={(v) => setSort(v as typeof sort)}
+              sortOptions={[
+                { value: "due", label: "Due date" },
+                { value: "amount", label: "Amount" },
+                { value: "alpha", label: "A–Z" },
+              ]}
+              group={group}
+              onGroupChange={(v) => setGroup(v as typeof group)}
+              groupOptions={[
+                { value: "category", label: "Category" },
+                { value: "kind", label: "Bill / Debt" },
+                { value: "status", label: "Paid status" },
+                { value: "period", label: "Due this pay period" },
+                { value: "month", label: "Due this month" },
+              ]}
+              categories={categories}
+              selectedCategories={selectedCategories}
+              onSelectedCategoriesChange={setSelectedCategories}
+            />
 
-        <Button
-          variant="outline"
-          onClick={handleResetDebts}
-          className="h-11 w-full"
-          disabled={resetDebts.isPending}
-        >
-          <RotateCcw className="mr-2 h-4 w-4" />
-          Reset debts for new month
-        </Button>
+            <div className="grid grid-cols-3 gap-2">
+              <Select
+                value={kindFilter}
+                onValueChange={(v) => setKindFilter(v as typeof kindFilter)}
+              >
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  <SelectItem value="bills">Bills only</SelectItem>
+                  <SelectItem value="debts">Debts only</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
+              >
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any status</SelectItem>
+                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="partial">Partial</SelectItem>
+                  <SelectItem value="cleared">Cleared</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={dueFilter} onValueChange={(v) => setDueFilter(v as typeof dueFilter)}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any due date</SelectItem>
+                  <SelectItem value="period" disabled={!period}>
+                    Due this pay period
+                  </SelectItem>
+                  <SelectItem value="month">Due this month</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-        <div className="space-y-4 pt-2">
-          {rows.length === 0 && (
-            <Card>
-              <CardContent className="p-0">
-                <EmptyState>Nothing matches.</EmptyState>
-              </CardContent>
-            </Card>
-          )}
-          {groups.map(([label, list]) =>
-            list.length === 0 ? null : (
-              <div key={label || "all"} className="space-y-2">
-                {label ? (
-                  <div className="flex items-baseline justify-between gap-2">
-                    <SectionLabel>{label}</SectionLabel>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {list.length} · {formatMoney(list.reduce((s, r) => s + r.amount, 0))}
-                    </span>
-                  </div>
-                ) : null}
-                {list.map((r) => {
-                  const paid = r.state === "cleared";
-                  const { Icon, className: stateColor, label: stateLabel } = stateVisual(r.state);
-                  const cat = r.category_id ? categoryById[r.category_id] : null;
-                  // Option A: category is a 3px left edge only — no edge when uncategorized.
-                  const edgeColor = cat ? categoryVisual(cat).color : "transparent";
-                  // A partially-paid cycle shows what's left instead of the due date.
-                  const partialLeft =
-                    r.info.clearedSum > 0 && r.info.remaining > 0
-                      ? formatMoney(r.info.remaining)
-                      : null;
-                  const metaTail = partialLeft
-                    ? `${partialLeft} left`
-                    : r.due_date
-                      ? shortDate(r.due_date)
-                      : null;
-                  // ADR-094: the payoff strategy's target for this debt this month.
-                  const rec = recommended.get(r.id);
-                  const planHint = r.kind === "Debt" && hasRecommendation(rec) ? rec : null;
-                  return (
-                    <Card key={`${r.kind}-${r.id}`} className="overflow-hidden">
-                      <CardContent
-                        className="relative flex items-center gap-3 p-3.5"
-                        style={{ borderLeft: `3px solid ${edgeColor}` }}
-                      >
-                        {r.logoUrl ? (
-                          <img
-                            src={r.logoUrl}
-                            alt=""
-                            aria-hidden
-                            loading="lazy"
-                            // Oversized watermark: taller than the row so the card
-                            // crops it (a "window"), centred at 60% width so it
-                            // lands in the gap between the text and the amount.
-                            className="pointer-events-none absolute left-[60%] top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 select-none object-contain opacity-[0.08]"
-                          />
-                        ) : null}
-                        <button
-                          type="button"
-                          aria-label={`${r.name}: ${stateLabel} — tap to advance`}
-                          disabled={busy}
-                          onClick={() => handleTap(r)}
-                          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-card disabled:opacity-50"
-                        >
-                          <Icon className={`h-6 w-6 ${stateColor}`} />
-                        </button>
+            <Button
+              variant="outline"
+              onClick={handleResetDebts}
+              className="h-11 w-full"
+              disabled={resetDebts.isPending}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Reset debts for new month
+            </Button>
 
-                        <button
-                          type="button"
-                          onClick={() => openDetail(r)}
-                          className="relative min-w-0 flex-1 overflow-hidden text-left"
-                        >
-                          <p
-                            className={`truncate font-medium ${paid ? "text-muted-foreground line-through" : ""}`}
+            <div className="space-y-4 pt-2">
+              {rows.length === 0 && (
+                <Card>
+                  <CardContent className="p-0">
+                    <EmptyState>Nothing matches.</EmptyState>
+                  </CardContent>
+                </Card>
+              )}
+              {groups.map(([label, list]) =>
+                list.length === 0 ? null : (
+                  <div key={label || "all"} className="space-y-2">
+                    {label ? (
+                      <div className="flex items-baseline justify-between gap-2">
+                        <SectionLabel>{label}</SectionLabel>
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          {list.length} · {formatMoney(list.reduce((s, r) => s + r.amount, 0))}
+                        </span>
+                      </div>
+                    ) : null}
+                    {list.map((r) => {
+                      const paid = r.state === "cleared";
+                      const {
+                        Icon,
+                        className: stateColor,
+                        label: stateLabel,
+                      } = stateVisual(r.state);
+                      const cat = r.category_id ? categoryById[r.category_id] : null;
+                      // Option A: category is a 3px left edge only — no edge when uncategorized.
+                      const edgeColor = cat ? categoryVisual(cat).color : "transparent";
+                      // A partially-paid cycle shows what's left instead of the due date.
+                      const partialLeft =
+                        r.info.clearedSum > 0 && r.info.remaining > 0
+                          ? formatMoney(r.info.remaining)
+                          : null;
+                      const metaTail = partialLeft
+                        ? `${partialLeft} left`
+                        : r.due_date
+                          ? shortDate(r.due_date)
+                          : null;
+                      // ADR-094: the payoff strategy's target for this debt this month.
+                      const rec = recommended.get(r.id);
+                      const planHint = r.kind === "Debt" && hasRecommendation(rec) ? rec : null;
+                      return (
+                        <Card key={`${r.kind}-${r.id}`} className="overflow-hidden">
+                          <CardContent
+                            className="relative flex items-center gap-3 p-3.5"
+                            style={{ borderLeft: `3px solid ${edgeColor}` }}
                           >
-                            {r.name}
-                          </p>
-                          <p
-                            className={`mt-1 truncate text-[13px] ${
-                              r.overdue ? "font-medium text-destructive" : "text-muted-foreground"
-                            }`}
-                          >
-                            {r.overdue ? "Overdue" : stateLabel}
-                            {metaTail ? ` · ${metaTail}` : ""}
-                          </p>
-                        </button>
-
-                        <div className="relative shrink-0 text-right">
-                          <p className="font-semibold tabular-nums">
-                            {r.kind === "Debt" ? (
-                              <span className="text-xs font-normal text-muted-foreground">
-                                min.{" "}
-                              </span>
+                            {r.logoUrl ? (
+                              <img
+                                src={r.logoUrl}
+                                alt=""
+                                aria-hidden
+                                loading="lazy"
+                                // Oversized watermark: taller than the row so the card
+                                // crops it (a "window"), centred at 60% width so it
+                                // lands in the gap between the text and the amount.
+                                className="pointer-events-none absolute left-[60%] top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 select-none object-contain opacity-[0.08]"
+                              />
                             ) : null}
-                            {formatMoney(r.amount)}
-                          </p>
-                          {planHint ? (
-                            <div className="mt-0.5 whitespace-nowrap text-[11px] leading-tight tabular-nums text-muted-foreground">
-                              <div>{formatMoney(planHint.monthlyMinimum)}/mo min</div>
-                              <div className="font-medium text-foreground">
-                                {formatMoney(planHint.monthlyTarget)}/mo plan
-                              </div>
+                            <button
+                              type="button"
+                              aria-label={`${r.name}: ${stateLabel} — tap to advance`}
+                              disabled={busy}
+                              onClick={() => handleTap(r)}
+                              className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-card disabled:opacity-50"
+                            >
+                              <Icon className={`h-6 w-6 ${stateColor}`} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => openDetail(r)}
+                              className="relative min-w-0 flex-1 overflow-hidden text-left"
+                            >
+                              <p
+                                className={`truncate font-medium ${paid ? "text-muted-foreground line-through" : ""}`}
+                              >
+                                {r.name}
+                              </p>
+                              <p
+                                className={`mt-1 truncate text-[13px] ${
+                                  r.overdue
+                                    ? "font-medium text-destructive"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                {r.overdue ? "Overdue" : stateLabel}
+                                {metaTail ? ` · ${metaTail}` : ""}
+                              </p>
+                            </button>
+
+                            <div className="relative shrink-0 text-right">
+                              <p className="font-semibold tabular-nums">
+                                {r.kind === "Debt" ? (
+                                  <span className="text-xs font-normal text-muted-foreground">
+                                    min.{" "}
+                                  </span>
+                                ) : null}
+                                {formatMoney(r.amount)}
+                              </p>
+                              {planHint ? (
+                                <div className="mt-0.5 whitespace-nowrap text-[11px] leading-tight tabular-nums text-muted-foreground">
+                                  <div>{formatMoney(planHint.monthlyMinimum)}/mo min</div>
+                                  <div className="font-medium text-foreground">
+                                    {formatMoney(planHint.monthlyTarget)}/mo plan
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                ),
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="stephanie" className="space-y-3 pt-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={stephanieQuery}
+                onChange={(e) => setStephanieQuery(e.target.value)}
+                placeholder="Search…"
+                className="h-11 pl-9"
+              />
+            </div>
+
+            <div className="space-y-2">
+              {stephanieRows.length === 0 && (
+                <Card>
+                  <CardContent className="p-0">
+                    <EmptyState>Nothing matches.</EmptyState>
+                  </CardContent>
+                </Card>
+              )}
+              {stephanieRows.map((r) => {
+                const status = stephanieStatus(r, today);
+                const cat = r.category_id ? categoryById[r.category_id] : null;
+                const monthly = monthlyEquivalent({
+                  amount: r.amount,
+                  billing_cycle: r.cycle,
+                  cycle_interval_days: (r.bill ?? r.debt)?.cycle_interval_days,
+                });
+                const totalOwed =
+                  r.kind === "Debt" && r.debt
+                    ? effectiveDebtBalance(
+                        r.debt,
+                        balanceAccounts,
+                        latestBalances,
+                        balanceTransactions,
+                      )
+                    : null;
+                const institutionId = r.bill?.institution_id ?? r.debt?.institution_id ?? null;
+                const institution = institutionId ? institutionIndex[institutionId] : null;
+                const links = institutionId
+                  ? institutionLinks.filter((l) => l.institution_id === institutionId)
+                  : [];
+                return (
+                  <Card key={`sv-${r.kind}-${r.id}`}>
+                    <CardContent className="space-y-2 p-3.5">
+                      <button
+                        type="button"
+                        onClick={() => openDetail(r)}
+                        className="flex w-full items-start gap-3 text-left"
+                      >
+                        <status.Icon className={`mt-0.5 h-5 w-5 shrink-0 ${status.className}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{r.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {cat?.name ?? "Uncategorized"} · {r.kind}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {r.due_date ? shortDate(r.due_date) : "No due date"}
+                          </p>
+                          <p className="font-semibold tabular-nums">
+                            {monthly == null ? "—" : formatMoney(monthly)}
+                          </p>
+                          {totalOwed != null ? (
+                            <p className="text-xs tabular-nums text-muted-foreground">
+                              {formatMoney(totalOwed)} total
+                            </p>
                           ) : null}
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            ),
-          )}
-        </div>
+                      </button>
+                      {institution?.login_url || links.length > 0 ? (
+                        <InstitutionLoginButton institution={institution} links={links} />
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
       {picker}
       <BillDetailDialog
