@@ -41,7 +41,9 @@
 * Files touched: `docs/SCRATCHPAD.md`, `src/routes/app.institutions.tsx`,
   `src/routes/app.everything.tsx`, `src/routes/app.bills.tsx`,
   `src/components/InstitutionDialog.tsx`, `src/lib/supabase.ts`,
-  `docs/DECISIONS.md` (ADR-115, ADR-116, ADR-105 addendum),
+  `docs/adr/ADR-115-institution-active-inactive-toggle-visibility-only.md`,
+  `docs/adr/ADR-116-stephanie-view-alternate-everything-display-status-icon-extension.md`,
+  `docs/adr/ADR-105-cross-entity-navigation-via-open-id-search-params-global-dialogs-gain-external-presets.md` addendum,
   `scripts/migrations/2026-11-05-institutions-active-toggle.sql` (+ verify).
 * `tsc --noEmit` clean, 283/283 tests pass. Not yet checked in a running
   browser.
@@ -79,7 +81,7 @@
   left untouched.
 * Files touched: `src/components/SplitLinesEditor.tsx`, `src/lib/payments.ts`,
   `src/lib/data-hooks.ts`, `src/components/AddTransactionFab.tsx`,
-  `src/routes/app.transactions.tsx`, `docs/DECISIONS.md` (ADR-114),
+  `src/routes/app.transactions.tsx`, `docs/adr/ADR-114-per-line-place-for-split-cash-back-entries.md`,
   `scripts/migrations/2026-11-04-dispensary-atm-fee-place-fix.sql` (+ verify).
 * `tsc --noEmit` clean, 283/283 tests pass. Not yet checked in a running
   browser.
@@ -131,7 +133,7 @@
   considered and deliberately deferred, flagged in the ADR.
 * Files touched: `scripts/reconcile-venmo-csv.mjs`, `src/lib/debt-episodes.ts`,
   `src/lib/debt-episodes.test.ts` (5 tests updated, 6 new concurrent-draw
-  fixtures), `docs/DECISIONS.md` (ADR-111 addendum), plus the 3 migrations
+  fixtures), `docs/adr/ADR-111-per-advance-episode-history-for-debt-type-advance-debts.md` (addendum), plus the 3 migrations
   above (+ verify files).
 * `tsc --noEmit` clean, 283/283 tests pass.
 
@@ -606,7 +608,7 @@ before. Purely client-side, no schema change.
 * `scripts/migrations/2026-09-17-transfers-count-as-spend.sql` (+
   `.verify.sql`) — user-run, applied and verified live: the column exists
   and exactly the 2 intended accounts are flagged.
-* `docs/DECISIONS.md` ADR-107 written, `docs/SCHEMA.md` updated. New
+* `docs/adr/ADR-107-transfers-to-an-untracked-personal-account-count-as-spend.md` written, `docs/SCHEMA.md` updated. New
   regression tests in `internal-transfers.test.ts`. `tsc --noEmit` clean,
   235/235 tests pass. Not yet checked in a running browser.
 * **Found along the way**: GitHub Issue #64 ("One Checking: unexplained
@@ -1748,7 +1750,7 @@ re-verified against the combined tree.
 
 ### Documentation
 - Corrected `SCHEMA.md`: `bills` and `debts` reference `institutions.institution_id`, not `accounts.account_id` (prior docs were stale/contradictory)
-- Added ADR-005 through ADR-010 to `DECISIONS.md`:
+- Added ADR-005 through ADR-010 (now `docs/adr/ADR-005-*.md` through `ADR-010-*.md`):
   - ADR-005: Institutions support multiple categories (join table)
   - ADR-006: Bills and Debts reference Institutions, not Accounts
   - ADR-007: Account selection resolved at payment time
@@ -2475,7 +2477,7 @@ re-verified against the combined tree.
 * Planning pass first (spec-only, no code): root-caused the Dashboard grid
   cutoff, confirmed the "boring card" pattern was shared by `BudgetTile` and
   `SpendRow`, documented the hero set-aside formula as a 2026-08-18 addendum to
-  ADR-034 in `docs/DECISIONS.md`, and resolved four judgment calls with the
+  ADR-034 in `docs/adr/ADR-034-budget-totals-include-linked-bill-amounts-shown-as-two-parts.md`, and resolved four judgment calls with the
   user (dual progress bars over a 2x2 grid, amount **range** search, Payoff
   Progress collapsible defaulting closed, items 7/8 built rather than noted).
 * Safe-area clearance: `src/routes/app.tsx` uses

@@ -51,5 +51,5 @@ and will now be listed when you tap the receipt icon.
   definition; unit tests added for the paired vs. one-sided cases.
 - `src/lib/tx-filter-store.ts` gains an `excludeInternalTransfers` flag that
   `app.transactions.tsx` honours, keeping list and total consistent.
-- Docs: ADR entry for the transfer rule, plus SESSION.md / DECISIONS.md updates
+- Docs: new ADR file under docs/adr/ for the transfer rule, plus SESSION.md / DECISIONS.md index updates
   per project convention. No schema change, no migration.

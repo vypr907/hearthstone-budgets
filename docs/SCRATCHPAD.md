@@ -64,7 +64,7 @@ Not scoped. Not decided. If pursued, likely needs its own small ADR (touches UX 
 
 (The late-payment misattribution, "Total due" overstatement, and "no arrears-only
 payment" ideas noted here on 2026-08-20 all became ADR-075/ADR-076, implemented
-2026-08-21 — see docs/DECISIONS.md.)
+2026-08-21 — see docs/DECISIONS.md index.)
 
 ## Future: In-app theme color editor
 Per-user editable overrides on top of the base theme (color pickers per token,

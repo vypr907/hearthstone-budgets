@@ -37,4 +37,4 @@ After the policy is applied: pick Halo on `/app/settings`, confirm `<html data-t
 
 ## Docs
 
-`docs/SESSION.md` (diagnosis + fix), `docs/SCHEMA.md` (the policy SQL), `docs/DECISIONS.md` (note appended to ADR-061 that member self-update RLS is required), `docs/TODO.md` (migration-run checkbox).
+`docs/SESSION.md` (diagnosis + fix), `docs/SCHEMA.md` (the policy SQL), `docs/adr/ADR-061-color-theme-system.md` (note appended that member self-update RLS is required), `docs/TODO.md` (migration-run checkbox).

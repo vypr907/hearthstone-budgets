@@ -13,7 +13,7 @@
  * if the RLS config ever regresses, rather than letting a test silently run
  * against the wrong data.
  *
- * See docs/DECISIONS.md ADR-083.
+ * See docs/adr/ADR-083-automated-test-writes-via-an-rls-bound-test-household.md.
  */
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";

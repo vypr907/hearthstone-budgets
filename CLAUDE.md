@@ -72,6 +72,9 @@ claiming something is verified — don't default to "can't check" anymore.
 Current conversation > existing code > existing schema > docs/DECISIONS.md >
 docs/SCHEMA.md > docs/CHANGELOG.md > GitHub Issues/Milestones (roadmap questions).
 
+For decisions, read docs/DECISIONS.md (the index) first; open only the
+specific docs/adr/ADR-<NNN>-*.md files you need. Do not glob docs/adr/.
+
 ## Documentation Rules (docs/) — part of every task, not a wrap-up step
 Create any of these files if they don't exist yet.
 
@@ -80,19 +83,21 @@ Create any of these files if they don't exist yet.
    as a sub-bullet if any surfaced.
 2. SCHEMA.md — update whenever tables/columns/indexes/constraints change.
 3. ARCHITECTURE.md — update whenever architecture changes.
-4. DECISIONS.md — update whenever an implementation choice future devs
-   should know about is made. Match existing entry format exactly:
+4. DECISIONS.md — ADRs live one-per-file under docs/adr/ADR-<xxx>-<kebab
+   -title>.md; docs/DECISIONS.md is the index (ID | Title | Status | Date),
+   not a place to append to. Match existing entry format exactly:
    ## ADR-<xxx>: <Title>
    Decision:
    Reason:
    Status: Decided <DATE>. Implemented/Not implemented.
 
    ADR lookup logic (in order):
-   - Prompt names an ADR number explicitly → append to that ADR, never
-     create a new number for it.
+   - Prompt names an ADR number explicitly → open and append to that ADR's
+     own file, never create a new number for it.
    - No ADR named, but change looks like a variant of an existing entry →
      ASK before creating a new ADR. Do not guess.
-   - Otherwise → new ADR, next sequential number.
+   - Otherwise → new docs/adr/ADR-<next>-<kebab-title>.md, next sequential
+     number, plus a new row in the docs/DECISIONS.md index.
 5. Tasks — open work is GitHub Issues, not a file (ADR-087). Create an Issue
    when a task is discovered; `Closes #N` in the PR when it's done. docs/TODO.md
    holds only working-as-designed limitations.

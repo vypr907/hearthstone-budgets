@@ -32,4 +32,4 @@ Transfer rows and rows already linked to a bill/debt are still listed — assign
 ## Files
 - new: `src/components/PlacePicker.tsx`, `src/routes/app.fix-places.tsx`
 - edit: `src/components/AddTransactionFab.tsx`, `src/lib/data-hooks.ts` (`useSaveTransfer`), `src/routes/app.more.tsx`
-- docs: append to `docs/SESSION.md`; mark ADR-062/063/064 Implemented in `docs/DECISIONS.md`; note the Fix Places screen in `docs/ARCHITECTURE.md`
+- docs: append to `docs/SESSION.md`; mark ADR-062/063/064 Implemented in `docs/adr/ADR-062-manual-transactions-default-to-pending-not-cleared.md` / `ADR-063-place-and-description-are-separate-fields-amends-adr-053.md` / `ADR-064-transfers-gain-a-category-picker-amends-adr-056.md`; note the Fix Places screen in `docs/ARCHITECTURE.md`

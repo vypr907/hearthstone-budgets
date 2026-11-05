@@ -54,7 +54,7 @@ docs/             see below
 |---|---|
 | `CLAUDE.md` | agent working rules — **start here** |
 | `docs/CONTEXT.md` | compact current-state briefing (phase list, locked decisions, rules) |
-| `docs/DECISIONS.md` | every ADR (001–083+) |
+| `docs/DECISIONS.md` | ADR index (001–116+); each ADR is its own file under `docs/adr/` |
 | `docs/SCHEMA.md` | full schema + RLS policies |
 | `docs/ARCHITECTURE.md` | module → screen map |
 | `docs/CHANGELOG.md` | dated history |

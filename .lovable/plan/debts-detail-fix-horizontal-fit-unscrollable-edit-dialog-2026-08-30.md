@@ -27,4 +27,4 @@ Same info, nothing clips, no horizontal scroll. The detail dialog's own `overflo
 - Visual check in preview is blocked (no injectable session — `LOVABLE_BROWSER_AUTH_STATUS=no_supabase`), so I'll flag this for your eyeball: open a debt → scroll the Edit dialog to Save; check a debt with linked transactions shows Delete/Correct/Reverse fully on-screen.
 
 ## Docs
-- Append a bullet to `docs/SESSION.md`. UI-only fix: `DECISIONS.md`/`SCHEMA.md` untouched.
+- Append a bullet to `docs/SESSION.md`. UI-only fix: `docs/adr/`/`SCHEMA.md` untouched.

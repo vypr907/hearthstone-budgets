@@ -54,4 +54,4 @@ Add a "Post deposits" action on already-received income events that runs the sam
 - SQL for the new columns (`debts.plan_payment_count`, `debts.plan_final_payment`, `bills/debts.opening_arrears`, `bills/debts.arrears_as_of`) is provided for you to run in your own Supabase project, followed by a PostgREST schema reload.
 - Arrears logic lives in a new pure module with unit tests, reusing `deriveCycleInfo` and the ADR-040 custom-cycle date maths.
 - New ADRs: invoice/payment-plan modelling, and arrears tracking with a manual opening balance.
-- Docs updated per project rules: SESSION.md, SCHEMA.md, DECISIONS.md, TODO.md.
+- Docs updated per project rules: SESSION.md, SCHEMA.md, docs/adr/ (indexed in DECISIONS.md), TODO.md.

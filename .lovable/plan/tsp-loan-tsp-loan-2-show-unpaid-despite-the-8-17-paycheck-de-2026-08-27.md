@@ -58,5 +58,5 @@ correct, only the derivation is wrong.
 
 ## Docs
 
-`docs/SESSION.md` bullet; `docs/DECISIONS.md` appended under **ADR-068**
+`docs/SESSION.md` bullet; `docs/adr/ADR-068-deduction-funded-bill-debt-auto-payment.md` appended
 (sign convention for deduction-funded payments) — no new ADR number.

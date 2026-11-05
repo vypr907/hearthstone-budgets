@@ -11,7 +11,7 @@
  * Usage: node scripts/reconcile-venmo-csv.mjs [--json-missing]
  *
  * Matching algorithm (fixed 2026-09-08 after a real duplicate-insertion
- * incident — see docs/DECISIONS.md ADR-097 addendum / docs/SESSION.md):
+ * incident — see docs/adr/ADR-097-fees-on-transfers-amends-adr-056-reuses-adr-046.md addendum / docs/SESSION.md):
  * Venmo card purchases can clear 2-5 days after the date the household
  * enters manually, so a tight ±1 day window let genuinely-already-logged
  * purchases look "missing." The fix has two parts:

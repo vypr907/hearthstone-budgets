@@ -31,4 +31,4 @@ In the Transfer block of `AddTransactionFab.tsx`, after Amount and before Catego
 Export `TransactionDetail` from `app.transactions.tsx` (no internal changes). In `app.accounts.tsx`, add `detail` state, mount `<TransactionDetail>` alongside the other dialogs, thread an `onSelect` prop through `RecentActivity`, and make each row clickable with `cursor-pointer`. Split rows keep current behavior.
 
 ## Docs
-Update `docs/SESSION.md` (per-item bullets) and `docs/TODO.md` if items are opened/closed. No schema change, so `SCHEMA.md`/`DECISIONS.md` untouched.
+Update `docs/SESSION.md` (per-item bullets) and `docs/TODO.md` if items are opened/closed. No schema change, so `SCHEMA.md`/`docs/adr/` untouched.

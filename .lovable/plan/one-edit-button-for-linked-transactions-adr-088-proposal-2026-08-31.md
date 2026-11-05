@@ -101,5 +101,5 @@ editor directly rather than making you drill into a line.
 - Tests: extend `src/lib/payments.test.ts` for the boundary crossings
   (partial → full, full → partial, cleared → pending) and add a
   `split-groups.test.ts` case for the new classification.
-- Docs: new ADR in `docs/DECISIONS.md` (ADR-088, superseding the ADR-077 UI
+- Docs: new ADR file `docs/adr/ADR-088-per-account-owner-accounts-owner-member-id-member-scoped-spendable-net-worth.md` (indexed in `docs/DECISIONS.md`; superseding the ADR-077 UI
   split), plus `docs/SESSION.md` entry. No schema change.

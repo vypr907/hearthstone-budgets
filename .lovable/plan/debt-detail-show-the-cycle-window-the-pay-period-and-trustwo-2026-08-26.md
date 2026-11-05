@@ -57,6 +57,6 @@ and its linked transactions before changing any math.
 
 ## Docs
 
-Append to `docs/SESSION.md`; new ADR in `docs/DECISIONS.md` for "debt detail reads ledger-derived
+Append to `docs/SESSION.md`; new ADR file under `docs/adr/` (indexed in `docs/DECISIONS.md`) for "debt detail reads ledger-derived
 cycle state, and exposes the cycle window + pay period" (extends ADR-036 — confirm the next number
 before writing).

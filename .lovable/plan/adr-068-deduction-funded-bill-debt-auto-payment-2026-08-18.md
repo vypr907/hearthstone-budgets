@@ -39,4 +39,4 @@ In `src/routes/app.index.tsx`, where the overdue rows are built, when a bill/deb
 
 ## Docs
 
-`docs/SESSION.md` bullet, `docs/SCHEMA.md` updated with the already-applied columns/table, `docs/DECISIONS.md` appended under **ADR-068** (no new ADR number), `docs/TODO.md` adjusted.
+`docs/SESSION.md` bullet, `docs/SCHEMA.md` updated with the already-applied columns/table, `docs/adr/ADR-068-deduction-funded-bill-debt-auto-payment.md` appended (no new ADR number), `docs/TODO.md` adjusted.

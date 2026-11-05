@@ -37,7 +37,7 @@ Same filter applied to `budgets.filter((b) => !!b.category_id)`. The category pi
 
 ## Docs
 
-Update `docs/SESSION.md` (work entry), `docs/DECISIONS.md` (append implementation notes to ADR-069 — no new ADR), and `docs/TODO.md` with the pending SQL migration: add the `income` domain value plus the four categories, to be run manually after this ships.
+Update `docs/SESSION.md` (work entry), `docs/adr/ADR-069-ad-hoc-income-category.md` (append implementation notes — no new ADR), and `docs/TODO.md` with the pending SQL migration: add the `income` domain value plus the four categories, to be run manually after this ships.
 
 ## Not touched
 

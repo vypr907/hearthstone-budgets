@@ -46,7 +46,7 @@ created, with no migration or manual Supabase step. (Marked TODO item complete.)
 
 - SESSION.md: mark A1/A2 done, drop the two known-issue lines.
 - TODO.md: check off the ADR-047 follow-up and "Fees" category items.
-- DECISIONS.md: append a short note to ADR-047 documenting the no-split-row
+- docs/adr/ADR-047-marking-an-income-event-as-received-auto-creates-split-transactions.md: append a short note documenting the no-split-row
   account prompt; no new ADR.
 
 ## Part B — Visual consistency pass
@@ -106,5 +106,5 @@ correctly in dark mode). Pure presentation, no logic change.
   empty states, and control heights; toggle dark mode to confirm the hero.
 
 ## Documentation
-Update SESSION.md, TODO.md, and append to DECISIONS.md (ADR-047 note) per the
+Update SESSION.md, TODO.md, and append to docs/adr/ADR-047-marking-an-income-event-as-received-auto-creates-split-transactions.md (note) per the
 project's documentation rules. No SCHEMA/ARCHITECTURE changes.

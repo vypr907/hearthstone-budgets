@@ -75,6 +75,6 @@ usually means a step above didn't fully land.
 
 ## Docs to update as groups land
 `docs/SESSION.md`, `docs/SCHEMA.md`, `docs/ARCHITECTURE.md`,
-`docs/DECISIONS.md` (mark ADR-055..058 Implemented once done),
+`docs/adr/ADR-055-*.md` through `ADR-058-*.md` (mark Implemented once done),
 `docs/CHANGELOG.md`. `docs/TODO.md`: remove closed items, keep it as an
 open-items list only.

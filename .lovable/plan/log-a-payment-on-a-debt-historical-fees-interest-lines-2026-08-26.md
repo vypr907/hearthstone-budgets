@@ -49,6 +49,6 @@ Behaviour on save:
 
 ## Docs
 
-Append to `docs/SESSION.md`; add an ADR in `docs/DECISIONS.md` for the date-driven
+Append to `docs/SESSION.md`; add an ADR file under `docs/adr/` (indexed in `docs/DECISIONS.md`) for the date-driven
 in-cycle vs historical rule and the "fees never affect debt balance" decision (extends
 ADR-046 — confirm the number before writing).

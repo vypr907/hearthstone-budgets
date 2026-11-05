@@ -1,6 +1,6 @@
 # Parent Category Migration Reference
 
-**Status:** Not yet implemented. See ADR-011 in `DECISIONS.md` for why this was deferred.
+**Status:** Not yet implemented. See ADR-011 in `docs/adr/ADR-011-parent-category-stays-a-text-column-for-now.md` for why this was deferred.
 
 **Purpose:** Step-by-step path from `categories.parent_category` (plain text) to a
 proper `parent_categories` table with an FK, whenever you're ready to make that move.

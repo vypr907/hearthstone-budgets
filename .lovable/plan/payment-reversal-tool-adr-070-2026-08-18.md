@@ -2,7 +2,7 @@
 
 Add a way to undo a cleared bill/debt payment from the Bill or Debt detail view, without deleting history: the original payment stays, and an offsetting reversal entry is written while the bill/debt is rolled back.
 
-ADR-070 already exists in docs/DECISIONS.md — no new ADR will be created.
+ADR-070 already exists at docs/adr/ADR-070-payment-reversal-tool.md — no new ADR will be created.
 
 ## What the user sees
 

@@ -52,7 +52,7 @@ for the task.
 4.  PLAN.md (only for roadmap questions)
 
 Suggested docs: - CONTEXT.md - SCHEMA.md - ARCHITECTURE.md -
-DECISIONS.md - CSV_IMPORT.md - AUTH.md - TRANSACTIONS.md -
+DECISIONS.md (index; ADRs in docs/adr/) - CSV_IMPORT.md - AUTH.md - TRANSACTIONS.md -
 DEBT_ENGINE.md - UI_GUIDELINES.md
 
 ## Decision Framework

@@ -25,7 +25,7 @@
 --
 -- Reconstructing the full corrected ledger (via the newly-fixed
 -- computeAdvanceEpisodes, which also needed its own carry-forward fix —
--- see the ADR-111 2026-10-15 addendum in docs/DECISIONS.md) lands on
+-- see the ADR-111 2026-10-15 addendum in docs/adr/ADR-111-per-advance-episode-history-for-debt-type-advance-debts.md) lands on
 -- exactly $231.75 owed for the still-open cycle (the $225 draw + $6.75
 -- fee, nothing repaid yet) — every earlier cycle nets to $0. Corrects
 -- the stored remaining_balance/minimum_payment to match; cycle_paid_to_date/
