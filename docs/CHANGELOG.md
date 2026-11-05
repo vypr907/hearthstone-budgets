@@ -1,3 +1,169 @@
+## 2026-11-05 — SCRATCHPAD cleanup, Institutions UX fixes, institution active toggle, Stephanie view (ADR-105/115/116)
+
+* `docs/SCRATCHPAD.md` pruned of 16 completed/struck-through ideas (all
+  section headers kept); a plan was built and shipped for its "Next Steps"
+  backlog, split into Phase A (5 independent fixes) and Phase B (a bigger
+  new view, its own ADR).
+* Phase A:
+  - Institutions screen's type/category groups are now collapsible,
+    collapsed by default — reuses the existing `Collapsible` pattern
+    already live in `app.daily-financials.tsx`.
+  - Fixed a bug where paid-off invoices/debts could linger on Everything
+    indefinitely: the filter trusted a possibly-stale `date_paid_off`
+    column and had a full-bypass escape hatch whenever the current pay
+    period failed to resolve. Replaced with the same
+    `effectiveDebtBalance()` + `isDebtPaidOff()` check `app.debts.tsx`
+    already uses, with the pay-period grace window layered on top instead
+    of as a bypass.
+  - New `institutions.is_active` toggle (ADR-115; migration run and
+    verified live — all 172 existing institutions defaulted to active).
+    Deliberately visibility-only: unlike `bills.is_active`, no balance or
+    total calculation reads it.
+  - Institution detail's linked bills/debts are now clickable, reusing the
+    ADR-105 `?open=<id>` deep-link convention (extended to `/app/bills`,
+    which didn't have it yet) — a paid-off item (e.g. a Beautifully
+    Wicked invoice) stays reachable from its institution's own page even
+    though it's correctly hidden from Everything/active Debts.
+  - Fixed the Edit Institution Categories dropdown's scroll bug:
+    `w-[--radix-popover-trigger-width]` is invalid Tailwind v4 CSS (a bare
+    custom-property name, not wrapped in `var(...)`) and silently dropped
+    the width constraint; changed to `w-64`, matching the two other
+    working instances of the same Popover+Checkbox pattern.
+* Phase B (ADR-116): new "Stephanie view" tab on Everything — a simpler,
+  read-only-friendly list with its own independent search (always sorted
+  by due date, decoupled from the standard tab's filters) showing a
+  4-state status icon (paid/issue/pending/due — "issue" reuses
+  `computeArrears()`, "due" needed no new calendar-flip logic since
+  `useCycleState` already resets a cycle's state to "unpaid" when a new
+  billing window starts), name + category, due date, amount owed, total
+  owed for debts, and a working Log In button (reused
+  `InstitutionLoginButton`) per institution.
+* Files touched: `docs/SCRATCHPAD.md`, `src/routes/app.institutions.tsx`,
+  `src/routes/app.everything.tsx`, `src/routes/app.bills.tsx`,
+  `src/components/InstitutionDialog.tsx`, `src/lib/supabase.ts`,
+  `docs/DECISIONS.md` (ADR-115, ADR-116, ADR-105 addendum),
+  `scripts/migrations/2026-11-05-institutions-active-toggle.sql` (+ verify).
+* `tsc --noEmit` clean, 283/283 tests pass. Not yet checked in a running
+  browser.
+
+## 2026-11-04 — Per-line place for split/Cash Back entries (ADR-114); historical dispensary ATM fee data fix
+
+* ADR-114: a split transaction or Cash Back combo entry had exactly one
+  shared place for the whole entry; each line already had its own
+  category/tags (ADR-104) but not its own place. Motivating case: an ATM
+  withdrawal charging a $3 ATM-operator fee and a $2.50 card-network fee
+  from two different places, previously forced into one lumped $5.50
+  "Fee" line.
+  - `SplitRow` gains `institutionId: string | null`; new
+    `CompactPlacePicker` wraps `PlacePicker` in a `Popover` per row
+    (mirrors `TagPicker`'s compact mode).
+  - Both write paths (`insertCashBackPurchaseRows`,
+    `useSaveSplitTransaction`) resolve each row's place as
+    `line.institutionId ?? <shared institutionId> ?? null`, the same
+    fallback convention `submitTransfer`'s fee leg already used.
+  - `app.transactions.tsx`'s plain-split edit dialog seeds/saves per-line
+    place the same way it already does tags, and its read-only summary
+    now shows each line's place. Cash Back purchase lines don't go
+    through that dialog (already excluded) — no edit-path change needed
+    there.
+  - No schema change — `transactions.institution_id` already existed per
+    row.
+* Data fix: scanned the household's full history for the same $3 + $2.50
+  fee combo predating this feature. Found 12 entries (Nature's Releaf,
+  Honeypot, Pakalolo Supply Co.) — 4 already split but both lines
+  mistagged to the dispensary, 8 never split at all. Fixed via
+  `scripts/migrations/2026-11-04-dispensary-atm-fee-place-fix.sql`, run and
+  verified live; one exception caught — a 10/25 entry on the vypr907 Cash
+  App account needed its network fee tagged to Cash App, not Venmo. 5
+  unrelated July entries with no fee breakdown at all were flagged and
+  left untouched.
+* Files touched: `src/components/SplitLinesEditor.tsx`, `src/lib/payments.ts`,
+  `src/lib/data-hooks.ts`, `src/components/AddTransactionFab.tsx`,
+  `src/routes/app.transactions.tsx`, `docs/DECISIONS.md` (ADR-114),
+  `scripts/migrations/2026-11-04-dispensary-atm-fee-place-fix.sql` (+ verify).
+* `tsc --noEmit` clean, 283/283 tests pass. Not yet checked in a running
+  browser.
+
+## 2026-11-03 — Venmo Sep/Oct reconciliation, Cleo data corrections; concurrent-advance episode attribution (Issue #82, ADR-111 addendum)
+
+* Venmo catch-up: reused the existing `scripts/reconcile-venmo-csv.mjs`
+  pipeline to reconcile two months of statement CSVs the user had fallen
+  behind logging. Fixed two bugs in the tool itself (it was reading every
+  `.csv` in `planning/`, not just Venmo exports; extended its static
+  merchant-institution map). Found 144 missing rows; a long interview
+  resolved every merchant/transfer/edge case (10 new institutions, Cash
+  App's real 3-account setup, Rent-via-Flex payments, a Cleo advance/repay
+  sequence, the usual ATM cash-out split convention, a "Venmo account
+  repayment" explained as a reversed UberEats instant-cashout). Generated
+  `scripts/migrations/2026-11-03-venmo-reconcile-sep-oct.sql`
+  programmatically from the categorized row list (catching and fixing a
+  PAI ATM double-insertion bug before it reached SQL). Run and verified
+  live — Venmo account 437→606 transactions, exact expected delta.
+* Follow-up bug #1 (user caught via the Debts screen): the migration had
+  also written 2 spurious `debt_adjustments` rows
+  (`adjustment_type='repayment'`, not a real convention anywhere else) for
+  Cleo's two new repayments, double-counting them in the advance-episode
+  view. Fixed via
+  `scripts/migrations/2026-11-03-cleo-repayment-adjustment-fix.sql`, run
+  and verified.
+* Follow-up bug #2 (user caught via screenshot): Cleo's Debts card showed
+  "$147.02 past due." Traced to `next_due_date` stuck at 2026-09-24 since
+  before this session — combined with a newly-correct $55.00
+  `minimum_payment`, `computeArrears` counted 3 fictional missed biweekly
+  cycles. Fixed via
+  `scripts/migrations/2026-11-03-cleo-next-due-date-fix.sql` (moves
+  `next_due_date` to 2026-11-03, resets `cycle_paid_to_date`), run and
+  verified.
+* Issue #82 / ADR-111 addendum: the Cleo reconciliation surfaced that
+  ADR-111's original "one open advance at a time" assumption was wrong —
+  Cleo allows concurrent draws up to a credit limit.
+  `computeAdvanceEpisodes` (`src/lib/debt-episodes.ts`) rewritten from
+  fixed date-window bucketing + `applyCarryForward` to
+  `runFifoAllocation`: each draw gets its own independent balance;
+  repayments FIFO-allocate oldest-open-draw-first; fees attribute via
+  parsing the existing `"(M/D advance)"` description convention, falling
+  back to FIFO. `AdvanceEpisodeStatus`'s `"carried_forward"` retired
+  (confirmed with the user) — every episode now reads `"open"`/`"repaid"`.
+  `net` and `endDate` change meaning (per-draw balance/resolution date,
+  not whole-debt/window-boundary) — invisible to `tsc`, verified by hand
+  against live Cleo data (7 episodes' `net` sums to the exact live
+  `remaining_balance`). A real schema-backed advance↔repayment link was
+  considered and deliberately deferred, flagged in the ADR.
+* Files touched: `scripts/reconcile-venmo-csv.mjs`, `src/lib/debt-episodes.ts`,
+  `src/lib/debt-episodes.test.ts` (5 tests updated, 6 new concurrent-draw
+  fixtures), `docs/DECISIONS.md` (ADR-111 addendum), plus the 3 migrations
+  above (+ verify files).
+* `tsc --noEmit` clean, 283/283 tests pass.
+
+## 2026-10-23 — Personal debts (institution_type='person') + "paid by someone else" (ADR-113)
+
+* Built so a friend covering part of a bill, or paying a utility bill
+  directly to get it reconnected, can be tracked as a real debt instead
+  of falling outside the app's model.
+* `institution_type` gains `'person'` — migration run and verified live
+  (`institutions_institution_type_check` now lists all 23 values);
+  `InstitutionDialog.tsx`'s type list and `visual-meta.ts`'s icon map
+  updated to match.
+* New `isCoveredPaymentDisbursement`/`isDebtDisbursement` predicates
+  (`src/lib/payments.ts`), swapped in for every `isAdvanceDisbursement`
+  cycle/history-exclusion check across `ledger-state.ts`,
+  `debt-history.ts`, `debt-episodes.ts`, `app.debts.tsx`,
+  `app.debt-strategy.tsx`.
+* New `useLogPaymentCoveredByOther` hook wired into a "Someone else paid
+  this" toggle in both `LogBillPaymentDialog.tsx` and
+  `LogDebtPaymentDialog.tsx`. `DebtDialog` gained an `onSaved` callback
+  and `useUpsertDebt` now returns the saved row — groundwork for a future
+  inline quick-create, not yet wired up.
+* Files touched: `src/lib/payments.ts` (+ test), `src/lib/data-hooks.ts`,
+  `src/lib/ledger-state.ts`, `src/lib/debt-history.ts`,
+  `src/lib/debt-episodes.ts`, `src/routes/app.debts.tsx`,
+  `src/routes/app.debt-strategy.tsx`, `src/components/InstitutionDialog.tsx`,
+  `src/lib/visual-meta.ts`, `src/components/LogBillPaymentDialog.tsx`,
+  `src/components/LogDebtPaymentDialog.tsx`,
+  `scripts/migrations/2026-10-23-institution-type-person.sql` (+ verify).
+* `tsc --noEmit` clean, 277/277 tests pass (3 new). Not yet checked in a
+  running browser.
+
 ## 2026-10-21 — Delete-transaction footgun traced, fixed; Providence/Yukon Eye balances corrected
 
 * User reported Providence Alaska showing paid off with only 4 of 6 planned

@@ -48,3 +48,16 @@ not tasks:
   Found and deliberately preserved verbatim (not fixed) while porting all
   five to atomic RPCs (ADR-101 addendum, Issue #67, 2026-09-24) — a
   pre-existing asymmetry, not something introduced by that change.
+- **`LogDebtPaymentDialog`'s advance-fee double-logging warning only ever
+  checks the latest episode**, not a specific open draw. Harmless under
+  the original single-open-advance assumption; now a real gap since
+  concurrent advances are supported (ADR-111 addendum, Issue #82,
+  2026-11-03) — no UI exists to say "this payment is for THIS open draw."
+  Fixing it needs the same deferred schema/UI work (a real advance↔payment
+  link) flagged in that ADR, not a standalone fix.
+- **Stephanie view's "issue"/"due" status icon colors are plain Tailwind
+  classes, not per-theme `--state-*` CSS tokens** like the 3 states it
+  reuses from `stateVisual()` (ADR-116, 2026-11-05). Adding 2 new tokens
+  across all ~8 theme variants in `src/styles.css` was judged
+  disproportionate scope for an icon-color choice on one view — a
+  deliberate simplification, not an oversight.
